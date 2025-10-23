@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 
 // Fully responsive, Bootstrap-only, JavaScript-based JSX (no TS)
 // Flow: Email -> Send OTP -> Verify -> Reset Password -> Success
@@ -10,6 +11,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 const API_BASE = "https://express-myapp.onrender.com/api/admin"; // explicit base as requested
 
 export default function ForgotPass() {
+  const navigate = useNavigate();
   const [step, setStep] = useState("email"); // "email" | "otp" | "reset" | "done"
   const [busy, setBusy] = useState(false);
 
@@ -146,7 +148,7 @@ export default function ForgotPass() {
                 <div className="back-button-container">
                   <button
                     className="btn btn-outline-secondary back-btn"
-                    onClick={() => window.location.href = '/login'}
+                    onClick={() => navigate('/login')}
                   >
                     Back to Login
                   </button>
@@ -263,7 +265,7 @@ export default function ForgotPass() {
                     <div className="display-6 mb-2">✅</div>
                     <h2 className="h5 fw-bold">Password Changed</h2>
                     <p className="text-secondary">You may now sign in with your new password.</p>
-                    <a href="/login" className="btn btn-primary glow-btn">Go to Login</a>
+                    <Link to="/login" className="btn btn-primary glow-btn">Go to Login</Link>
                   </div>
                 )}
 

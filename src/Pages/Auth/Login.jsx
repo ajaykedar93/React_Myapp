@@ -125,7 +125,7 @@ export default function Login() {
             <div className="group">
               {/* ✅ Route to your ForgotPass page */}
               <Link to="/forgot-password">Forgot Password?</Link>
-              <a href="/register">Create Account</a>
+              <Link to="/register">Create Account</Link>
             </div>
           </form>
         </div>
