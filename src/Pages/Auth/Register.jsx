@@ -23,7 +23,7 @@ const Register = () => {
   const [modalType, setModalType] = useState(""); // success or error message type
   const navigate = useNavigate(); // Using useNavigate hook for navigation
 
-  const API_BASE_URL = "http://localhost:5000/api/admin"; // Ensure the API URL is correct for your backend
+  const API_BASE_URL = "https://express-myapp.onrender.com/api/admin"; // Ensure the API URL is correct for your backend
 
   // Check if an admin already exists on page load
   useEffect(() => {

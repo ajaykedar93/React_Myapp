@@ -21,7 +21,7 @@ import LoadingSpiner from "../Entertainment/LoadingSpiner";
  * - Non-blocking fetch, resilient error UI
  */
 
-const API_BASE = import.meta?.env?.VITE_API_BASE ?? "http://localhost:5000/api";
+const API_BASE = import.meta?.env?.VITE_API_BASE ?? "https://express-myapp.onrender.com/api";
 
 // ---------- Small helpers ---------- //
 const cleanName = (s) => (typeof s === "string" ? s.trim().replace(/\s+/g, " ") : "");

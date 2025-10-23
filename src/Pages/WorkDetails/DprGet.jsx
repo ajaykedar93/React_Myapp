@@ -43,7 +43,7 @@ const DprGet = () => {
     setError(null);
     setDprList([]);
     try {
-      const res = await fetch(`http://localhost:5000/api/dpr/month/${month}`);
+      const res = await fetch(`https://express-myapp.onrender.com/api/dpr/month/${month}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to fetch DPR");
       setDprList(data);
@@ -63,7 +63,7 @@ const DprGet = () => {
       async () => {
         try {
           setLoading(true);
-          const res = await fetch(`http://localhost:5000/api/dpr/delete/${date}`, {
+          const res = await fetch(`https://express-myapp.onrender.com/api/dpr/delete/${date}`, {
             method: "DELETE",
           });
           const body = await res.json();
@@ -85,7 +85,7 @@ const DprGet = () => {
   const handleDownload = async () => {
     if (!selectedMonth) return;
     try {
-      const res = await fetch(`http://localhost:5000/api/dpr/export/${selectedMonth}`, {
+      const res = await fetch(`https://express-myapp.onrender.com/api/dpr/export/${selectedMonth}`, {
         method: "GET",
       });
       if (!res.ok) throw new Error("Failed to download PDF");

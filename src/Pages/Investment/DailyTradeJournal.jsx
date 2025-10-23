@@ -3,11 +3,11 @@ import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 
 /* ===== API LINKS ===== */
-const API_CATEGORY = "http://localhost:5000/api/investment_category";
-const API_SUBCATEGORY = "http://localhost:5000/api/investment_subcategory";
-const API_DEPOSITS = "http://localhost:5000/api/deposits";                // GET /:cat/:sub
-const API_JOURNAL = "http://localhost:5000/api/trading_journal";          // CRUD
-const API_SUMMARY_DAY = "http://localhost:5000/api/trading_journal/summary/day";
+const API_CATEGORY = "https://express-myapp.onrender.com/api/investment_category";
+const API_SUBCATEGORY = "https://express-myapp.onrender.com/api/investment_subcategory";
+const API_DEPOSITS = "https://express-myapp.onrender.com/api/deposits";                // GET /:cat/:sub
+const API_JOURNAL = "https://express-myapp.onrender.com/api/trading_journal";          // CRUD
+const API_SUMMARY_DAY = "https://express-myapp.onrender.com/api/trading_journal/summary/day";
 
 const colors = {
   gradient: "linear-gradient(135deg, #5f4bb6 0%, #1f5f78 100%)",

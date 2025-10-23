@@ -31,7 +31,7 @@ import {
  * - Default 10/page; responsive
  */
 
-const API_BASE = "http://localhost:5000"; // no trailing slash
+const API_BASE = "https://express-myapp.onrender.com"; // no trailing slash
 
 // ----------------------------- helpers -----------------------------
 const toInt = (v, d = 10) => {

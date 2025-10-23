@@ -4,7 +4,7 @@ import { useAuth } from "../../context/AuthContext";
 import LoadingSpiner from "./LoadingSpiner";
 
 /* ================= CONFIG ================= */
-const BASE_URL   = "http://localhost:5000/api/favorites";
+const BASE_URL   = "https://express-myapp.onrender.com/api/favorites";
 const SEARCH_URL = `${BASE_URL}/search`;
 const WATCH_URL  = `${BASE_URL}/watch-filter`;
 const CAT_URL    = `${BASE_URL}/category-filter`;

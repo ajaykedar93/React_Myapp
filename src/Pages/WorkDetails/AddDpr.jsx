@@ -11,7 +11,7 @@ import LoadingSpiner from "../Entertainment/LoadingSpiner";
  * - Optional categories via props (falls back to API fetch)
  */
 
-const API_BASE = import.meta?.env?.VITE_API_BASE ?? "http://localhost:5000/api";
+const API_BASE = import.meta?.env?.VITE_API_BASE ?? "https://express-myapp.onrender.com/api";
 
 const fieldWrap = {
   marginBottom: 16,

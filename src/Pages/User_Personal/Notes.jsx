@@ -3,7 +3,7 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import LoadingSpiner from "../Entertainment/LoadingSpiner.jsx";
 import Swal from "sweetalert2";
 
-const BASE_URL = "http://localhost:5000/api/notes";
+const BASE_URL = "https://express-myapp.onrender.com/api/notes";
 
 /* ====== Date helpers (pretty: "2 Oct 2025") ====== */
 const MONTHS = [

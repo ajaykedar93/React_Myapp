@@ -17,7 +17,7 @@ const MainNavbar = () => {
       try {
         const token = localStorage.getItem("token");
         const res = await axios.get(
-          "http://localhost:5000/api/admin/get-names-and-profiles",
+          "https://express-myapp.onrender.com/api/admin/get-names-and-profiles",
           { headers: { Authorization: `Bearer ${token}` } }
         );
         if (res.data.admins && res.data.admins.length > 0) {

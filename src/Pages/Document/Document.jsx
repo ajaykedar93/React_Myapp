@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import LoadingSpinner from "../Entertainment/LoadingSpiner";
 import { useAuth } from "../../context/AuthContext"; // <-- useAuth only
 
-const API_BASE = "http://localhost:5000/api";
+const API_BASE = "https://express-myapp.onrender.com/api";
 
 const Document = () => {
   const { user } = useAuth(); // expects { user_id, token, ... }

@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import LoadingSpiner from "../Entertainment/LoadingSpiner";
 
-const API_URL = "http://localhost:5000/api/inward";
+const API_URL = "https://express-myapp.onrender.com/api/inward";
 
 export default function InwardGet() {
   const [records, setRecords] = useState([]);

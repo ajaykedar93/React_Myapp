@@ -7,7 +7,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 //  POST http://localhost:5000/api/admin/forgot/verify-otp       { email, otp }
 //  POST http://localhost:5000/api/admin/forgot/reset-password   { email, otp, new_password }
 
-const API_BASE = "http://localhost:5000/api/admin"; // explicit base as requested
+const API_BASE = "https://express-myapp.onrender.com/api/admin"; // explicit base as requested
 
 export default function ForgotPass() {
   const [step, setStep] = useState("email"); // "email" | "otp" | "reset" | "done"

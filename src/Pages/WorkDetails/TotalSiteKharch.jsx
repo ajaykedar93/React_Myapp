@@ -23,7 +23,7 @@ const TotalSiteKharch = () => {
       return;
     }
     try {
-      const res = await fetch("http://localhost:5000/api/add-received-amount", {
+      const res = await fetch("https://express-myapp.onrender.com/api/add-received-amount", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ amount_received: receivedAmount, payment_date: receivedDate }),
@@ -41,7 +41,7 @@ const TotalSiteKharch = () => {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch(`http://localhost:5000/api/monthly-summary-sitekharch?month=${month}`);
+      const res = await fetch(`https://express-myapp.onrender.com/api/monthly-summary-sitekharch?month=${month}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to fetch summary");
       if (data.length > 0) {

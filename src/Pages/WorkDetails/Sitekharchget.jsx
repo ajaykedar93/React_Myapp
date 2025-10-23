@@ -59,12 +59,12 @@ const SitekharchGet = () => {
     try {
       let url = "";
       if (selectedDate) {
-        url = `http://localhost:5000/api/sitekharch?from=${selectedDate}&to=${selectedDate}`;
+        url = `https://express-myapp.onrender.com/api/sitekharch?from=${selectedDate}&to=${selectedDate}`;
       } else if (selectedMonth) {
         const [year, month] = selectedMonth.split("-");
         const from = `${year}-${month}-01`;
         const to = new Date(year, month, 0).toISOString().split("T")[0];
-        url = `http://localhost:5000/api/sitekharch?from=${from}&to=${to}`;
+        url = `https://express-myapp.onrender.com/api/sitekharch?from=${from}&to=${to}`;
       }
 
       const res = await fetch(url);
@@ -85,7 +85,7 @@ const SitekharchGet = () => {
 
   const handleDelete = async (id) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/sitekharch/${id}`, {
+      const res = await fetch(`https://express-myapp.onrender.com/api/sitekharch/${id}`, {
         method: "DELETE",
       });
       if (res.ok) {

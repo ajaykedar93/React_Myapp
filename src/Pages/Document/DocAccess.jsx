@@ -4,7 +4,7 @@ import axios from "axios";
 import { motion } from "framer-motion";
 import LoadingSpinner from "../Entertainment/LoadingSpiner";
 
-const API_BASE = "http://localhost:5000/api/documents";
+const API_BASE = "https://express-myapp.onrender.com/api/documents";
 
 const fileEmojiByMime = {
   "application/pdf": "📄",

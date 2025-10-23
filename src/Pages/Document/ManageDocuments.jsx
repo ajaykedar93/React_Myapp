@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import LoadingSpinner from "../Entertainment/LoadingSpiner";
 import { FaFilePdf, FaFileWord, FaFileAlt, FaFileImage, FaFile } from "react-icons/fa";
 
-const API_BASE = "http://localhost:5000/api/documents";
+const API_BASE = "https://express-myapp.onrender.com/api/documents";
 
 const getFileIcon = (fileName) => {
   const ext = (fileName || "").split(".").pop()?.toLowerCase();

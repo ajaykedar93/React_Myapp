@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 
-const TOTALS_API = "http://localhost:5000/api/monthly-summary/total";
-const LIST_API = "http://localhost:5000/api/monthly-summary";
+const TOTALS_API = "https://express-myapp.onrender.com/api/monthly-summary/total";
+const LIST_API = "https://express-myapp.onrender.com/api/monthly-summary";
 
 // Utilities
 const monthNames = [

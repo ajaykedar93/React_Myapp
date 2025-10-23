@@ -17,7 +17,7 @@ import React, {
 } from "react";
 import LoadingSpiner from "./LoadingSpiner";
 
-const API_BASE = "http://localhost:5000/api";
+const API_BASE = "https://express-myapp.onrender.com/api";
 const EP = {
   // meta & stats
   MOVIES_COUNT: `${API_BASE}/movies/count`,

@@ -2,8 +2,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 
-const API_CATEGORY = "http://localhost:5000/api/investment_category";
-const API_SUBCATEGORY = "http://localhost:5000/api/investment_subcategory";
+const API_CATEGORY = "https://express-myapp.onrender.com/api/investment_category";
+const API_SUBCATEGORY = "https://express-myapp.onrender.com/api/investment_subcategory";
 
 /* Elegant palette (soft gradients + vivid accents) */
 const palette = {

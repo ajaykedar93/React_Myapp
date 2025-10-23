@@ -5,7 +5,7 @@ import LoadingSpiner from "./LoadingSpiner";
 import { motion } from "framer-motion";
 
 const itemsPerPage = 10;
-const API_BASE = "http://localhost:5000/api";
+const API_BASE = "https://express-myapp.onrender.com/api";
 
 /** Prev/Next-only pagination */
 function PrevNext({ page, totalPages, onPage }) {

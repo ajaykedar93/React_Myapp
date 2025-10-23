@@ -16,7 +16,7 @@ export default function Login() {
   const [successMessage, setSuccessMessage] = useState("");
   const navigate = useNavigate();
 
-  const API_BASE_URL = "http://localhost:5000/api/admin";
+  const API_BASE_URL = "https://express-myapp.onrender.com/api/admin";
 
   const handleSubmit = (e) => {
     e.preventDefault();

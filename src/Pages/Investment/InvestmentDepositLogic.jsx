@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 
-const API_CATEGORY = "http://localhost:5000/api/investment_category";
-const API_SUBCATEGORY = "http://localhost:5000/api/investment_subcategory";
-const API_DEPOSIT = "http://localhost:5000/api/deposits";
+const API_CATEGORY = "https://express-myapp.onrender.com/api/investment_category";
+const API_SUBCATEGORY = "https://express-myapp.onrender.com/api/investment_subcategory";
+const API_DEPOSIT = "https://express-myapp.onrender.com/api/deposits";
 
 const colors = {
   primary: "#5f4bb6",

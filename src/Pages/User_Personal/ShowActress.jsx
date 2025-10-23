@@ -188,7 +188,7 @@ export default function ShowActress() {
   /* ===== Load Actress List ===== */
   const fetchActresses = async () => {
     try {
-      const res = await axios.get("http://localhost:5000/api/act_favorite");
+      const res = await axios.get("https://express-myapp.onrender.com/api/act_favorite");
       setActresses(res.data || []);
     } catch (err) {
       console.error("Error loading actresses:", err);
@@ -219,7 +219,7 @@ export default function ShowActress() {
 
     if (result.isConfirmed) {
       try {
-        await axios.delete(`http://localhost:5000/api/act_favorite/${id}`);
+        await axios.delete(`https://express-myapp.onrender.com/api/act_favorite/${id}`);
         setActresses(prev => prev.filter(a => a.id !== id));
         await Swal.fire({
           icon: "success",

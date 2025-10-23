@@ -43,7 +43,7 @@ const AddInward = () => {
     const run = async () => {
       try {
         setLoadingCats(true);
-        const res = await fetch("http://localhost:5000/api/workcategory");
+        const res = await fetch("https://express-myapp.onrender.com/api/workcategory");
         const data = await res.json();
         setCategories(Array.isArray(data) ? data : []);
       } catch {
@@ -126,7 +126,7 @@ const AddInward = () => {
 
     try {
       setSaving(true); // ⬅️ spinner ON only during save
-      const res = await fetch("http://localhost:5000/api/inward", {
+      const res = await fetch("https://express-myapp.onrender.com/api/inward", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

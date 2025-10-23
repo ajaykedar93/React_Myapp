@@ -4,7 +4,7 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import Swal from "sweetalert2";
 import LoadingSpiner from "../Entertainment/LoadingSpiner.jsx";
 
-const API = "http://localhost:5000/api/user_investment";
+const API = "https://express-myapp.onrender.com/api/user_investment";
 
 /* ---------- Month helpers ---------- */
 const MONTHS = [

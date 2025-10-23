@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 
 // Use your app's full API base URL
-const API_BASE = "http://localhost:5000/api/transaction-category";
+const API_BASE = "https://express-myapp.onrender.com/api/transaction-category";
 
 // Validators
 const HEX_RE = /^#([0-9a-fA-F]{6})$/;

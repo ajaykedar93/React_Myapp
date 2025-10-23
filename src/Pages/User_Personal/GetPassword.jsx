@@ -4,7 +4,7 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import LoadingSpiner from "../Entertainment/LoadingSpiner.jsx";
 import Swal from "sweetalert2";
 
-const BASE_URL = "http://localhost:5000/api/password-manager";
+const BASE_URL = "https://express-myapp.onrender.com/api/password-manager";
 const TYPES = ["", "app", "website", "email", "mobile", "screen", "cloud", "document", "private_lock", "other"];
 const TYPE_COLORS = {
   app: "bg-success-subtle text-success-emphasis",

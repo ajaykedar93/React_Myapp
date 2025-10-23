@@ -99,7 +99,7 @@ export default function ActFavorite() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await axios.get("http://localhost:5000/api/act_favorite/countries");
+        const res = await axios.get("https://express-myapp.onrender.com/api/act_favorite/countries");
         setCountries(res.data || []);
       } catch {
         setToast({ type: "warning", msg: "Could not load countries." });
@@ -146,7 +146,7 @@ export default function ActFavorite() {
     setSaving(true);
     try {
       const payload = { ...formData, age: formData.age ? Number(formData.age) : null };
-      const res = await axios.post("http://localhost:5000/api/act_favorite", payload);
+      const res = await axios.post("https://express-myapp.onrender.com/api/act_favorite", payload);
       const created = res.data;
       setNewFavorite(created);
       setModalShow(true);
