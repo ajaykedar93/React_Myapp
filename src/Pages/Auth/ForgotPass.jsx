@@ -48,27 +48,34 @@ export default function ForgotPass() {
     return () => clearInterval(id);
   }, [cooldown]);
 
-  // ---- robust fetch wrapper to avoid JSON parse errors ----
+  // ---- robust fetch wrapper (throws with details if not OK) ----
   async function fetchJson(url, options) {
     const res = await fetch(url, { ...options, mode: "cors" });
     const text = await res.text();
     let data = {};
     try { data = text ? JSON.parse(text) : {}; } catch (_) {}
+    if (!res.ok) {
+      const msg = data?.error || data?.message || text || `${res.status} ${res.statusText}`;
+      const err = new Error(msg);
+      err.status = res.status;
+      err.url = url;
+      err.payload = data;
+      throw err;
+    }
     return { res, data, raw: text };
   }
 
-  // API calls (use x-www-form-urlencoded to reduce CORS preflight complexity)
+  // ---- API calls (JSON bodies) ----
   const requestOtp = async () => {
     if (!isEmailValid) return showPopup('danger', 'Invalid Email', 'Please enter a valid email address.');
     try {
       setBusy(true);
-      const body = new URLSearchParams({ email: email.trim() }).toString();
       const { res, data } = await fetchJson(`${API_BASE}/forgot/request-otp`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim() })
       });
-      if (!res.ok) throw new Error(data?.error || data?.message || `${res.status} ${res.statusText}`);
+      // if not OK, fetchJson would have thrown already
       setStep('otp');
       setCooldown(30);
       showPopup('success', 'OTP Sent', 'A 6-digit OTP has been sent to your email.');
@@ -83,13 +90,11 @@ export default function ForgotPass() {
     if (!isOtpValid) return showPopup('danger', 'Invalid OTP', 'OTP must be a 6-digit number.');
     try {
       setBusy(true);
-      const body = new URLSearchParams({ email: email.trim(), otp: otp.trim() }).toString();
       const { res, data } = await fetchJson(`${API_BASE}/forgot/verify-otp`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), otp: otp.trim() })
       });
-      if (!res.ok) throw new Error(data?.error || data?.message || `${res.status} ${res.statusText}`);
       setStep('reset');
       showPopup('success', 'OTP Verified', 'Please set a new password.');
     } catch (e) {
@@ -103,17 +108,15 @@ export default function ForgotPass() {
     if (!canReset) return showPopup('danger', 'Check Passwords', 'Passwords must match and be reasonably strong.');
     try {
       setBusy(true);
-      const body = new URLSearchParams({
-        email: email.trim(),
-        otp: otp.trim(),
-        new_password: pwd1
-      }).toString();
       const { res, data } = await fetchJson(`${API_BASE}/forgot/reset-password`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim(),
+          otp: otp.trim(),
+          new_password: pwd1
+        })
       });
-      if (!res.ok) throw new Error(data?.error || data?.message || `${res.status} ${res.statusText}`);
       setStep('done');
       showPopup('success', 'Password Updated', 'Your password has been changed successfully.');
     } catch (e) {

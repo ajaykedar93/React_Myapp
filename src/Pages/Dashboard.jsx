@@ -6,6 +6,13 @@ import { Card, Container, Row, Col } from "react-bootstrap";
 import MainNavbar from "./MainNavbar";
 import Footer from "./Footer"; // ✅ Import Footer
 
+// ✅ Import images properly (works after build & deploy)
+import documentsImg from "../assets/documents.png";
+import investmentImg from "../assets/investment.png";
+import moviesImg from "../assets/movies_series.png";
+import transactionImg from "../assets/transaction_new.png";
+import workDetailsImg from "../assets/work_details.png";
+
 const Dashboard = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -52,7 +59,7 @@ const Dashboard = () => {
                 >
                   <Card.Body>
                     <Card.Title>Documents</Card.Title>
-                    <Card.Img variant="top" src="src/assets/documents.png" />
+                    <Card.Img variant="top" src={documentsImg} />
                   </Card.Body>
                 </Card>
               </Col>
@@ -65,7 +72,7 @@ const Dashboard = () => {
                 >
                   <Card.Body>
                     <Card.Title>Investment</Card.Title>
-                    <Card.Img variant="top" src="src/assets/investment.png" />
+                    <Card.Img variant="top" src={investmentImg} />
                   </Card.Body>
                 </Card>
               </Col>
@@ -78,7 +85,7 @@ const Dashboard = () => {
                 >
                   <Card.Body>
                     <Card.Title>Movies & Series</Card.Title>
-                    <Card.Img variant="top" src="src/assets/movies_series.png" />
+                    <Card.Img variant="top" src={moviesImg} />
                   </Card.Body>
                 </Card>
               </Col>
@@ -91,7 +98,7 @@ const Dashboard = () => {
                 >
                   <Card.Body>
                     <Card.Title>Transaction</Card.Title>
-                    <Card.Img variant="top" src="src/assets/transaction_new.png" />
+                    <Card.Img variant="top" src={transactionImg} />
                   </Card.Body>
                 </Card>
               </Col>
@@ -106,7 +113,7 @@ const Dashboard = () => {
                     <Card.Title>Work Details</Card.Title>
                     <Card.Img
                       variant="top"
-                      src="src/assets/work_details.png"
+                      src={workDetailsImg}
                       style={{ height: "200px", objectFit: "contain" }}
                     />
                   </Card.Body>
@@ -122,10 +129,10 @@ const Dashboard = () => {
         {`
           :root{
             /* Adjust these if navbar/footer heights change */
-            --top-strip: 6px;   /* from MainNavbar's animated strip */
-            --nav-core: 86px;   /* approximate navbar block height */
-            --nav-h: calc(var(--top-strip) + var(--nav-core)); /* total nav */
-            --footer-h: 110px;  /* Footer height */
+            --top-strip: 6px;
+            --nav-core: 86px;
+            --nav-h: calc(var(--top-strip) + var(--nav-core));
+            --footer-h: 110px;
           }
 
           .dashboard-container {
@@ -133,11 +140,9 @@ const Dashboard = () => {
             position: relative;
             display: flex;
             flex-direction: column;
-            overflow: hidden; /* only middle scrolls */
+            overflow: hidden;
           }
 
-          /* Force the MainNavbar to be fixed (in case it's not) */
-          /* These class names come from your MainNavbar styles */
           .top-strip {
             position: fixed !important;
             top: 0; left: 0; right: 0;
@@ -150,33 +155,29 @@ const Dashboard = () => {
             z-index: 1190;
           }
 
-          /* Pin Footer to bottom just on this page */
-          .dashboard-container .pro-footer{
+          .dashboard-container .pro-footer {
             position: fixed !important;
             left: 0; right: 0; bottom: 0;
-            z-index: 1030; /* below navbar */
+            z-index: 1030;
             display: block;
           }
 
-          /* Footer small strip visibility for small screens */
           @media (max-width: 576px) {
             .dashboard-container .pro-footer {
-              height: 30px; /* only small footer strip visible */
+              height: 30px;
               display: block;
             }
           }
 
-          /* Scrollable area between fixed navbar & fixed footer */
-          .dashboard-scroll{
+          .dashboard-scroll {
             position: relative;
             height: calc(100vh - var(--nav-h) - var(--footer-h));
-            margin-top: var(--nav-h);         /* push below navbar */
-            margin-bottom: var(--footer-h);   /* keep space above footer */
+            margin-top: var(--nav-h);
+            margin-bottom: var(--footer-h);
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
           }
 
-          /* Content inside the scrollable area */
           .dashboard-content {
             padding: 20px;
             margin-top: 0;
@@ -215,7 +216,6 @@ const Dashboard = () => {
           .transaction-card { background-color: #f44336; color: #fff; }
           .work-details-card { background-color: #9c27b0; color: #fff; }
 
-          /* Banner */
           .manage-details-banner {
             font-family: 'Poppins', 'Segoe UI', sans-serif;
             font-weight: 800;
@@ -225,16 +225,12 @@ const Dashboard = () => {
             padding: 14px 24px;
             border-radius: 12px;
             text-align: center;
-
-            /* 👇 Adjusted spacing */
-            margin: 60px auto 10px; /* 40px above (navbar gap), 30px below (before cards) */
-
+            margin: 60px auto 10px;
             max-width: 680px;
             box-shadow: 0 6px 16px rgba(0,0,0,0.08);
             letter-spacing: 0.5px;
           }
 
-          /* Responsive tweaks for heights */
           @media (max-width: 992px){
             :root{
               --nav-core: 82px;
