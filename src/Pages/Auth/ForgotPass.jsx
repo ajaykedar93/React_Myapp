@@ -4,11 +4,11 @@ import { Link, useNavigate } from "react-router-dom";
 // Fully responsive, Bootstrap-only, JavaScript-based JSX (no TS)
 // Flow: Email -> Send OTP -> Verify -> Reset Password -> Success
 // Backend endpoints used (absolute):
-//  POST http://localhost:5000/api/admin/forgot/request-otp      { email }
-//  POST http://localhost:5000/api/admin/forgot/verify-otp       { email, otp }
-//  POST http://localhost:5000/api/admin/forgot/reset-password   { email, otp, new_password }
+//  POST https://express-myapp.onrender.com/api/admin/forgot/request-otp      { email }
+//  POST https://express-myapp.onrender.com/api/admin/forgot/verify-otp       { email, otp }
+//  POST https://express-myapp.onrender.com/api/admin/forgot/reset-password   { email, otp, new_password }
 
-const API_BASE = "https://express-myapp.onrender.com/api/admin"; // explicit base as requested
+const API_BASE = "https://express-myapp.onrender.com/api/admin";
 
 export default function ForgotPass() {
   const navigate = useNavigate();
@@ -37,8 +37,7 @@ export default function ForgotPass() {
   useEffect(() => {
     if (!cardRef.current) return;
     cardRef.current.classList.remove("fade-slide-in");
-    // force reflow
-    void cardRef.current.offsetWidth;
+    void cardRef.current.offsetWidth; // reflow
     cardRef.current.classList.add("fade-slide-in");
   }, [step]);
 
@@ -51,24 +50,25 @@ export default function ForgotPass() {
 
   // ---- robust fetch wrapper to avoid JSON parse errors ----
   async function fetchJson(url, options) {
-    const res = await fetch(url, options);
+    const res = await fetch(url, { ...options, mode: "cors" });
     const text = await res.text();
     let data = {};
-    try { data = text ? JSON.parse(text) : {}; } catch (e) { /* ignore parse errors */ }
-    return { res, data };
+    try { data = text ? JSON.parse(text) : {}; } catch (_) {}
+    return { res, data, raw: text };
   }
 
-  // API calls
+  // API calls (use x-www-form-urlencoded to reduce CORS preflight complexity)
   const requestOtp = async () => {
     if (!isEmailValid) return showPopup('danger', 'Invalid Email', 'Please enter a valid email address.');
     try {
       setBusy(true);
+      const body = new URLSearchParams({ email: email.trim() }).toString();
       const { res, data } = await fetchJson(`${API_BASE}/forgot/request-otp`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim() }),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body
       });
-      if (!res.ok) throw new Error(data?.error || 'Failed to send OTP');
+      if (!res.ok) throw new Error(data?.error || data?.message || `${res.status} ${res.statusText}`);
       setStep('otp');
       setCooldown(30);
       showPopup('success', 'OTP Sent', 'A 6-digit OTP has been sent to your email.');
@@ -83,12 +83,13 @@ export default function ForgotPass() {
     if (!isOtpValid) return showPopup('danger', 'Invalid OTP', 'OTP must be a 6-digit number.');
     try {
       setBusy(true);
+      const body = new URLSearchParams({ email: email.trim(), otp: otp.trim() }).toString();
       const { res, data } = await fetchJson(`${API_BASE}/forgot/verify-otp`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), otp: otp.trim() }),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body
       });
-      if (!res.ok) throw new Error(data?.error || 'OTP verification failed');
+      if (!res.ok) throw new Error(data?.error || data?.message || `${res.status} ${res.statusText}`);
       setStep('reset');
       showPopup('success', 'OTP Verified', 'Please set a new password.');
     } catch (e) {
@@ -102,12 +103,17 @@ export default function ForgotPass() {
     if (!canReset) return showPopup('danger', 'Check Passwords', 'Passwords must match and be reasonably strong.');
     try {
       setBusy(true);
+      const body = new URLSearchParams({
+        email: email.trim(),
+        otp: otp.trim(),
+        new_password: pwd1
+      }).toString();
       const { res, data } = await fetchJson(`${API_BASE}/forgot/reset-password`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), otp: otp.trim(), new_password: pwd1 }),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body
       });
-      if (!res.ok) throw new Error(data?.error || 'Failed to reset password');
+      if (!res.ok) throw new Error(data?.error || data?.message || `${res.status} ${res.statusText}`);
       setStep('done');
       showPopup('success', 'Password Updated', 'Your password has been changed successfully.');
     } catch (e) {
@@ -170,7 +176,7 @@ export default function ForgotPass() {
                     </div>
 
                     <div className="d-grid gap-2 mt-4">
-                      {/* 🔥 Changed only this button to a vibrant gradient */}
+                      {/* Vibrant gradient button */}
                       <button
                         className="btn btn-otp btn-lg glow-btn"
                         disabled={!isEmailValid || busy}
@@ -361,7 +367,7 @@ const styles = `
 .glow-btn { box-shadow: 0 10px 22px rgba(59,130,246,.28); }
 .glow-btn:active { transform: translateY(1px); }
 
-/* ⚡ Vibrant gradient button style JUST for Send OTP */
+/* Vibrant gradient button for Send OTP */
 .btn-otp {
   position: relative;
   border: none;
