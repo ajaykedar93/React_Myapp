@@ -23,7 +23,7 @@ const TotalSiteKharch = () => {
       return;
     }
     try {
-      const res = await fetch("https://express-myapp.onrender.com/api/add-received-amount", {
+      const res = await fetch("https://express-backend-myapp.onrender.com/api/add-received-amount", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ amount_received: receivedAmount, payment_date: receivedDate }),
@@ -41,7 +41,7 @@ const TotalSiteKharch = () => {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch(`https://express-myapp.onrender.com/api/monthly-summary-sitekharch?month=${month}`);
+      const res = await fetch(`https://express-backend-myapp.onrender.com/api/monthly-summary-sitekharch?month=${month}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to fetch summary");
       if (data.length > 0) {
@@ -88,46 +88,62 @@ const TotalSiteKharch = () => {
         body { background: var(--bg); font-family: 'Inter', sans-serif; margin:0; }
         .wrap { max-width: 960px; margin: 0 auto; padding: 25px 15px; }
 
-        .hd { text-align:center; font-weight:700; font-size:clamp(2rem,5vw,2.8rem); color:var(--title); margin-bottom:25px; }
+        .hd { text-align:center; font-weight:700; font-size:clamp(1.8rem,5vw,2.6rem); color:var(--title); margin-bottom:25px; }
 
         .card {
           background: var(--card);
-          border-radius: 20px;
-          box-shadow: 0 10px 25px var(--shadow-light), 0 4px 15px var(--shadow-strong);
-          padding: 25px;
+          border-radius: 18px;
+          box-shadow: 0 8px 18px var(--shadow-light), 0 3px 10px var(--shadow-strong);
+          padding: 20px;
           margin-bottom:25px;
           transition: transform 0.2s ease, box-shadow 0.2s ease;
         }
-        .card:hover { transform: translateY(-3px); box-shadow: 0 14px 30px var(--shadow-strong), 0 6px 20px var(--shadow-light); }
+        .card:hover { transform: translateY(-3px); box-shadow: 0 10px 25px var(--shadow-strong); }
 
-        h3 { font-weight:600; color: var(--brand); margin-bottom:18px; }
+        h3 { font-weight:600; color: var(--brand); margin-bottom:16px; font-size:1.1rem; }
 
-        .field { margin-bottom:18px; }
-        label { display:block; font-weight:500; color:var(--muted); margin-bottom:6px; font-size:0.95rem; }
+        .field { margin-bottom:16px; }
+        label { display:block; font-weight:500; color:var(--muted); margin-bottom:6px; font-size:0.9rem; }
         input[type="number"], input[type="date"], select {
-          width:100%; padding:14px 12px; border-radius:14px; border:1px solid var(--border);
+          width:100%; padding:12px 10px; border-radius:12px; border:1px solid var(--border);
           font-size:1rem; outline:none; transition: 0.3s; box-shadow: inset 0 1px 3px var(--shadow-light);
         }
         input:focus, select:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(124,58,237,0.2); }
 
         button {
-          padding:12px 22px; border:none; border-radius:12px; background: linear-gradient(90deg,#7c3aed,#a78bfa);
+          width:100%; padding:12px 20px; border:none; border-radius:12px; background: linear-gradient(90deg,#7c3aed,#a78bfa);
           color:white; font-weight:600; cursor:pointer; transition:0.3s; box-shadow:0 6px 15px rgba(124,58,237,0.25);
         }
         button:hover { opacity:0.9; transform: translateY(-1px); box-shadow:0 8px 20px rgba(124,58,237,0.3); }
 
-        .summary { display:flex; justify-content:space-between; flex-wrap:wrap; gap:20px; margin-top:25px; }
-        .summary div { flex:1; min-width:180px; background: var(--card); padding:20px; border-radius:16px;
-          text-align:center; box-shadow: 0 5px 15px var(--shadow-light); transition: transform 0.2s ease, box-shadow 0.2s ease;
+        .summary {
+          display:flex; justify-content:space-between; flex-wrap:wrap; gap:18px; margin-top:22px;
         }
-        .summary div:hover { transform: translateY(-3px); box-shadow: 0 12px 25px var(--shadow-strong); }
-        .summary div h3 { margin-bottom:12px; font-size:1.1rem; color: var(--muted); font-weight:500; }
-        .summary div p { font-size:1.8rem; font-weight:700; color:var(--title); }
+        .summary div {
+          flex:1; min-width:200px; background: var(--card); padding:16px; border-radius:14px;
+          text-align:center; box-shadow: 0 4px 12px var(--shadow-light); transition: all 0.2s ease;
+        }
+        .summary div:hover { transform: translateY(-3px); box-shadow: 0 10px 25px var(--shadow-strong); }
+        .summary div h3 { margin-bottom:10px; font-size:1rem; color: var(--muted); font-weight:500; }
+        .summary div p { font-size:1.6rem; font-weight:700; color:var(--title); }
 
         .cash-label { color: var(--highlight); font-weight:700; font-size:1rem; }
 
-        @media(max-width:700px) { .summary { flex-direction:column; } }
+        /* ✅ Mobile Responsiveness */
+        @media(max-width:768px) {
+          .wrap { padding:18px 12px; }
+          .card { padding:16px; border-radius:14px; }
+          input, select, button { font-size:0.95rem; }
+          .summary { flex-direction:column; gap:14px; }
+          .summary div p { font-size:1.4rem; }
+        }
 
+        @media(max-width:480px) {
+          .hd { font-size:1.8rem; }
+          .card { padding:14px; }
+          label { font-size:0.85rem; }
+          .summary div h3 { font-size:0.9rem; }
+        }
       `}</style>
 
       <h2 className="hd">Total Site Kharch & Received</h2>

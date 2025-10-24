@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import axios from "axios";
 
-const API = "https://express-myapp.onrender.com/api";
+const API = "https://express-backend-myapp.onrender.com/api";
 
 export default function DailyTransactionPage() {
   const [categories, setCategories] = useState([]);

@@ -1,5 +1,5 @@
 // DocumentTab.jsx
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import Document from "./Document";
@@ -16,24 +16,56 @@ const tabs = [
 
 const DocumentTab = () => {
   const [activeTab, setActiveTab] = useState("AddDocument");
-  const [inkPos, setInkPos] = useState({ left: 10, right: 10, bottom: 6 });
+  const [ink, setInk] = useState({ left: 10, width: 40, top: 36, ready: false });
   const railRef = useRef(null);
   const navigate = useNavigate();
 
-  // Keep underline width aligned to active tab label
-  useEffect(() => {
+  // ---- Measure & place the ink underline under the active tab button ----
+  const measureInk = React.useCallback(() => {
     const rail = railRef.current;
     if (!rail) return;
     const btn = rail.querySelector(`[data-tab="${activeTab}"]`);
     if (!btn) return;
-    const railRect = rail.getBoundingClientRect();
-    const btnRect = btn.getBoundingClientRect();
-    setInkPos({
-      left: btnRect.left - railRect.left + 10,
-      right: railRect.right - btnRect.right + 10,
-      bottom: 6,
-    });
+
+    // Button rect relative to rail (use offsetTop/Left so it works with scroll/zoom reliably)
+    const left = btn.offsetLeft + 10; // inner rail padding = 6, plus small inset
+    const width = btn.offsetWidth - 20;
+    const top = btn.offsetTop + btn.offsetHeight - 4; // 3px ink + 1px margin
+
+    setInk({ left, width: Math.max(24, width), top, ready: true });
+    // Ensure active tab is visible when tabs overflow horizontally
+    btn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
   }, [activeTab]);
+
+  useLayoutEffect(() => {
+    measureInk();
+  }, [measureInk]);
+
+  // Recalculate on window resize and font load changes
+  useEffect(() => {
+    const rail = railRef.current;
+    if (!rail) return;
+
+    const ro = new ResizeObserver(() => measureInk());
+    ro.observe(rail);
+
+    const onResize = () => measureInk();
+    window.addEventListener("resize", onResize);
+
+    // Handle font loading/layout shifts
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(() => measureInk()).catch(() => {});
+    }
+
+    // Re-measure after next paint too (smoother on mobile orientation change)
+    const raf = requestAnimationFrame(() => measureInk());
+
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", onResize);
+      cancelAnimationFrame(raf);
+    };
+  }, [measureInk]);
 
   // Keyboard navigation between tabs
   const onKeyDownTabs = (e) => {
@@ -50,7 +82,7 @@ const DocumentTab = () => {
 
   return (
     <div className="doc-page">
-      {/* Glassy Navbar with subtle shine */}
+      {/* Glassy Navbar */}
       <nav className="navbar-fixed">
         <motion.h2
           className="navbar-title"
@@ -66,6 +98,7 @@ const DocumentTab = () => {
           whileHover={{ y: -1, scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           onClick={() => navigate("/dashboard")}
+          type="button"
         >
           Dashboard
           <span className="btn-glint" />
@@ -74,7 +107,12 @@ const DocumentTab = () => {
 
       {/* Tabs */}
       <div className="tabs-container" onKeyDown={onKeyDownTabs}>
-        <div className="tabs-rail" ref={railRef} role="tablist" aria-label="Document sections">
+        <div
+          className="tabs-rail"
+          ref={railRef}
+          role="tablist"
+          aria-label="Document sections"
+        >
           {tabs.map((t) => {
             const active = activeTab === t.key;
             return (
@@ -84,13 +122,14 @@ const DocumentTab = () => {
                 role="tab"
                 aria-selected={active}
                 aria-controls={`panel-${t.key}`}
+                id={`tab-${t.key}`}
                 tabIndex={active ? 0 : -1}
                 className={`tab-item ${active ? "active" : ""}`}
                 onClick={() => setActiveTab(t.key)}
+                type="button"
               >
                 <span className="tab-ripple" />
                 <span className="tab-label">{t.label}</span>
-                {/* Active pill */}
                 <AnimatePresence>
                   {active && (
                     <motion.span
@@ -104,21 +143,23 @@ const DocumentTab = () => {
             );
           })}
 
-          {/* Shared animated underline across rail */}
+          {/* Animated underline positioned via left/width/top */}
           <AnimatePresence>
-            <motion.span
-              key={activeTab}
-              className="tab-ink"
-              initial={{ opacity: 0 }}
-              animate={{
-                opacity: 1,
-                left: inkPos.left,
-                right: inkPos.right,
-                bottom: inkPos.bottom,
-              }}
-              exit={{ opacity: 0 }}
-              transition={{ type: "spring", stiffness: 380, damping: 30 }}
-            />
+            {ink.ready && (
+              <motion.span
+                key={activeTab}
+                className="tab-ink"
+                initial={{ opacity: 0 }}
+                animate={{
+                  opacity: 1,
+                  left: ink.left,
+                  width: ink.width,
+                  top: ink.top,
+                }}
+                exit={{ opacity: 0 }}
+                transition={{ type: "spring", stiffness: 380, damping: 30 }}
+              />
+            )}
           </AnimatePresence>
         </div>
       </div>
@@ -129,7 +170,7 @@ const DocumentTab = () => {
         className="tab-content"
         key={activeTab}
         role="tabpanel"
-        aria-labelledby={activeTab}
+        aria-labelledby={`tab-${activeTab}`}
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35 }}
@@ -149,20 +190,21 @@ const DocumentTab = () => {
           --ink-900:#0f172a; --ink-700:#334155; --ink-600:#475569; --ink-500:#64748b;
           --surface:#ffffff; --border:#e6e9ef;
           --gold:#f6c15a; --gold-press:#e3a83e;
-          --accent:#2b7a8b;
           --tab-ink:#f6c15a;
           --tab-pill:#f7f8ff;
-          --glow:#a5b4fc;
         }
 
         .doc-page {
           background: var(--bg-grad);
           min-height: 100vh;
+          min-height: 100dvh;
           font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-          padding-top: 86px;
+          padding-top: calc(86px + env(safe-area-inset-top, 0px));
+          padding-bottom: env(safe-area-inset-bottom, 0px);
           display: flex;
           flex-direction: column;
           align-items: center;
+          box-sizing: border-box;
         }
 
         /* Navbar */
@@ -183,13 +225,11 @@ const DocumentTab = () => {
           content:""; position:absolute; inset:0; pointer-events:none;
           background: linear-gradient(180deg, transparent 0%, var(--nav-overlay) 100%);
         }
-
         .navbar-title {
           font-size: clamp(20px, 2.4vw, 28px);
           font-weight: 900; letter-spacing: .3px; margin: 0;
           text-shadow: 0 1px 2px rgba(0,0,0,.25);
         }
-
         .btn-dashboard {
           position: relative;
           overflow: hidden;
@@ -215,7 +255,6 @@ const DocumentTab = () => {
             0 0 0 6px rgba(31,95,120,.45),
             0 10px 22px rgba(0,0,0,.18);
         }
-        /* subtle glint sweeping effect */
         .btn-glint{
           position:absolute; top:-150%; left:-50%; width:50%; height:400%;
           background: linear-gradient(120deg, transparent 45%, rgba(255,255,255,.25) 50%, transparent 55%);
@@ -240,7 +279,14 @@ const DocumentTab = () => {
           border-radius: 16px;
           padding: 6px;
           box-shadow: 0 10px 28px rgba(2,6,23,.06);
+          overflow-x: auto; /* allow scroll on tiny screens */
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: thin;
         }
+        .tabs-rail::-webkit-scrollbar{ height: 8px; }
+        .tabs-rail::-webkit-scrollbar-thumb{ background: #d6d9e2; border-radius: 8px; }
+        .tabs-rail::-webkit-scrollbar-track{ background: transparent; }
+
         .tab-item{
           position: relative;
           background: transparent;
@@ -254,6 +300,7 @@ const DocumentTab = () => {
           transition: background .2s ease, color .2s ease, transform .2s ease, box-shadow .2s ease;
           outline: none;
           overflow: hidden;
+          white-space: nowrap; /* keep tabs compact inside scroll area */
         }
         .tab-item .tab-ripple{
           position:absolute; inset:auto; top:50%; left:50%; width:0; height:0; border-radius:999px;
@@ -265,20 +312,15 @@ const DocumentTab = () => {
           background: #f5f7fb; color: var(--ink-900); transform: translateY(-1px);
           box-shadow: 0 2px 10px rgba(99,102,241,.10);
         }
-        .tab-item:active .tab-ripple{
-          animation: ripple .55s ease-out;
-        }
+        .tab-item:active .tab-ripple{ animation: ripple .55s ease-out; }
         @keyframes ripple {
           0% { width: 0; height: 0; opacity:.65; }
           100% { width: 280px; height: 280px; opacity:0; }
         }
         .tab-item.active{ color: var(--ink-900); }
-        .tab-item:focus-visible{
-          box-shadow: 0 0 0 3px rgba(99,102,241,.25);
-        }
+        .tab-item:focus-visible{ box-shadow: 0 0 0 3px rgba(99,102,241,.25); }
         .tab-label{ position: relative; z-index: 2; }
 
-        /* Active soft pill */
         .tab-pill{
           position: absolute;
           inset: 2px;
@@ -288,12 +330,11 @@ const DocumentTab = () => {
           box-shadow: inset 0 0 0 1px #eef1ff, 0 6px 16px rgba(99,102,241,.10);
         }
 
-        /* Underline */
+        /* Underline - positioned dynamically with inline styles */
         .tab-ink{
           position: absolute;
           height: 3px; border-radius: 3px;
           background: var(--tab-ink);
-          bottom: 6px;
           box-shadow: 0 6px 16px rgba(246,193,90,.45);
           pointer-events:none;
         }

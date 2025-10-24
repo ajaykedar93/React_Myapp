@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from "react";
 
-const API_BASE = "https://express-myapp.onrender.com/api";
+const API_BASE = "https://express-backend-myapp.onrender.com/api";
 
 const WorkCategory = () => {
   const [categories, setCategories] = useState([]);

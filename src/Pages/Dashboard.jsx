@@ -1,120 +1,164 @@
 // src/components/Dashboard.jsx
-import React, { useEffect } from "react";
+import React, { useEffect, useLayoutEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { Card, Container, Row, Col } from "react-bootstrap";
 import MainNavbar from "./MainNavbar";
-import Footer from "./Footer"; // ✅ Import Footer
+import Footer from "./Footer";
 
-// ✅ Import images properly (works after build & deploy)
 import documentsImg from "../assets/documents.png";
 import investmentImg from "../assets/investment.png";
 import moviesImg from "../assets/movies_series.png";
 import transactionImg from "../assets/transaction_new.png";
 import workDetailsImg from "../assets/work_details.png";
 
+/** Measure fixed bars and expose CSS vars for perfect layout. */
+function useFixedLayoutVars() {
+  const measure = () => {
+    const topStrip = document.querySelector(".top-strip");
+    const navbar   = document.querySelector(".custom-navbar");
+    const footer   = document.querySelector(".pro-footer");
+
+    // heights (offsetHeight ignores margins – we force margins to 0 via CSS below)
+    const topH  = topStrip?.offsetHeight ?? 0;
+    const navH  = navbar?.offsetHeight ?? 0;
+    const footH = footer?.offsetHeight ?? 0;
+
+    const root = document.documentElement.style;
+    root.setProperty("--top-strip", `${topH}px`);
+    root.setProperty("--nav-core", `${navH}px`);
+    root.setProperty("--nav-h", `${topH + navH}px`);
+    root.setProperty("--footer-h", `${footH}px`);
+  };
+
+  useLayoutEffect(() => {
+    measure();
+    const ro = new ResizeObserver(measure);
+    const topStrip = document.querySelector(".top-strip");
+    const navbar   = document.querySelector(".custom-navbar");
+    const footer   = document.querySelector(".pro-footer");
+
+    if (topStrip) ro.observe(topStrip);
+    if (navbar)   ro.observe(navbar);
+    if (footer)   ro.observe(footer);
+
+    window.addEventListener("resize", measure, { passive: true });
+    const t = setTimeout(measure, 250);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+      clearTimeout(t);
+    };
+  }, []);
+}
+
 const Dashboard = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  useFixedLayoutVars();
 
-  // Navigate on card click
-  const handleCardClick = (path) => {
-    navigate(path);
-  };
-
-  // Handle logout
-  const handleLogout = () => {
-    logout();
-    navigate("/login", { replace: true });
-  };
-
-  // Redirect if not logged in
-  useEffect(() => {
-    if (!user) {
-      navigate("/login", { replace: true });
+  const handleCardClick = (path) => navigate(path);
+  const onCardKey = (e, path) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      handleCardClick(path);
     }
+  };
+
+  useEffect(() => {
+    if (!user) navigate("/login", { replace: true });
   }, [user, navigate]);
 
   return (
     <div className="dashboard-container">
-      {/* Navbar (forced fixed via CSS below) */}
       <MainNavbar />
-
-      {/* Fixed footer */}
       <Footer />
 
-      {/* Only this section scrolls */}
-      <div className="dashboard-scroll">
-        <div className="manage-details-banner">Manage All Personal Details</div>
+      {/* Only this area scrolls */}
+      <div className="dashboard-scroll" role="main" aria-label="Main content">
+        <div className="manage-details-banner" role="heading" aria-level={1}>
+          Manage All Personal Details
+        </div>
 
-        {/* Dashboard Content */}
         <Container className="dashboard-content">
-          <div className="cards-container mt-4">
+          <div className="cards-container mt-3" aria-label="Quick sections">
             <Row xs={1} md={2} lg={3} xl={5} className="g-4">
-              {/* Documents */}
               <Col>
                 <Card
                   className="clickable-card documents-card"
                   onClick={() => handleCardClick("/document")}
+                  role="button" tabIndex={0}
+                  onKeyDown={(e) => onCardKey(e, "/document")}
+                  aria-label="Open Documents"
                 >
-                  <Card.Body>
-                    <Card.Title>Documents</Card.Title>
-                    <Card.Img variant="top" src={documentsImg} />
+                  <Card.Body className="d-flex flex-column align-items-center text-center">
+                    <Card.Title as="h3" className="card-title">Documents</Card.Title>
+                    <Card.Img variant="top" src={documentsImg} alt="Documents" loading="lazy" />
                   </Card.Body>
                 </Card>
               </Col>
 
-              {/* Investment */}
               <Col>
                 <Card
                   className="clickable-card investment-card"
                   onClick={() => handleCardClick("/investment")}
+                  role="button" tabIndex={0}
+                  onKeyDown={(e) => onCardKey(e, "/investment")}
+                  aria-label="Open Investment"
                 >
-                  <Card.Body>
-                    <Card.Title>Investment</Card.Title>
-                    <Card.Img variant="top" src={investmentImg} />
+                  <Card.Body className="d-flex flex-column align-items-center text-center">
+                    <Card.Title as="h3" className="card-title">Investment</Card.Title>
+                    <Card.Img variant="top" src={investmentImg} alt="Investment" loading="lazy" />
                   </Card.Body>
                 </Card>
               </Col>
 
-              {/* Movies & Series */}
               <Col>
                 <Card
                   className="clickable-card movies-card"
                   onClick={() => handleCardClick("/movies-series")}
+                  role="button" tabIndex={0}
+                  onKeyDown={(e) => onCardKey(e, "/movies-series")}
+                  aria-label="Open Movies and Series"
                 >
-                  <Card.Body>
-                    <Card.Title>Movies & Series</Card.Title>
-                    <Card.Img variant="top" src={moviesImg} />
+                  <Card.Body className="d-flex flex-column align-items-center text-center">
+                    <Card.Title as="h3" className="card-title">Movies & Series</Card.Title>
+                    <Card.Img variant="top" src={moviesImg} alt="Movies and Series" loading="lazy" />
                   </Card.Body>
                 </Card>
               </Col>
 
-              {/* Transaction */}
               <Col>
                 <Card
                   className="clickable-card transaction-card"
                   onClick={() => handleCardClick("/transaction")}
+                  role="button" tabIndex={0}
+                  onKeyDown={(e) => onCardKey(e, "/transaction")}
+                  aria-label="Open Transaction"
                 >
-                  <Card.Body>
-                    <Card.Title>Transaction</Card.Title>
-                    <Card.Img variant="top" src={transactionImg} />
+                  <Card.Body className="d-flex flex-column align-items-center text-center">
+                    <Card.Title as="h3" className="card-title">Transaction</Card.Title>
+                    <Card.Img variant="top" src={transactionImg} alt="Transaction" loading="lazy" />
                   </Card.Body>
                 </Card>
               </Col>
 
-              {/* Work Details */}
               <Col>
                 <Card
                   className="clickable-card work-details-card"
                   onClick={() => handleCardClick("/work-details")}
+                  role="button" tabIndex={0}
+                  onKeyDown={(e) => onCardKey(e, "/work-details")}
+                  aria-label="Open Work Details"
                 >
-                  <Card.Body>
-                    <Card.Title>Work Details</Card.Title>
+                  <Card.Body className="d-flex flex-column align-items-center text-center">
+                    <Card.Title as="h3" className="card-title">Work Details</Card.Title>
                     <Card.Img
                       variant="top"
                       src={workDetailsImg}
-                      style={{ height: "200px", objectFit: "contain" }}
+                      alt="Work Details"
+                      loading="lazy"
+                      style={{ height: 200, objectFit: "contain" }}
                     />
                   </Card.Body>
                 </Card>
@@ -124,129 +168,114 @@ const Dashboard = () => {
         </Container>
       </div>
 
-      {/* Inline CSS */}
-      <style>
-        {`
-          :root{
-            /* Adjust these if navbar/footer heights change */
-            --top-strip: 6px;
-            --nav-core: 86px;
-            --nav-h: calc(var(--top-strip) + var(--nav-core));
-            --footer-h: 110px;
-          }
+      <style>{`
+        :root{
+          --top-strip: 0px;     /* JS overwrites */
+          --nav-core: 86px;     /* JS overwrites */
+          --nav-h: calc(var(--top-strip) + var(--nav-core));
+          --footer-h: 110px;    /* JS overwrites */
+        }
 
-          .dashboard-container {
-            min-height: 100vh;
-            position: relative;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-          }
+        /* Make sure body has no default margin impacting layout */
+        html, body { margin: 0; padding: 0; }
 
-          .top-strip {
-            position: fixed !important;
-            top: 0; left: 0; right: 0;
-            z-index: 1200;
-          }
-          .custom-navbar {
-            position: fixed !important;
-            top: var(--top-strip);
-            left: 0; right: 0;
-            z-index: 1190;
-          }
+        .dashboard-container {
+          min-height: 100dvh;
+          display: flex; flex-direction: column;
+          overflow: hidden; /* only inner area scrolls */
+          background: #f7fafc;
+          -webkit-tap-highlight-color: transparent;
+        }
 
-          .dashboard-container .pro-footer {
-            position: fixed !important;
-            left: 0; right: 0; bottom: 0;
-            z-index: 1030;
-            display: block;
-          }
+        /* 🔒 Remove outer margins from fixed bars so math is exact */
+        .custom-navbar { margin: 0 !important; position: fixed !important; top: var(--top-strip); left: 0; right: 0; z-index: 1190; }
+        .top-strip { position: fixed !important; top: 0; left: 0; right: 0; height: 6px; z-index: 1200; }
+        .dashboard-container .pro-footer { margin: 0 !important; position: fixed !important; left: 0; right: 0; bottom: 0; z-index: 1030;
+          padding-bottom: max(env(safe-area-inset-bottom, 0px), 8px); background-clip: padding-box; }
 
-          @media (max-width: 576px) {
-            .dashboard-container .pro-footer {
-              height: 30px;
-              display: block;
-            }
-          }
+        /* 🧭 Single scroll area uses the *remaining* space exactly */
+        .dashboard-scroll {
+          margin-top: var(--nav-h);
+          margin-bottom: var(--footer-h);
 
-          .dashboard-scroll {
-            position: relative;
-            height: calc(100vh - var(--nav-h) - var(--footer-h));
-            margin-top: var(--nav-h);
-            margin-bottom: var(--footer-h);
-            overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
-          }
+          /* prefer svh (small viewport) where available */
+          height: calc(100svh - var(--nav-h) - var(--footer-h));
+          min-height: calc(100svh - var(--nav-h) - var(--footer-h));
 
-          .dashboard-content {
-            padding: 20px;
-            margin-top: 0;
-            flex: 0 0 auto;
-          }
+          /* fallback/override for browsers using dvh */
+          height: calc(100dvh - var(--nav-h) - var(--footer-h));
+          min-height: calc(100dvh - var(--nav-h) - var(--footer-h));
 
-          .cards-container {
-            margin-top: 30px;
-            margin-bottom: 30px;
-          }
+          overflow-y: auto;
+          overscroll-behavior: contain;
+          -webkit-overflow-scrolling: touch;
+          scroll-behavior: smooth;
+          scrollbar-gutter: stable both-edges;
+        }
 
-          .card {
-            cursor: pointer;
-            border-radius: 15px;
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-          }
-          .card img {
-            max-height: 200px;
-            object-fit: contain;
-            width: 100%;
-            border-radius: 10px;
-            margin-bottom: 10px;
-          }
-          .card:hover {
-            transform: translateY(-10px);
-            box-shadow: 0 12px 20px rgba(0, 0, 0, 0.1);
-          }
+        /* Optional: subtle desktop scrollbar */
+        @media (pointer: fine) {
+          .dashboard-scroll::-webkit-scrollbar { width: 10px; }
+          .dashboard-scroll::-webkit-scrollbar-track { background: transparent; }
+          .dashboard-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 10px; border: 2px solid transparent; background-clip: padding-box; }
+          .dashboard-scroll:hover::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.25); }
+        }
 
-          .documents-card { background-color: #ffeb3b; color: #000; }
-          .investment-card { background-color: #4caf50; color: #fff; }
-          .movies-card { background-color: #2196f3; color: #fff; }
-          .transaction-card { background-color: #f44336; color: #fff; }
-          .work-details-card { background-color: #9c27b0; color: #fff; }
+        .dashboard-content { padding: 16px 12px 24px; }
+        .cards-container { margin: 16px 0 24px; }
 
-          .manage-details-banner {
-            font-family: 'Poppins', 'Segoe UI', sans-serif;
-            font-weight: 800;
-            font-size: 1.6rem;
-            color: #d22212ff;
-            background: linear-gradient(90deg, #e0eafc, #cfdef3);
-            padding: 14px 24px;
-            border-radius: 12px;
-            text-align: center;
-            margin: 60px auto 10px;
-            max-width: 680px;
-            box-shadow: 0 6px 16px rgba(0,0,0,0.08);
-            letter-spacing: 0.5px;
-          }
+        .card {
+          cursor: pointer;
+          border-radius: 16px;
+          border: none; outline: none;
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          transition: transform .22s ease, box-shadow .22s ease;
+        }
+        .card:focus-visible { box-shadow: 0 0 0 4px rgba(59,130,246,.45), 0 12px 24px rgba(16,24,40,.12); transform: translateY(-2px); }
+        .card:hover { transform: translateY(-6px); box-shadow: 0 12px 24px rgba(16,24,40,.12); }
+        .card img { max-height: 200px; width: 100%; object-fit: contain; border-radius: 10px; margin-bottom: 10px; user-select: none; -webkit-user-drag: none; }
+        .card-title { font-size: 1.15rem; font-weight: 800; letter-spacing: .3px; margin-bottom: 12px; }
 
-          @media (max-width: 992px){
-            :root{
-              --nav-core: 82px;
-              --footer-h: 120px;
-            }
-          }
-          @media (max-width: 768px){
-            .card { margin-bottom: 20px; }
-            :root{ --nav-core: 78px; }
-          }
-          @media (max-width: 576px){
-            .card { margin-bottom: 10px; }
-            :root{ --nav-core: 74px; }
-          }
-        `}
-      </style>
+        .documents-card   { background-color: #ffeb3b; color: #0f172a; }
+        .investment-card  { background-color: #22c55e; color: #ffffff; }
+        .movies-card      { background-color: #3b82f6; color: #ffffff; }
+        .transaction-card { background-color: #ef4444; color: #ffffff; }
+        .work-details-card{ background-color: #a855f7; color: #ffffff; }
+
+        /* ✅ Tight sticky banner (no wasted vertical space) */
+        .manage-details-banner {
+          position: sticky; top: 0; z-index: 5;
+          font-family: 'Poppins','Segoe UI',system-ui,-apple-system,Roboto,Arial,sans-serif;
+          font-weight: 800; font-size: 1.45rem; color: #d22212;
+          background: linear-gradient(90deg, #e0eafc, #cfdef3);
+          padding: 10px 18px;
+          border-radius: 12px;
+          text-align: center;
+          margin: 8px auto 6px;  /* tighter */
+          max-width: 820px;
+          box-shadow: 0 6px 16px rgba(0,0,0,0.06);
+          letter-spacing: .35px;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .card, .card:hover, .card:focus-visible { transition: none !important; transform: none !important; }
+          .dashboard-scroll { scroll-behavior: auto; }
+        }
+        @media (max-width: 992px){
+          :root{ --nav-core: 82px; }
+        }
+        @media (max-width: 768px){
+          :root{ --nav-core: 78px; }
+          .manage-details-banner { font-size: 1.3rem; padding: 9px 14px; }
+          .card img{ max-height: 190px; }
+        }
+        @media (max-width: 576px){
+          :root{ --nav-core: 74px; }
+          .manage-details-banner { margin: 6px auto 4px; }
+          .card img{ max-height: 180px; }
+          .card-title{ font-size: 1.05rem; }
+        }
+      `}</style>
     </div>
   );
 };

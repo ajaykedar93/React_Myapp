@@ -3,7 +3,7 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import LoadingSpiner from "../Entertainment/LoadingSpiner.jsx";
 import Swal from "sweetalert2";
 
-const BASE_URL = "https://express-myapp.onrender.com/api/notes";
+const BASE_URL = "https://express-backend-myapp.onrender.com/api/notes";
 
 /* ====== Date helpers (pretty: "2 Oct 2025") ====== */
 const MONTHS = [
@@ -172,7 +172,35 @@ export default function Notes() {
       .table thead th { position: sticky; top: 0; background: #f8fafc; z-index: 1; }
       .truncate { max-width: 480px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       @media (max-width: 768px){ .truncate { max-width: 200px; } }
-      @keyframes fadeIn{from{opacity:0} to{opacity:1}} @keyframes scaleIn{from{transform:scale(.96);opacity:0} to{transform:scale(1);opacity:1}}
+
+      /* ===== Responsive "table to cards" pattern ===== */
+      @media (max-width: 680px){
+        .stack-table thead { display: none; }
+        .stack-table tbody, .stack-table tr, .stack-table td { display: block; width: 100%; }
+        .stack-table tr { border-bottom: 1px solid rgba(15,23,42,0.08); padding: 10px 12px; }
+        .stack-table td { border: none !important; padding: 6px 0 !important; }
+        .stack-table td::before{
+          content: attr(data-label);
+          display: inline-block;
+          min-width: 110px;
+          font-weight: 700;
+          color: #334155;
+          margin-right: 8px;
+        }
+        .stack-table .row-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: 8px;
+          margin-top: 6px;
+        }
+        .stack-table .row-index { font-weight: 800; color:#0b1221; }
+      }
+
+      /* Subtle hover */
+      .table-hover tbody tr:hover { background: #f9fbff; }
+
+      @keyframes fadeIn{from{opacity:0} to{opacity:1}} 
+      @keyframes scaleIn{from{transform:scale(.96);opacity:0} to{transform:scale(1);opacity:1}}
     `;
     document.head.appendChild(s);
   }, []);
@@ -376,7 +404,7 @@ export default function Notes() {
       <div className="glass p-3 p-md-4 mb-4">
         <h5 className="mb-3">Add Note</h5>
         <div className="row g-3">
-          <div className="col-md-3">
+          <div className="col-md-3 col-12">
             <label className="form-label">Title</label>
             <input
               className="form-control"
@@ -385,7 +413,7 @@ export default function Notes() {
               placeholder="e.g. Buy groceries"
             />
           </div>
-          <div className="col-md-3">
+          <div className="col-md-3 col-12">
             <DateSelect
               label="Date (2 Oct 2025)"
               value={form.note_date}
@@ -394,7 +422,7 @@ export default function Notes() {
               required
             />
           </div>
-          <div className="col-md-3">
+          <div className="col-md-3 col-12">
             <label className="form-label">User Name (optional)</label>
             <input
               className="form-control"
@@ -403,7 +431,7 @@ export default function Notes() {
               placeholder="Your name"
             />
           </div>
-          <div className="col-md-3">
+          <div className="col-md-3 col-12">
             <label className="form-label">User Email (optional)</label>
             <input
               className="form-control"
@@ -465,10 +493,10 @@ export default function Notes() {
         </div>
       </div>
 
-      {/* Notes Table */}
+      {/* Notes Table (auto-cards on mobile) */}
       <div className="glass overflow-hidden">
         <div className="table-responsive">
-          <table className="table table-hover align-middle m-0">
+          <table className="table table-hover align-middle m-0 stack-table">
             <thead className="table-light">
               <tr>
                 <th style={{ width: 56 }}>#</th>
@@ -499,27 +527,29 @@ export default function Notes() {
                   const rowNumber = (page - 1) * PAGE_SIZE + (idx + 1);
                   return (
                     <tr key={n.id}>
-                      <td>{rowNumber}</td>
-                      <td className="truncate" title={n.title}>{n.title}</td>
-                      <td>{display || "-"}</td>
-                      <td className="truncate" title={n.user_name || "-"}>{n.user_name || "-"}</td>
-                      <td className="truncate" title={n.user_email || "-"}>{n.user_email || "-"}</td>
-                      <td className="truncate" title={n.details || "-"}>{n.details || "-"}</td>
-                      <td className="text-end">
-                        <button
-                          className="btn btn-outline-primary btn-sm me-2"
-                          onClick={() =>
-                            setEditItem({ ...n, note_date: display || n.note_date })
-                          }
-                        >
-                          Edit
-                        </button>
-                        <button
-                          className="btn btn-outline-danger btn-sm"
-                          onClick={() => deleteNote(n.id)}
-                        >
-                          Delete
-                        </button>
+                      <td data-label="#" className="row-index">{rowNumber}</td>
+                      <td data-label="Title" className="truncate" title={n.title}>{n.title}</td>
+                      <td data-label="Date">{display || "-"}</td>
+                      <td data-label="User" className="truncate" title={n.user_name || "-"}>{n.user_name || "-"}</td>
+                      <td data-label="Email" className="truncate" title={n.user_email || "-"}>{n.user_email || "-"}</td>
+                      <td data-label="Details" className="truncate" title={n.details || "-"}>{n.details || "-"}</td>
+                      <td data-label="Actions" className="text-end">
+                        <div className="row-actions">
+                          <button
+                            className="btn btn-outline-primary btn-sm me-2"
+                            onClick={() =>
+                              setEditItem({ ...n, note_date: display || n.note_date })
+                            }
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className="btn btn-outline-danger btn-sm"
+                            onClick={() => deleteNote(n.id)}
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

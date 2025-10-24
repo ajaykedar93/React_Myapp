@@ -9,7 +9,7 @@ import React, { useEffect, useMemo, useRef, useState, memo, useCallback } from "
 import LoadingSpiner from "./LoadingSpiner";
 
 // API endpoints
-const API_BASE = "https://express-myapp.onrender.com/api";
+const API_BASE = "https://express-backend-myapp.onrender.com/api";
 const EP = {
   CATEGORIES: `${API_BASE}/movies/categories`,
   SUBCATEGORIES: `${API_BASE}/movies/subcategories`,

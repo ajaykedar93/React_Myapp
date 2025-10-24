@@ -26,12 +26,12 @@ import {
  * - Accept any URL; auto-prepend https:// if missing
  * - Optional drag & drop image
  * - Search, category, pagination, edit/delete
- * - URLs show fully (wrap); small Copy button next to URL (below)
- * - Image area shows ONLY: Open + Full buttons (no Copy up top)
+ * - URLs show fully (wrap) with Show more/less toggle
+ * - Image area shows ONLY: Open + Full buttons
  * - Default 10/page; responsive
  */
 
-const API_BASE = "https://express-myapp.onrender.com"; // no trailing slash
+const API_BASE = "https://express-backend-myapp.onrender.com"; // no trailing slash
 
 // ----------------------------- helpers -----------------------------
 const toInt = (v, d = 10) => {
@@ -72,6 +72,7 @@ const Badge = ({ tone = "info", children }) => {
   return <span className={cls}>{children}</span>;
 };
 
+/** Centered popup WITHOUT overlay — always centered in viewport */
 function CenterNotice({ open, type = "success", title, message, onClose }) {
   const palette =
     type === "success"
@@ -81,26 +82,33 @@ function CenterNotice({ open, type = "success", title, message, onClose }) {
       : { Icon: FiInfo, border: "#0d6efd" };
   const { Icon } = palette;
 
+  const okBtnRef = useRef(null);
+  useEffect(() => {
+    if (open) {
+      try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch {}
+      setTimeout(() => okBtnRef.current?.focus(), 0);
+    }
+  }, [open]);
+
   return (
     <AnimatePresence>
       {open && (
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="position-fixed top-0 start-0 w-100 h-100 d-grid"
-          style={{ background: "rgba(0,0,0,.5)", zIndex: 1060, placeItems: "center" }}
-          onClick={onClose}
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.98 }}
+          transition={spring}
+          className="position-fixed d-block"
+          style={{
+            zIndex: 2000,
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            width: "min(92vw, 520px)",
+            pointerEvents: "none",
+          }}
         >
-          <motion.div
-            initial={{ y: 14, opacity: 0, scale: 0.98 }}
-            animate={{ y: 0, opacity: 1, scale: 1 }}
-            exit={{ y: 10, opacity: 0, scale: 0.98 }}
-            transition={spring}
-            className="card shadow-lg"
-            style={{ maxWidth: 520, width: "92%", borderTop: `4px solid ${palette.border}` }}
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="card shadow-lg" style={{ borderTop: `4px solid ${palette.border}`, pointerEvents: "auto" }}>
             <div className="card-body">
               <div className="d-flex align-items-center gap-3 mb-2">
                 <div className="d-inline-flex align-items-center justify-content-center rounded-circle border"
@@ -111,10 +119,10 @@ function CenterNotice({ open, type = "success", title, message, onClose }) {
               </div>
               <p className="card-text text-secondary mb-4">{message}</p>
               <div className="text-end">
-                <button className="btn btn-primary fw-bold" onClick={onClose}>OK</button>
+                <button ref={okBtnRef} className="btn btn-primary fw-bold" onClick={onClose}>OK</button>
               </div>
             </div>
-          </motion.div>
+          </div>
         </motion.div>
       )}
     </AnimatePresence>
@@ -251,6 +259,9 @@ export default function WebsitesUrl() {
   const [fFile, setFFile] = useState(null);
   const [saving, setSaving] = useState(false);
 
+  // NEW: per-card "show more" state for long URLs
+  const [expanded, setExpanded] = useState({}); // { [id]: true|false }
+
   const showNotice = (type, title, message) => setNotice({ open: true, type, title, message });
 
   const copyLink = async (url) => {
@@ -381,6 +392,22 @@ export default function WebsitesUrl() {
     }
   };
 
+  // styles for URL text (clamped vs expanded)
+  const clampStyle = {
+    display: "-webkit-box",
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: "vertical",
+    overflow: "hidden",
+    wordBreak: "break-all",
+    whiteSpace: "normal",
+    maxWidth: "100%",
+  };
+  const expandedStyle = {
+    wordBreak: "break-all",
+    whiteSpace: "normal",
+    maxWidth: "100%",
+  };
+
   return (
     <div className="min-vh-100" style={{ background: "#f5f7fb" }}>
       {/* Header */}
@@ -399,7 +426,6 @@ export default function WebsitesUrl() {
       >
         <div className="container py-3 d-flex align-items-center justify-content-between gap-3 flex-wrap">
           <div className="d-flex align-items-center gap-3">
-            {/* Enhanced URL badge with bold white font + glow */}
             <div
               className="rounded-3 d-grid"
               style={{
@@ -556,6 +582,7 @@ export default function WebsitesUrl() {
             <AnimatePresence>
               {items.map((it) => {
                 const displayUrl = normalizeUrl(it.url);
+                const isExpanded = !!expanded[it.id];
                 return (
                   <motion.div
                     key={it.id}
@@ -566,7 +593,7 @@ export default function WebsitesUrl() {
                     className="col-sm-6 col-lg-4 col-xl-3"
                   >
                     <div className="card h-100 shadow-sm">
-                      {/* Image area: click to open full preview (fit to card by default) */}
+                      {/* Image area */}
                       <div
                         className="position-relative d-flex align-items-center justify-content-center bg-light"
                         style={{
@@ -593,7 +620,6 @@ export default function WebsitesUrl() {
                           </div>
                         )}
 
-                        {/* TOP overlay buttons: ONLY Open + Full */}
                         <div className="position-absolute end-0 bottom-0 m-2 d-flex gap-1">
                           <button
                             type="button"
@@ -625,22 +651,36 @@ export default function WebsitesUrl() {
                             </div>
 
                             {it.url && (
-                              <div className="small text-secondary d-flex align-items-start gap-2 mt-1" title={it.url}>
-                                {/* small Copy button IN FRONT of the website (below only) */}
-                                <button
-                                  type="button"
-                                  className="btn btn-outline-secondary btn-sm py-0 px-2 d-inline-flex align-items-center gap-1"
-                                  onClick={() => copyLink(it.url)}
-                                  aria-label="Copy link"
-                                  title="Copy link"
-                                  style={{ lineHeight: 1.2, whiteSpace: "nowrap" }}
-                                >
-                                  <FiCopy /> Copy
-                                </button>
-                                <span style={{ wordBreak: "break-all" }}>
-                                  <FiGlobe className="me-1" />
-                                  {displayUrl}
-                                </span>
+                              <div className="small text-secondary d-flex flex-column gap-1 mt-1" title={it.url}>
+                                <div className="d-flex align-items-start gap-2">
+                                  <button
+                                    type="button"
+                                    className="btn btn-outline-secondary btn-sm py-0 px-2 d-inline-flex align-items-center gap-1"
+                                    onClick={() => copyLink(it.url)}
+                                    aria-label="Copy link"
+                                    title="Copy link"
+                                    style={{ lineHeight: 1.2, whiteSpace: "nowrap" }}
+                                  >
+                                    <FiCopy /> Copy
+                                  </button>
+                                  <span style={isExpanded ? expandedStyle : clampStyle}>
+                                    <FiGlobe className="me-1" />
+                                    {displayUrl}
+                                  </span>
+                                </div>
+
+                                {/* Show more / less toggle */}
+                                <div>
+                                  <button
+                                    type="button"
+                                    className="btn btn-link btn-sm p-0"
+                                    onClick={() =>
+                                      setExpanded((m) => ({ ...m, [it.id]: !isExpanded }))
+                                    }
+                                  >
+                                    {isExpanded ? "Show less" : "Show more"}
+                                  </button>
+                                </div>
                               </div>
                             )}
                           </div>
@@ -764,7 +804,7 @@ export default function WebsitesUrl() {
         onConfirm={doDelete}
       />
 
-      {/* Centered notice */}
+      {/* Centered notice (no overlay, always at center) */}
       <CenterNotice
         open={notice.open}
         type={notice.type}

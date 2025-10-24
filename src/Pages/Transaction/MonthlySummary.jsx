@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import LoadingSpinner from "../Entertainment/LoadingSpiner";
 
-const API_BASE = "https://express-myapp.onrender.com/api";
+const API_BASE = "https://express-backend-myapp.onrender.com/api";
 
 // Formatter: always return 2 decimals
 const format = (num) => {

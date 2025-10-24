@@ -41,7 +41,7 @@ const AddSitekharch = () => {
     const run = async () => {
       try {
         setLoadingCats(true);
-        const res = await fetch("https://express-myapp.onrender.com/api/workcategory");
+        const res = await fetch("https://express-backend-myapp.onrender.com/api/workcategory");
         const data = await res.json();
         setCategories(Array.isArray(data) ? data : []);
       } catch {
@@ -125,7 +125,7 @@ const AddSitekharch = () => {
 
     try {
       setSaving(true);
-      const res = await fetch("https://express-myapp.onrender.com/api/sitekharch", {
+      const res = await fetch("https://express-backend-myapp.onrender.com/api/sitekharch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

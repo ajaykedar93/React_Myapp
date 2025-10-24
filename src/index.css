@@ -5,6 +5,12 @@
   box-sizing: border-box;
 }
 
+/* Prevent accidental horizontal scroll on small screens */
+html, body { overflow-x: hidden; }
+
+/* Respect safe areas on phones with notches */
+body { padding-bottom: env(safe-area-inset-bottom); }
+
 /* ===== Body Layout ===== */
 body {
   font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -30,16 +36,13 @@ a {
   text-decoration: none;
   transition: color 0.2s ease-in-out;
 }
-
 a:hover {
   color: #0a58ca;
   text-decoration: underline;
 }
 
 /* ===== Navbar Fix (Bootstrap override) ===== */
-.navbar {
-  padding: 0.8rem 1rem;
-}
+.navbar { padding: 0.8rem 1rem; }
 
 /* ===== Main Content ===== */
 main {
@@ -62,12 +65,10 @@ button,
   border-radius: 8px !important;
   font-weight: 500;
   transition: all 0.2s ease-in-out;
+  min-height: 44px; /* better tap target on mobile */
 }
-
 button:hover,
-.btn:hover {
-  transform: translateY(-2px);
-}
+.btn:hover { transform: translateY(-2px); }
 
 /* ===== Cards ===== */
 .card {
@@ -75,34 +76,22 @@ button:hover,
   overflow: hidden;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
-
 .card:hover {
   transform: translateY(-3px);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
 }
 
+/* Make images, videos, tables responsive by default */
+img, video, canvas, svg { max-width: 100%; height: auto; }
+table { width: 100%; }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+/* -------- Favorites Page (your classes) -------- */
 
 /* Main Container */
 .favorite {
   width: 100%;
   max-width: 1200px;
-  margin: 20px;
+  margin: 20px auto;            /* centered on big & small screens */
   padding: 30px;
   background-color: #ffffff;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
@@ -115,7 +104,6 @@ button:hover,
   text-align: center;
   margin-bottom: 40px;
 }
-
 .favorite-header h1 {
   font-size: 2.5rem;
   color: #007bff;
@@ -129,7 +117,6 @@ button:hover,
   flex-direction: column;
   gap: 10px;
 }
-
 .category-dropdown {
   padding: 12px;
   font-size: 1rem;
@@ -140,28 +127,20 @@ button:hover,
   width: 200px;
   margin: 0 auto;
 }
-
-.category-dropdown:focus {
-  border-color: #007bff;
-}
+.category-dropdown:focus { border-color: #007bff; }
 
 /* Favorites List */
-.favorites-list {
-  padding-top: 20px;
-}
-
+.favorites-list { padding-top: 20px; }
 .favorites-list h2 {
   font-size: 1.8rem;
   margin-bottom: 20px;
   text-align: center;
 }
-
 .favorites-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 20px;
 }
-
 .favorite-item {
   background-color: #fff;
   border-radius: 8px;
@@ -170,30 +149,18 @@ button:hover,
   text-align: center;
   transition: transform 0.3s ease;
 }
-
-.favorite-item:hover {
-  transform: translateY(-5px);
-}
-
+.favorite-item:hover { transform: translateY(-5px); }
 .favorite-content h3 {
   font-size: 1.5rem;
   color: #333;
   margin-bottom: 10px;
 }
-
 .favorite-content p {
   font-size: 1.2rem;
   color: #888;
 }
-
-.favorite-actions {
-  margin-top: 20px;
-}
-
-.rating-section {
-  margin-bottom: 15px;
-}
-
+.favorite-actions { margin-top: 20px; }
+.rating-section { margin-bottom: 15px; }
 .rating-input {
   width: 50px;
   padding: 8px;
@@ -203,11 +170,7 @@ button:hover,
   background-color: #f9f9f9;
   outline: none;
 }
-
-.rating-input:focus {
-  border-color: #007bff;
-}
-
+.rating-input:focus { border-color: #007bff; }
 .add-favorite-button {
   padding: 10px 20px;
   background-color: #007bff;
@@ -218,57 +181,74 @@ button:hover,
   cursor: pointer;
   transition: background-color 0.3s;
 }
+.add-favorite-button:hover { background-color: #0056b3; }
 
-.add-favorite-button:hover {
-  background-color: #0056b3;
-}
-
-/* Responsive Design */
+/* Responsive Design (existing rules) */
 @media (max-width: 768px) {
-  .favorite-page {
-    padding: 20px;
-  }
-
-  .favorite-header h1 {
-    font-size: 2rem;
-  }
-
-  .category-dropdown {
-    width: 100%;
-  }
-
-  .favorites-grid {
-    grid-template-columns: 1fr;
-  }
+  .favorite-page { padding: 20px; }   /* keep your original */
+  .favorite-header h1 { font-size: 2rem; }
+  .category-dropdown { width: 100%; }
+  .favorites-grid { grid-template-columns: 1fr; }
 }
-
 @media (max-width: 480px) {
-  .favorite-header h1 {
-    font-size: 1.8rem;
-  }
-
-  .favorite-item {
-    padding: 15px;
-  }
-
-  .rating-input {
-    width: 40px;
-  }
-
-  .add-favorite-button {
-    width: 100%;
-  }
+  .favorite-header h1 { font-size: 1.8rem; }
+  .favorite-item { padding: 15px; }
+  .rating-input { width: 40px; }
+  .add-favorite-button { width: 100%; }
 }
 
+/* ---------- EXTRA Mobile Polish (added) ---------- */
 
+/* The previous media rule used .favorite-page (which may not exist).
+   Add the same paddings for the actual .favorite container too. */
+@media (max-width: 768px) {
+  .favorite { padding: 20px; margin: 14px auto; }
+}
 
+/* Make long text never overflow on tiny screens */
+.favorite, .favorite * { word-break: break-word; overflow-wrap: anywhere; }
 
+/* Tighten the main content padding on phones */
+@media (max-width: 576px) {
+  main { padding: 1rem; }
+}
 
+/* Make category select & buttons full-width on narrow phones */
+@media (max-width: 480px) {
+  .category-selection { align-items: stretch; }
+  .category-dropdown { width: 100%; margin: 0; }
+  .add-favorite-button,
+  .btn { width: 100%; }
+}
 
+/* Slightly smaller card hover lift on touch to reduce jumpiness */
+@media (hover: none) {
+  .card:hover { transform: none; box-shadow: 0 6px 18px rgba(0,0,0,0.12); }
+  button:hover, .btn:hover { transform: none; }
+}
 
+/* Reduce heading sizes safely on very small screens */
+@media (max-width: 380px) {
+  .favorite-header h1 { font-size: 1.6rem; }
+  .favorites-list h2 { font-size: 1.35rem; }
+}
 
+/* Give grid a smaller minimum on very small phones so two columns still fit when possible */
+@media (max-width: 420px) {
+  .favorites-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+}
 
+/* Improve table responsiveness globally if you use tables elsewhere */
+.table-responsive { -webkit-overflow-scrolling: touch; }
 
+/* Ensure footers/headers don’t stick on top of content edges on very small phones */
+@media (max-width: 360px) {
+  footer { padding: 0.8rem; font-size: 0.85rem; }
+}
 
-
-
+/* Optional: nicer focus ring for accessibility */
+:focus-visible { outline: 3px solid rgba(13,110,253,0.35); outline-offset: 2px; }
+/* global stylesheet */
+body { padding-top: 98px; }      /* default */
+@media (max-width: 991.98px){ body { padding-top: 88px; } }
+@media (max-width: 575.98px){ body { padding-top: 80px; } }

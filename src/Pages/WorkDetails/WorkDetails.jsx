@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
 import { FaClipboardList, FaInbox, FaHammer, FaPlus, FaEye } from "react-icons/fa";
+import { useNavigate } from "react-router-dom"; // ✅ added
 
 import AddDpr from "./AddDpr";
 import AddInward from "./AddInward";
@@ -21,7 +22,7 @@ import LoadingSpiner from "../Entertainment/LoadingSpiner";
  * - Non-blocking fetch, resilient error UI
  */
 
-const API_BASE = import.meta?.env?.VITE_API_BASE ?? "https://express-myapp.onrender.com/api";
+const API_BASE = import.meta?.env?.VITE_API_BASE ?? "https://express-backend-myapp.onrender.com/api";
 
 // ---------- Small helpers ---------- //
 const cleanName = (s) => (typeof s === "string" ? s.trim().replace(/\s+/g, " ") : "");
@@ -443,6 +444,8 @@ export default function WorkDetails() {
     }
   };
 
+  const navigate = useNavigate(); // ✅ added
+
   return (
     <div
       className="container-fluid"
@@ -497,7 +500,13 @@ export default function WorkDetails() {
               border: "none",
               boxShadow: "0 14px 30px rgba(2,6,23,.25)",
             }}
-            onClick={() => (window.location.href = "/dashboard")}
+            onClick={() => {
+              try {
+                navigate("/dashboard");               // ✅ SPA navigation (works on Vercel)
+              } catch {
+                window.location.assign("/dashboard");  // ✅ safe fallback outside Router
+              }
+            }}
           >
             Dashboard
           </button>

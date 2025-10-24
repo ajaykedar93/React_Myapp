@@ -1,15 +1,45 @@
 // src/pages/Entertainment/Movies_SeriesTab.jsx
-import React, { useMemo, useRef, useState, useEffect } from "react";
+import React, { useMemo, useRef, useState, useEffect, useLayoutEffect } from "react";
 import Navbar from "./Navbar";
 
 // Subpages
 import AddMovies from "./AddMovies";
 import AddSeries from "./AddSeries";
-import Fevarate from "./Fevarate";  // Import Fevarate (Favorites) page
+import Fevarate from "./Fevarate";
 import Manage from "./Manage";
 import Allcategories from "./Allcategories";
 import Download from "./Download";
 import AllList from "./AllList";
+
+/** Expose total fixed top height as --fixed-top so nothing hides under the navbar */
+function useFixedTopOffset() {
+  useLayoutEffect(() => {
+    const getFixedTop = () => {
+      const all = Array.from(document.body.querySelectorAll("*"));
+      let total = 0;
+      for (const el of all) {
+        const cs = window.getComputedStyle(el);
+        if (cs.position === "fixed" && (cs.top === "0px" || cs.top === "0")) {
+          const rect = el.getBoundingClientRect();
+          if (rect.height > 0 && rect.top === 0) total += rect.height;
+        }
+      }
+      document.documentElement.style.setProperty("--fixed-top", `${Math.round(total)}px`);
+    };
+
+    getFixedTop();
+    const ro = new ResizeObserver(getFixedTop);
+    ro.observe(document.documentElement);
+    window.addEventListener("resize", getFixedTop);
+    window.addEventListener("orientationchange", getFixedTop);
+    if (document.fonts?.ready) document.fonts.ready.then(getFixedTop).catch(() => {});
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", getFixedTop);
+      window.removeEventListener("orientationchange", getFixedTop);
+    };
+  }, []);
+}
 
 function TabButton({ id, active, onClick, onKeyDown, children, c1, c2 }) {
   return (
@@ -23,12 +53,7 @@ function TabButton({ id, active, onClick, onKeyDown, children, c1, c2 }) {
         className={`nav-link pill px-3 py-2 rounded-pill fw-medium ${active ? "active" : ""}`}
         onClick={onClick}
         onKeyDown={onKeyDown}
-        style={{
-          whiteSpace: "nowrap",
-          // color variables used by CSS for gradients / focus / hover / ripple
-          ["--c1"]: c1,
-          ["--c2"]: c2,
-        }}
+        style={{ whiteSpace: "nowrap", ["--c1"]: c1, ["--c2"]: c2 }}
       >
         <span className="pill-ripple" aria-hidden="true" />
         <span className="d-flex align-items-center justify-content-center w-100 gap-2">
@@ -41,81 +66,32 @@ function TabButton({ id, active, onClick, onKeyDown, children, c1, c2 }) {
 }
 
 export default function Movies_SeriesTab() {
+  useFixedTopOffset();
+
   const [activeTab, setActiveTab] = useState("movies");
   const tablistRef = useRef(null);
 
-  // Nice gradients per tab (editable)
   const tabs = useMemo(
     () => [
-      {
-        key: "movies",
-        label: "Movies",
-        icon: "🎬",
-        component: <AddMovies />,
-        c1: "#ff6b6b",
-        c2: "#f06595",
-      },
-      {
-        key: "series",
-        label: "Series",
-        icon: "📺",
-        component: <AddSeries />,
-        c1: "#51cf66",
-        c2: "#0ca678",
-      },
-      {
-        key: "manage",
-        label: "Manage",
-        icon: "⚙️",
-        component: <Manage />,
-        c1: "#339af0",
-        c2: "#845ef7",
-      },
-      {
-        key: "category",
-        label: "Categories",
-        icon: "🏷",
-        component: <Allcategories />,
-        c1: "#fcc419",
-        c2: "#f08c00",
-      },
-      {
-        key: "fevarate",
-        label: "Favorites",
-        icon: "❤️",
-        component: <Fevarate />,
-        c1: "#f06595",
-        c2: "#d6336c",
-      },
-      {
-        key: "download",
-        label: "Download",
-        icon: "⬇️",
-        component: <Download />,
-        c1: "#4dabf7",
-        c2: "#15aabf",
-      },
-      {
-        key: "all-list",
-        label: "Movies & Series",
-        icon: "🎞️",
-        component: <AllList />,
-        c1: "#ddce34",
-        c2: "#fc3d80",
-      },
+      { key: "movies",    label: "Movies",          icon: "🎬", component: <AddMovies />,     c1: "#ff6b6b", c2: "#f06595" },
+      { key: "series",    label: "Series",          icon: "📺", component: <AddSeries />,     c1: "#51cf66", c2: "#0ca678" },
+      { key: "manage",    label: "Manage",          icon: "⚙️", component: <Manage />,        c1: "#339af0", c2: "#845ef7" },
+      { key: "category",  label: "Categories",      icon: "🏷",  component: <Allcategories />, c1: "#fcc419", c2: "#f08c00" },
+      { key: "fevarate",  label: "Favorites",       icon: "❤️", component: <Fevarate />,      c1: "#f06595", c2: "#d6336c" },
+      { key: "download",  label: "Download",        icon: "⬇️", component: <Download />,      c1: "#4dabf7", c2: "#15aabf" },
+      { key: "all-list",  label: "Movies & Series", icon: "🎞️", component: <AllList />,       c1: "#ddce34", c2: "#fc3d80" },
     ],
     []
   );
 
   const active = tabs.find((t) => t.key === activeTab) ?? tabs[0];
 
-  // Keyboard navigation for the tab bar
+  // Arrow/Home/End keyboard nav
   const handleKeyNav = (idx) => (e) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
     e.preventDefault();
     const last = tabs.length - 1;
     let nextIndex = idx;
-
     if (e.key === "ArrowLeft") nextIndex = idx === 0 ? last : idx - 1;
     if (e.key === "ArrowRight") nextIndex = idx === last ? 0 : idx + 1;
     if (e.key === "Home") nextIndex = 0;
@@ -127,28 +103,28 @@ export default function Movies_SeriesTab() {
     if (listEl) {
       const btn = listEl.querySelectorAll("button[role='tab']")[nextIndex];
       btn?.focus();
-      btn?.scrollIntoView({ inline: "nearest", behavior: "smooth", block: "nearest" });
+      btn?.scrollIntoView({ inline: "center", behavior: "smooth", block: "nearest" });
     }
   };
 
-  // Keep underline in sync on resize & scroll
   useEffect(() => {
-    const onResize = () => {
-      // trigger re-render for underline by toggling activeTab (no-op) - simpler: call a custom event
-      const evt = new Event("__tab_resize");
-      window.dispatchEvent(evt);
-    };
+    const onResize = () => window.dispatchEvent(new Event("__tab_resize"));
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
   useEffect(() => {
-    // set a CSS variable for tab count so we can try equal widths where possible
     const listEl = tablistRef.current;
-    if (listEl) {
-      listEl.style.setProperty("--tab-count", tabs.length);
-    }
+    if (listEl) listEl.style.setProperty("--tab-count", tabs.length);
   }, [tabs.length]);
+
+  // also scroll active pill into view when changed by click
+  useEffect(() => {
+    const listEl = tablistRef.current;
+    if (!listEl) return;
+    const btn = listEl.querySelector(`#tab-${active.key}`);
+    btn?.scrollIntoView({ inline: "center", behavior: "smooth", block: "nearest" });
+  }, [active.key]);
 
   return (
     <>
@@ -159,6 +135,7 @@ export default function Movies_SeriesTab() {
         className="border-bottom"
         style={{
           background: "linear-gradient(135deg, rgba(13,110,253,.06), rgba(111,66,193,.06))",
+          paddingTop: "clamp(0px, var(--fixed-top, 0px), 120px)",
         }}
       >
         <div className="container py-3 d-flex flex-wrap align-items-center justify-content-between gap-3">
@@ -166,50 +143,42 @@ export default function Movies_SeriesTab() {
             <div
               className="rounded-circle d-flex align-items-center justify-content-center shadow-sm"
               style={{
-                width: 44,
-                height: 44,
-                background:
-                  "radial-gradient(120px 120px at 30% 30%, rgba(13,110,253,.2), rgba(111,66,193,.15))",
+                width: 44, height: 44,
+                background: "radial-gradient(120px 120px at 30% 30%, rgba(13,110,253,.2), rgba(111,66,193,.15))",
               }}
               aria-hidden="true"
             >
-              <span style={{ fontSize: 20 }} role="img" aria-label="clapper">
-                🎞️
-              </span>
+              <span style={{ fontSize: 20 }} role="img" aria-label="clapper">🎞️</span>
             </div>
             <div>
               <h1 className="h5 mb-1 mb-md-0">Entertainment Hub</h1>
-              <p className="text-muted mb-0 d-none d-md-block">
-                Add & manage Movies/Series, and export your lists.
-              </p>
+              <p className="text-muted mb-0 d-none d-md-block">Add & manage Movies/Series, and export your lists.</p>
             </div>
           </div>
 
-          <div className="d-flex align-items-center gap-2">
-            <span
-              className="badge rounded-pill px-3 py-2"
-              style={{
-                background: `linear-gradient(135deg, ${active.c1}, ${active.c2})`,
-                color: "#fff",
-                boxShadow: "0 8px 20px rgba(0,0,0,.15)",
-              }}
-            >
-              {active.icon} {active.label}
-            </span>
-          </div>
+          <span
+            className="badge rounded-pill px-3 py-2"
+            style={{
+              background: `linear-gradient(135deg, ${active.c1}, ${active.c2})`,
+              color: "#fff",
+              boxShadow: "0 8px 20px rgba(0,0,0,.15)",
+            }}
+          >
+            {active.icon} {active.label}
+          </span>
         </div>
       </header>
 
       {/* Body */}
       <div className="container my-4">
-        {/* Tab bar */}
-        <div className="position-sticky top-0 bg-white pt-2" style={{ zIndex: 1020 }}>
+        {/* Sticky tab bar below any fixed navbar */}
+        <div className="position-sticky bg-white pt-2" style={{ zIndex: 1020, top: "var(--fixed-top, 0px)" }}>
           <div className="position-relative">
             <ul
               ref={tablistRef}
               className="nav nav-pills"
               role="tablist"
-              style={{ gap: ".45rem", overflowX: "auto", WebkitOverflowScrolling: "touch" }}
+              style={{ gap: ".45rem", overflowX: "auto", WebkitOverflowScrolling: "touch", position: "relative" }}
             >
               {tabs.map((t, i) => (
                 <TabButton
@@ -221,14 +190,13 @@ export default function Movies_SeriesTab() {
                   c1={t.c1}
                   c2={t.c2}
                 >
-                  {[
-                    <span className="me-1" aria-hidden="true">{t.icon}</span>,
-                    <span>{t.label}</span>,
-                  ]}
+                  {[<span className="me-1" aria-hidden="true" key="i">{t.icon}</span>, <span key="l">{t.label}</span>]}
                 </TabButton>
               ))}
+
+              {/* Underline is rendered INSIDE the UL and positioned by top/left/width */}
+              <ActiveUnderlineInsideUL activeKey={activeTab} c1={active.c1} c2={active.c2} />
             </ul>
-            <ActiveUnderline tabs={tabs} activeKey={activeTab} c1={active.c1} c2={active.c2} />
           </div>
         </div>
 
@@ -242,9 +210,7 @@ export default function Movies_SeriesTab() {
           >
             <div className="card border-0 shadow-sm">
               <div className="card-body p-3 p-md-4">
-                <h2 className="h5 mb-3">
-                  {active.icon} {active.label}
-                </h2>
+                <h2 className="h5 mb-3">{active.icon} {active.label}</h2>
                 {active.component}
               </div>
             </div>
@@ -254,18 +220,14 @@ export default function Movies_SeriesTab() {
 
       {/* Styles */}
       <style>{`
-        /* Root: we expose tab count to allow equal-width behavior when possible */
         ul[role='tablist'] { --tab-count: 6; }
 
-        /* Layout: make tabs equal width as much as possible, but keep a sensible min width and allow scroll on small screens */
         .nav-pills { display: flex; gap: .45rem; align-items: stretch; padding: .5rem; }
         .nav-pills .nav-item { flex: 1 1 0; min-width: 110px; max-width: 320px; }
         .nav-pills .nav-link.pill { display: block; width: 100%; text-align: center; padding-left: .75rem; padding-right: .75rem; box-sizing: border-box; }
 
-        /* Truncate long labels so widths never change */
         .tab-label { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-        /* Fancy pill buttons (colorized via --c1 / --c2) */
         .nav-pills .nav-link.pill {
           position: relative;
           --bg1: color-mix(in srgb, var(--c1) 12%, #fff);
@@ -277,14 +239,12 @@ export default function Movies_SeriesTab() {
           overflow: hidden;
           isolation: isolate;
         }
-        /* Hover uses a slightly darker tint pulled from the variables */
         .nav-pills .nav-link.pill:hover {
           transform: translateY(-1px);
           box-shadow: 0 8px 20px color-mix(in srgb, var(--c2) 24%, transparent);
           color: #111;
           background: linear-gradient(135deg, color-mix(in srgb, var(--c1) 28%, #000 6%), color-mix(in srgb, var(--c2) 28%, #000 6%));
         }
-        /* Focus ring uses the tab's colors */
         .nav-pills .nav-link.pill:focus-visible {
           outline: none;
           box-shadow: 0 0 0 .22rem color-mix(in srgb, var(--c1) 35%, var(--c2) 35%, #0000 30%);
@@ -297,7 +257,6 @@ export default function Movies_SeriesTab() {
           transform: translateY(-1px);
         }
 
-        /* Soft ripple on interaction */
         .pill .pill-ripple {
           position: absolute; inset: 0; pointer-events: none; opacity: 0;
           background: radial-gradient(120px 60px at var(--x,50%) var(--y,50%), color-mix(in srgb, var(--c1) 30%, transparent), transparent 60%);
@@ -305,104 +264,99 @@ export default function Movies_SeriesTab() {
         }
         .pill:active .pill-ripple { opacity: .55; transition: opacity .2s ease; }
 
-        /* Active underline */
+        /* Underline element (now uses top/left/width so it sits under the active pill only) */
         .tab-underline {
           position: absolute;
           height: 4px;
-          left: 0;
-          bottom: 0;
           border-radius: 8px;
           background: linear-gradient(90deg, var(--u1), var(--u2));
           box-shadow: 0 6px 18px rgba(0,0,0,.12);
-          transition: transform .28s cubic-bezier(.2,.8,.2,1), width .28s cubic-bezier(.2,.8,.2,1), opacity .15s ease, background .2s ease;
+          pointer-events: none;
+          transition: transform .28s cubic-bezier(.2,.8,.2,1), width .28s cubic-bezier(.2,.8,.2,1),
+                      opacity .15s ease, background .2s ease, top .28s cubic-bezier(.2,.8,.2,1), left .28s cubic-bezier(.2,.8,.2,1);
         }
 
-        /* Small screens: don't squish labels — enable horizontal scrolling and fixed min-width */
         @media (max-width: 720px) {
           .nav-pills { padding: .35rem; }
           .nav-pills .nav-item { flex: 0 0 auto; min-width: 120px; }
         }
-
-        /* Very large screens: allow a max width so pills don't become absurdly wide */
         @media (min-width: 1200px) {
           .nav-pills .nav-item { max-width: 260px; }
         }
       `}</style>
 
-      {/* Pointer position for ripple */}
+      {/* Ripple + underline refresh */}
       <script
         dangerouslySetInnerHTML={{
           __html: `
-          document.addEventListener('pointerdown', (e) => {
-            const pill = e.target.closest('.nav-link.pill');
-            if (!pill) return;
-            const r = pill.getBoundingClientRect();
-            const rr = pill.querySelector('.pill-ripple');
-            if (!rr) return;
-            rr.style.setProperty('--x', (e.clientX - r.left) + 'px');
-            rr.style.setProperty('--y', (e.clientY - r.top) + 'px');
-          });
-
-          // ensure underline updates when tabs scroll/resize
-          window.addEventListener('__tab_resize', () => {
-            const evt = new Event('resize');
-            window.dispatchEvent(evt);
-          });
-        `,
+            document.addEventListener('pointerdown', (e) => {
+              const pill = e.target.closest('.nav-link.pill');
+              if (!pill) return;
+              const r = pill.getBoundingClientRect();
+              const rr = pill.querySelector('.pill-ripple');
+              if (!rr) return;
+              rr.style.setProperty('--x', (e.clientX - r.left) + 'px');
+              rr.style.setProperty('--y', (e.clientY - r.top) + 'px');
+            });
+            window.addEventListener('__tab_resize', () => window.dispatchEvent(new Event('resize')));
+          `,
         }}
       />
     </>
   );
 }
 
-/**
- * Active underline that tracks the active pill button and inherits its colors.
- */
-function ActiveUnderline({ tabs, activeKey, c1, c2 }) {
-  const containerRef = useRef(null);
-  const [rect, setRect] = useState({ x: 0, w: 0, visible: false });
+/** Underline INSIDE the UL: positions by offsetLeft/offsetTop for perfect multi-row support */
+function ActiveUnderlineInsideUL({ activeKey, c1, c2 }) {
+  const ulRef = useRef(null);
+  const [pos, setPos] = useState({ left: 0, top: 0, width: 0, visible: false });
 
   useEffect(() => {
-    const parent = containerRef.current?.parentElement;
-    if (!parent) return;
+    // UL is the parent of this component (rendered inside the UL)
+    const ul = ulRef.current?.parentElement;
+    if (!ul) return;
 
     const compute = () => {
-      const btn = parent.querySelector(`#tab-${activeKey}`);
-      const list = parent.querySelector("ul.nav");
-      if (!btn || !list) return;
-      const btnRect = btn.getBoundingClientRect();
-      const listRect = list.getBoundingClientRect();
-      setRect({
-        x: btnRect.left - listRect.left + list.scrollLeft,
-        w: btnRect.width,
-        visible: true,
-      });
+      const btn = ul.querySelector(`#tab-${activeKey}`);
+      if (!btn) return;
+      // Use offsets so wrapping rows are handled
+      const left = btn.offsetLeft;
+      const top = btn.offsetTop + btn.offsetHeight - 4; // 4px underline height
+      const width = btn.offsetWidth;
+      setPos({ left, top, width, visible: true });
+
+      // keep the active button visible
+      btn.scrollIntoView({ inline: "center", behavior: "smooth", block: "nearest" });
     };
 
     compute();
 
-    // update on scroll & resize
-    const list = parent.querySelector("ul.nav");
+    const ro = new ResizeObserver(compute);
+    ro.observe(ul);
+    ul.addEventListener("scroll", compute);
     window.addEventListener("resize", compute);
-    list?.addEventListener("scroll", compute);
-    window.addEventListener('__tab_resize', compute);
+    window.addEventListener("__tab_resize", compute);
+    const raf = requestAnimationFrame(compute);
 
     return () => {
+      ro.disconnect();
+      ul.removeEventListener("scroll", compute);
       window.removeEventListener("resize", compute);
-      list?.removeEventListener("scroll", compute);
-      window.removeEventListener('__tab_resize', compute);
+      window.removeEventListener("__tab_resize", compute);
+      cancelAnimationFrame(raf);
     };
-  }, [tabs, activeKey]);
+  }, [activeKey]);
 
   return (
     <div
-      ref={containerRef}
+      ref={ulRef}
       className="tab-underline"
       aria-hidden="true"
       style={{
-        transform: `translateX(${rect.x}px)`,
-        width: rect.w,
-        opacity: rect.visible ? 1 : 0,
+        left: pos.left,
+        top: pos.top,
+        width: pos.width,
+        opacity: pos.visible ? 1 : 0,
         ["--u1"]: c1,
         ["--u2"]: c2,
       }}

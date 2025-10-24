@@ -3,11 +3,11 @@ import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 
 /* ===== API LINKS ===== */
-const API_CATEGORY = "https://express-myapp.onrender.com/api/investment_category";
-const API_SUBCATEGORY = "https://express-myapp.onrender.com/api/investment_subcategory";
-const API_DEPOSITS = "https://express-myapp.onrender.com/api/deposits";                // GET /:cat/:sub
-const API_JOURNAL = "https://express-myapp.onrender.com/api/trading_journal";          // CRUD
-const API_SUMMARY_DAY = "https://express-myapp.onrender.com/api/trading_journal/summary/day";
+const API_CATEGORY = "https://express-backend-myapp.onrender.com/api/investment_category";
+const API_SUBCATEGORY = "https://express-backend-myapp.onrender.com/api/investment_subcategory";
+const API_DEPOSITS = "https://express-backend-myapp.onrender.com/api/deposits";                // GET /:cat/:sub
+const API_JOURNAL = "https://express-backend-myapp.onrender.com/api/trading_journal";          // CRUD
+const API_SUMMARY_DAY = "https://express-backend-myapp.onrender.com/api/trading_journal/summary/day";
 
 const colors = {
   gradient: "linear-gradient(135deg, #5f4bb6 0%, #1f5f78 100%)",
@@ -189,7 +189,6 @@ export default function DailyTradeJournal() {
   /* ===== price validation helpers ===== */
   function isPriceOk(raw) {
     if (raw === "" || raw === null || raw === undefined) return false;
-    // allow "123" or "123.45" only, and must be >= 1
     if (!PRICE_RX.test(String(raw))) return false;
     return Number(raw) >= 1;
   }
@@ -220,15 +219,14 @@ export default function DailyTradeJournal() {
     }
 
     const bigLoss = r ? loss > Number(r.risk || 0) : false;
-    const maxTradesReached = rows.length >= 3;
 
     // input field price errors
     const entryErr = priceError(form.trade_entry);
     const exitErr = priceError(form.trade_exit);
 
-    return { rewardOK, riskOK, rrOK, net, messages, bigLoss, maxTradesReached, entryErr, exitErr };
+    return { rewardOK, riskOK, rrOK, net, messages, bigLoss, entryErr, exitErr };
     // eslint-disable-next-line
-  }, [form.trade_entry, form.trade_exit, form.profit_amount, form.loss_amount, form.brokerage, rule, rows.length]);
+  }, [form.trade_entry, form.trade_exit, form.profit_amount, form.loss_amount, form.brokerage, rule]);
 
   /* ===== handlers ===== */
   function onFilterChange(e) {
@@ -285,7 +283,7 @@ export default function DailyTradeJournal() {
 
     // construct payload WITHOUT sequence_no (auto by backend)
     const payload = {
-      trade_date: form.trade_date || undefined, // DB default today if omitted
+      trade_date: form.trade_date || undefined,
       category_id: Number(filters.category_id),
       subcategory_id: Number(filters.subcategory_id),
       trade_entry: Number(form.trade_entry),
@@ -356,7 +354,7 @@ export default function DailyTradeJournal() {
     }
 
     try {
-      const { sequence_no, ...payload } = editForm; // do not send sequence_no (managed by backend)
+      const { sequence_no, ...payload } = editForm; // do not send sequence_no
       await axios.patch(`${API_JOURNAL}/${editRow.journal_id}`, payload);
       showToast("Updated");
       setEditOpen(false);
@@ -386,8 +384,8 @@ export default function DailyTradeJournal() {
       <div className="container">
         {/* Header */}
         <div className="p-4 rounded-4 shadow-sm mb-4" style={{ backgroundImage: colors.gradient, color: "#fff" }}>
-          <div className="d-flex flex-wrap align-items-center justify-content-between">
-            <div>
+          <div className="d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <div className="flex-grow-1">
               <h3 className="fw-bold mb-1">Trading Journal</h3>
               <div className="opacity-75">
                 Date: <strong>{prettyDMY(filters.date)}</strong>
@@ -397,7 +395,7 @@ export default function DailyTradeJournal() {
               )}
             </div>
 
-            <div className="d-flex gap-2 mt-3 mt-md-0">
+            <div className="d-flex flex-wrap gap-2 w-100 w-md-auto">
               <input
                 type="date"
                 className="form-control form-control-sm"
@@ -405,6 +403,7 @@ export default function DailyTradeJournal() {
                 value={filters.date}
                 onChange={onFilterChange}
                 style={{ minWidth: 180 }}
+                aria-label="Trade Date"
               />
               <select
                 className="form-select form-select-sm"
@@ -412,6 +411,7 @@ export default function DailyTradeJournal() {
                 value={filters.category_id}
                 onChange={onFilterChange}
                 style={{ minWidth: 210 }}
+                aria-label="Category"
               >
                 <option value="">Select Category</option>
                 {categories.map((c) => (
@@ -427,6 +427,7 @@ export default function DailyTradeJournal() {
                 onChange={onFilterChange}
                 disabled={!filters.category_id}
                 style={{ minWidth: 210 }}
+                aria-label="Subcategory"
               >
                 <option value="">Select Subcategory</option>
                 {filteredSubcategories.map((s) => (
@@ -469,7 +470,7 @@ export default function DailyTradeJournal() {
           <div className="card-body">
             <h5 className="card-title fw-bold mb-3">Add Trade</h5>
             <div className="row g-3">
-              <div className="col-6 col-md-3">
+              <div className="col-12 col-sm-6 col-md-3">
                 <label className="form-label">Date</label>
                 <input
                   type="date"
@@ -477,15 +478,17 @@ export default function DailyTradeJournal() {
                   className="form-control"
                   value={form.trade_date}
                   onChange={onFormChange}
+                  aria-label="Trade Date"
                 />
               </div>
-              <div className="col-6 col-md-3">
+              <div className="col-12 col-sm-6 col-md-3">
                 <label className="form-label">Category</label>
                 <select
                   name="category_id"
                   className="form-select"
                   value={form.category_id || filters.category_id}
                   onChange={onFormChange}
+                  aria-label="Form Category"
                 >
                   <option value="">Select Category</option>
                   {categories.map((c) => (
@@ -503,6 +506,7 @@ export default function DailyTradeJournal() {
                   value={form.subcategory_id || filters.subcategory_id}
                   onChange={onFormChange}
                   disabled={!form.category_id && !filters.category_id}
+                  aria-label="Form Subcategory"
                 >
                   <option value="">Select Subcategory</option>
                   {filteredSubcategories.map((s) => (
@@ -522,6 +526,9 @@ export default function DailyTradeJournal() {
                   placeholder="e.g., 230 or 230.30"
                   value={form.trade_entry}
                   onChange={onFormChange}
+                  inputMode="decimal"
+                  pattern="\d+(\.\d{2})?"
+                  aria-invalid={!!rt.entryErr}
                 />
                 {rt.entryErr && <div className="invalid-feedback">{rt.entryErr}</div>}
               </div>
@@ -534,6 +541,9 @@ export default function DailyTradeJournal() {
                   placeholder="e.g., 230 or 230.30"
                   value={form.trade_exit}
                   onChange={onFormChange}
+                  inputMode="decimal"
+                  pattern="\d+(\.\d{2})?"
+                  aria-invalid={!!rt.exitErr}
                 />
                 {rt.exitErr && <div className="invalid-feedback">{rt.exitErr}</div>}
               </div>
@@ -545,6 +555,7 @@ export default function DailyTradeJournal() {
                   className="form-control"
                   value={form.profit_amount}
                   onChange={onFormChange}
+                  inputMode="numeric"
                 />
               </div>
               <div className="col-6 col-md-2">
@@ -555,6 +566,7 @@ export default function DailyTradeJournal() {
                   className="form-control"
                   value={form.loss_amount}
                   onChange={onFormChange}
+                  inputMode="numeric"
                 />
               </div>
               <div className="col-12 col-md-2">
@@ -565,6 +577,7 @@ export default function DailyTradeJournal() {
                   className="form-control"
                   value={form.brokerage}
                   onChange={onFormChange}
+                  inputMode="numeric"
                 />
               </div>
 
@@ -630,7 +643,7 @@ export default function DailyTradeJournal() {
               {rule && (
                 <div className="col-12">
                   <div className="alert mb-0 py-2 px-3 border-0" style={{ background: "#eef2ff", color: "#111827" }}>
-                    <div className="d-flex align-items-center gap-2">
+                    <div className="d-flex align-items-center gap-2 flex-wrap">
                       <span className={`badge ${rt.rrOK ? "bg-success" : "bg-danger"}`}>
                         {rt.rrOK ? "R:R OK" : "R:R Issue"}
                       </span>
@@ -666,7 +679,7 @@ export default function DailyTradeJournal() {
 
               <div className="col-12">
                 <button
-                  className="btn btn-primary px-4 fw-semibold btn-cta"
+                  className="btn btn-primary px-4 fw-semibold btn-cta w-100 w-sm-auto"
                   onClick={addJournal}
                   disabled={summary?.limit_left === 0}
                 >
@@ -692,7 +705,7 @@ export default function DailyTradeJournal() {
             </div>
 
             <div className="table-responsive mt-3">
-              <table className="table align-middle">
+              <table className="table align-middle journal-table">
                 <thead className="table-light">
                   <tr>
                     <th>#</th>
@@ -724,29 +737,32 @@ export default function DailyTradeJournal() {
                   ) : (
                     rows.map((r, i) => (
                       <tr key={r.journal_id} style={{ borderTop: `1px solid ${colors.line}` }}>
-                        <td>{i + 1}</td>
-                        <td>{r.sequence_no}</td>
-                        <td>{r.trade_entry}</td>
-                        <td>{r.trade_exit}</td>
-                        <td className="text-end text-success">₹{money(r.profit_amount)}</td>
-                        <td className="text-end text-danger">₹{money(r.loss_amount)}</td>
-                        <td className="text-end">₹{money(r.brokerage)}</td>
-                        <td className={`text-end fw-semibold ${Number(r.net_pnl) >= 0 ? "text-success" : "text-danger"}`}>
+                        <td data-label="#"> {i + 1}</td>
+                        <td data-label="Seq">{r.sequence_no}</td>
+                        <td data-label="Entry">{r.trade_entry}</td>
+                        <td data-label="Exit">{r.trade_exit}</td>
+                        <td data-label="Profit" className="text-end text-success">₹{money(r.profit_amount)}</td>
+                        <td data-label="Loss" className="text-end text-danger">₹{money(r.loss_amount)}</td>
+                        <td data-label="Brokerage" className="text-end">₹{money(r.brokerage)}</td>
+                        <td
+                          data-label="Net"
+                          className={`text-end fw-semibold ${Number(r.net_pnl) >= 0 ? "text-success" : "text-danger"}`}
+                        >
                           ₹{money(r.net_pnl)}
                         </td>
-                        <td>
+                        <td data-label="R:R">
                           {r.rr_respected ? (
                             <span className="badge bg-success">OK</span>
                           ) : (
                             <span className="badge bg-danger" title={r.violation_reason || ""}>Issue</span>
                           )}
                         </td>
-                        <td className="text-truncate" style={{ maxWidth: 140 }}>{r.broker_name || "-"}</td>
-                        <td className="text-truncate" style={{ maxWidth: 140 }}>{r.segment || "-"}</td>
-                        <td className="text-truncate" style={{ maxWidth: 160 }}>{r.purpose || "-"}</td>
-                        <td className="text-truncate" style={{ maxWidth: 220 }}>{r.trade_logic}</td>
-                        <td className="text-truncate" style={{ maxWidth: 220 }}>{r.mistakes || "-"}</td>
-                        <td className="text-center">
+                        <td data-label="Broker" className="text-truncate" style={{ maxWidth: 140 }}>{r.broker_name || "-"}</td>
+                        <td data-label="Segment" className="text-truncate" style={{ maxWidth: 140 }}>{r.segment || "-"}</td>
+                        <td data-label="Purpose" className="text-truncate" style={{ maxWidth: 160 }}>{r.purpose || "-"}</td>
+                        <td data-label="Logic" className="text-truncate" style={{ maxWidth: 220 }}>{r.trade_logic}</td>
+                        <td data-label="Mistakes" className="text-truncate" style={{ maxWidth: 220 }}>{r.mistakes || "-"}</td>
+                        <td data-label="Actions" className="text-center">
                           <div className="btn-group btn-group-sm">
                             <button className="btn btn-outline-primary" onClick={() => openEdit(r)}>Edit</button>
                             <button className="btn btn-outline-danger" onClick={() => delRow(r)}>Delete</button>
@@ -760,9 +776,15 @@ export default function DailyTradeJournal() {
                   <tfoot>
                     <tr className="table-light">
                       <th colSpan="4" className="text-end">Totals</th>
-                      <th className="text-end text-success">₹{money(rows.reduce((a, r) => a + Number(r.profit_amount || 0), 0))}</th>
-                      <th className="text-end text-danger">₹{money(rows.reduce((a, r) => a + Number(r.loss_amount || 0), 0))}</th>
-                      <th className="text-end">₹{money(rows.reduce((a, r) => a + Number(r.brokerage || 0), 0))}</th>
+                      <th className="text-end text-success">
+                        ₹{money(rows.reduce((a, r) => a + Number(r.profit_amount || 0), 0))}
+                      </th>
+                      <th className="text-end text-danger">
+                        ₹{money(rows.reduce((a, r) => a + Number(r.loss_amount || 0), 0))}
+                      </th>
+                      <th className="text-end">
+                        ₹{money(rows.reduce((a, r) => a + Number(r.brokerage || 0), 0))}
+                      </th>
                       <th className="text-end fw-bold">
                         ₹{money(rows.reduce((a, r) => a + Number(r.net_pnl || 0), 0))}
                       </th>
@@ -797,7 +819,7 @@ export default function DailyTradeJournal() {
       {/* Alert Modal */}
       {alert.show && (
         <div className="modal d-block" tabIndex="-1" style={{ background: "rgba(0,0,0,.45)" }}>
-          <div className="modal-dialog modal-dialog-centered">
+          <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable">
             <div className="modal-content">
               <div className={`modal-header ${alert.type === "danger" ? "bg-danger" : "bg-warning"} text-white`}>
                 <h6 className="modal-title m-0">{alert.title}</h6>
@@ -817,7 +839,7 @@ export default function DailyTradeJournal() {
       {/* Edit Modal */}
       {editOpen && (
         <div className="modal d-block" tabIndex="-1" style={{ background: "rgba(0,0,0,.45)" }}>
-          <div className="modal-dialog modal-xl modal-dialog-centered">
+          <div className="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
             <div className="modal-content">
               <div className="modal-header bg-primary text-white">
                 <h6 className="modal-title m-0">Edit Trade</h6>
@@ -855,6 +877,8 @@ export default function DailyTradeJournal() {
                       placeholder="230 or 230.30"
                       value={editForm.trade_entry || ""}
                       onChange={onEditChange}
+                      inputMode="decimal"
+                      pattern="\d+(\.\d{2})?"
                     />
                   </div>
                   <div className="col-6 col-md-3">
@@ -866,6 +890,8 @@ export default function DailyTradeJournal() {
                       placeholder="230 or 230.30"
                       value={editForm.trade_exit || ""}
                       onChange={onEditChange}
+                      inputMode="decimal"
+                      pattern="\d+(\.\d{2})?"
                     />
                   </div>
 
@@ -877,6 +903,7 @@ export default function DailyTradeJournal() {
                       className="form-control"
                       value={editForm.profit_amount || ""}
                       onChange={onEditChange}
+                      inputMode="numeric"
                     />
                   </div>
                   <div className="col-4 col-md-3">
@@ -887,6 +914,7 @@ export default function DailyTradeJournal() {
                       className="form-control"
                       value={editForm.loss_amount || ""}
                       onChange={onEditChange}
+                      inputMode="numeric"
                     />
                   </div>
                   <div className="col-4 col-md-3">
@@ -897,6 +925,7 @@ export default function DailyTradeJournal() {
                       className="form-control"
                       value={editForm.brokerage || ""}
                       onChange={onEditChange}
+                      inputMode="numeric"
                     />
                   </div>
 
@@ -974,6 +1003,83 @@ export default function DailyTradeJournal() {
         .btn-cta:active {
           transform: translateY(1px) scale(.99);
           box-shadow: 0 4px 10px rgba(95,75,182,.25);
+        }
+
+        /* ======= Mobile Enhancements ======= */
+
+        /* Ensure form controls don't overflow on xs */
+        @media (max-width: 576px) {
+          .form-control, .form-select { font-size: 14px; }
+          .badge { font-size: 12px; }
+          .card-title { font-size: 1rem; }
+        }
+
+        /* Table -> Card layout on small screens */
+        @media (max-width: 576px) {
+          .journal-table thead {
+            display: none;
+          }
+          .journal-table, 
+          .journal-table tbody, 
+          .journal-table tr, 
+          .journal-table td {
+            display: block;
+            width: 100%;
+          }
+          .journal-table tr {
+            margin-bottom: 0.9rem;
+            border: 1px solid ${colors.line};
+            border-radius: .75rem;
+            padding: .5rem .5rem .25rem;
+            background: #fff;
+            box-shadow: 0 6px 14px rgba(0,0,0,.04);
+          }
+          .journal-table td {
+            text-align: left !important;
+            padding: .35rem .25rem;
+            border: none !important;
+          }
+          .journal-table td::before {
+            content: attr(data-label) ":";
+            display: inline-block;
+            min-width: 108px;
+            font-weight: 600;
+            color: #374151;
+            margin-right: .25rem;
+          }
+          .journal-table td.text-end {
+            text-align: right !important;
+            display: flex;
+            justify-content: space-between;
+          }
+          .journal-table td.text-end::before {
+            margin-right: .75rem;
+          }
+          .journal-table tfoot {
+            display: block;
+            margin-top: 1rem;
+          }
+          .journal-table tfoot th {
+            display: block;
+            width: 100% !important;
+            text-align: right !important;
+            padding: .3rem .5rem;
+          }
+        }
+
+        /* Filter bar & badges wrap nicer */
+        @media (max-width: 768px) {
+          .container .d-flex.flex-wrap.gap-2 > .form-control,
+          .container .d-flex.flex-wrap.gap-2 > .form-select {
+            flex: 1 1 180px;
+          }
+        }
+
+        /* Modals: smaller paddings on xs for more content */
+        @media (max-width: 576px) {
+          .modal-content { border-radius: .75rem; }
+          .modal-body { padding: 0.75rem; }
+          .modal-header, .modal-footer { padding: .5rem .75rem; }
         }
       `}</style>
     </div>

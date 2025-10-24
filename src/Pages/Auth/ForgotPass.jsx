@@ -8,7 +8,7 @@ import { Link, useNavigate } from "react-router-dom";
 //  POST https://express-myapp.onrender.com/api/admin/forgot/verify-otp       { email, otp }
 //  POST https://express-myapp.onrender.com/api/admin/forgot/reset-password   { email, otp, new_password }
 
-const API_BASE = "https://express-myapp.onrender.com/api/admin";
+const API_BASE = "https://express-backend-myapp.onrender.com/api/admin";
 
 export default function ForgotPass() {
   const navigate = useNavigate();

@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import LoadingSpiner from "../Entertainment/LoadingSpiner.jsx"; // your spinner
 
-const BASE_URL = "https://express-myapp.onrender.com/api/password-manager";
+const BASE_URL = "https://express-backend-myapp.onrender.com/api/password-manager";
 const TYPES = ["app", "website", "email", "mobile", "screen", "cloud", "document", "private_lock", "other"];
 
 function initForm() {

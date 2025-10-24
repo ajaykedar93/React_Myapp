@@ -10,7 +10,7 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 
 const API_BASE =
-  (import.meta?.env?.VITE_API_BASE ? `${import.meta.env.VITE_API_BASE}/api` : "https://express-myapp.onrender.com/api");
+  (import.meta?.env?.VITE_API_BASE ? `${import.meta.env.VITE_API_BASE}/api` : "https://express-backend-myapp.onrender.com/api");
 
 const EP = {
   CATEGORIES: `${API_BASE}/categories`,

@@ -17,7 +17,7 @@ const MainNavbar = () => {
       try {
         const token = localStorage.getItem("token");
         const res = await axios.get(
-          "https://express-myapp.onrender.com/api/admin/get-names-and-profiles",
+          "https://express-backend-myapp.onrender.com/api/admin/get-names-and-profiles",
           { headers: { Authorization: `Bearer ${token}` } }
         );
         if (res.data.admins && res.data.admins.length > 0) {
@@ -44,7 +44,7 @@ const MainNavbar = () => {
   };
 
   const handleUserPersonalTab = () => {
-    navigate("/user-tabs", { replace: true });  // Navigating to User_Tabs.jsx
+    navigate("/user-tabs", { replace: true }); // Navigating to User_Tabs.jsx
   };
 
   return (
@@ -100,19 +100,25 @@ const MainNavbar = () => {
           </Navbar.Brand>
 
           {/* Mobile toggle */}
-          <Navbar.Toggle aria-controls="mainnav-collapse" className="toggle" />
+          <Navbar.Toggle
+            aria-controls="mainnav-collapse"
+            className="toggle ms-auto"
+          />
 
-          <Navbar.Collapse id="mainnav-collapse">
-            <Nav className="ms-auto d-flex align-items-center gap-3 nav-right">
+          {/* ⬇️ Right-corner on lg+ screens */}
+          <Navbar.Collapse id="mainnav-collapse" className="justify-content-lg-end">
+            <Nav className="d-flex align-items-center gap-3 nav-right flex-column flex-lg-row justify-content-lg-end">
               {/* Professional tagline */}
-              <Navbar.Text className="tagline-text">
-                <span className="grad-text">"Your Information • Your Power • Seamlessly Organized"</span>
+              <Navbar.Text className="tagline-text order-3 order-lg-1 text-lg-end">
+                <span className="grad-text">
+                  "Your Information • Your Power • Seamlessly Organized"
+                </span>
               </Navbar.Text>
 
               {/* User Personal Tab Button */}
               <Button
                 variant="info"
-                className="personal-tab-button"
+                className="personal-tab-button w-100 w-lg-auto order-1 order-lg-2"
                 onClick={handleUserPersonalTab}
               >
                 User Personal Tab
@@ -121,7 +127,7 @@ const MainNavbar = () => {
               {/* Logout button */}
               <Button
                 variant="danger"
-                className="logout-button-pro"
+                className="logout-button-pro w-100 w-lg-auto order-2 order-lg-3"
                 onClick={handleLogout}
               >
                 Logout
@@ -189,6 +195,14 @@ const MainNavbar = () => {
             .personal-tab-button:active {
               transform: translateY(0);
               box-shadow: 0 4px 12px rgba(52, 152, 219, 0.4);
+            }
+
+            /* Utility: make w-100 on mobile, auto on lg+ */
+            @media (min-width: 992px) {
+              .w-lg-auto { width: auto !important; }
+            }
+            @media (max-width: 991.98px) {
+              .w-lg-auto { width: 100% !important; }
             }
           `}</style>
         </Container>
@@ -303,6 +317,7 @@ const MainNavbar = () => {
           position: relative;
           width: 90px;
           height: 90px;
+          flex: 0 0 auto;
         }
         .avatar {
           width: 90px;
@@ -361,7 +376,7 @@ const MainNavbar = () => {
           background: rgba(255, 255, 255, .05);
         }
 
-        /* Logout Button */
+        /* Legacy logout style (if used elsewhere) */
         .logout-button {
           font-weight: 700;
           border-radius: 28px;
@@ -382,31 +397,39 @@ const MainNavbar = () => {
           transform: translateY(0);
         }
 
-        /* Responsive */
-        @media (max-width: 992px) {
-          .navbar-heading {
-            font-size: 1.75rem;
+        /* ---------- Responsive Tweaks ---------- */
+
+        /* Large down (≤ 991.98px) */
+        @media (max-width: 991.98px) {
+          .nav-right { gap: 12px; }
+          .tagline-text {
+            white-space: normal;
+            text-align: center;
+            width: 100%;
+            line-height: 1.35;
+            font-size: 1rem;
+            order: 3;
           }
+          .personal-tab-button,
+          .logout-button-pro {
+            width: 100%;
+            padding: 12px 20px;
+            font-size: 1rem;
+          }
+          .brand-link { gap: 12px !important; }
+          .navbar-heading { font-size: 1.65rem; }
+          .admin-name { font-size: .88rem; }
           .avatar,
           .avatar-wrap,
-          .avatar-placeholder {
-            width: 72px;
-            height: 72px;
-          }
-          .avatar-ring {
-            inset: -5px;
-          }
+          .avatar-placeholder { width: 64px; height: 64px; }
+          .avatar-ring { inset: -5px; }
         }
-        @media (max-width: 768px) {
-          .navbar-heading {
-            font-size: 1.6rem;
-          }
-          .admin-name {
-            font-size: .85rem;
-          }
-          .developer-name {
-            font-size: .95rem;
-          }
+
+        /* Small down (≤ 575.98px) */
+        @media (max-width: 575.98px) {
+          .navbar-heading { font-size: 1.45rem; letter-spacing: .3px; }
+          .navbar-heading .shimmer { display: none; }
+          .admin-name { margin-top: 0; }
         }
       `}</style>
     </div>

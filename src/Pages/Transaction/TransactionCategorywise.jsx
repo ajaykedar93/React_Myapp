@@ -8,7 +8,7 @@ import LoadingSpiner from "../Entertainment/LoadingSpiner.jsx";
 const API_BASE =
   (import.meta?.env?.VITE_API_BASE &&
     `${import.meta.env.VITE_API_BASE}/transaction-category`) ||
-  "https://express-myapp.onrender.com/api/transaction-category";
+  "https://express-backend-myapp.onrender.com/api/transaction-category";
 
 const inr = new Intl.NumberFormat("en-IN", {
   style: "currency",

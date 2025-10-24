@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import LoadingSpinner from "../Entertainment/LoadingSpiner";
 import { useAuth } from "../../context/AuthContext"; // <-- useAuth only
 
-const API_BASE = "https://express-myapp.onrender.com/api";
+const API_BASE = "https://express-backend-myapp.onrender.com/api";
 
 const Document = () => {
   const { user } = useAuth(); // expects { user_id, token, ... }
@@ -136,9 +136,11 @@ const Document = () => {
       {popup.visible && (
         <motion.div
           className={`popup-message ${popup.success ? "success" : "error"}`}
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ type: "spring", stiffness: 300 }}
+          initial={{ y: -20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ type: "spring", stiffness: 280, damping: 20 }}
+          role="status"
+          aria-live="polite"
         >
           {popup.message}
         </motion.div>
@@ -146,7 +148,7 @@ const Document = () => {
 
       <motion.h2
         className="page-title"
-        initial={{ opacity: 0, y: -20 }}
+        initial={{ opacity: 0, y: -16 }}
         animate={{ opacity: 1, y: 0 }}
       >
         📁 Document Upload & Management
@@ -155,19 +157,22 @@ const Document = () => {
       {/* Upload Card */}
       <motion.div
         className="upload-card"
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
+        transition={{ duration: 0.35 }}
       >
         <div
           {...getRootProps()}
           className={`dropzone ${isDragActive ? "dropzone-active" : ""}`}
+          aria-label="File drop area"
         >
-          <input {...getInputProps()} />
+          <input {...getInputProps()} aria-label="Choose file" />
           {file ? (
-            <p className="mb-0 text-truncate">Selected file: {file.name}</p>
+            <p className="mb-0 text-truncate" title={file.name}>
+              Selected file: <strong>{file.name}</strong>
+            </p>
           ) : isDragActive ? (
-            <p className="mb-0">Drop the file here...</p>
+            <p className="mb-0">Drop the file here…</p>
           ) : (
             <p className="mb-0">Drag & Drop any document or click to select</p>
           )}
@@ -230,79 +235,178 @@ const Document = () => {
               setSelectedCategory("");
               setSelectedSubcategory("");
             }}
+            type="button"
           >
             Reset
           </button>
-          <button className="btn-upload" onClick={handleUpload} disabled={loading}>
+          <button className="btn-upload" onClick={handleUpload} disabled={loading} type="button">
             {loading ? "Uploading..." : "Upload Document"}
           </button>
         </div>
       </motion.div>
 
-      {/* (Optional) Documents list/table goes here; unchanged) */}
+      {/* (Optional) Documents list/table can be rendered here) */}
 
       {/* Styles */}
       <style>{`
-        .doc-page {
-          background: linear-gradient(135deg, #fff8e1, #ffe0b2);
+        :root{
+          --orange-900:#e65100;
+          --orange-700:#ff8f00;
+          --orange-500:#ffa726;
+          --orange-400:#ffb74d;
+          --orange-300:#ffcc80;
+          --orange-200:#ffe0b2;
+          --orange-100:#fff3e0;
+          --shadow: 0 10px 30px rgba(0,0,0,0.1);
+          --shadow-hover: 0 15px 35px rgba(0,0,0,0.15);
+          --radius: 16px;
+        }
+
+        /* Full-height app layout with safe-area padding for iOS notches */
+        .doc-page{
+          background: linear-gradient(135deg, #fff8e1, var(--orange-200));
           min-height: 100vh;
+          min-height: 100dvh;
           width: 100%;
-          padding: 30px 20px;
-          font-family: 'Inter', sans-serif;
+          padding: clamp(16px, 2.5vw, 30px) clamp(12px, 2vw, 20px);
+          padding-top: calc(env(safe-area-inset-top, 0px) + clamp(12px,1.5vw,20px));
+          padding-bottom: calc(env(safe-area-inset-bottom, 0px) + clamp(12px,1.5vw,20px));
+          font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
           display: flex;
           flex-direction: column;
           align-items: center;
+          box-sizing: border-box;
         }
-        .page-title {
-          text-align: center;
-          font-size: 2.2rem;
-          font-weight: 700;
-          margin-bottom: 40px;
-          color: #e65100;
+
+        .page-title{
+          text-align:center;
+          font-size: clamp(1.4rem, 2.2vw, 2.2rem);
+          line-height:1.2;
+          font-weight: 800;
+          margin: 0 0 clamp(20px, 3vw, 40px);
+          color: var(--orange-900);
           width: 100%;
+          word-break: break-word;
         }
-        .upload-card, .table-card {
-          background: #ffffff;
-          border-radius: 16px;
-          padding: 30px;
-          margin-bottom: 30px;
-          box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+
+        .upload-card, .table-card{
+          background: #fff;
+          border-radius: var(--radius);
+          padding: clamp(18px, 2.2vw, 30px);
+          margin-bottom: clamp(18px, 2.2vw, 30px);
+          box-shadow: var(--shadow);
           transition: transform 0.3s ease, box-shadow 0.3s ease;
-          width: 95%;
-          max-width: 1200px;
+          width: min(100%, 1200px);
+          box-sizing: border-box;
         }
-        .upload-card:hover, .table-card:hover {
-          transform: translateY(-5px);
-          box-shadow: 0 15px 35px rgba(0,0,0,0.15);
-        }
-        .dropzone {
-          border: 2px dashed #ff8f00;
+        .upload-card:hover, .table-card:hover{ transform: translateY(-4px); box-shadow: var(--shadow-hover); }
+
+        .dropzone{
+          border: 2px dashed var(--orange-700);
           border-radius: 12px;
-          padding: 50px;
+          padding: clamp(22px, 4vw, 50px);
           text-align: center;
-          font-weight: 600;
-          color: #ff8f00;
-          font-size: 1rem;
+          font-weight: 700;
+          color: var(--orange-700);
+          font-size: clamp(0.95rem, 1.1vw, 1rem);
           transition: all 0.3s ease;
           cursor: pointer;
+          overflow: hidden;
         }
-        .dropzone-active { background-color: #fff3e0; }
-        .form-row { display: flex; gap: 15px; flex-wrap: wrap; margin-top: 25px; }
-        .form-input { flex: 1; padding: 12px 18px; border-radius: 10px; border: 1px solid #ffcc80; font-size: 1rem; transition: all 0.3s ease; min-width: 220px; }
-        .form-input:focus { outline: none; border-color: #ffb74d; box-shadow: 0 0 5px rgba(255,183,77,0.5); }
-        .actions { display:flex; gap:10px; justify-content:flex-end; margin-top: 16px; }
-        .btn-upload { background: linear-gradient(90deg, #ffa726, #ff7043); color: #fff; padding: 12px 22px; border: none; border-radius: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s ease; }
-        .btn-upload:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(255,112,67,0.35); }
-        .btn-ghost { background: #fff7ed; color: #9a5a22; border: 1px dashed #f5c38a; border-radius: 12px; padding: 12px 16px; font-weight: 700; }
-        .btn-ghost:hover { background: #ffedd5; }
-        .popup-message { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 15px 30px; border-radius: 12px; font-weight: 600; z-index: 9999; text-align: center; color: white; font-size: 1rem; }
-        .popup-message.success { background: #2e7d32; }
-        .popup-message.error { background: #c62828; }
-        @media (max-width: 768px) {
-          .form-row { flex-direction: column; }
-          .form-input { width: 100%; }
-          .upload-card { padding: 20px; width: 95%; }
-          .dropzone { padding: 35px; font-size: 0.95rem; }
+        .dropzone-active{ background-color: var(--orange-100); }
+        .mb-0{ margin-bottom:0; }
+        .text-truncate{
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        /* Responsive grid for inputs: auto-fit columns with a sensible min */
+        .form-row{
+          display: grid;
+          gap: clamp(10px, 1.2vw, 15px);
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          margin-top: clamp(16px, 2vw, 25px);
+        }
+
+        .form-input{
+          width: 100%;
+          padding: 12px 16px;
+          border-radius: 10px;
+          border: 1px solid var(--orange-300);
+          font-size: 1rem;
+          transition: all 0.2s ease;
+          min-width: 0; /* prevents overflow in grid cells on tiny screens */
+          box-sizing: border-box;
+          background: #fff;
+        }
+        .form-input:focus{
+          outline: none;
+          border-color: var(--orange-400);
+          box-shadow: 0 0 0 4px rgba(255, 183, 77, 0.25);
+        }
+
+        .actions{
+          display: flex;
+          gap: 10px;
+          justify-content: flex-end;
+          margin-top: 16px;
+          flex-wrap: wrap;
+        }
+        .btn-upload{
+          background: linear-gradient(90deg, var(--orange-500), #ff7043);
+          color: #fff;
+          padding: 12px 20px;
+          border: none;
+          border-radius: 12px;
+          font-weight: 800;
+          cursor: pointer;
+          transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.2s;
+          touch-action: manipulation;
+        }
+        .btn-upload:disabled{ opacity: 0.7; cursor: not-allowed; }
+        .btn-upload:hover{ transform: translateY(-1px); box-shadow: 0 8px 20px rgba(255, 112, 67, 0.35); }
+
+        .btn-ghost{
+          background: #fff7ed;
+          color: #9a5a22;
+          border: 1px dashed #f5c38a;
+          border-radius: 12px;
+          padding: 12px 16px;
+          font-weight: 800;
+          cursor: pointer;
+          transition: background-color 0.2s ease;
+        }
+        .btn-ghost:hover{ background: #ffedd5; }
+
+        /* App-like toast pinned under the notch area with max-width */
+        .popup-message{
+          position: fixed;
+          top: calc(env(safe-area-inset-top, 0px) + 12px);
+          left: 50%;
+          transform: translateX(-50%);
+          padding: 12px 18px;
+          border-radius: 12px;
+          font-weight: 700;
+          z-index: 9999;
+          text-align: center;
+          color: #fff;
+          font-size: clamp(0.9rem, 1vw, 1rem);
+          max-width: min(92vw, 520px);
+          box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+          word-break: break-word;
+        }
+        .popup-message.success{ background:#2e7d32; }
+        .popup-message.error{ background:#c62828; }
+
+        /* Ultra-small phones tweaks */
+        @media (max-width: 360px){
+          .form-row{ grid-template-columns: 1fr; }
+        }
+
+        /* Reduce motion if user prefers */
+        @media (prefers-reduced-motion: reduce){
+          * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; }
         }
       `}</style>
     </div>
