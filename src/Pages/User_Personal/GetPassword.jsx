@@ -78,13 +78,41 @@ export default function GetPassword() {
       .row-appear { animation:slideFadeIn .22s ease both; }
       .table-hover tbody tr:hover { transform:translateY(-1px); transition:transform .15s ease, box-shadow .15s ease; box-shadow:0 2px 12px rgba(0,0,0,.04); }
 
-      /* Mobile tweaks */
+      /* --- Action button sizing --- */
+      /* Default (desktop/tablet): keep normal Bootstrap size */
+      /* Large screens: make ONLY action buttons bigger and easier to click */
+      @media (min-width: 992px) {
+        .btn-action {
+          padding: .55rem .9rem;
+          font-size: .95rem;
+          line-height: 1.2;
+          border-radius: .5rem;
+        }
+      }
+
+      /* --- Mobile tweaks (≤576px) --- */
       @media (max-width: 576px) {
+        .container-xxl { padding-left: 10px !important; padding-right: 10px !important; }
+        .glass { border-radius: 12px; }
         .table thead { display:none; }
         .table tbody tr { display:block; border-bottom:1px solid rgba(0,0,0,.06); padding:0.5rem 0.25rem; }
-        .table tbody td { display:flex; justify-content:space-between; padding:.35rem .75rem; }
+        .table tbody td { display:flex; justify-content:space-between; padding:.35rem .5rem; gap:10px; }
         .td-label { font-weight:600; color:#6b7280; margin-right:.75rem; }
         .text-end { text-align:right !important; }
+        /* Only action buttons become compact on mobile */
+        .btn-action { 
+          padding: .25rem .5rem; 
+          font-size: .75rem; 
+          line-height: 1.2; 
+          border-radius: .3rem; 
+        }
+        /* tighten selects and inputs on bar & modal */
+        .form-control, .form-select { 
+          min-height: 36px; 
+          padding: 6px 10px; 
+          font-size: .9rem; 
+        }
+        .btn-close { transform: scale(.9); }
       }
 
       @keyframes fadeIn { from { opacity:0 } to { opacity:1 } }
@@ -96,7 +124,7 @@ export default function GetPassword() {
 
   // lock scroll when overlay open (ONLY for busy/toast; NOT for edit modal)
   useEffect(()=> {
-    const hasOverlay = busy || overlayMsg.show; // ← removed "|| !!editItem"
+    const hasOverlay = busy || overlayMsg.show;
     document.body.style.overflow = hasOverlay ? "hidden" : "";
     return ()=> { document.body.style.overflow = ""; }
   }, [busy, overlayMsg.show, editItem]);
@@ -134,7 +162,6 @@ export default function GetPassword() {
     const ctl = new AbortController();
     abortRef.current = ctl;
     const t = setTimeout(()=> fetchList(ctl.signal), 150);
-    // reset to first page whenever filters/search change
     setPage(1);
     return ()=> { clearTimeout(t); ctl.abort(); };
   }, [type, q]);
@@ -287,7 +314,7 @@ export default function GetPassword() {
                         <span className="font-monospace">{r.username || "-"}</span>
                         {r.username && (
                           <button
-                            className="btn btn-sm btn-outline-secondary ms-2 btn-ripple"
+                            className="btn btn-outline-secondary ms-2 btn-ripple btn-action"
                             onClick={()=>copyToClipboard(r.username)}
                             title="Copy username"
                           >
@@ -300,14 +327,14 @@ export default function GetPassword() {
                         {r.password && (
                           <>
                             <button
-                              className="btn btn-sm btn-soft ms-2 btn-ripple"
+                              className="btn btn-soft ms-2 btn-ripple btn-action"
                               onClick={()=>setShowPwRow(s=>({...s,[r.id]:!visible}))}
                               title={visible ? "Hide password" : "Show password"}
                             >
                               {visible ? "Hide" : "Show"}
                             </button>
                             <button
-                              className="btn btn-sm btn-outline-secondary ms-2 btn-ripple"
+                              className="btn btn-outline-secondary ms-2 btn-ripple btn-action"
                               onClick={()=>copyToClipboard(r.password)}
                               title="Copy password"
                             >
@@ -321,7 +348,7 @@ export default function GetPassword() {
                         <div className="d-flex justify-content-end gap-2 flex-wrap">
                           {r.username && (
                             <button
-                              className="btn btn-outline-secondary btn-sm btn-ripple"
+                              className="btn btn-outline-secondary btn-ripple btn-action"
                               onClick={()=>copyToClipboard(`${r.username}`)}
                               title="Copy username"
                             >
@@ -330,17 +357,17 @@ export default function GetPassword() {
                           )}
                           {r.password && (
                             <button
-                              className="btn btn-outline-secondary btn-sm btn-ripple"
+                              className="btn btn-outline-secondary btn-ripple btn-action"
                               onClick={()=>copyToClipboard(`${r.password}`)}
                               title="Copy password"
                             >
                               Copy P
                             </button>
                           )}
-                          <button className="btn btn-outline-primary btn-sm btn-ripple" onClick={()=>setEditItem({...r})}>
+                          <button className="btn btn-outline-primary btn-ripple btn-action" onClick={()=>setEditItem({...r})}>
                             Edit
                           </button>
-                          <button className="btn btn-outline-danger btn-sm btn-ripple" onClick={()=>deleteRecord(r.id)}>
+                          <button className="btn btn-outline-danger btn-ripple btn-action" onClick={()=>deleteRecord(r.id)}>
                             Delete
                           </button>
                         </div>
@@ -353,7 +380,7 @@ export default function GetPassword() {
           </table>
         </div>
 
-        {/* Pagination */}
+        {/* Pagination (kept standard sizes) */}
         {!loadingTable && activeCount > 0 && (
           <div className="d-flex align-items-center justify-content-between p-3">
             <div className="text-muted small">
@@ -416,8 +443,8 @@ export default function GetPassword() {
               </div>
             </div>
             <div className="edit-footer">
-              <button className="btn btn-light me-2 btn-ripple" onClick={()=>setEditItem(null)}>Cancel</button>
-              <button className="btn btn-success px-4 btn-ripple" onClick={handleUpdate}>Update</button>
+              <button className="btn btn-light me-2 btn-ripple btn-action" onClick={()=>setEditItem(null)}>Cancel</button>
+              <button className="btn btn-success px-4 btn-ripple btn-action" onClick={handleUpdate}>Update</button>
             </div>
           </div>
         </div>

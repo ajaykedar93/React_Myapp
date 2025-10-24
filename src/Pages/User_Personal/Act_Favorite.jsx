@@ -1,3 +1,4 @@
+// src/pages/ActFavorite.jsx
 import React, { useState, useEffect, useMemo } from "react";
 import axios from "axios";
 import {
@@ -11,7 +12,10 @@ import {
   Alert,
 } from "react-bootstrap";
 import { motion, AnimatePresence } from "framer-motion";
-import LoadingSpinner from "../Entertainment/LoadingSpiner.jsx"; // ✅ custom spinner
+import LoadingSpinner from "../Entertainment/LoadingSpiner.jsx"; // ✅ your custom spinner
+
+/* ========= API ========= */
+const API = "https://express-backend-myapp.onrender.com/api/act_favorite";
 
 /* ========= Theme ========= */
 const theme = {
@@ -99,9 +103,9 @@ export default function ActFavorite() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await axios.get("https://express-backend-myapp.onrender.com/api/act_favorite/countries");
+        const res = await axios.get(`${API}/countries`);
         setCountries(res.data || []);
-      } catch {
+      } catch (e) {
         setToast({ type: "warning", msg: "Could not load countries." });
       } finally {
         setLoading(false);
@@ -115,23 +119,26 @@ export default function ActFavorite() {
     setFormData((p) => ({ ...p, [name]: value }));
   };
 
-  const handleProfileChange = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => setFormData((p) => ({ ...p, profile_image: reader.result }));
-    reader.readAsDataURL(file);
-  };
-
-  const handleMultiImage = (e) => {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
-    files.forEach((file) => {
+  const fileToBase64 = (file) =>
+    new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onloadend = () =>
-        setFormData((p) => ({ ...p, images: [...p.images, reader.result] }));
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
       reader.readAsDataURL(file);
     });
+
+  const handleProfileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const b64 = await fileToBase64(file);
+    setFormData((p) => ({ ...p, profile_image: b64 }));
+  };
+
+  const handleMultiImage = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const b64s = await Promise.all(files.map(fileToBase64));
+    setFormData((p) => ({ ...p, images: [...p.images, ...b64s] }));
   };
 
   const removeImage = (idx) =>
@@ -140,31 +147,41 @@ export default function ActFavorite() {
       images: p.images.filter((_, i) => i !== idx),
     }));
 
+  const resetForm = () =>
+    setFormData({
+      country: "",
+      favorite_actress_name: "",
+      age: "",
+      actress_dob: "",
+      favorite_movie_series: "",
+      profile_image: "",
+      images: [],
+      notes: "",
+    });
+
   /* ========= Submit ========= */
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
     try {
-      const payload = { ...formData, age: formData.age ? Number(formData.age) : null };
-      const res = await axios.post("https://express-backend-myapp.onrender.com/api/act_favorite", payload);
+      const payload = {
+        ...formData,
+        // API accepts country as id or exact name; we’re sending the name from the dropdown.
+        // Age to number or null:
+        age: formData.age ? Number(formData.age) : null,
+      };
+
+      const res = await axios.post(API, payload);
       const created = res.data;
       setNewFavorite(created);
       setModalShow(true);
       setToast({ type: "success", msg: "Favorite added successfully!" });
-
-      // reset
-      setFormData({
-        country: "",
-        favorite_actress_name: "",
-        age: "",
-        actress_dob: "",
-        favorite_movie_series: "",
-        profile_image: "",
-        images: [],
-        notes: "",
-      });
+      resetForm();
     } catch (err) {
-      const msg = err?.response?.data?.error || err?.message || "Error saving favorite";
+      const msg =
+        err?.response?.data?.error ||
+        err?.message ||
+        "Error saving favorite";
       setToast({ type: "danger", msg });
     } finally {
       setSaving(false);
@@ -198,7 +215,7 @@ export default function ActFavorite() {
           🎬 Add Favorite Actress
         </h2>
         <p className="text-muted mb-0">
-          Add your favorite actress with country, movie, and profile image.
+          Add your favorite actress with country, movie/series, and profile image.
         </p>
       </motion.div>
 
@@ -264,7 +281,7 @@ export default function ActFavorite() {
                   />
                 </Form.Group>
 
-                {/* Movie */}
+                {/* Movie / Series */}
                 <Form.Group className="mb-3">
                   <Form.Label>Favorite Movie / Series</Form.Label>
                   <Form.Control
@@ -276,6 +293,36 @@ export default function ActFavorite() {
                     required
                   />
                 </Form.Group>
+
+                {/* Age / DOB */}
+                <Row>
+                  <Col xs={12} md={6}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Age (Optional)</Form.Label>
+                      <Form.Control
+                        name="age"
+                        type="number"
+                        min="1"
+                        value={formData.age}
+                        onChange={handleChange}
+                        style={styles.formControl}
+                        placeholder="e.g., 30"
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col xs={12} md={6}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Date of Birth (Optional)</Form.Label>
+                      <Form.Control
+                        type="date"
+                        name="actress_dob"
+                        value={formData.actress_dob}
+                        onChange={handleChange}
+                        style={styles.formControl}
+                      />
+                    </Form.Group>
+                  </Col>
+                </Row>
 
                 {/* Profile */}
                 <Form.Group className="mb-3">
@@ -306,15 +353,16 @@ export default function ActFavorite() {
                     onChange={handleMultiImage}
                     style={styles.formControl}
                   />
-                  <div className="d-flex flex-wrap mt-2">
+                  <div className="d-flex flex-wrap mt-2 gap-2">
                     {formData.images.map((img, i) => (
                       <div key={i} style={{ position: "relative" }}>
                         <img src={img} alt="preview" style={styles.imagePreview} />
                         <Button
                           size="sm"
                           variant="danger"
-                          style={{ position: "absolute", top: 0, right: 0 }}
+                          style={{ position: "absolute", top: 0, right: 0, borderRadius: "50%" }}
                           onClick={() => removeImage(i)}
+                          aria-label={`Remove image ${i + 1}`}
                         >
                           ×
                         </Button>
@@ -356,13 +404,18 @@ export default function ActFavorite() {
         <Modal.Body className="text-center">
           {newFavorite && (
             <>
-              <img
-                src={newFavorite.profile_image}
-                alt="Profile"
-                style={{ width: 150, borderRadius: 12, marginBottom: 10 }}
-              />
-              <h5>{newFavorite.favorite_actress_name}</h5>
+              {newFavorite.profile_image && (
+                <img
+                  src={newFavorite.profile_image}
+                  alt="Profile"
+                  style={{ width: 150, borderRadius: 12, marginBottom: 10 }}
+                />
+              )}
+              <h5 className="mb-1">{newFavorite.favorite_actress_name}</h5>
               <div className="text-muted">{newFavorite.favorite_movie_series}</div>
+              {newFavorite.country_name && (
+                <div className="small mt-1">Country: {newFavorite.country_name}</div>
+              )}
             </>
           )}
         </Modal.Body>

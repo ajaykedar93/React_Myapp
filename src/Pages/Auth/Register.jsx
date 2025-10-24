@@ -284,7 +284,7 @@ const Register = () => {
         ) : (
           <div className="text-center">
             <h4>Only one admin allowed.</h4>
-            <small>Admin already present.</small>
+            <small>Admin already present – <span class="fw-bold text-danger">Ajay Kedar</span></small>
           </div>
         )}
 

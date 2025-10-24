@@ -9,6 +9,7 @@ export default function Login() {
   const { login } = useAuth();
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false); // 👁️ toggle
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [showModal, setShowModal] = useState(false);
@@ -83,6 +84,14 @@ export default function Login() {
 
   return (
     <div className="page">
+      {/* 🔝 Always-on professional animated banner (sticky, unobtrusive) */}
+      <div className="dev-top" aria-label="Developer credit">
+        <span className="dev-pill">
+          <i className="fa-solid fa-code"></i>
+          <strong> Developed by Ajay Kedar</strong>
+        </span>
+      </div>
+
       {isSubmitting && <LoadingSpinner />}
 
       <div className="box">
@@ -102,15 +111,28 @@ export default function Login() {
               aria-label="Email or Mobile"
             />
 
-            <input
-              type="password"
-              id="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-              aria-label="Password"
-            />
+            {/* 👁️ Password with visibility toggle (small eye icon, fixed in place) */}
+            <div className="password-wrap">
+              <input
+                type={showPassword ? "text" : "password"}
+                id="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                aria-label="Password"
+              />
+              <button
+                type="button"
+                className="eye-btn"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                aria-pressed={showPassword}
+                onClick={() => setShowPassword((v) => !v)}
+                tabIndex={0}
+              >
+                <i className={`fa-solid ${showPassword ? "fa-eye-slash" : "fa-eye"}`} />
+              </button>
+            </div>
 
             {errorMessage && (
               <div className="error-banner" role="alert">
@@ -138,6 +160,7 @@ export default function Login() {
 
 /* Page wrapper (brighter background now) */
 .page {
+  position: relative;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -252,6 +275,7 @@ h2 i { color: #ff2770; text-shadow: 0 0 5px #ff2770, 0 0 20px #ff2770; }
 /* Inputs */
 input {
   width: 100%;
+  height: 44px;                /* 🔒 fixed height for stability */
   padding: 10px 20px;
   outline: none;
   border: none;
@@ -260,8 +284,10 @@ input {
   background: #f8fafc;
   border: 2px solid #e2e8f0;
   border-radius: 30px;
+  box-sizing: border-box;      /* avoid size shifts */
 }
 input::placeholder { color: #94a3b8; }
+input:focus { border-color: #94a3ff; }
 
 /* Submit button */
 .submit-btn {
@@ -292,6 +318,87 @@ input::placeholder { color: #94a3b8; }
   padding: 10px 14px;
   border-radius: 10px;
   text-align: center;
+}
+
+/* 👁️ Password field wrap & eye button (fixed position) */
+.password-wrap {
+  position: relative;
+  width: 100%;
+}
+.password-wrap input {
+  padding-right: 46px;          /* space for the eye button */
+}
+.eye-btn {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);  /* keep centered vertically */
+  height: 32px;
+  width: 32px;
+  border: none;
+  outline: none;
+  background: transparent;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  border-radius: 50%;
+}
+.eye-btn:focus-visible {
+  box-shadow: 0 0 0 3px rgba(59,130,246,.45);
+}
+.eye-btn i {
+  font-size: 1rem;
+  color: #334155;
+  line-height: 1;
+  pointer-events: none; /* icon itself doesn't steal click */
+}
+
+/* 🔝 Sticky top developer banner with professional animation */
+.dev-top {
+  position: fixed;
+  top: 10px;
+  left: 0; right: 0;
+  display: flex;
+  justify-content: center;
+  z-index: 2000;
+  pointer-events: none; /* don't block clicks below */
+  padding: 0 12px;
+}
+.dev-pill {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  border: 1px solid #e5e7eb;
+  background:
+    linear-gradient(90deg, #ffffffdd, #ffffffee),
+    linear-gradient(120deg, rgba(59,130,246,0.12), rgba(236,72,153,0.12), rgba(99,102,241,0.12));
+  backdrop-filter: blur(8px);
+  box-shadow: 0 6px 18px rgba(0,0,0,.08);
+  color: #111827;
+  font-size: .95rem;
+  animation: floaty 6s ease-in-out infinite;
+  position: relative;
+  overflow: hidden;
+}
+.dev-pill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent 0%, rgba(255,255,255,.6) 50%, transparent 100%);
+  transform: translateX(-120%);
+  animation: shimmer 3.2s ease-in-out infinite;
+}
+@keyframes shimmer {
+  0% { transform: translateX(-120%); }
+  60% { transform: translateX(120%); }
+  100% { transform: translateX(120%); }
+}
+@keyframes floaty {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
 }
 
 /* Responsiveness tweaks */
