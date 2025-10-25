@@ -6,16 +6,18 @@ import Document from "./Document";
 import ManageDocuments from "./ManageDocuments";
 import DocAccess from "./DocAccess";
 import DocCategory from "./DocCategory";
+import AdminImpDocument from "./AdminImp_document"; // ⬅ NEW: Import the Imp Document page
 
 const tabs = [
   { key: "AddDocument", label: "➕ Add Document" },
   { key: "ManageDocuments", label: "📂 Manage Documents" },
   { key: "AccessDocuments", label: "🔍 Access Documents" },
   { key: "DocCategory", label: "🏷️ Document Categories" },
+  { key: "ImpDocument", label: "⭐ Imp Document" }, // ⬅ NEW TAB
 ];
 
 const DocumentTab = () => {
-  const [activeTab, setActiveTab] = useState("AddDocument");
+  const [activeTab, setActiveTab] = useState("ImpDocument"); // default to Imp Document if you want
   const [ink, setInk] = useState({ left: 10, width: 40, top: 36, ready: false });
   const railRef = useRef(null);
   const navigate = useNavigate();
@@ -27,13 +29,11 @@ const DocumentTab = () => {
     const btn = rail.querySelector(`[data-tab="${activeTab}"]`);
     if (!btn) return;
 
-    // Button rect relative to rail (use offsetTop/Left so it works with scroll/zoom reliably)
-    const left = btn.offsetLeft + 10; // inner rail padding = 6, plus small inset
+    const left = btn.offsetLeft + 10;
     const width = btn.offsetWidth - 20;
-    const top = btn.offsetTop + btn.offsetHeight - 4; // 3px ink + 1px margin
-
+    const top = btn.offsetTop + btn.offsetHeight - 4;
     setInk({ left, width: Math.max(24, width), top, ready: true });
-    // Ensure active tab is visible when tabs overflow horizontally
+
     btn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
   }, [activeTab]);
 
@@ -41,7 +41,6 @@ const DocumentTab = () => {
     measureInk();
   }, [measureInk]);
 
-  // Recalculate on window resize and font load changes
   useEffect(() => {
     const rail = railRef.current;
     if (!rail) return;
@@ -52,12 +51,10 @@ const DocumentTab = () => {
     const onResize = () => measureInk();
     window.addEventListener("resize", onResize);
 
-    // Handle font loading/layout shifts
     if (document.fonts && document.fonts.ready) {
       document.fonts.ready.then(() => measureInk()).catch(() => {});
     }
 
-    // Re-measure after next paint too (smoother on mobile orientation change)
     const raf = requestAnimationFrame(() => measureInk());
 
     return () => {
@@ -70,14 +67,8 @@ const DocumentTab = () => {
   // Keyboard navigation between tabs
   const onKeyDownTabs = (e) => {
     const idx = tabs.findIndex((t) => t.key === activeTab);
-    if (e.key === "ArrowRight") {
-      const next = tabs[(idx + 1) % tabs.length].key;
-      setActiveTab(next);
-    }
-    if (e.key === "ArrowLeft") {
-      const prev = tabs[(idx - 1 + tabs.length) % tabs.length].key;
-      setActiveTab(prev);
-    }
+    if (e.key === "ArrowRight") setActiveTab(tabs[(idx + 1) % tabs.length].key);
+    if (e.key === "ArrowLeft") setActiveTab(tabs[(idx - 1 + tabs.length) % tabs.length].key);
   };
 
   return (
@@ -179,9 +170,10 @@ const DocumentTab = () => {
         {activeTab === "ManageDocuments" && <ManageDocuments />}
         {activeTab === "AccessDocuments" && <DocAccess />}
         {activeTab === "DocCategory" && <DocCategory />}
+        {activeTab === "ImpDocument" && <AdminImpDocument />}{/* ⬅ NEW: renders the Imp Document page */}
       </motion.div>
 
-      {/* Styles */}
+      {/* Styles (unchanged) */}
       <style>{`
         :root{
           --bg-grad: linear-gradient(135deg, #f6f8fc 0%, #e9eff7 100%);
@@ -279,7 +271,7 @@ const DocumentTab = () => {
           border-radius: 16px;
           padding: 6px;
           box-shadow: 0 10px 28px rgba(2,6,23,.06);
-          overflow-x: auto; /* allow scroll on tiny screens */
+          overflow-x: auto;
           -webkit-overflow-scrolling: touch;
           scrollbar-width: thin;
         }
@@ -300,7 +292,7 @@ const DocumentTab = () => {
           transition: background .2s ease, color .2s ease, transform .2s ease, box-shadow .2s ease;
           outline: none;
           overflow: hidden;
-          white-space: nowrap; /* keep tabs compact inside scroll area */
+          white-space: nowrap;
         }
         .tab-item .tab-ripple{
           position:absolute; inset:auto; top:50%; left:50%; width:0; height:0; border-radius:999px;
@@ -330,7 +322,6 @@ const DocumentTab = () => {
           box-shadow: inset 0 0 0 1px #eef1ff, 0 6px 16px rgba(99,102,241,.10);
         }
 
-        /* Underline - positioned dynamically with inline styles */
         .tab-ink{
           position: absolute;
           height: 3px; border-radius: 3px;
@@ -339,7 +330,6 @@ const DocumentTab = () => {
           pointer-events:none;
         }
 
-        /* Content surface */
         .tab-content {
           width: min(1200px, 92%);
           min-height: 520px;

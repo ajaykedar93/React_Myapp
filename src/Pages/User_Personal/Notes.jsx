@@ -36,7 +36,7 @@ function normalizeDMY(str) {
 function toPrettyDate(val) {
   if (!val) return "";
   if (typeof val === "string") {
-    const m = val.match(/^(\d{4})-(\d{2})-(\d{2})/); // ISO/ISO-like
+    const m = val.match(/^(\d{4})-(\d{2})-(\d{2})/);
     if (m) {
       const y = +m[1], mo = +m[2], d = +m[3];
       const monthShort = MONTHS[mo - 1]?.short || "Jan";
@@ -61,6 +61,47 @@ function toPrettyDate(val) {
     return `${d} ${monthShort} ${y}`;
   }
   return String(val);
+}
+
+// Convert pretty DMY ("2 Oct 2025") to a UTC Date for sorting
+function dmyToUTC(dmy) {
+  const p = parseDMY(toPrettyDate(dmy));
+  if (!p) return new Date(0);
+  const mo = MONTHS.find(m => m.short === p.monthShort)?.num || 1;
+  return new Date(Date.UTC(p.year, mo - 1, p.day));
+}
+
+/* ===== Badge color helpers (consistent per-date) ===== */
+const BADGE_CLASSES = [
+  "text-bg-primary",
+  "text-bg-success",
+  "text-bg-warning",
+  "text-bg-info",
+  "text-bg-danger",
+  "text-bg-secondary",
+  "text-bg-dark",
+];
+const BADGE_GLOW = {
+  "text-bg-primary":  "rgba(13,110,253,0.22)",
+  "text-bg-success":  "rgba(25,135,84,0.22)",
+  "text-bg-warning":  "rgba(255,193,7,0.22)",
+  "text-bg-info":     "rgba(13,202,240,0.22)",
+  "text-bg-danger":   "rgba(220,53,69,0.22)",
+  "text-bg-secondary":"rgba(108,117,125,0.22)",
+  "text-bg-dark":     "rgba(33,37,41,0.22)",
+};
+
+function hashString(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+  return h;
+}
+function getBadgeClassForDate(datePretty) {
+  const idx = hashString(datePretty || "-") % BADGE_CLASSES.length;
+  return BADGE_CLASSES[idx];
+}
+function getGlowForBadgeClass(badgeClass) {
+  return BADGE_GLOW[badgeClass] || "rgba(0,0,0,0.12)";
 }
 
 /* == Date selector that reads/writes "2 Oct 2025" == */
@@ -99,34 +140,13 @@ function DateSelect({ value, onChange, label, idPrefix = "ds", required = false 
     <div className="w-100">
       {label && <label className="form-label">{label}</label>}
       <div className="d-flex gap-2 flex-wrap">
-        <select
-          id={`${idPrefix}-day`}
-          className="form-select"
-          value={day}
-          onChange={(e) => setDay(Number(e.target.value))}
-          required={required}
-          style={{ maxWidth: 110 }}
-        >
+        <select id={`${idPrefix}-day`} className="form-select" value={day} onChange={(e) => setDay(Number(e.target.value))} required={required} style={{ maxWidth: 110 }}>
           {dayOptions.map(d => <option key={d} value={d}>{d}</option>)}
         </select>
-        <select
-          id={`${idPrefix}-month`}
-          className="form-select"
-          value={monthShort}
-          onChange={(e) => setMonthShort(e.target.value)}
-          required={required}
-          style={{ maxWidth: 140 }}
-        >
+        <select id={`${idPrefix}-month`} className="form-select" value={monthShort} onChange={(e) => setMonthShort(e.target.value)} required={required} style={{ maxWidth: 140 }}>
           {MONTHS.map(m => <option key={m.short} value={m.short}>{m.short}</option>)}
         </select>
-        <select
-          id={`${idPrefix}-year`}
-          className="form-select"
-          value={year}
-          onChange={(e) => setYear(Number(e.target.value))}
-          required={required}
-          style={{ maxWidth: 130 }}
-        >
+        <select id={`${idPrefix}-year`} className="form-select" value={year} onChange={(e) => setYear(Number(e.target.value))} required={required} style={{ maxWidth: 130 }}>
           {years.map(y => <option key={y} value={y}>{y}</option>)}
         </select>
       </div>
@@ -136,19 +156,13 @@ function DateSelect({ value, onChange, label, idPrefix = "ds", required = false 
 }
 
 export default function Notes() {
-  const [form, setForm] = useState({
-    title: "",
-    note_date: "",    // "2 Oct 2025"
-    details: "",
-    user_name: "",    // optional
-    user_email: "",   // optional
-  });
+  const [form, setForm] = useState({ title: "", note_date: "", details: "", user_name: "", user_email: "" });
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState("");
   const [filterEmail, setFilterEmail] = useState("");
-  const [filterDate, setFilterDate] = useState(""); // "2 Oct 2025"
+  const [filterDate, setFilterDate] = useState("");
   const [editItem, setEditItem] = useState(null);
   const [overlayMsg, setOverlayMsg] = useState({ show: false, type: "", text: "" });
   const toastTimerRef = useRef(null);
@@ -157,9 +171,12 @@ export default function Notes() {
   const PAGE_SIZE = 10;
   const [page, setPage] = useState(1);
 
+  // Refs
+  const addFormRef = useRef(null);
+
   // ===== style once =====
   useEffect(() => {
-    const id = "notes-page-style";
+    const id = "notes-page-style-cards";
     if (document.getElementById(id)) return;
     const s = document.createElement("style");
     s.id = id;
@@ -167,40 +184,23 @@ export default function Notes() {
       .glass { backdrop-filter: blur(10px); background: rgba(255,255,255,0.9); border: 1px solid rgba(15,23,42,0.12); border-radius: 16px; box-shadow: 0 12px 32px rgba(0,0,0,0.08); }
       .overlay-backdrop{ position:fixed; inset:0; display:grid; place-items:center; background:rgba(255,255,255,0.72); z-index:2000; animation:fadeIn .2s ease both; }
       .center-msg{ position:fixed; inset:0; display:grid; place-items:center; background:rgba(0,0,0,0.25); z-index:2100; animation:fadeIn .2s ease both; }
-      .center-msg .card{ min-width:280px; background:#fffdf7; border:1px solid rgba(15,23,42,0.12); border-radius:16px; padding:18px; box-shadow:0 12px 32px rgba(0,0,0,0.08); animation:scaleIn .2s ease both; }
-      .center-msg .card.success{ border-color:rgba(34,197,94,.45);} .center-msg .card.error{ border-color:rgba(239,68,68,.45);}
-      .table thead th { position: sticky; top: 0; background: #f8fafc; z-index: 1; }
-      .truncate { max-width: 480px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      @media (max-width: 768px){ .truncate { max-width: 200px; } }
+      .center-msg .card{ min-width:280px; background:#fff; border:1px solid rgba(15,23,42,0.12); border-radius:16px; padding:18px; box-shadow:0 12px 32px rgba(0,0,0,0.08); animation:scaleIn .2s ease both; }
+      .center-msg .card.success{ border-left:6px solid #22c55e;} .center-msg .card.error{ border-left:6px solid #ef4444;}
 
-      /* ===== Responsive "table to cards" pattern ===== */
-      @media (max-width: 680px){
-        .stack-table thead { display: none; }
-        .stack-table tbody, .stack-table tr, .stack-table td { display: block; width: 100%; }
-        .stack-table tr { border-bottom: 1px solid rgba(15,23,42,0.08); padding: 10px 12px; }
-        .stack-table td { border: none !important; padding: 6px 0 !important; }
-        .stack-table td::before{
-          content: attr(data-label);
-          display: inline-block;
-          min-width: 110px;
-          font-weight: 700;
-          color: #334155;
-          margin-right: 8px;
-        }
-        .stack-table .row-actions {
-          display: flex;
-          justify-content: flex-end;
-          gap: 8px;
-          margin-top: 6px;
-        }
-        .stack-table .row-index { font-weight: 800; color:#0b1221; }
+      .note-card { position: relative; border-radius: 16px; border: 1px solid rgba(15,23,42,0.08); transition: box-shadow .2s ease, border-color .2s ease; }
+      .note-badge { position:absolute; top:12px; right:12px; }
+      .note-badge .badge { padding:.45rem .6rem; font-weight:600; border-radius: 999px; }
+      .truncate-2 { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+      .truncate-3 { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+      .btn-chip { border-radius: 999px; padding:.35rem .75rem; }
+
+      .fab-add { position: fixed; right: 16px; bottom: 16px; z-index: 2200; border-radius: 999px; width: 56px; height: 56px; display:grid; place-items:center; box-shadow: 0 12px 28px rgba(0,0,0,0.18); }
+      @media (min-width: 768px) {
+        .fab-add { right: 24px; bottom: 24px; width: 60px; height: 60px; }
       }
 
-      /* Subtle hover */
-      .table-hover tbody tr:hover { background: #f9fbff; }
-
-      @keyframes fadeIn{from{opacity:0} to{opacity:1}} 
-      @keyframes scaleIn{from{transform:scale(.96);opacity:0} to{transform:scale(1);opacity:1}}
+      @keyframes fadeIn{from{opacity:0} to{opacity:1}}
+      @keyframes scaleIn{from{transform:scale(.96);opacity:0} to{transform:scale(1);opacity:1)}
     `;
     document.head.appendChild(s);
   }, []);
@@ -237,6 +237,9 @@ export default function Notes() {
         );
       }
 
+      // Sequence-wise (newest first) by note_date
+      data.sort((a,b) => dmyToUTC(b.note_date) - dmyToUTC(a.note_date));
+
       setNotes(data);
     } catch (err) {
       showCenterMsg("error", err.message);
@@ -256,26 +259,18 @@ export default function Notes() {
     const normalized = normalizeDMY(form.note_date);
     if (!normalized) return showCenterMsg("error", "Invalid date format.");
 
-    const payload = {
-      title: form.title,
-      note_date: normalized,
-      details: form.details || "",
-      user_name: form.user_name || "",
-      user_email: form.user_email || "",
-    };
+    const payload = { title: form.title, note_date: normalized, details: form.details || "", user_name: form.user_name || "", user_email: form.user_email || "" };
 
     setBusy(true);
     try {
-      const res = await fetch(BASE_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const res = await fetch(BASE_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const json = await res.json();
       if (!res.ok) throw new Error(json.message || "Add failed");
       setForm({ title: "", note_date: "", details: "", user_name: "", user_email: "" });
       showCenterMsg("success", "Note added successfully");
       fetchNotes();
+      // scroll to list after add (optional)
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (e) {
       showCenterMsg("error", e.message);
     } finally {
@@ -283,17 +278,9 @@ export default function Notes() {
     }
   };
 
-  // delete
+  // delete with auto-refill page to 10
   const deleteNote = async (id) => {
-    const res = await Swal.fire({
-      title: "Delete this note?",
-      text: "This action cannot be undone.",
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonColor: "#06b6d4",
-      cancelButtonColor: "#ef4444",
-      confirmButtonText: "Delete",
-    });
+    const res = await Swal.fire({ title: "Delete this note?", text: "This action cannot be undone.", icon: "warning", showCancelButton: true, confirmButtonColor: "#06b6d4", cancelButtonColor: "#ef4444", confirmButtonText: "Delete" });
     if (!res.isConfirmed) return;
 
     setBusy(true);
@@ -301,8 +288,12 @@ export default function Notes() {
       const r = await fetch(`${BASE_URL}/${id}`, { method: "DELETE" });
       if (!r.ok) throw new Error("Delete failed");
       showCenterMsg("success", "Note deleted");
-      if ((page - 1) * PAGE_SIZE >= notes.length - 1) {
-        setPage((p) => Math.max(1, p - 1));
+
+      // recompute page
+      const newTotal = Math.max(0, notes.length - 1);
+      const totalPages = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
+      if (page > totalPages) {
+        setPage(totalPages);
       }
       fetchNotes();
     } catch (err) {
@@ -322,11 +313,7 @@ export default function Notes() {
 
     setBusy(true);
     try {
-      const res = await fetch(`${BASE_URL}/${editItem.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const res = await fetch(`${BASE_URL}/${editItem.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const json = await res.json();
       if (!res.ok) throw new Error(json.message || "Update failed");
       setEditItem(null);
@@ -350,47 +337,13 @@ export default function Notes() {
   const showingTo = Math.min(page * PAGE_SIZE, total);
 
   return (
-    <div
-      className="container-xxl py-4"
-      style={{
-        minHeight: "100vh",
-        background:
-          "radial-gradient(1200px 600px at -10% -10%, rgba(6,182,212,0.18), transparent 60%), " +
-          "radial-gradient(1200px 600px at 110% -10%, rgba(34,197,94,0.16), transparent 60%), " +
-          "linear-gradient(180deg, #ffffff 0%, #fcfffb 45%, #f7fbff 100%)",
-        fontFamily: "Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
-        color: "#0b1221",
-      }}
-    >
+    <div className="container-xxl py-4" style={{ minHeight: "100vh", background: "radial-gradient(1200px 600px at -10% -10%, rgba(6,182,212,0.18), transparent 60%), radial-gradient(1200px 600px at 110% -10%, rgba(34,197,94,0.16), transparent 60%), linear-gradient(180deg, #ffffff 0%, #fcfffb 45%, #f7fbff 100%)", fontFamily: "Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif", color: "#0b1221" }}>
       {/* Header */}
       <div className="glass p-3 p-md-4 mb-3 d-flex justify-content-between align-items-center flex-wrap">
         <div className="d-flex align-items-center gap-3">
-          <div
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 12,
-              background: "linear-gradient(180deg,#06b6d4,#22c55e)",
-              display: "grid",
-              placeItems: "center",
-              color: "#05212a",
-              fontWeight: 800,
-            }}
-          >
-            N
-          </div>
-          <div>
-            <h4
-              className="m-0"
-              style={{
-                background: "linear-gradient(90deg,#06b6d4,#22c55e,#a78bfa)",
-                WebkitBackgroundClip: "text",
-                backgroundClip: "text",
-                color: "transparent",
-              }}
-            >
-              Notes Manager
-            </h4>
+          <div style={{ width: 44, height: 44, borderRadius: 12, background: "linear-gradient(180deg,#06b6d4,#22c55e)", display: "grid", placeItems: "center", color: "#05212a", fontWeight: 800 }}>N</div>
+        <div>
+            <h4 className="m-0" style={{ background: "linear-gradient(90deg,#06b6d4,#22c55e,#a78bfa)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>Notes Manager</h4>
             <div className="text-muted small">Add and manage all your notes easily.</div>
           </div>
         </div>
@@ -401,65 +354,31 @@ export default function Notes() {
       </div>
 
       {/* Add Form */}
-      <div className="glass p-3 p-md-4 mb-4">
+      <div ref={addFormRef} className="glass p-3 p-md-4 mb-4">
         <h5 className="mb-3">Add Note</h5>
         <div className="row g-3">
           <div className="col-md-3 col-12">
             <label className="form-label">Title</label>
-            <input
-              className="form-control"
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-              placeholder="e.g. Buy groceries"
-            />
+            <input className="form-control" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Buy groceries" />
           </div>
           <div className="col-md-3 col-12">
-            <DateSelect
-              label="Date (2 Oct 2025)"
-              value={form.note_date}
-              onChange={(v) => setForm({ ...form, note_date: v })}
-              idPrefix="add"
-              required
-            />
+            <DateSelect label="Date (2 Oct 2025)" value={form.note_date} onChange={(v) => setForm({ ...form, note_date: v })} idPrefix="add" required />
           </div>
           <div className="col-md-3 col-12">
             <label className="form-label">User Name (optional)</label>
-            <input
-              className="form-control"
-              value={form.user_name}
-              onChange={(e) => setForm({ ...form, user_name: e.target.value })}
-              placeholder="Your name"
-            />
+            <input className="form-control" value={form.user_name} onChange={(e) => setForm({ ...form, user_name: e.target.value })} placeholder="Your name" />
           </div>
           <div className="col-md-3 col-12">
             <label className="form-label">User Email (optional)</label>
-            <input
-              className="form-control"
-              value={form.user_email}
-              onChange={(e) => setForm({ ...form, user_email: e.target.value })}
-              placeholder="you@example.com"
-            />
+            <input className="form-control" value={form.user_email} onChange={(e) => setForm({ ...form, user_email: e.target.value })} placeholder="you@example.com" />
           </div>
           <div className="col-12">
             <label className="form-label">Details</label>
-            <textarea
-              className="form-control"
-              rows="2"
-              value={form.details}
-              onChange={(e) => setForm({ ...form, details: e.target.value })}
-              placeholder="Write details..."
-            ></textarea>
+            <textarea className="form-control" rows="2" value={form.details} onChange={(e) => setForm({ ...form, details: e.target.value })} placeholder="Write details..."></textarea>
           </div>
         </div>
         <div className="mt-3 d-flex gap-2 flex-wrap">
-          {/* Bigger button, full width on mobile */}
-          <button
-            className="btn btn-success btn-lg px-5 py-2 w-100 w-md-auto"
-            onClick={addNote}
-            disabled={busy}
-          >
-            {busy ? "Saving..." : "Add Note"}
-          </button>
+          <button className="btn btn-success btn-lg px-5 py-2 w-100 w-md-auto" onClick={addNote} disabled={busy}>{busy ? "Saving..." : "Add Note"}</button>
         </div>
       </div>
 
@@ -467,160 +386,101 @@ export default function Notes() {
       <div className="glass p-3 mb-3 d-flex flex-wrap gap-2 align-items-end">
         <div className="d-flex flex-column" style={{ maxWidth: 260 }}>
           <label className="form-label mb-1">Search</label>
-          <input
-            className="form-control"
-            placeholder="Title / Name / Details"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+          <input className="form-control" placeholder="Title / Name / Details" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
         <div className="d-flex flex-column" style={{ maxWidth: 260 }}>
           <label className="form-label mb-1">Filter by Email</label>
-          <input
-            className="form-control"
-            placeholder="you@example.com"
-            value={filterEmail}
-            onChange={(e) => setFilterEmail(e.target.value)}
-          />
+          <input className="form-control" placeholder="you@example.com" value={filterEmail} onChange={(e) => setFilterEmail(e.target.value)} />
         </div>
         <div style={{ maxWidth: 460, flex: 1 }}>
-          <DateSelect
-            label="Filter by Date (optional)"
-            value={filterDate}
-            onChange={(v) => setFilterDate(v)}
-            idPrefix="filter"
-          />
+          <DateSelect label="Filter by Date (optional)" value={filterDate} onChange={(v) => setFilterDate(v)} idPrefix="filter" />
         </div>
       </div>
 
-      {/* Notes Table (auto-cards on mobile) */}
-      <div className="glass overflow-hidden">
-        <div className="table-responsive">
-          <table className="table table-hover align-middle m-0 stack-table">
-            <thead className="table-light">
-              <tr>
-                <th style={{ width: 56 }}>#</th>
-                <th style={{ minWidth: 180 }}>Title</th>
-                <th style={{ minWidth: 150 }}>Date</th>
-                <th style={{ minWidth: 160 }}>User</th>
-                <th style={{ minWidth: 220 }}>Email</th>
-                <th style={{ minWidth: 240 }}>Details</th>
-                <th className="text-end" style={{ width: 180 }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan="7" className="text-center py-4">
-                    <LoadingSpiner />
-                  </td>
-                </tr>
-              ) : pageItems.length === 0 ? (
-                <tr>
-                  <td colSpan="7" className="text-center py-4 text-muted">
-                    No notes found.
-                  </td>
-                </tr>
-              ) : (
-                pageItems.map((n, idx) => {
-                  const display = toPrettyDate(n.note_date); // ✅ same as DB date
-                  const rowNumber = (page - 1) * PAGE_SIZE + (idx + 1);
-                  return (
-                    <tr key={n.id}>
-                      <td data-label="#" className="row-index">{rowNumber}</td>
-                      <td data-label="Title" className="truncate" title={n.title}>{n.title}</td>
-                      <td data-label="Date">{display || "-"}</td>
-                      <td data-label="User" className="truncate" title={n.user_name || "-"}>{n.user_name || "-"}</td>
-                      <td data-label="Email" className="truncate" title={n.user_email || "-"}>{n.user_email || "-"}</td>
-                      <td data-label="Details" className="truncate" title={n.details || "-"}>{n.details || "-"}</td>
-                      <td data-label="Actions" className="text-end">
-                        <div className="row-actions">
-                          <button
-                            className="btn btn-outline-primary btn-sm me-2"
-                            onClick={() =>
-                              setEditItem({ ...n, note_date: display || n.note_date })
-                            }
-                          >
-                            Edit
-                          </button>
-                          <button
-                            className="btn btn-outline-danger btn-sm"
-                            onClick={() => deleteNote(n.id)}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+      {/* Notes grid (per-note date badge, consistent color per date) */}
+      <div className="glass p-2 p-md-3">
+        {loading ? (
+          <div className="text-center py-4"><LoadingSpiner /></div>
+        ) : pageItems.length === 0 ? (
+          <div className="text-center py-4 text-muted">No notes found.</div>
+        ) : (
+          <div className="row g-3">
+            {pageItems.map((n, idx) => {
+              const datePretty = toPrettyDate(n.note_date);
+              const badgeClass = getBadgeClassForDate(datePretty);
+              const glow = getGlowForBadgeClass(badgeClass);
+              const rowNumber = (page - 1) * PAGE_SIZE + (idx + 1);
+              return (
+                <div className="col-12 col-sm-6 col-lg-4 col-xl-3" key={n.id}>
+                  <div
+                    className="note-card h-100 p-3 bg-white"
+                    style={{
+                      borderColor: glow.replace(/0\.22\)$/, "0.35)"),
+                      boxShadow: `0 10px 24px rgba(0,0,0,.05), 0 4px 14px ${glow}`
+                    }}
+                  >
+                    {/* Date badge */}
+                    <div className="note-badge"><span className={`badge ${badgeClass}`}>{datePretty || "-"}</span></div>
+
+                    <div className="d-flex align-items-center justify-content-between mb-1">
+                      <span className="text-muted small">#{rowNumber}</span>
+                      {n.user_email ? <span className="badge text-bg-secondary">{n.user_email}</span> : <span />}
+                    </div>
+
+                    <h6 className="fw-bold mb-1" title={n.title} style={{ wordBreak: "break-word" }}>{n.title}</h6>
+                    {n.user_name && (
+                      <div className="text-muted mb-2 small">by <strong>{n.user_name}</strong></div>
+                    )}
+
+                    <div className="text-secondary small truncate-3" title={n.details || "-"}>{n.details || "-"}</div>
+
+                    <div className="mt-3 d-flex justify-content-end gap-2">
+                      <button className="btn btn-outline-primary btn-sm btn-chip" onClick={() => setEditItem({ ...n, note_date: datePretty || n.note_date })}>Edit</button>
+                      <button className="btn btn-outline-danger btn-sm btn-chip" onClick={() => deleteNote(n.id)}>Delete</button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Pagination footer */}
         {!loading && total > 0 && (
-          <div className="d-flex flex-wrap align-items-center justify-content-between p-3 gap-2">
-            <div className="text-muted small">
-              Showing <b>{showingFrom}</b>–<b>{showingTo}</b> of <b>{total}</b>
-            </div>
+          <div className="d-flex flex-wrap align-items-center justify-content-between p-2 p-md-3 gap-2 mt-2">
+            <div className="text-muted small">Showing <b>{showingFrom}</b>–<b>{showingTo}</b> of <b>{total}</b></div>
             <div className="btn-group">
-              <button
-                className="btn btn-outline-secondary btn-sm"
-                disabled={page <= 1}
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-              >
-                ‹ Prev
-              </button>
+              <button className="btn btn-outline-secondary btn-sm" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>‹ Prev</button>
               <span className="btn btn-light btn-sm disabled">{page} / {totalPages}</span>
-              <button
-                className="btn btn-outline-secondary btn-sm"
-                disabled={page >= totalPages}
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-              >
-                Next ›
-              </button>
+              <button className="btn btn-outline-secondary btn-sm" disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>Next ›</button>
             </div>
           </div>
         )}
       </div>
 
+      {/* Floating Add button (mobile-friendly) */}
+      <button
+        className="fab-add btn btn-success"
+        onClick={() => addFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        aria-label="Add Note"
+        title="Add Note"
+      >
+        +
+      </button>
+
       {/* Edit Modal */}
       {editItem && (
-        <div
-          className="center-msg"
-          onClick={(e) => e.target.classList.contains("center-msg") && setEditItem(null)}
-        >
+        <div className="center-msg" onClick={(e) => e.target.classList.contains("center-msg") && setEditItem(null)}>
           <div className="card" style={{ maxWidth: 520 }}>
             <h5 className="mb-3">Edit Note</h5>
-            <input
-              className="form-control mb-2"
-              value={editItem.title}
-              onChange={(e) => setEditItem({ ...editItem, title: e.target.value })}
-            />
+            <input className="form-control mb-2" value={editItem.title} onChange={(e) => setEditItem({ ...editItem, title: e.target.value })} />
             <div className="mb-2">
-              <DateSelect
-                label="Date (2 Oct 2025)"
-                value={editItem.note_date}
-                onChange={(v) => setEditItem({ ...editItem, note_date: v })}
-                idPrefix="edit"
-                required
-              />
+              <DateSelect label="Date (2 Oct 2025)" value={editItem.note_date} onChange={(v) => setEditItem({ ...editItem, note_date: v })} idPrefix="edit" required />
             </div>
-            <textarea
-              className="form-control mb-3"
-              rows="2"
-              value={editItem.details || ""}
-              onChange={(e) => setEditItem({ ...editItem, details: e.target.value })}
-            ></textarea>
+            <textarea className="form-control mb-3" rows="2" value={editItem.details || ""} onChange={(e) => setEditItem({ ...editItem, details: e.target.value })}></textarea>
             <div className="d-flex justify-content-end gap-2">
-              <button className="btn btn-light" onClick={() => setEditItem(null)}>
-                Cancel
-              </button>
-              <button className="btn btn-success px-4" onClick={updateNote}>
-                Update
-              </button>
+              <button className="btn btn-light" onClick={() => setEditItem(null)}>Cancel</button>
+              <button className="btn btn-success px-4" onClick={updateNote}>Update</button>
             </div>
           </div>
         </div>

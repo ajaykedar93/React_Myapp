@@ -21,23 +21,16 @@ import {
 } from "react-icons/fi";
 
 /**
- * WebsitesUrl.jsx — Bootstrap version (responsive, professional, high-contrast)
- * - Inline Add/Edit form at top; list below
- * - Accept any URL; auto-prepend https:// if missing
- * - Optional drag & drop image
- * - Search, category, pagination, edit/delete
- * - URLs show fully (wrap) with Show more/less toggle
- * - Image area shows ONLY: Open + Full buttons
- * - Default 10/page; responsive
+ * WebsitesUrl.jsx — Bootstrap version (fixed 10/page, mobile-perfect)
+ * - Fixed pagination: ALWAYS 10 items per page (no per‑page selector)
+ * - Page 1 → 1–10, Page 2 → 11–20, etc.
+ * - Smooth responsive grid, full-height on mobile (100dvh), sticky header
  */
 
 const API_BASE = "https://express-backend-myapp.onrender.com"; // no trailing slash
+const PAGE_SIZE = 10; // ← fixed 10 per page
 
 // ----------------------------- helpers -----------------------------
-const toInt = (v, d = 10) => {
-  const n = parseInt(v, 10);
-  return Number.isFinite(n) && n > 0 ? n : d;
-};
 const spring = { type: "spring", stiffness: 420, damping: 32, mass: 0.7 };
 
 async function api(path, { method = "GET", body, headers, json = true } = {}) {
@@ -198,10 +191,7 @@ function Dropzone({ file, setFile }) {
 
   return (
     <div
-      onDragOver={(e) => {
-        e.preventDefault();
-        setIsOver(true);
-      }}
+      onDragOver={(e) => { e.preventDefault(); setIsOver(true); }}
       onDragLeave={() => setIsOver(false)}
       onDrop={onDrop}
       className={`p-3 rounded-3 border ${isOver ? "border-primary bg-primary-subtle" : "border-secondary-subtle bg-white"}`}
@@ -213,7 +203,7 @@ function Dropzone({ file, setFile }) {
         <div className="small">
           <div className="fw-semibold text-dark">Drag & drop image (optional)</div>
           <div className="text-secondary">
-            or{" "}
+            or {" "}
             <button type="button" onClick={() => ref.current?.click()} className="btn btn-link p-0 align-baseline">
               browse
             </button>
@@ -238,7 +228,6 @@ export default function WebsitesUrl() {
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(10); // default 10 per page
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
   const [categories, setCategories] = useState([]);
@@ -260,7 +249,7 @@ export default function WebsitesUrl() {
   const [saving, setSaving] = useState(false);
 
   // NEW: per-card "show more" state for long URLs
-  const [expanded, setExpanded] = useState({}); // { [id]: true|false }
+  const [expanded, setExpanded] = useState({});
 
   const showNotice = (type, title, message) => setNotice({ open: true, type, title, message });
 
@@ -271,11 +260,7 @@ export default function WebsitesUrl() {
         await navigator.clipboard.writeText(link);
       } else {
         const ta = document.createElement("textarea");
-        ta.value = link;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand("copy");
-        document.body.removeChild(ta);
+        ta.value = link; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta);
       }
       showNotice("success", "Link Copied", "The website link has been copied to clipboard.");
     } catch {
@@ -283,10 +268,8 @@ export default function WebsitesUrl() {
     }
   };
 
-  const openPreview = (src, title) =>
-    setPreview({ open: true, src, title: title || "Preview" });
-  const closePreview = () =>
-    setPreview({ open: false, src: "", title: "" });
+  const openPreview = (src, title) => setPreview({ open: true, src, title: title || "Preview" });
+  const closePreview = () => setPreview({ open: false, src: "", title: "" });
 
   const loadCategories = async () => {
     try {
@@ -302,7 +285,7 @@ export default function WebsitesUrl() {
     try {
       const params = new URLSearchParams();
       params.set("page", String(page));
-      params.set("limit", String(limit));
+      params.set("limit", String(PAGE_SIZE)); // ← always 10
       if (q) params.set("q", q);
       if (category) params.set("category", category);
       const data = await api(`/websites?${params.toString()}`);
@@ -315,28 +298,15 @@ export default function WebsitesUrl() {
     }
   };
 
-  useEffect(() => {
-    loadCategories();
-  }, []);
-  useEffect(() => {
-    load();
-  }, [page, limit, q, category]);
+  useEffect(() => { loadCategories(); }, []);
+  useEffect(() => { load(); }, [page, q, category]);
 
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(total / limit)), [total, limit]);
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total]);
 
-  const clearFilters = () => {
-    setQ("");
-    setCategory("");
-    setPage(1);
-  };
+  const clearFilters = () => { setQ(""); setCategory(""); setPage(1); };
 
   const resetForm = () => {
-    setEditing(null);
-    setFUrl("");
-    setFName("");
-    setFCategory("");
-    setFFile(null);
-    setSaving(false);
+    setEditing(null); setFUrl(""); setFName(""); setFCategory(""); setFFile(null); setSaving(false);
   };
 
   const fillFormForEdit = (it) => {
@@ -381,35 +351,43 @@ export default function WebsitesUrl() {
 
   const doDelete = async () => {
     const id = confirm.id;
+    // close confirm immediately
     setConfirm({ open: false, id: null, name: "" });
+
+    // show busy while we reconcile pages
+    setLoading(true);
     try {
       await api(`/websites/${id}`, { method: "DELETE" });
+
+      // Compute new totals/pages so the UI always shows a full 10 items when possible
+      const newTotal = Math.max(0, total - 1);
+      const newTotalPages = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
+
+      // If current page would become out-of-range after delete, jump to the last valid page;
+      // the effect on `page` will trigger a fresh load that fills the page to 10.
+      if (page > newTotalPages) {
+        setTotal(newTotal);
+        setPage(newTotalPages); // triggers useEffect(load)
+      } else {
+        // Stay on the same page but force a reload so the next item from the next page slides in
+        setTotal(newTotal);
+        await load();
+      }
+
       showNotice("success", "Deleted", "Website removed successfully.");
-      setItems((prev) => prev.filter((x) => x.id !== id));
-      setTotal((t) => Math.max(0, t - 1));
     } catch (e) {
       showNotice("error", "Delete Failed", e.message || "Unable to delete website.");
+    } finally {
+      setLoading(false);
     }
   };
 
   // styles for URL text (clamped vs expanded)
-  const clampStyle = {
-    display: "-webkit-box",
-    WebkitLineClamp: 2,
-    WebkitBoxOrient: "vertical",
-    overflow: "hidden",
-    wordBreak: "break-all",
-    whiteSpace: "normal",
-    maxWidth: "100%",
-  };
-  const expandedStyle = {
-    wordBreak: "break-all",
-    whiteSpace: "normal",
-    maxWidth: "100%",
-  };
+  const clampStyle = { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", wordBreak: "break-all", whiteSpace: "normal", maxWidth: "100%" };
+  const expandedStyle = { wordBreak: "break-all", whiteSpace: "normal", maxWidth: "100%" };
 
   return (
-    <div className="min-vh-100" style={{ background: "#f5f7fb" }}>
+    <div className="min-vh-100" style={{ background: "#f5f7fb", minHeight: "100dvh" }}>
       {/* Header */}
       <motion.div
         initial={{ y: -12, opacity: 0 }}
@@ -456,25 +434,14 @@ export default function WebsitesUrl() {
 
       <div className="container py-4">
         {/* Add/Edit Form */}
-        <motion.form
-          onSubmit={submitForm}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={spring}
-          className="card shadow-sm mb-4"
-        >
+        <motion.form onSubmit={submitForm} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={spring} className="card shadow-sm mb-4">
           <div className="card-body">
             <div className="d-flex align-items-center justify-content-between mb-3">
               <h5 className="mb-0 fw-bold">{editing ? "Edit Website" : "Add Website"}</h5>
               <div className="d-flex align-items-center gap-2">
                 {editing ? <Badge>Update</Badge> : <Badge>Create</Badge>}
                 {editing && (
-                  <button
-                    type="button"
-                    onClick={resetForm}
-                    className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1"
-                    title="Reset to Add mode"
-                  >
+                  <button type="button" onClick={resetForm} className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1" title="Reset to Add mode">
                     <FiRotateCcw /> Cancel Edit
                   </button>
                 )}
@@ -484,39 +451,21 @@ export default function WebsitesUrl() {
             <div className="row g-3">
               <div className="col-lg-8">
                 <label className="form-label fw-semibold">Website URL</label>
-                <input
-                  value={fUrl}
-                  onChange={(e) => setFUrl(e.target.value)}
-                  placeholder="example.com or https://example.com"
-                  className="form-control"
-                />
-                <div className="form-text">
-                  Any format allowed; we’ll auto-prepend <code>https://</code> if missing.
-                </div>
+                <input value={fUrl} onChange={(e) => setFUrl(e.target.value)} placeholder="example.com or https://example.com" className="form-control" />
+                <div className="form-text">Any format allowed; we’ll auto-prepend <code>https://</code> if missing.</div>
               </div>
 
               <div className="col-md-6 col-lg-4">
                 <label className="form-label fw-semibold">Name (optional)</label>
-                <input
-                  value={fName}
-                  onChange={(e) => setFName(e.target.value)}
-                  placeholder="Display name"
-                  className="form-control"
-                />
+                <input value={fName} onChange={(e) => setFName(e.target.value)} placeholder="Display name" className="form-control" />
               </div>
 
               <div className="col-md-6 col-lg-4">
                 <label className="form-label fw-semibold">Category (optional)</label>
-                <select
-                  value={fCategory}
-                  onChange={(e) => setFCategory(e.target.value)}
-                  className="form-select"
-                >
+                <select value={fCategory} onChange={(e) => setFCategory(e.target.value)} className="form-select">
                   <option value="">Select category</option>
                   {categories.map((c) => (
-                    <option key={c.id || c.name} value={c.name}>
-                      {c.name}
-                    </option>
+                    <option key={c.id || c.name} value={c.name}>{c.name}</option>
                   ))}
                 </select>
               </div>
@@ -528,9 +477,7 @@ export default function WebsitesUrl() {
             </div>
 
             <div className="mt-3 d-flex justify-content-end gap-2">
-              <button type="button" onClick={resetForm} className="btn btn-outline-secondary">
-                Reset
-              </button>
+              <button type="button" onClick={resetForm} className="btn btn-outline-secondary">Reset</button>
               <button type="submit" disabled={saving} className="btn btn-primary fw-bold d-inline-flex align-items-center gap-2">
                 {editing ? (saving ? "Saving..." : <> <FiCheckCircle/> Save Changes</>) : saving ? "Adding..." : <> <FiPlus/> Add Website</>}
               </button>
@@ -545,32 +492,19 @@ export default function WebsitesUrl() {
               <div className="col-md">
                 <div className="position-relative">
                   <FiSearch className="position-absolute" style={{ left: 10, top: 10, opacity: .5 }} />
-                  <input
-                    value={q}
-                    onChange={(e) => { setQ(e.target.value); setPage(1); }}
-                    placeholder="Search url or name"
-                    className="form-control ps-5"
-                  />
+                  <input value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Search url or name" className="form-control ps-5" />
                 </div>
               </div>
               <div className="col-md-auto">
-                <select
-                  value={category}
-                  onChange={(e) => { setCategory(e.target.value); setPage(1); }}
-                  className="form-select"
-                >
+                <select value={category} onChange={(e) => { setCategory(e.target.value); setPage(1); }} className="form-select">
                   <option value="">All categories</option>
                   {categories.map((c) => (
-                    <option key={c.id || c.name} value={c.name}>
-                      {c.name}
-                    </option>
+                    <option key={c.id || c.name} value={c.name}>{c.name}</option>
                   ))}
                 </select>
               </div>
               <div className="col-md-auto">
-                <button onClick={clearFilters} className="btn btn-outline-secondary">
-                  Reset
-                </button>
+                <button onClick={clearFilters} className="btn btn-outline-secondary">Reset</button>
               </div>
             </div>
           </div>
@@ -584,36 +518,17 @@ export default function WebsitesUrl() {
                 const displayUrl = normalizeUrl(it.url);
                 const isExpanded = !!expanded[it.id];
                 return (
-                  <motion.div
-                    key={it.id}
-                    layout
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    className="col-sm-6 col-lg-4 col-xl-3"
-                  >
+                  <motion.div key={it.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="col-12 col-sm-6 col-lg-4 col-xl-3">
                     <div className="card h-100 shadow-sm">
                       {/* Image area */}
                       <div
                         className="position-relative d-flex align-items-center justify-content-center bg-light"
-                        style={{
-                          minHeight: 140,
-                          maxHeight: 340,
-                          overflow: "hidden",
-                          borderBottom: "1px solid rgba(0,0,0,.05)",
-                          cursor: it.image?.mime ? "zoom-in" : "default",
-                        }}
-                        onClick={() => {
-                          if (it.image?.mime) openPreview(`${API_BASE}${it.image.href}`, it.name || it.url);
-                        }}
+                        style={{ minHeight: 140, maxHeight: 340, overflow: "hidden", borderBottom: "1px solid rgba(0,0,0,.05)", cursor: it.image?.mime ? "zoom-in" : "default" }}
+                        onClick={() => { if (it.image?.mime) openPreview(`${API_BASE}${it.image.href}`, it.name || it.url); }}
                         title={it.image?.mime ? "Click to preview" : undefined}
                       >
                         {it.image?.mime ? (
-                          <img
-                            src={`${API_BASE}${it.image.href}`}
-                            alt={it.name || it.url}
-                            style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
-                          />
+                          <img src={`${API_BASE}${it.image.href}`} alt={it.name || it.url} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
                         ) : (
                           <div className="d-flex align-items-center justify-content-center position-absolute top-0 start-0 w-100 h-100 text-secondary">
                             <FiImage size={48} />
@@ -621,21 +536,11 @@ export default function WebsitesUrl() {
                         )}
 
                         <div className="position-absolute end-0 bottom-0 m-2 d-flex gap-1">
-                          <button
-                            type="button"
-                            className="btn btn-dark btn-sm d-inline-flex align-items-center gap-1"
-                            onClick={(e) => { e.stopPropagation(); window.open(displayUrl, "_blank", "noopener"); }}
-                            title="Open"
-                          >
+                          <button type="button" className="btn btn-dark btn-sm d-inline-flex align-items-center gap-1" onClick={(e) => { e.stopPropagation(); window.open(displayUrl, "_blank", "noopener"); }} title="Open">
                             <FiExternalLink /> Open
                           </button>
                           {it.image?.mime && (
-                            <button
-                              type="button"
-                              className="btn btn-outline-light btn-sm d-inline-flex align-items-center gap-1"
-                              onClick={(e) => { e.stopPropagation(); openPreview(`${API_BASE}${it.image.href}`, it.name || it.url); }}
-                              title="Full Image"
-                            >
+                            <button type="button" className="btn btn-outline-light btn-sm d-inline-flex align-items-center gap-1" onClick={(e) => { e.stopPropagation(); openPreview(`${API_BASE}${it.image.href}`, it.name || it.url); }} title="Full Image">
                               <FiZoomIn /> Full
                             </button>
                           )}
@@ -653,14 +558,7 @@ export default function WebsitesUrl() {
                             {it.url && (
                               <div className="small text-secondary d-flex flex-column gap-1 mt-1" title={it.url}>
                                 <div className="d-flex align-items-start gap-2">
-                                  <button
-                                    type="button"
-                                    className="btn btn-outline-secondary btn-sm py-0 px-2 d-inline-flex align-items-center gap-1"
-                                    onClick={() => copyLink(it.url)}
-                                    aria-label="Copy link"
-                                    title="Copy link"
-                                    style={{ lineHeight: 1.2, whiteSpace: "nowrap" }}
-                                  >
+                                  <button type="button" className="btn btn-outline-secondary btn-sm py-0 px-2 d-inline-flex align-items-center gap-1" onClick={() => copyLink(it.url)} aria-label="Copy link" title="Copy link" style={{ lineHeight: 1.2, whiteSpace: "nowrap" }}>
                                     <FiCopy /> Copy
                                   </button>
                                   <span style={isExpanded ? expandedStyle : clampStyle}>
@@ -671,13 +569,7 @@ export default function WebsitesUrl() {
 
                                 {/* Show more / less toggle */}
                                 <div>
-                                  <button
-                                    type="button"
-                                    className="btn btn-link btn-sm p-0"
-                                    onClick={() =>
-                                      setExpanded((m) => ({ ...m, [it.id]: !isExpanded }))
-                                    }
-                                  >
+                                  <button type="button" className="btn btn-link btn-sm p-0" onClick={() => setExpanded((m) => ({ ...m, [it.id]: !isExpanded }))}>
                                     {isExpanded ? "Show less" : "Show more"}
                                   </button>
                                 </div>
@@ -687,16 +579,10 @@ export default function WebsitesUrl() {
                           {it.category ? <Badge>{it.category}</Badge> : <span />}
                         </div>
                         <div className="mt-auto d-flex justify-content-end gap-2">
-                          <button
-                            onClick={() => fillFormForEdit(it)}
-                            className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1"
-                          >
+                          <button onClick={() => fillFormForEdit(it)} className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1">
                             <FiEdit2 /> Edit
                           </button>
-                          <button
-                            onClick={() => askDelete(it)}
-                            className="btn btn-danger btn-sm d-inline-flex align-items-center gap-1"
-                          >
+                          <button onClick={() => askDelete(it)} className="btn btn-danger btn-sm d-inline-flex align-items-center gap-1">
                             <FiTrash2 /> Delete
                           </button>
                         </div>
@@ -713,44 +599,15 @@ export default function WebsitesUrl() {
           )}
         </LayoutGroup>
 
-        {/* Pagination */}
+        {/* Pagination (fixed 10/page) */}
         <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-4">
           <div className="text-secondary">
             Total: <span className="fw-bold text-dark">{total}</span>
           </div>
           <div className="d-flex align-items-center gap-2">
-            <button
-              disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="btn btn-outline-secondary"
-            >
-              Prev
-            </button>
-            <span className="small">
-              Page <b>{page}</b> / {totalPages}
-            </span>
-            <button
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              className="btn btn-outline-secondary"
-            >
-              Next
-            </button>
-            <select
-              value={limit}
-              onChange={(e) => {
-                setLimit(toInt(e.target.value, 10));
-                setPage(1);
-              }}
-              className="form-select"
-              style={{ width: 140 }}
-            >
-              {[10, 12, 16, 24, 32].map((n) => (
-                <option key={n} value={n}>
-                  {n}/page
-                </option>
-              ))}
-            </select>
+            <button disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="btn btn-outline-secondary">Prev</button>
+            <span className="small">Page <b>{page}</b> / {totalPages}</span>
+            <button disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="btn btn-outline-secondary">Next</button>
           </div>
         </div>
       </div>
@@ -758,33 +615,14 @@ export default function WebsitesUrl() {
       {/* Full-image Preview Modal */}
       <AnimatePresence>
         {preview.open && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="position-fixed top-0 start-0 w-100 h-100 d-grid"
-            style={{ background: "rgba(0,0,0,.8)", zIndex: 1065, placeItems: "center" }}
-            onClick={closePreview}
-          >
-            <motion.div
-              initial={{ scale: 0.98, y: 10 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.98, y: 10 }}
-              transition={spring}
-              className="p-2"
-              onClick={(e) => e.stopPropagation()}
-              style={{ maxWidth: "95vw", maxHeight: "90vh" }}
-            >
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="position-fixed top-0 start-0 w-100 h-100 d-grid" style={{ background: "rgba(0,0,0,.8)", zIndex: 1065, placeItems: "center" }} onClick={closePreview}>
+            <motion.div initial={{ scale: 0.98, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.98, y: 10 }} transition={spring} className="p-2" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "95vw", maxHeight: "90vh" }}>
               <div className="d-flex justify-content-between align-items-center mb-2">
                 <h6 className="text-white-50 mb-0">{preview.title}</h6>
                 <button className="btn btn-sm btn-light" onClick={closePreview}><FiX /></button>
               </div>
               <div className="bg-black d-flex align-items-center justify-content-center" style={{ maxWidth: "95vw", maxHeight: "85vh" }}>
-                <img
-                  src={preview.src}
-                  alt={preview.title}
-                  style={{ maxWidth: "95vw", maxHeight: "85vh", objectFit: "contain" }}
-                />
+                <img src={preview.src} alt={preview.title} style={{ maxWidth: "95vw", maxHeight: "85vh", objectFit: "contain" }} />
               </div>
             </motion.div>
           </motion.div>
@@ -792,26 +630,10 @@ export default function WebsitesUrl() {
       </AnimatePresence>
 
       {/* Confirm delete */}
-      <Confirm
-        open={confirm.open}
-        title="Delete Website"
-        message={
-          <span>
-            Are you sure you want to delete <b>{confirm.name}</b>? This action cannot be undone.
-          </span>
-        }
-        onCancel={() => setConfirm({ open: false, id: null, name: "" })}
-        onConfirm={doDelete}
-      />
+      <Confirm open={confirm.open} title="Delete Website" message={<span>Are you sure you want to delete <b>{confirm.name}</b>? This action cannot be undone.</span>} onCancel={() => setConfirm({ open: false, id: null, name: "" })} onConfirm={doDelete} />
 
       {/* Centered notice (no overlay, always at center) */}
-      <CenterNotice
-        open={notice.open}
-        type={notice.type}
-        title={notice.title}
-        message={notice.message}
-        onClose={() => setNotice((n) => ({ ...n, open: false }))}
-      />
+      <CenterNotice open={notice.open} type={notice.type} title={notice.title} message={notice.message} onClose={() => setNotice((n) => ({ ...n, open: false }))} />
 
       {/* Busy overlay */}
       <BusyOverlay show={loading} />

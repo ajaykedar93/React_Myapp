@@ -41,24 +41,23 @@ export default function GetPassword() {
     toastTimerRef.current = setTimeout(()=> setOverlayMsg({ show:false, type:"", text:""}), ms);
   };
 
-  // styles once (animations + polish)
+  // styles once (animations + polish + mobile fit)
   useEffect(() => {
     const id = "pm-style";
     if (document.getElementById(id)) return;
     const s = document.createElement("style");
     s.id = id;
     s.innerHTML = `
+      :root { --ring: 0 0 0 3px rgba(2,132,199,.25); }
       body { font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
-      .glass { backdrop-filter:blur(10px); background:rgba(255,255,255,.9); border:1px solid rgba(15,23,42,.10); box-shadow:0 12px 32px rgba(0,0,0,.07); border-radius:16px; }
+      .glass { backdrop-filter:blur(10px); background:rgba(255,255,255,.92); border:1px solid rgba(15,23,42,.10); box-shadow:0 12px 32px rgba(0,0,0,.07); border-radius:16px; }
 
       /* Buttons */
-      .btn-soft { background:rgba(2, 132, 199, .08); border:1px solid rgba(2,132,199,.18); }
-      .btn-soft:hover { background:rgba(2, 132, 199, .12); }
+      .btn-soft { background:rgba(2,132,199,.08); border:1px solid rgba(2,132,199,.18); }
+      .btn-soft:hover { background:rgba(2,132,199,.12); }
       .btn-ripple { position:relative; overflow:hidden; }
-      .btn-ripple::after {
-        content:""; position:absolute; inset:auto; width:0; height:0; border-radius:999px; opacity:.25; background:currentColor; transform:translate(-50%, -50%);
-        pointer-events:none; transition:width .4s ease, height .4s ease, opacity .6s ease;
-      }
+      .btn-ripple:focus-visible { outline: none; box-shadow: var(--ring); }
+      .btn-ripple::after { content:""; position:absolute; inset:auto; width:0; height:0; border-radius:999px; opacity:.25; background:currentColor; transform:translate(-50%, -50%); pointer-events:none; transition:width .4s ease, height .4s ease, opacity .6s ease; }
       .btn-ripple:active::after { width:220px; height:220px; opacity:.18; }
 
       /* Modal */
@@ -78,19 +77,17 @@ export default function GetPassword() {
       .row-appear { animation:slideFadeIn .22s ease both; }
       .table-hover tbody tr:hover { transform:translateY(-1px); transition:transform .15s ease, box-shadow .15s ease; box-shadow:0 2px 12px rgba(0,0,0,.04); }
 
+      /* Clamp & wrap for long text */
+      .clamp-1 { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+      .break-any { word-break: break-word; overflow-wrap:anywhere; }
+
       /* --- Action button sizing --- */
-      /* Default (desktop/tablet): keep normal Bootstrap size */
-      /* Large screens: make ONLY action buttons bigger and easier to click */
-      @media (min-width: 992px) {
-        .btn-action {
-          padding: .55rem .9rem;
-          font-size: .95rem;
-          line-height: 1.2;
-          border-radius: .5rem;
-        }
+      @media (min-width: 992px) { /* Large screens */
+        .btn-action { padding:.55rem .9rem; font-size:.95rem; line-height:1.2; border-radius:.5rem; }
       }
 
-      /* --- Mobile tweaks (≤576px) --- */
+      /* A responsive wrapper that becomes a grid on narrow screens so buttons auto-fit full width nicely */
+      .actions-wrap { display:flex; flex-wrap:wrap; gap:.5rem; justify-content:flex-end; }
       @media (max-width: 576px) {
         .container-xxl { padding-left: 10px !important; padding-right: 10px !important; }
         .glass { border-radius: 12px; }
@@ -99,19 +96,10 @@ export default function GetPassword() {
         .table tbody td { display:flex; justify-content:space-between; padding:.35rem .5rem; gap:10px; }
         .td-label { font-weight:600; color:#6b7280; margin-right:.75rem; }
         .text-end { text-align:right !important; }
-        /* Only action buttons become compact on mobile */
-        .btn-action { 
-          padding: .25rem .5rem; 
-          font-size: .75rem; 
-          line-height: 1.2; 
-          border-radius: .3rem; 
-        }
-        /* tighten selects and inputs on bar & modal */
-        .form-control, .form-select { 
-          min-height: 36px; 
-          padding: 6px 10px; 
-          font-size: .9rem; 
-        }
+        .btn-action { padding:.4rem .6rem; font-size:.85rem; line-height:1.2; border-radius:.4rem; }
+        .actions-wrap { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:.5rem; }
+        .actions-wrap > .btn { width:100%; } /* buttons auto stretch */
+        .form-control, .form-select { min-height: 36px; padding: 6px 10px; font-size: .95rem; }
         .btn-close { transform: scale(.9); }
       }
 
@@ -127,7 +115,7 @@ export default function GetPassword() {
     const hasOverlay = busy || overlayMsg.show;
     document.body.style.overflow = hasOverlay ? "hidden" : "";
     return ()=> { document.body.style.overflow = ""; }
-  }, [busy, overlayMsg.show, editItem]);
+  }, [busy, overlayMsg.show]);
 
   // fetch
   const fetchList = async (signal) => {
@@ -156,12 +144,19 @@ export default function GetPassword() {
     } finally { setLoadingTable(false); }
   };
 
+  // initial fetch
+  useEffect(()=>{
+    const ctl = new AbortController();
+    fetchList(ctl.signal);
+    return ()=> ctl.abort();
+  }, []);
+
   // refetch on filter/search
   useEffect(()=> {
     if (abortRef.current) abortRef.current.abort();
     const ctl = new AbortController();
     abortRef.current = ctl;
-    const t = setTimeout(()=> fetchList(ctl.signal), 150);
+    const t = setTimeout(()=> fetchList(ctl.signal), 180); // tiny debounce
     setPage(1);
     return ()=> { clearTimeout(t); ctl.abort(); };
   }, [type, q]);
@@ -204,15 +199,24 @@ export default function GetPassword() {
     if(!String(editItem.name||"").trim()){ showCenterMsg("error","Name required"); return; }
     if(!String(editItem.password||"").trim()){ showCenterMsg("error","Password required"); return; }
 
+    // If user typed a JSON object in additional_info, try to parse it; otherwise keep string
+    let payload = { ...editItem };
+    if (typeof editItem.additional_info === "string") {
+      const s = editItem.additional_info.trim();
+      if (s.startsWith("{") || s.startsWith("[")) {
+        try { payload.additional_info = JSON.parse(s); } catch { /* keep as string */ }
+      }
+    }
+
     setBusy(true);
     try {
       const res = await fetch(`${BASE_URL}/${editItem.id}`, {
         method:"PATCH", headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify(editItem)
+        body:JSON.stringify(payload)
       });
       const j = await res.json().catch(()=>{});
       if(!res.ok) throw new Error(j?.message || "Update failed");
-      setItems(prev=>prev.map(x=>x.id===editItem.id ? editItem : x));
+      setItems(prev=>prev.map(x=>x.id===editItem.id ? payload : x));
       showCenterMsg("success","Updated");
       setEditItem(null);
     } catch(e){ showCenterMsg("error",e.message); }
@@ -230,8 +234,8 @@ export default function GetPassword() {
 
   // Render helpers
   const renderAI = (ai)=> {
-    if (!ai) return "-";
-    if (typeof ai === "string") return ai;
+    if (ai == null) return "-";
+    if (typeof ai === "string") return ai || "-";
     try { return JSON.stringify(ai); } catch { return String(ai); }
   };
 
@@ -239,12 +243,12 @@ export default function GetPassword() {
   const TD = ({label, children, className}) => (
     <td className={className}>
       <span className="td-label d-sm-none">{label}</span>
-      <span>{children}</span>
+      <span className="break-any">{children}</span>
     </td>
   );
 
   return (
-    <div className="container-xxl py-4" style={{ background:"linear-gradient(180deg,#fff,#f7fbff)", minHeight:"100vh", color:"#0b1221" }}>
+    <div className="container-xxl py-4" style={{ background:"linear-gradient(180deg,#fff,#f7fbff)", minHeight:"100dvh", color:"#0b1221" }}>
       {/* Header */}
       <div className="glass p-3 p-md-4 mb-3 d-flex justify-content-between align-items-center flex-wrap">
         <div className="d-flex align-items-center gap-3">
@@ -256,7 +260,7 @@ export default function GetPassword() {
         </div>
         <div className="text-end mt-2 mt-md-0">
           <div className="text-muted small">Total</div>
-          <div className="fw-bold">{activeCount}</div>
+          <div className="fw-bold" aria-live="polite">{activeCount}</div>
         </div>
       </div>
 
@@ -264,8 +268,8 @@ export default function GetPassword() {
       <div className="glass p-2 p-md-3 mb-3 d-flex flex-wrap align-items-center gap-2">
         <div className="d-flex align-items-center gap-2">
           <span className="text-muted">Type</span>
-          <select className="form-select" style={{width:220}} value={type} onChange={e=>setType(e.target.value)}>
-            {TYPES.map(t=><option key={t||"all"} value={t}>{t||"All"}</option>)}
+          <select className="form-select" style={{width:220}} value={type} onChange={e=>setType(e.target.value)} aria-label="Filter by type">
+            {TYPES.map(t=> <option key={t||"all"} value={t}>{t||"All"}</option>)}
           </select>
         </div>
         <div className="ms-auto" style={{minWidth:240}}>
@@ -274,6 +278,7 @@ export default function GetPassword() {
             value={q}
             onChange={e=>setQ(e.target.value)}
             placeholder="Search by name or notes"
+            aria-label="Search passwords"
           />
         </div>
       </div>
@@ -305,31 +310,33 @@ export default function GetPassword() {
                   const dots = "•".repeat(Math.min(r.password?.length || 3, 12));
                   return (
                     <tr key={r.id} className="row-appear">
-                      <TD label="#" >{i+1}</TD>
+                      <TD label="#">{i+1}</TD>
                       <TD label="Type">
                         <span className={`badge ${TYPE_COLORS[r.type]||"bg-secondary-subtle"}`}>{r.type||"other"}</span>
                       </TD>
-                      <TD label="Name">{r.name}</TD>
+                      <TD label="Name"><span className="clamp-1" title={r.name}>{r.name}</span></TD>
                       <TD label="Username" className="d-none d-sm-table-cell">
-                        <span className="font-monospace">{r.username || "-"}</span>
+                        <span className="font-monospace clamp-1" title={r.username || "-"}>{r.username || "-"}</span>
                         {r.username && (
                           <button
                             className="btn btn-outline-secondary ms-2 btn-ripple btn-action"
                             onClick={()=>copyToClipboard(r.username)}
                             title="Copy username"
+                            aria-label={`Copy username for ${r.name}`}
                           >
                             Copy
                           </button>
                         )}
                       </TD>
                       <TD label="Password">
-                        <span className="font-monospace">{visible ? (r.password || "-") : <span className="pw-dots">{dots}</span>}</span>
+                        <span className="font-monospace">{visible ? (r.password || "-") : <span className="pw-dots" aria-hidden>{dots}</span>}</span>
                         {r.password && (
                           <>
                             <button
                               className="btn btn-soft ms-2 btn-ripple btn-action"
                               onClick={()=>setShowPwRow(s=>({...s,[r.id]:!visible}))}
                               title={visible ? "Hide password" : "Show password"}
+                              aria-pressed={visible}
                             >
                               {visible ? "Hide" : "Show"}
                             </button>
@@ -337,15 +344,16 @@ export default function GetPassword() {
                               className="btn btn-outline-secondary ms-2 btn-ripple btn-action"
                               onClick={()=>copyToClipboard(r.password)}
                               title="Copy password"
+                              aria-label={`Copy password for ${r.name}`}
                             >
                               Copy
                             </button>
                           </>
                         )}
                       </TD>
-                      <TD label="Notes" className="d-none d-lg-table-cell">{renderAI(r.additional_info)}</TD>
+                      <TD label="Notes" className="d-none d-lg-table-cell"><span className="clamp-1" title={renderAI(r.additional_info)}>{renderAI(r.additional_info)}</span></TD>
                       <TD label="Actions" className="text-end">
-                        <div className="d-flex justify-content-end gap-2 flex-wrap">
+                        <div className="actions-wrap">
                           {r.username && (
                             <button
                               className="btn btn-outline-secondary btn-ripple btn-action"
@@ -364,10 +372,10 @@ export default function GetPassword() {
                               Copy P
                             </button>
                           )}
-                          <button className="btn btn-outline-primary btn-ripple btn-action" onClick={()=>setEditItem({...r})}>
+                          <button className="btn btn-outline-primary btn-ripple btn-action" onClick={()=>setEditItem({...r})} title="Edit this entry">
                             Edit
                           </button>
-                          <button className="btn btn-outline-danger btn-ripple btn-action" onClick={()=>deleteRecord(r.id)}>
+                          <button className="btn btn-outline-danger btn-ripple btn-action" onClick={()=>deleteRecord(r.id)} title="Delete this entry">
                             Delete
                           </button>
                         </div>
@@ -380,25 +388,27 @@ export default function GetPassword() {
           </table>
         </div>
 
-        {/* Pagination (kept standard sizes) */}
+        {/* Pagination (kept standard sizes, mobile-friendly) */}
         {!loadingTable && activeCount > 0 && (
-          <div className="d-flex align-items-center justify-content-between p-3">
-            <div className="text-muted small">
+          <div className="d-flex align-items-center justify-content-between p-3 flex-wrap gap-2">
+            <div className="text-muted small order-2 order-sm-1">
               Showing <b>{(page-1)*PAGE_SIZE + 1}</b>–<b>{Math.min(page*PAGE_SIZE, activeCount)}</b> of <b>{activeCount}</b>
             </div>
-            <div className="btn-group">
+            <div className="btn-group order-1 order-sm-2 ms-auto">
               <button
                 className="btn btn-outline-secondary btn-sm btn-ripple"
                 disabled={page <= 1}
                 onClick={()=>setPage(p=>Math.max(1, p-1))}
+                aria-label="Previous page"
               >
                 ‹ Prev
               </button>
-              <span className="btn btn-light btn-sm disabled">{page} / {totalPages}</span>
+              <span className="btn btn-light btn-sm disabled" aria-live="polite">{page} / {totalPages}</span>
               <button
                 className="btn btn-outline-secondary btn-sm btn-ripple"
                 disabled={page >= totalPages}
                 onClick={()=>setPage(p=>Math.min(totalPages, p+1))}
+                aria-label="Next page"
               >
                 Next ›
               </button>
@@ -409,15 +419,15 @@ export default function GetPassword() {
 
       {/* Edit Modal */}
       {editItem && (
-        <div className="edit-modal" onClick={e=>e.target.classList.contains("edit-modal") && setEditItem(null)}>
+        <div className="edit-modal" role="dialog" aria-modal="true" aria-label="Edit password" onClick={e=>e.target.classList.contains("edit-modal") && setEditItem(null)}>
           <div className="edit-card">
-            <button className="btn-close position-absolute top-0 end-0 m-3" onClick={()=>setEditItem(null)}></button>
+            <button className="btn-close position-absolute top-0 end-0 m-3" onClick={()=>setEditItem(null)} aria-label="Close"></button>
             <h5>Edit Password</h5>
             <div className="edit-card-body">
               <div className="mb-3">
                 <label className="form-label">Type</label>
                 <select className="form-select" value={editItem.type||""} onChange={e=>setEditItem({...editItem,type:e.target.value})}>
-                  {TYPES.map(t=><option key={t||"sel"} value={t}>{t||"Select type"}</option>)}
+                  {TYPES.map(t=> <option key={t||"sel"} value={t}>{t||"Select type"}</option>)}
                 </select>
               </div>
               <div className="mb-3">
