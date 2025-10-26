@@ -2,14 +2,14 @@ import React from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 
-// Import pages
+// Pages
 import Dashboard from "./Pages/Dashboard";
 import Login from "./Pages/Auth/Login";
 import Register from "./Pages/Auth/Register";
 import Logout from "./Pages/Auth/Logout";
 import ForgotPass from "./Pages/Auth/ForgotPass.jsx";
 
-// Entertainment pages
+// Entertainment
 import AddMovies from "./Pages/Entertainment/AddMovies";
 import AddSeries from "./Pages/Entertainment/AddSeries";
 import Allcategories from "./Pages/Entertainment/Allcategories";
@@ -22,213 +22,75 @@ import Movies_SeriesTab from "./Pages/Entertainment/Movies_SeriesTab";
 import SeriesManager from "./Pages/Entertainment/SeriesManager";
 import AllList from "./Pages/Entertainment/AllList";
 
-// Transaction pages
+// Transaction
 import TransactionDashboard from "./Pages/Transaction/TransactionDashboard";
 
-// Document pages
+// Documents
 import DocumentTab from "./Pages/Document/DocumentTab.jsx";
 
-// Work Details pages
+// Work Details
 import WorkDetails from "./Pages/WorkDetails/WorkDetails.jsx";
 
-// Investment pages
+// Investment
 import InvestmentTabs from "./Pages/Investment/InvestmentTabs.jsx";
 
+// User personal
 import UserTabs from "./Pages/User_Personal/User_Tabs.jsx";
 
-
-// ✅ Private Route Wrapper
+// ---- Private Route ----
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
-
-  if (loading) {
-    return <div className="text-center mt-5">Loading...</div>; // show loader until context is ready
-  }
-
+  if (loading) return <div className="text-center mt-5">Loading...</div>;
   return user ? children : <Navigate to="/login" replace />;
 }
 
 function AppRoutes() {
   const { user, loading } = useAuth();
-
-  if (loading) {
-    return <div className="text-center mt-5">Loading...</div>;
-  }
+  if (loading) return <div className="text-center mt-5">Loading...</div>;
 
   return (
     <Routes>
-      {/* Default route → always go to login if not logged in */}
+      {/* Root redirect */}
       <Route path="/" element={<Navigate to={user ? "/dashboard" : "/login"} replace />} />
 
-      {/* Auth Routes */}
-      <Route
-        path="/login"
-        element={user ? <Navigate to="/dashboard" replace /> : <Login />}
-      />
-      <Route
-        path="/register"
-        element={user ? <Navigate to="/dashboard" replace /> : <Register />}
-      />
+      {/* Auth */}
+      <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <Login />} />
+      <Route path="/register" element={user ? <Navigate to="/dashboard" replace /> : <Register />} />
+      <Route path="/forgot-password" element={user ? <Navigate to="/dashboard" replace /> : <ForgotPass />} />
 
-      {/* 🔐 Forgot Password (PUBLIC) */}
-      <Route
-        path="/forgot-password"
-        element={user ? <Navigate to="/dashboard" replace /> : <ForgotPass />}
-      />
+      {/* Protected */}
+      <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+      <Route path="/user-tabs" element={<PrivateRoute><UserTabs /></PrivateRoute>} />
 
-      {/* Dashboard (protected) */}
-      <Route
-        path="/dashboard"
-        element={
-          <PrivateRoute>
-            <Dashboard />
-          </PrivateRoute>
-        }
-      />
-      
-     <Route
-          path="/user-tabs"
-          element={
-            <PrivateRoute>
-              <UserTabs />
-            </PrivateRoute>
-          }
-        />
-
-      {/* Entertainment Routes (protected) */}
-      <Route
-        path="/movies-series"
-        element={
-          <PrivateRoute>
-            <Movies_SeriesTab />
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/add-movies"
-        element={
-          <PrivateRoute>
-            <AddMovies />
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/add-series"
-        element={
-          <PrivateRoute>
-            <AddSeries />
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/allcategories"
-        element={
-          <PrivateRoute>
-            <Allcategories />
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/download"
-        element={
-          <PrivateRoute>
-            <Download />
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/fevarate"
-        element={
-          <PrivateRoute>
-            <Fevarate />
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/loading-spinner"
-        element={
-          <PrivateRoute>
-            <LoadingSpiner />
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/manage"
-        element={
-          <PrivateRoute>
-            <Manage />
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/movies-manager"
-        element={
-          <PrivateRoute>
-            <MoviesManager />
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/series-manager"
-        element={
-          <PrivateRoute>
-            <SeriesManager />
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/all-list"
-        element={
-          <PrivateRoute>
-            <AllList />
-          </PrivateRoute>
-        }
-      />
+      {/* Entertainment (protected) */}
+      <Route path="/movies-series" element={<PrivateRoute><Movies_SeriesTab /></PrivateRoute>} />
+      <Route path="/add-movies" element={<PrivateRoute><AddMovies /></PrivateRoute>} />
+      <Route path="/add-series" element={<PrivateRoute><AddSeries /></PrivateRoute>} />
+      <Route path="/allcategories" element={<PrivateRoute><Allcategories /></PrivateRoute>} />
+      <Route path="/download" element={<PrivateRoute><Download /></PrivateRoute>} />
+      <Route path="/fevarate" element={<PrivateRoute><Fevarate /></PrivateRoute>} />
+      <Route path="/loading-spinner" element={<PrivateRoute><LoadingSpiner /></PrivateRoute>} />
+      <Route path="/manage" element={<PrivateRoute><Manage /></PrivateRoute>} />
+      <Route path="/movies-manager" element={<PrivateRoute><MoviesManager /></PrivateRoute>} />
+      <Route path="/series-manager" element={<PrivateRoute><SeriesManager /></PrivateRoute>} />
+      <Route path="/all-list" element={<PrivateRoute><AllList /></PrivateRoute>} />
 
       {/* Transaction (protected) */}
-      <Route
-        path="/transaction"
-        element={
-          <PrivateRoute>
-            <TransactionDashboard />
-          </PrivateRoute>
-        }
-      />
+      <Route path="/transaction" element={<PrivateRoute><TransactionDashboard /></PrivateRoute>} />
 
       {/* Document (protected) */}
-      <Route
-        path="/document"
-        element={
-          <PrivateRoute>
-            <DocumentTab />
-          </PrivateRoute>
-        }
-      />
+      <Route path="/document" element={<PrivateRoute><DocumentTab /></PrivateRoute>} />
 
       {/* Work Details (protected) */}
-      <Route
-        path="/work-details"
-        element={
-          <PrivateRoute>
-            <WorkDetails />
-          </PrivateRoute>
-        }
-      />
+      <Route path="/work-details" element={<PrivateRoute><WorkDetails /></PrivateRoute>} />
 
       {/* Investment (protected) */}
-      <Route
-        path="/investment"
-        element={
-          <PrivateRoute>
-            <InvestmentTabs />
-          </PrivateRoute>
-        }
-      />
+      <Route path="/investment" element={<PrivateRoute><InvestmentTabs /></PrivateRoute>} />
 
-      {/* Logout */}
+      {/* Logout (public) */}
       <Route path="/logout" element={<Logout />} />
 
-      {/* Fallback 404 */}
+      {/* 404 */}
       <Route
         path="*"
         element={
