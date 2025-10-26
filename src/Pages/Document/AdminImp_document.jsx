@@ -147,6 +147,43 @@ const styles = {
     overflowX: "auto",
     paddingBottom: 6,
   },
+  // Extra: better iOS scrolling in Modal body
+  modalScrollFix: {
+    height: "80vh",
+    WebkitOverflowScrolling: "touch",
+    overflow: "auto",
+  },
+};
+
+/* ===== Mobile-friendly preview helpers ===== */
+const isPdf = (ext, mime) =>
+  (ext || "").toLowerCase() === "pdf" || String(mime || "").toLowerCase().includes("application/pdf");
+
+const isImage = (ext, mime) =>
+  ["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(String(ext || "").toLowerCase()) ||
+  String(mime || "").startsWith("image/");
+
+const isVideo = (ext, mime) =>
+  ["mp4", "mov", "mkv", "avi", "webm"].includes(String(ext || "").toLowerCase()) ||
+  String(mime || "").startsWith("video/");
+
+const isAudio = (ext, mime) =>
+  ["mp3", "wav", "m4a", "flac"].includes(String(ext || "").toLowerCase()) ||
+  String(mime || "").startsWith("audio/");
+
+const isOffice = (ext) => ["doc", "docx", "ppt", "pptx", "xls", "xlsx"].includes(String(ext || "").toLowerCase());
+
+const officeViewerUrl = (rawUrl) =>
+  `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(rawUrl)}`;
+
+/* Build best URL for inline viewing.
+   For PDF we try /view?id with ?inline=1 to avoid "attachment" disposition blocking inline preview. */
+const buildPreviewUrl = (doc) => {
+  // Use your view endpoint when possible
+  const viewUrl = `${endpoint}/${doc.document_id}/view?inline=1`;
+  // Some types (image/video/audio) may stream better via /download
+  const directUrl = `${endpoint}/${doc.document_id}/download`;
+  return { viewUrl, directUrl };
 };
 
 export default function AdminImpDocument() {
@@ -178,6 +215,7 @@ export default function AdminImpDocument() {
   // Preview
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewDoc, setPreviewDoc] = useState(null);
+  const [previewError, setPreviewError] = useState(""); // show fallback message when embed fails
 
   // Edit
   const [editOpen, setEditOpen] = useState(false);
@@ -229,7 +267,6 @@ export default function AdminImpDocument() {
     setFileObj(files[0]);
   };
   const handleFileInput = (e) => onDrop(Array.from(e.target.files || []));
-
   const submitUpload = async () => {
     if (!label.trim()) {
       return Swal.fire({ icon: "warning", title: "Label required", position: "center" });
@@ -355,6 +392,7 @@ export default function AdminImpDocument() {
 
   /* ===== Preview ===== */
   const openPreview = (r) => {
+    setPreviewError("");
     setPreviewDoc(r);
     setPreviewOpen(true);
   };
@@ -662,21 +700,35 @@ export default function AdminImpDocument() {
         </Offcanvas.Body>
       </Offcanvas>
 
-      {/* Preview Modal */}
+      {/* Preview Modal (mobile-friendly) */}
       <Modal show={previewOpen} onHide={() => setPreviewOpen(false)} centered size="xl" fullscreen="md-down">
         <Modal.Header closeButton>
           <Modal.Title>Preview — {previewDoc?.original_name}</Modal.Title>
         </Modal.Header>
-        <Modal.Body style={{ padding: 0, height: "80vh" }}>
-          {previewDoc ? (
-            <iframe
-              title="preview"
-              src={`${endpoint}/${previewDoc.document_id}/view`}
-              style={{ border: "none", width: "100%", height: "100%" }}
-            />
-          ) : (
-            <div className="p-4 text-muted">No preview.</div>
-          )}
+        <Modal.Body style={{ padding: 0 }}>
+          {/* scroll fix wrapper */}
+          <div style={styles.modalScrollFix}>
+            {!previewDoc ? (
+              <div className="p-4 text-muted">No preview.</div>
+            ) : (
+              <PreviewContent
+                doc={previewDoc}
+                onError={(msg) => setPreviewError(msg || "Preview failed")}
+              />
+            )}
+
+            {previewError && (
+              <div className="p-3 text-center">
+                <div className="text-danger mb-2">{previewError}</div>
+                <Button
+                  variant="primary"
+                  onClick={() => window.open(`${endpoint}/${previewDoc.document_id}/download`, "_blank")}
+                >
+                  Open in new tab
+                </Button>
+              </div>
+            )}
+          </div>
         </Modal.Body>
         <Modal.Footer>
           {previewDoc && (
@@ -742,5 +794,95 @@ export default function AdminImpDocument() {
         </Modal.Footer>
       </Modal>
     </Container>
+  );
+}
+
+/** Renders the right preview based on file type with graceful fallbacks for mobile */
+function PreviewContent({ doc, onError }) {
+  const ext = getExt(doc?.mime_type, doc?.original_name);
+  const { viewUrl, directUrl } = buildPreviewUrl(doc);
+  const mime = doc?.mime_type || "";
+
+  // PDF (use <object>/<embed> for iOS reliability)
+  if (isPdf(ext, mime)) {
+    return (
+      <object
+        data={viewUrl}
+        type="application/pdf"
+        style={{ width: "100%", height: "100%" }}
+        onError={() => onError?.("PDF preview not supported on this device.")}
+      >
+        <embed
+          src={viewUrl}
+          type="application/pdf"
+          style={{ width: "100%", height: "100%" }}
+          onError={() => onError?.("PDF embed blocked by the browser.")}
+        />
+      </object>
+    );
+  }
+
+  // Images: native <img>
+  if (isImage(ext, mime)) {
+    return (
+      <img
+        src={directUrl}
+        alt={doc?.original_name || "image"}
+        style={{ width: "100%", height: "100%", objectFit: "contain" }}
+        onError={() => onError?.("Image preview failed to load.")}
+      />
+    );
+  }
+
+  // Videos: native <video controls>
+  if (isVideo(ext, mime)) {
+    return (
+      <video
+        src={directUrl}
+        controls
+        playsInline
+        style={{ width: "100%", height: "100%", background: "#000" }}
+        onError={() => onError?.("Video preview failed to load.")}
+      />
+    );
+  }
+
+  // Audio: native <audio controls>
+  if (isAudio(ext, mime)) {
+    return (
+      <div className="p-3">
+        <audio
+          src={directUrl}
+          controls
+          style={{ width: "100%" }}
+          onError={() => onError?.("Audio preview failed to load.")}
+        />
+      </div>
+    );
+  }
+
+  // Office docs: use Microsoft Office Web Viewer
+  if (isOffice(ext)) {
+    const url = officeViewerUrl(directUrl);
+    return (
+      <iframe
+        title="office-preview"
+        src={url}
+        style={{ border: "none", width: "100%", height: "100%" }}
+        allow="fullscreen"
+        referrerPolicy="no-referrer-when-downgrade"
+        onError={() => onError?.("Office preview not available on this device.")}
+      />
+    );
+  }
+
+  // Fallback: try your /view endpoint inside an iframe; if it fails, show error and open button
+  return (
+    <iframe
+      title="preview"
+      src={viewUrl}
+      style={{ border: "none", width: "100%", height: "100%" }}
+      onError={() => onError?.("Preview not supported for this file type.")}
+    />
   );
 }
