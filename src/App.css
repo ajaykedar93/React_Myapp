@@ -1,10 +1,35 @@
+html,
+body,
 #root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+  /* ✅ Fill the full screen */
+  height: 100%;
+  min-height: 100dvh; /* mobile-safe viewport (fixes Android WebView issue) */
+  margin: 0;
+  padding: 0;
+  width: 100%;
 }
 
+/* ✅ Root container full width without desktop constraints */
+#root {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  /* remove desktop-only width limits */
+  /* max-width: 1280px; */
+  /* margin: 0 auto; */
+  /* padding: 2rem; */
+}
+
+/* Optional inner container if you still want spacing */
+.container {
+  flex: 1;
+  width: 100%;
+  padding: 1rem;
+}
+
+/* Your existing Vite styles remain unchanged */
 .logo {
   height: 6em;
   padding: 1.5em;
