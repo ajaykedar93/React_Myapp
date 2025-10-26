@@ -1,47 +1,145 @@
 // src/components/Footer.jsx
 import React, { useState, useEffect, useRef } from "react";
-import { FaDollarSign, FaGithub, FaWhatsapp, FaHeart, FaArrowUp } from "react-icons/fa";
+import { FaDollarSign, FaGithub, FaWhatsapp, FaHeart, FaArrowUp, FaTimes } from "react-icons/fa";
 
 const PANEL_ID = "footer-collapsible-panel";
 
 const Footer = () => {
   const year = new Date().getFullYear();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(false);          // collapsible (mobile)
+  const [sheetOpen, setSheetOpen] = useState(false); // full-screen popup (mobile)
   const contentRef = useRef(null);
+  const closeBtnRef = useRef(null);
 
   const scrollToTop = () => {
-    try {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    } catch {
-      window.scrollTo(0, 0);
-    }
+    try { window.scrollTo({ top: 0, behavior: "smooth" }); }
+    catch { window.scrollTo(0, 0); }
   };
 
-  // When we open on small screens, ensure the panel is fully in view
+  // Ensure panel is fully visible when opened (mobile collapsible)
   useEffect(() => {
     if (!open || !contentRef.current) return;
-    // Wait a tick so CSS transition can apply max-height & layout
     const t = setTimeout(() => {
       const y = contentRef.current.getBoundingClientRect().top + window.scrollY - 12;
-      try { window.scrollTo({ top: y, behavior: "smooth" }); } catch { window.scrollTo(0, y); }
+      try { window.scrollTo({ top: y, behavior: "smooth" }); }
+      catch { window.scrollTo(0, y); }
     }, 30);
     return () => clearTimeout(t);
   }, [open]);
 
+  // ===== Full-screen sheet focus & keyboard handling (mobile) =====
+  useEffect(() => {
+    if (!sheetOpen) return;
+    // focus the close button when sheet opens
+    const t = setTimeout(() => closeBtnRef.current?.focus(), 0);
+
+    const onKey = (e) => {
+      if (e.key === "Escape") setSheetOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [sheetOpen]);
+
+  // Prevent background scroll when sheet is open
+  useEffect(() => {
+    if (!sheetOpen) return;
+    const { overflow, touchAction } = document.body.style;
+    document.body.style.overflow = "hidden";
+    document.body.style.touchAction = "none";
+    return () => {
+      document.body.style.overflow = overflow || "";
+      document.body.style.touchAction = touchAction || "";
+    };
+  }, [sheetOpen]);
+
+  // footer inner content extracted to reuse in both places
+  const FooterInner = () => (
+    <div className="pro-footer__inner">
+      <div className="pro-footer__brand" aria-label="Brand credit">
+        <span className="pro-footer__at">@</span>
+        <span className="pro-footer__text">
+          Developed By
+          <FaDollarSign className="pro-footer__icon" aria-hidden="true" />
+          <strong className="pro-footer__name">Ajay Kedar</strong>
+        </span>
+      </div>
+
+      <nav className="pro-footer__links" aria-label="Social & contact links">
+        <a
+          className="pro-footer__link"
+          href="https://github.com/ajaykedar93"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="GitHub"
+          title="GitHub"
+        >
+          <FaGithub />
+        </a>
+
+        <a
+          className="pro-footer__link"
+          href="https://wa.me/919370470095"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="WhatsApp 9370470095"
+          title="WhatsApp 9370470095"
+        >
+          <FaWhatsapp />
+        </a>
+
+        <div className="pro-footer__chip-container">
+          <a className="pro-footer__chip" href="tel:+919370470095" aria-label="Call 9370470095" title="Call 9370470095">
+            9370470095
+          </a>
+          <a className="pro-footer__chip" href="tel:+919146963805" aria-label="Call 9146963805" title="Call 9146963805">
+            9146963805
+          </a>
+          <a className="pro-footer__chip" href="mailto:ajaykedar3790@gmail.com" aria-label="Email ajaykedar3790@gmail.com" title="Email ajaykedar3790@gmail.com">
+            ajaykedar3790@gmail.com
+          </a>
+          <a className="pro-footer__chip" href="mailto:ajaykedar9657@gmail.com" aria-label="Email ajaykedar9657@gmail.com" title="Email ajaykedar9657@gmail.com">
+            ajaykedar9657@gmail.com
+          </a>
+        </div>
+      </nav>
+
+      <div className="pro-footer__meta" aria-label="Footer meta">
+        <span>
+          © {year} • Built with <FaHeart className="pro-footer__heart" aria-hidden="true" /> &amp; craft
+        </span>
+      </div>
+    </div>
+  );
+
   return (
     <>
-      {/* Toggle button (small screens only) */}
-      <div className="pro-footer__toggle-wrap" aria-hidden="true">
-        <button
-          type="button"
-          className="pro-footer__toggle"
-          onClick={() => setOpen((v) => !v)}
-          aria-controls={PANEL_ID}
-          aria-expanded={open}
-        >
-          <span className="sr-only">Footer info</span>
-          {open ? "Hide footer info" : "Show footer info"}
-        </button>
+      {/* Toggle & Fullscreen controls (mobile only) */}
+      <div className="pro-footer__toggle-wrap" aria-hidden="false">
+        <div className="pro-footer__toggle-grid">
+          <button
+            type="button"
+            className="pro-footer__toggle"
+            onClick={() => setOpen((v) => !v)}
+            aria-controls={PANEL_ID}
+            aria-expanded={open}
+          >
+            <span className="sr-only">Footer info</span>
+            {open ? "Hide footer info" : "Show footer info"}
+          </button>
+
+          <button
+            type="button"
+            className="pro-footer__toggle pro-footer__toggle--accent"
+            onClick={() => setSheetOpen(true)}
+            aria-haspopup="dialog"
+            aria-controls="footer-fullsheet"
+          >
+            Open full footer
+          </button>
+        </div>
       </div>
 
       <footer className={`pro-footer ${open ? "is-open" : ""}`} role="contentinfo" aria-label="Site footer">
@@ -52,65 +150,9 @@ const Footer = () => {
           </svg>
         </div>
 
-        {/* Main content (always visible on desktop; collapsible on mobile) */}
+        {/* Main content (collapsible on mobile) */}
         <div id={PANEL_ID} className="pro-footer__collapsible" ref={contentRef}>
-          <div className="pro-footer__inner">
-            <div className="pro-footer__brand" aria-label="Brand credit">
-              <span className="pro-footer__at">@</span>
-              <span className="pro-footer__text">
-                Developed By
-                <FaDollarSign className="pro-footer__icon" aria-hidden="true" />
-                <strong className="pro-footer__name">Ajay Kedar</strong>
-              </span>
-            </div>
-
-            {/* Social & contact */}
-            <nav className="pro-footer__links" aria-label="Social & contact links">
-              <a
-                className="pro-footer__link"
-                href="https://github.com/ajaykedar93"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="GitHub"
-                title="GitHub"
-              >
-                <FaGithub />
-              </a>
-
-              <a
-                className="pro-footer__link"
-                href="https://wa.me/919370470095"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="WhatsApp 9370470095"
-                title="WhatsApp 9370470095"
-              >
-                <FaWhatsapp />
-              </a>
-
-              {/* Phones & emails */}
-              <div className="pro-footer__chip-container">
-                <a className="pro-footer__chip" href="tel:+919370470095" aria-label="Call 9370470095" title="Call 9370470095">
-                  9370470095
-                </a>
-                <a className="pro-footer__chip" href="tel:+919146963805" aria-label="Call 9146963805" title="Call 9146963805">
-                  9146963805
-                </a>
-                <a className="pro-footer__chip" href="mailto:ajaykedar3790@gmail.com" aria-label="Email ajaykedar3790@gmail.com" title="Email ajaykedar3790@gmail.com">
-                  ajaykedar3790@gmail.com
-                </a>
-                <a className="pro-footer__chip" href="mailto:ajaykedar9657@gmail.com" aria-label="Email ajaykedar9657@gmail.com" title="Email ajaykedar9657@gmail.com">
-                  ajaykedar9657@gmail.com
-                </a>
-              </div>
-            </nav>
-
-            <div className="pro-footer__meta" aria-label="Footer meta">
-              <span>
-                © {year} • Built with <FaHeart className="pro-footer__heart" aria-hidden="true" /> &amp; craft
-              </span>
-            </div>
-          </div>
+          <FooterInner />
         </div>
 
         {/* Back-to-top button */}
@@ -131,13 +173,15 @@ const Footer = () => {
             --gold:#ffeb3b;
           }
 
-          /* Toggle button area (only on small screens) */
+          /* Toggle area (mobile only) */
           .pro-footer__toggle-wrap{
             display:none;
           }
+          .pro-footer__toggle-grid{
+            display:flex; gap:8px; padding:8px 10px; background:transparent;
+          }
           .pro-footer__toggle{
-            display:block;
-            width:100%;
+            flex:1;
             border:0;
             background:#0f172a;
             color:#fff;
@@ -146,7 +190,12 @@ const Footer = () => {
             padding:10px 14px;
             cursor:pointer;
             box-shadow: 0 -2px 8px rgba(0,0,0,.15);
+            border-radius:10px;
           }
+          .pro-footer__toggle--accent{
+            background: #0ea5e9;
+          }
+          .pro-footer__toggle:focus-visible{ outline: 3px solid rgba(34,197,94,.45); outline-offset: 2px; }
 
           .pro-footer{
             position:relative; width:100%;
@@ -165,7 +214,6 @@ const Footer = () => {
           .pro-footer__wave svg{ display:block; width:100%; height:100%; }
           .pro-footer__wave path{ fill: rgba(255,255,255,.06); }
 
-          /* Collapsible (GPU hint helps mid-range phones) */
           .pro-footer__collapsible{
             transition: max-height .28s ease, opacity .24s ease;
             will-change: max-height, opacity;
@@ -257,7 +305,6 @@ const Footer = () => {
           @media (max-width: 768px){
             .pro-footer__toggle-wrap{
               display:block; position:sticky; bottom:0; z-index:1030;
-              /* Avoid overlap with iOS home indicator */
               padding-bottom: env(safe-area-inset-bottom, 0px);
               background: transparent;
             }
@@ -267,7 +314,7 @@ const Footer = () => {
               overflow: hidden;
             }
             .pro-footer.is-open .pro-footer__collapsible{
-              max-height: 1200px; /* big enough to show all content */
+              max-height: 1200px;
               opacity: 1;
             }
             .pro-footer__inner{ padding: 24px 14px 30px; }
@@ -283,6 +330,60 @@ const Footer = () => {
             .pro-footer__collapsible{ max-height: none !important; opacity: 1 !important; overflow: visible !important; }
           }
 
+          /* Full-screen mobile sheet */
+          .pro-footer-sheet{
+            position: fixed;
+            inset: 0;
+            z-index: 1400;
+            display: none; /* hidden by default, enabled on mobile via media query */
+          }
+          .pro-footer-sheet__backdrop{
+            position:absolute; inset:0; background: rgba(0,0,0,.45);
+          }
+          .pro-footer-sheet__panel{
+            position:absolute; inset: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px) 0;
+            background: linear-gradient(120deg, var(--grad-a), var(--grad-b), var(--grad-c));
+            color:#fff;
+            display:flex; flex-direction:column;
+            height: 100%;
+            max-height: 100%;
+            box-shadow: 0 -6px 24px rgba(0,0,0,.35);
+            animation: fadeIn .2s ease;
+          }
+          .pro-footer-sheet__header{
+            display:flex; align-items:center; justify-content:space-between;
+            padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,.12);
+          }
+          .pro-footer-sheet__title{
+            font-weight: 900; letter-spacing:.2px;
+          }
+          .pro-footer-sheet__close{
+            display:inline-flex; align-items:center; justify-content:center;
+            width:38px; height:38px; border-radius:10px; border:1px solid rgba(255,255,255,.2);
+            background: rgba(255,255,255,.08); color:#fff; cursor:pointer;
+          }
+          .pro-footer-sheet__close:focus-visible{ outline: 3px solid rgba(34,197,94,.45); outline-offset: 2px; }
+
+          .pro-footer-sheet__body{
+            overflow: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 12px 10px 18px;
+          }
+
+          /* Reuse the same inner layout inside the sheet, but let it breathe */
+          .pro-footer-sheet .pro-footer__inner{
+            max-width: 720px; margin: 0 auto; padding: 14px 10px 24px;
+          }
+
+          @media (max-width: 768px){
+            .pro-footer-sheet{ display:block; }
+          }
+
+          @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to   { opacity: 1; transform: translateY(0); }
+          }
+
           /* Animated gradient background */
           @keyframes gradShift {
             0% { background-position: 0% 50%; }
@@ -291,6 +392,40 @@ const Footer = () => {
           }
         `}</style>
       </footer>
+
+      {/* ===== Full-screen mobile sheet ===== */}
+      {sheetOpen && (
+        <div
+          id="footer-fullsheet"
+          className="pro-footer-sheet"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="footer-fullsheet-title"
+          onClick={(e) => {
+            // close on backdrop click
+            if (e.target === e.currentTarget) setSheetOpen(false);
+          }}
+        >
+          <div className="pro-footer-sheet__backdrop" onClick={() => setSheetOpen(false)} />
+          <div className="pro-footer-sheet__panel">
+            <div className="pro-footer-sheet__header">
+              <div id="footer-fullsheet-title" className="pro-footer-sheet__title">Footer Information</div>
+              <button
+                ref={closeBtnRef}
+                className="pro-footer-sheet__close"
+                onClick={() => setSheetOpen(false)}
+                aria-label="Close"
+              >
+                <FaTimes />
+              </button>
+            </div>
+            <div className="pro-footer-sheet__body">
+              {/* Reuse exactly the same inner content for full-screen */}
+              <FooterInner />
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

@@ -84,12 +84,9 @@ export default function Login() {
 
   return (
     <div className="page">
-      {/* 🔝 Always-on professional animated banner (sticky, unobtrusive) */}
-      <div className="dev-top" aria-label="Developer credit">
-        <span className="dev-pill">
-          <i className="fa-solid fa-code"></i>
-          <strong> Developed by Ajay Kedar</strong>
-        </span>
+      {/* ✅ Simple, clear developer line just above the card */}
+      <div className="dev-inline" aria-label="Developer credit">
+        <i className="fa-solid fa-code" /> <span>Developed by <strong>Ajay Kedar</strong></span>
       </div>
 
       {isSubmitting && <LoadingSpinner />}
@@ -111,7 +108,7 @@ export default function Login() {
               aria-label="Email or Mobile"
             />
 
-            {/* 👁️ Password with visibility toggle (small eye icon, fixed in place) */}
+            {/* 👁️ Password with visibility toggle */}
             <div className="password-wrap">
               <input
                 type={showPassword ? "text" : "password"}
@@ -145,7 +142,6 @@ export default function Login() {
             </button>
 
             <div className="group">
-              {/* ✅ Route to your ForgotPass page */}
               <Link to="/forgot-password">Forgot Password?</Link>
               <Link to="/register">Create Account</Link>
             </div>
@@ -153,19 +149,19 @@ export default function Login() {
         </div>
       </div>
 
-      {/* Brighter theme, same animations */}
       <style>{`
 @import url("https://fonts.googleapis.com/css?family=Poppins:200,300,400,500,600,700,800,900&display=swap");
 @import url("https://use.fontawesome.com/releases/v6.5.1/css/all.css");
 
-/* Page wrapper (brighter background now) */
+/* Page wrapper: stack developer line above card */
 .page {
   position: relative;
   display: flex;
+  flex-direction: column;        /* stack vertically */
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  /* 🌟 Brighter gradient */
+  gap: 12px;                     /* small gap between dev line and card */
   background: linear-gradient(135deg, #e0f2fe 0%, #faf5ff 50%, #fffbeb 100%);
 }
 
@@ -173,6 +169,25 @@ export default function Login() {
 
 @property --a { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
 
+/* 🔹 Developer line (non-sticky, just above card) */
+.dev-inline {
+  width: min(92vw, 640px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 9999px;
+  border: 1px solid #e5e7eb;
+  background: #ffffffee;
+  box-shadow: 0 6px 18px rgba(0,0,0,.06);
+  color: #111827;
+  font-size: .95rem;
+  font-weight: 500;
+}
+.dev-inline i { color: #0ea5e9; }
+
+/* Card wrapper */
 .box {
   position: relative;
   width: min(90vw, 400px);
@@ -222,7 +237,6 @@ export default function Login() {
   content: "";
   position: absolute;
   inset: 4px;
-  /* Slightly lighter inner card on bright bg */
   background: #ffffffee;
   border-radius: 15px;
   border: 8px solid #f1f5f9;
@@ -240,7 +254,7 @@ export default function Login() {
   align-items: center;
   flex-direction: column;
   border-radius: 10px;
-  background: #ffffffcc; /* glass on bright bg */
+  background: #ffffffcc;
   color: #0f172a;
   z-index: 1000;
   box-shadow: inset 0 10px 20px rgba(0,0,0,.05);
@@ -272,10 +286,9 @@ h2 {
 }
 h2 i { color: #ff2770; text-shadow: 0 0 5px #ff2770, 0 0 20px #ff2770; }
 
-/* Inputs */
 input {
   width: 100%;
-  height: 44px;                /* 🔒 fixed height for stability */
+  height: 44px;
   padding: 10px 20px;
   outline: none;
   border: none;
@@ -284,12 +297,11 @@ input {
   background: #f8fafc;
   border: 2px solid #e2e8f0;
   border-radius: 30px;
-  box-sizing: border-box;      /* avoid size shifts */
+  box-sizing: border-box;
 }
 input::placeholder { color: #94a3b8; }
 input:focus { border-color: #94a3ff; }
 
-/* Submit button */
 .submit-btn {
   width: 100%;
   padding: 10px 20px;
@@ -320,19 +332,17 @@ input:focus { border-color: #94a3ff; }
   text-align: center;
 }
 
-/* 👁️ Password field wrap & eye button (fixed position) */
+/* 👁️ Password field wrap & eye button */
 .password-wrap {
   position: relative;
   width: 100%;
 }
-.password-wrap input {
-  padding-right: 46px;          /* space for the eye button */
-}
+.password-wrap input { padding-right: 46px; }
 .eye-btn {
   position: absolute;
   right: 10px;
   top: 50%;
-  transform: translateY(-50%);  /* keep centered vertically */
+  transform: translateY(-50%);
   height: 32px;
   width: 32px;
   border: none;
@@ -343,63 +353,8 @@ input:focus { border-color: #94a3ff; }
   cursor: pointer;
   border-radius: 50%;
 }
-.eye-btn:focus-visible {
-  box-shadow: 0 0 0 3px rgba(59,130,246,.45);
-}
-.eye-btn i {
-  font-size: 1rem;
-  color: #334155;
-  line-height: 1;
-  pointer-events: none; /* icon itself doesn't steal click */
-}
-
-/* 🔝 Sticky top developer banner with professional animation */
-.dev-top {
-  position: fixed;
-  top: 10px;
-  left: 0; right: 0;
-  display: flex;
-  justify-content: center;
-  z-index: 2000;
-  pointer-events: none; /* don't block clicks below */
-  padding: 0 12px;
-}
-.dev-pill {
-  pointer-events: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  border-radius: 9999px;
-  border: 1px solid #e5e7eb;
-  background:
-    linear-gradient(90deg, #ffffffdd, #ffffffee),
-    linear-gradient(120deg, rgba(59,130,246,0.12), rgba(236,72,153,0.12), rgba(99,102,241,0.12));
-  backdrop-filter: blur(8px);
-  box-shadow: 0 6px 18px rgba(0,0,0,.08);
-  color: #111827;
-  font-size: .95rem;
-  animation: floaty 6s ease-in-out infinite;
-  position: relative;
-  overflow: hidden;
-}
-.dev-pill::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(120deg, transparent 0%, rgba(255,255,255,.6) 50%, transparent 100%);
-  transform: translateX(-120%);
-  animation: shimmer 3.2s ease-in-out infinite;
-}
-@keyframes shimmer {
-  0% { transform: translateX(-120%); }
-  60% { transform: translateX(120%); }
-  100% { transform: translateX(120%); }
-}
-@keyframes floaty {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-2px); }
-}
+.eye-btn:focus-visible { box-shadow: 0 0 0 3px rgba(59,130,246,.45); }
+.eye-btn i { font-size: 1rem; color: #334155; line-height: 1; pointer-events: none; }
 
 /* Responsiveness tweaks */
 @media (max-width: 480px) {
@@ -416,7 +371,7 @@ input:focus { border-color: #94a3ff; }
 }
       `}</style>
 
-      {/* Success/Error Modal (same UX) */}
+      {/* Success/Error Modal */}
       <Modal show={showModal} onHide={handleCloseModal} centered>
         <Modal.Body className="text-center">
           <h5>{modalType === "success" ? "Success" : "Error"}</h5>
