@@ -18,7 +18,7 @@ body {
   line-height: 1.6;
   color: #212529;
   background-color: #f8f9fa;
-  min-height: 100vh;
+  min-height: 100dvh;              /* ✅ mobile-safe full height */
   display: flex;
   flex-direction: column;
 }
@@ -27,7 +27,7 @@ body {
 #root {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  min-height: 100dvh;              /* ✅ ensure app fills screen on mobile */
 }
 
 /* ===== Links ===== */
@@ -239,7 +239,10 @@ table { width: 100%; }
 }
 
 /* Improve table responsiveness globally if you use tables elsewhere */
-.table-responsive { -webkit-overflow-scrolling: touch; }
+.table-responsive {
+  -webkit-overflow-scrolling: touch;
+  overflow-x: auto;               /* ✅ actually enable horizontal scroll */
+}
 
 /* Ensure footers/headers don’t stick on top of content edges on very small phones */
 @media (max-width: 360px) {
@@ -248,6 +251,7 @@ table { width: 100%; }
 
 /* Optional: nicer focus ring for accessibility */
 :focus-visible { outline: 3px solid rgba(13,110,253,0.35); outline-offset: 2px; }
+
 /* global stylesheet */
 body { padding-top: 98px; }      /* default */
 @media (max-width: 991.98px){ body { padding-top: 88px; } }
