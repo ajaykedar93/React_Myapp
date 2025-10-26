@@ -2,12 +2,19 @@ import React from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 
-// Pages
-import Dashboard from "./Pages/Dashboard";
+// ==== Pages ====
+
+// Auth
 import Login from "./Pages/Auth/Login";
 import Register from "./Pages/Auth/Register";
 import Logout from "./Pages/Auth/Logout";
 import ForgotPass from "./Pages/Auth/ForgotPass.jsx";
+
+// Dashboard
+import Dashboard from "./Pages/Dashboard";
+
+// User Personal
+import UserTabs from "./Pages/User_Personal/User_Tabs.jsx";
 
 // Entertainment
 import AddMovies from "./Pages/Entertainment/AddMovies";
@@ -34,23 +41,30 @@ import WorkDetails from "./Pages/WorkDetails/WorkDetails.jsx";
 // Investment
 import InvestmentTabs from "./Pages/Investment/InvestmentTabs.jsx";
 
-// User personal
-import UserTabs from "./Pages/User_Personal/User_Tabs.jsx";
 
-// ---- Private Route ----
+// ✅ Private Route Wrapper
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
-  if (loading) return <div className="text-center mt-5">Loading...</div>;
+
+  if (loading) {
+    return <div className="text-center mt-5">Loading...</div>;
+  }
+
   return user ? children : <Navigate to="/login" replace />;
 }
 
+
+// ✅ App Routes
 function AppRoutes() {
   const { user, loading } = useAuth();
-  if (loading) return <div className="text-center mt-5">Loading...</div>;
+
+  if (loading) {
+    return <div className="text-center mt-5">Loading...</div>;
+  }
 
   return (
     <Routes>
-      {/* Root redirect */}
+      {/* Default Redirect */}
       <Route path="/" element={<Navigate to={user ? "/dashboard" : "/login"} replace />} />
 
       {/* Auth */}
@@ -58,8 +72,10 @@ function AppRoutes() {
       <Route path="/register" element={user ? <Navigate to="/dashboard" replace /> : <Register />} />
       <Route path="/forgot-password" element={user ? <Navigate to="/dashboard" replace /> : <ForgotPass />} />
 
-      {/* Protected */}
+      {/* Dashboard (protected) */}
       <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+
+      {/* User Tabs */}
       <Route path="/user-tabs" element={<PrivateRoute><UserTabs /></PrivateRoute>} />
 
       {/* Entertainment (protected) */}
@@ -75,19 +91,19 @@ function AppRoutes() {
       <Route path="/series-manager" element={<PrivateRoute><SeriesManager /></PrivateRoute>} />
       <Route path="/all-list" element={<PrivateRoute><AllList /></PrivateRoute>} />
 
-      {/* Transaction (protected) */}
+      {/* Transaction */}
       <Route path="/transaction" element={<PrivateRoute><TransactionDashboard /></PrivateRoute>} />
 
-      {/* Document (protected) */}
+      {/* Documents */}
       <Route path="/document" element={<PrivateRoute><DocumentTab /></PrivateRoute>} />
 
-      {/* Work Details (protected) */}
+      {/* Work Details */}
       <Route path="/work-details" element={<PrivateRoute><WorkDetails /></PrivateRoute>} />
 
-      {/* Investment (protected) */}
+      {/* Investment */}
       <Route path="/investment" element={<PrivateRoute><InvestmentTabs /></PrivateRoute>} />
 
-      {/* Logout (public) */}
+      {/* Logout */}
       <Route path="/logout" element={<Logout />} />
 
       {/* 404 */}
@@ -104,6 +120,8 @@ function AppRoutes() {
   );
 }
 
+
+// ✅ App Wrapper
 function App() {
   return (
     <AuthProvider>
