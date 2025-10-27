@@ -5,15 +5,14 @@ import DailyTradeJournal from "./DailyTradeJournal";
 import DailyCalculate from "./InvestmentDepositLogic";
 import InvestmentMonthSummary from "./InvestmentMonthSummary";
 
-const GAP_PX = 6; // little space under navbar
+const GAP_PX = 6; // small space between navbar and tabs
 
 const InvestmentTabs = () => {
   const [activeTab, setActiveTab] = useState("manageCategory");
 
-  // dynamic heights (fixes mobile tap overlap)
   const navbarRef = useRef(null);
   const tabsWrapRef = useRef(null);
-  const [heights, setHeights] = useState({ nav: 58, tabs: 56 });
+  const [heights, setHeights] = useState({ nav: 64, tabs: 56 }); // default to 64 to match others
 
   const listRef = useRef(null);
   const indicatorRef = useRef(null);
@@ -21,11 +20,7 @@ const InvestmentTabs = () => {
   const navigate = useNavigate();
 
   const goToDashboard = () => {
-    try {
-      navigate("/dashboard");
-    } catch {
-      window.location.assign("/dashboard");
-    }
+    try { navigate("/dashboard"); } catch { window.location.assign("/dashboard"); }
   };
 
   const tabs = useMemo(
@@ -38,20 +33,25 @@ const InvestmentTabs = () => {
     []
   );
 
-  // Measure navbar/tabs heights (accounts for mobile safe-area + font scaling)
+  // Measure heights (matches other pages because navbar has fixed --nav-h)
   useLayoutEffect(() => {
-    const ro = new ResizeObserver(() => {
-      const navH =
-        (navbarRef.current?.offsetHeight || 58) +
-        (parseFloat(getComputedStyle(document.documentElement).getPropertyValue("env(safe-area-inset-top)")) || 0);
+    const compute = () => {
+      const navH = navbarRef.current?.offsetHeight || 64;
       const tabsH = tabsWrapRef.current?.offsetHeight || 56;
       setHeights({ nav: navH, tabs: tabsH });
-    });
+    };
+    compute();
+    const ro = new ResizeObserver(compute);
     if (navbarRef.current) ro.observe(navbarRef.current);
     if (tabsWrapRef.current) ro.observe(tabsWrapRef.current);
-    return () => ro.disconnect();
+    window.addEventListener("resize", compute);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", compute);
+    };
   }, []);
 
+  // Move the indicator under the active tab
   useLayoutEffect(() => {
     const list = listRef.current;
     const indicator = indicatorRef.current;
@@ -74,11 +74,10 @@ const InvestmentTabs = () => {
     }
   }, [activeTab, tabs]);
 
+  // Keep active tab centered/visible
   useEffect(() => {
     const el = tabRefs.current[activeTab];
-    if (el?.scrollIntoView) {
-      el.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
-    }
+    el?.scrollIntoView?.({ block: "nearest", inline: "center", behavior: "smooth" });
   }, [activeTab]);
 
   const renderContent = () => {
@@ -93,25 +92,33 @@ const InvestmentTabs = () => {
 
   return (
     <div style={styles.shell}>
-      {/* Fixed Navbar */}
-      <nav ref={navbarRef} style={styles.navbar}>
-        <div style={styles.logoWrap}>
-          <div style={styles.logoGlow} />
-          <div style={styles.logo}>💹 Investment Plan</div>
+      {/* FIXED NAVBAR — SAME SIZE/LAYOUT AS OTHER PAGES */}
+      <nav ref={navbarRef} className="it-nav">
+        <div className="container-fluid d-flex justify-content-between align-items-center px-0">
+          <h1 className="it-title m-0">Investment Plan</h1>
+          <button
+            className="btn btn-warning fw-bold rounded-pill px-3 py-2"
+            onClick={goToDashboard}
+          >
+            Dashboard
+          </button>
         </div>
-        <button style={styles.dashboardBtn} onClick={goToDashboard}>Dashboard</button>
       </nav>
 
-      {/* Fixed Tabs (with tiny gap under navbar) */}
+      {/* Fixed Tabs */}
       <div
         ref={tabsWrapRef}
         style={{
           ...styles.tabsBarWrap,
-          top: heights.nav + GAP_PX, // add little space
+          top: heights.nav + GAP_PX,
         }}
       >
+        <div style={styles.fadeLeft} aria-hidden />
+        <div style={styles.fadeRight} aria-hidden />
+
         <div style={styles.tabsBar} ref={listRef}>
           <div ref={indicatorRef} style={styles.indicator} />
+          <div style={styles.edgeSpacer} />
           {tabs.map((tab) => {
             const active = activeTab === tab.id;
             return (
@@ -137,6 +144,7 @@ const InvestmentTabs = () => {
               </button>
             );
           })}
+          <div style={styles.edgeSpacer} />
         </div>
       </div>
 
@@ -144,13 +152,14 @@ const InvestmentTabs = () => {
       <section
         style={{
           ...styles.scrollArea,
-          top: heights.nav + heights.tabs + GAP_PX, // push below both bars + gap
+          top: heights.nav + heights.tabs + GAP_PX,
         }}
         className="contentFade"
       >
         {renderContent()}
       </section>
 
+      {/* Shared styles to match other pages */}
       <style>{css}</style>
     </div>
   );
@@ -162,48 +171,8 @@ const styles = {
     fontFamily: "'Inter','Segoe UI',Tahoma,sans-serif",
     height: "100vh",
     width: "100vw",
-    overflow: "hidden", // page itself doesn't scroll
+    overflow: "hidden",
     backgroundColor: "#f5f7fb",
-  },
-
-  navbar: {
-    position: "fixed",
-    top: "env(safe-area-inset-top, 0px)",
-    left: 0,
-    right: 0,
-    zIndex: 50,
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: "12px 18px",
-    background: "linear-gradient(90deg, #1e3a8a, #2563eb)",
-    color: "#fff",
-    boxShadow: "0 8px 20px rgba(30,58,138,0.35)",
-    // prevent overlaps swallowing taps
-    pointerEvents: "auto",
-  },
-
-  logoWrap: { display: "flex", alignItems: "center", position: "relative" },
-  logoGlow: {
-    position: "absolute",
-    left: -8,
-    top: -8,
-    width: 60,
-    height: 60,
-    borderRadius: "999px",
-    background: "radial-gradient(60px 60px at 30% 40%, rgba(96,165,250,0.35), rgba(0,0,0,0))",
-    pointerEvents: "none",
-  },
-  logo: { fontSize: "1.05rem", fontWeight: 700 },
-
-  dashboardBtn: {
-    background: "linear-gradient(180deg, #fde68a, #facc15)",
-    color: "#1f2937",
-    border: "none",
-    borderRadius: 8,
-    padding: "6px 12px",
-    fontWeight: 700,
-    fontSize: "0.9rem",
   },
 
   tabsBarWrap: {
@@ -216,17 +185,22 @@ const styles = {
     borderBottom: "1px solid #e5e7eb",
     display: "flex",
     alignItems: "center",
-    // make sure taps go through correctly
     pointerEvents: "auto",
+    height: "auto",
   },
   tabsBar: {
     display: "flex",
     gap: 10,
     overflowX: "auto",
     scrollbarWidth: "thin",
-    padding: "10px 10px",
+    padding: "10px 8px",
     position: "relative",
     width: "100%",
+    WebkitOverflowScrolling: "touch",
+    scrollSnapType: "x mandatory",
+    scrollBehavior: "smooth",
+    scrollPaddingLeft: 16,
+    scrollPaddingRight: 16,
   },
   tab: {
     border: "1px solid #e5e7eb",
@@ -240,7 +214,9 @@ const styles = {
     display: "flex",
     alignItems: "center",
     transition: "all .25s ease",
-    minWidth: 140, // overridden on mobile
+    minWidth: 140,
+    scrollSnapAlign: "center",
+    touchAction: "manipulation",
   },
   tabIcon: { marginRight: 6, fontSize: "1.1rem" },
   indicator: {
@@ -250,6 +226,27 @@ const styles = {
     width: 0,
     borderRadius: 999,
     transition: "transform .35s ease, width .35s ease",
+  },
+  edgeSpacer: { flex: "0 0 8px" },
+  fadeLeft: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 20,
+    background: "linear-gradient(90deg, rgba(255,255,255,0.92), rgba(255,255,255,0))",
+    pointerEvents: "none",
+    zIndex: 1,
+  },
+  fadeRight: {
+    position: "absolute",
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 20,
+    background: "linear-gradient(270deg, rgba(255,255,255,0.92), rgba(255,255,255,0))",
+    pointerEvents: "none",
+    zIndex: 1,
   },
 
   scrollArea: {
@@ -264,63 +261,77 @@ const styles = {
   },
 };
 
-/* ---------- CSS ---------- */
+/* ---------- Global CSS (matches your other pages) ---------- */
 const css = `
+:root{
+  --nav-h: 64px;
+}
+@media (max-width: 575.98px) {
+  :root { --nav-h: 58px; }
+}
+@media (min-width: 1400px) {
+  :root { --nav-h: 66px; }
+}
+
+/* FIXED NAVBAR (same size/layout) */
+.it-nav{
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: var(--nav-h);
+  z-index: 80;
+  background: linear-gradient(90deg, #065f46 0%, #10b981 50%, #34d399 100%);
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.18);
+  box-shadow: 0 10px 30px rgba(16,185,129,0.25), inset 0 -1px 0 rgba(255,255,255,0.06);
+  backdrop-filter: saturate(140%) blur(4px);
+  display:flex; align-items:center;
+  padding-top: calc(10px + env(safe-area-inset-top, 0px));
+}
+
+/* Bold black heading — same typography as others */
+.it-title{
+  color:#0b0b0b;
+  font-weight:900;
+  letter-spacing:.2px;
+  font-size:clamp(18px,2.4vw,24px);
+  text-shadow:none;
+}
+
+/* Anim + polish */
 @keyframes fadeSlide {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
 .contentFade { animation: fadeSlide .3s ease; }
 
-/* Hover */
 .tabBtn:hover { transform: translateY(-1px); }
 
-/* Thin scrollbars */
 ::-webkit-scrollbar { height: 6px; width: 8px; }
 ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 999px; }
 
-/* Mobile: auto-fit tabs & better touch targets */
 @media (max-width: 768px) {
-  .tabBtn {
-    min-width: auto !important;      /* allow auto width */
-    flex: 1 1 auto;                   /* let buttons grow/shrink to fit row */
-    font-size: 0.9rem;
-    padding: 10px 12px;
-    line-height: 1.2;
-    touch-action: manipulation;
-  }
-  .tabLabel {
-    max-width: none;
-    overflow: visible;
-    text-overflow: unset;
-    white-space: nowrap;              /* keep one line; remove if you want wrap */
-  }
+  .tabBtn { min-width: auto !important; font-size: 0.92rem; padding: 10px 12px; line-height: 1.2; }
+  body .contentFade { padding-bottom: 10px; }
 }
-
-/* Very small phones */
 @media (max-width: 480px) {
-  .tabBtn {
-    font-size: 0.85rem;
-    padding: 10px 10px;
-  }
-  .tabBtn .tabIcon { margin-right: 6px; font-size: 1.2rem; }
+  .tabBtn { font-size: 0.86rem; padding: 10px 10px; }
+  .tabBtn .tabIcon { margin-right: 6px; font-size: 1.1rem; }
 }
-
-/* Mobile-only Bootstrap-like focus ring (optional) */
 @media (max-width: 768px) and (pointer: coarse) {
   .tabBtn:focus-visible {
     outline: none !important;
     box-shadow:
-      0 0 0 .25rem rgba(13,110,253,.25),
+      0 0 0 .25rem rgba(16,185,129,.25),
       0 10px 20px var(--active-shadow, rgba(0,0,0,.18));
-    border-color: var(--bs-primary, #0d6efd) !important;
+    border-color: #10b981 !important;
   }
 }
 `;
 
 function hexToRgba(hex, alpha = 1) {
   const h = hex.replace("#", "");
-  const bigint = parseInt(h.length === 3 ? h.split("").map(c => c + c).join("") : h, 16);
+  const full = h.length === 3 ? h.split("").map(c => c + c).join("") : h;
+  const bigint = parseInt(full, 16);
   const r = (bigint >> 16) & 255;
   const g = (bigint >> 8) & 255;
   const b = bigint & 255;

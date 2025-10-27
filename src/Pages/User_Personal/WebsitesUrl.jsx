@@ -13,7 +13,7 @@ import {
  * - Smooth responsive grid, full-height on mobile (100dvh), sticky header
  */
 
-const API_BASE = "http://localhost:5000"; // no trailing slash
+const API_BASE = "https://express-backend-myapp.onrender.com"; // no trailing slash
 const PAGE_SIZE = 10;
 
 const spring = { type: "spring", stiffness: 420, damping: 32, mass: 0.7 };

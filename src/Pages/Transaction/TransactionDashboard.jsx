@@ -27,16 +27,16 @@ export default function TransactionDashboard() {
 
   const tabColors = {
     daily: "#2b7a8b",
-    main: "#fe67c9ff",
-    monthly: "#f88a4bff",
+    main: "#fe67c9",
+    monthly: "#f88a4b",
     total: "#0f8a5f",
-    category: "#ecda1cff",
-    categorywise: "#e4650bff",
+    category: "#ecda1c",
+    categorywise: "#e4650b",
   };
 
   const listRef = useRef(null);
 
-  // keyboard nav
+  // keyboard navigation
   useEffect(() => {
     const el = listRef.current;
     if (!el) return;
@@ -59,7 +59,7 @@ export default function TransactionDashboard() {
     return () => el.removeEventListener("keydown", handler);
   }, [activeTab]);
 
-  // underline position (includes horizontal scroll)
+  // underline/ink position (accounts for horizontal scroll)
   const [underlineStyle, setUnderlineStyle] = useState({});
   const recalcUnderline = () => {
     const container = listRef.current;
@@ -92,91 +92,110 @@ export default function TransactionDashboard() {
     <>
       <style>{`
         :root{
-          --nav-h: 68px;
+          --nav-h: 64px;
           --bg: #f6f8fb;
           --surface: #ffffff;
           --ink-900: #0f172a;
           --ink-700: #334155;
           --ink-600: #475569;
           --border: #e6e9ef;
-          --accent-grad: linear-gradient(90deg, #5f4bb6 0%, #1f5f78 100%);
+          /* ⬇ Red gradient navbar */
+          --accent-grad: linear-gradient(90deg, #b91c1c 0%, #dc2626 50%, #ef4444 100%);
           --overlay: rgba(255,255,255,.75);
         }
 
         .td-app { height: 100dvh; overflow: hidden; background: var(--bg); }
 
-        /* FIXED NAVBAR */
+        /* FIXED NAVBAR (size/layout identical across pages) */
         .td-nav {
           position: fixed; top: 0; left: 0; right: 0;
-          height: var(--nav-h); z-index: 50;
+          height: var(--nav-h); z-index: 80;
           background: var(--accent-grad);
-          padding: 10px 14px; /* a bit tighter */
+          padding: 10px 14px;
           border-bottom: 1px solid rgba(255,255,255,0.12);
           box-shadow: 0 10px 30px rgba(2,6,23,0.18), inset 0 -1px 0 rgba(255,255,255,0.06);
           backdrop-filter: saturate(140%) blur(4px);
           display:flex; align-items:center;
+          padding-top: calc(10px + env(safe-area-inset-top, 0px));
         }
-        .td-title { margin:0; color:#fff; font-weight:800; font-size:clamp(18px,2.4vw,24px); }
+        /* ⬇ Bold black heading on navbar */
+        .td-title { margin:0; color:#0b0b0b; font-weight:900; letter-spacing:.2px; font-size:clamp(18px,2.4vw,24px); text-shadow:none; }
 
-        /* Spacer equals navbar height only (no extra gap) */
-        .td-nav-spacer { height: var(--nav-h); }
+        /* Spacer equals navbar height (ensures tabs are NOT under the navbar) */
+        .td-nav-spacer { height: calc(var(--nav-h) + env(safe-area-inset-top, 0px)); }
 
-        /* Main area scrolls. Add *tiny* top padding to keep tabs from touching. */
+        /* Main scroll area */
         .td-main {
-          height: calc(100dvh - var(--nav-h));
+          height: calc(100dvh - var(--nav-h) - env(safe-area-inset-top, 0px));
           overflow-y: auto;
           -webkit-overflow-scrolling: touch;
-          padding-top: 4px; /* SMALL space under navbar */
+          padding-top: 6px; /* small space under navbar */
+          padding-bottom: env(safe-area-inset-bottom, 0px);
         }
 
+        /* Tabs Container (card style) */
         .td-tabs {
           background: var(--surface);
           border-radius: 14px;
           box-shadow: 0 8px 30px rgba(2,6,23,.06);
           border: 1px solid var(--border);
           padding: 8px;
-          margin: 6px 0 6px; /* reduced (desktop) */
+          margin: 6px 0;
           max-width: 100%;
         }
 
-        /* Single-row horizontal strip */
+        /* Horizontal strip */
         .td-tablist {
-          display:flex; flex-wrap:nowrap; gap:10px; position:relative;
+          position: relative;
+          display:flex; flex-wrap:nowrap; gap:10px;
           overflow-x:auto; overflow-y:hidden; white-space:nowrap;
           scrollbar-width:thin; -webkit-overflow-scrolling:touch;
-          padding: 4px 4px; /* tighter */
+          padding: 6px 6px;
           scroll-snap-type: x proximity;
+          scroll-padding-left: 8px;
+          scroll-padding-right: 8px;
+          z-index: 0;
         }
         .td-tablist::-webkit-scrollbar { height: 6px; }
         .td-tablist::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 999px; }
 
-        .td-tab {
-          display:inline-flex; align-items:center; justify-content:center;
-          min-width: 150px; padding: 10px 14px;
-          font-size: 0.975rem; border:none; border-radius:12px; font-weight:700;
-          background:transparent; color: var(--ink-600);
-          transition: background .2s ease, color .2s ease, transform .15s ease, box-shadow .15s ease;
-          scroll-snap-align:center;
-        }
-        @media (min-width: 576px){
-          .td-tab { min-width: 140px; font-size: .95rem; padding: 10px 14px; }
-        }
-        .td-tab:focus-visible {
-          outline: 0;
-          box-shadow: 0 0 0 .25rem rgba(13,110,253,.25), 0 10px 20px rgba(2,6,23,.08);
-        }
-        .td-tab[aria-selected="true"] { color:#fff; transform: translateY(-1px); }
-
+        /* Ink bar (sits behind buttons; cannot block taps) */
         .td-inkbar {
           position:absolute; height:38px; border-radius:12px;
           top: 50%; transform: translateY(-50%); left:0;
           transition: transform .25s ease, width .25s ease, background .25s ease;
-          z-index:0;
+          z-index: 0;
+          pointer-events: none;
         }
 
+        /* Individual tab chips */
+        .td-tab {
+          position: relative;
+          display:inline-flex; align-items:center; justify-content:center;
+          min-width: 140px; padding: 10px 14px;
+          font-size: 0.95rem; border-radius:12px; font-weight:700;
+          background:#fff; color: var(--ink-700);
+          border: 1px solid var(--border);
+          transition: background .18s ease, color .18s ease, transform .15s ease, box-shadow .15s ease, border-color .18s ease;
+          scroll-snap-align:center;
+          z-index: 1;                 /* above inkbar */
+          pointer-events: auto;       /* ensure taps always land */
+          touch-action: manipulation; /* better mobile tap */
+          white-space: nowrap;
+        }
+        .td-tab:hover { transform: translateY(-1px); box-shadow: 0 10px 20px rgba(2,6,23,.06); }
+
+        /* ACTIVE: only this one gets color */
+        .td-tab[aria-selected="true"] {
+          color:#fff;
+          background: var(--chip-active);
+          border-color: transparent;
+        }
+
+        /* Content card */
         .td-card {
           max-width: 1100px;
-          margin: 6px auto 16px; /* keep small gap below tabs */
+          margin: 8px auto 16px;
           background: var(--surface);
           border:1px solid var(--border);
           border-radius:16px;
@@ -185,14 +204,14 @@ export default function TransactionDashboard() {
           min-height:460px;
           padding:16px;
         }
+
+        /* Mobile first tweaks */
         @media (max-width: 576px){
-          /* Even tighter on mobile */
-          .td-main { padding-top: 2px; }
-          .td-tabs { margin: 4px 0 4px; padding: 6px; }
-          .td-tablist { padding: 2px 2px; gap: 8px; }
-          .td-tab { min-width: 128px; padding: 8px 12px; font-size: .92rem; }
+          .td-tabs { margin: 4px 0; padding: 6px; }
+          .td-tablist { padding: 4px; gap: 8px; }
+          .td-tab { min-width: 128px; padding: 9px 12px; font-size: .92rem; }
           .td-inkbar { height: 34px; }
-          .td-card { margin: 4px auto 12px; padding: 12px; border-radius: 14px; }
+          .td-card { margin: 6px auto 12px; padding: 12px; border-radius: 14px; }
         }
 
         .td-overlay {
@@ -216,7 +235,7 @@ export default function TransactionDashboard() {
           </div>
         </nav>
 
-        {/* Spacer to offset fixed navbar */}
+        {/* Spacer to place content below navbar */}
         <div className="td-nav-spacer" />
 
         {/* ONLY this area scrolls */}
@@ -230,9 +249,13 @@ export default function TransactionDashboard() {
                 aria-label="Transaction tabs"
                 className="td-tablist"
               >
+                {/* Ink bar behind buttons */}
                 <div
                   className="td-inkbar"
-                  style={{ ...underlineStyle, background: tabColors[activeTab] || "#444" }}
+                  style={{
+                    ...underlineStyle,
+                    background: tabColors[activeTab] || "#444"
+                  }}
                 />
                 {tabs.map((tab) => {
                   const selected = activeTab === tab.key;
@@ -247,15 +270,14 @@ export default function TransactionDashboard() {
                       aria-controls={`panel-${tab.key}`}
                       className="td-tab"
                       style={{
-                        color: selected ? "#fff" : color,
-                        background: selected ? color : "transparent",
+                        ["--chip-active"]: color
                       }}
                       onClick={() => setActiveTab(tab.key)}
                     >
                       <span aria-hidden style={{ marginRight: 8, display: "inline-flex" }}>
                         {tab.icon}
                       </span>
-                      {tab.label}
+                      <span className="text-truncate" style={{ maxWidth: 260 }}>{tab.label}</span>
                     </button>
                   );
                 })}

@@ -6,23 +6,22 @@ import Document from "./Document";
 import ManageDocuments from "./ManageDocuments";
 import DocAccess from "./DocAccess";
 import DocCategory from "./DocCategory";
-import AdminImpDocument from "./AdminImp_document"; // ⬅ NEW: Import the Imp Document page
+import AdminImpDocument from "./AdminImp_document";
 
 const tabs = [
   { key: "AddDocument", label: "➕ Add Document" },
   { key: "ManageDocuments", label: "📂 Manage Documents" },
   { key: "AccessDocuments", label: "🔍 Access Documents" },
   { key: "DocCategory", label: "🏷️ Document Categories" },
-  { key: "ImpDocument", label: "⭐ Imp Document" }, // ⬅ NEW TAB
+  { key: "ImpDocument", label: "⭐ Imp Document" },
 ];
 
 const DocumentTab = () => {
-  const [activeTab, setActiveTab] = useState("ImpDocument"); // default to Imp Document if you want
+  const [activeTab, setActiveTab] = useState("ImpDocument");
   const [ink, setInk] = useState({ left: 10, width: 40, top: 36, ready: false });
   const railRef = useRef(null);
   const navigate = useNavigate();
 
-  // ---- Measure & place the ink underline under the active tab button ----
   const measureInk = React.useCallback(() => {
     const rail = railRef.current;
     if (!rail) return;
@@ -37,9 +36,7 @@ const DocumentTab = () => {
     btn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
   }, [activeTab]);
 
-  useLayoutEffect(() => {
-    measureInk();
-  }, [measureInk]);
+  useLayoutEffect(() => { measureInk(); }, [measureInk]);
 
   useEffect(() => {
     const rail = railRef.current;
@@ -64,7 +61,6 @@ const DocumentTab = () => {
     };
   }, [measureInk]);
 
-  // Keyboard navigation between tabs
   const onKeyDownTabs = (e) => {
     const idx = tabs.findIndex((t) => t.key === activeTab);
     if (e.key === "ArrowRight") setActiveTab(tabs[(idx + 1) % tabs.length].key);
@@ -73,7 +69,7 @@ const DocumentTab = () => {
 
   return (
     <div className="doc-page">
-      {/* Glassy Navbar */}
+      {/* FIXED NAVBAR — same size/structure as other pages */}
       <nav className="navbar-fixed">
         <motion.h2
           className="navbar-title"
@@ -81,7 +77,7 @@ const DocumentTab = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45 }}
         >
-          📄 Document Manager
+          Document Manager
         </motion.h2>
 
         <motion.button
@@ -95,6 +91,9 @@ const DocumentTab = () => {
           <span className="btn-glint" />
         </motion.button>
       </nav>
+
+      {/* Spacer that exactly matches the navbar height */}
+      <div className="nav-spacer" />
 
       {/* Tabs */}
       <div className="tabs-container" onKeyDown={onKeyDownTabs}>
@@ -170,57 +169,51 @@ const DocumentTab = () => {
         {activeTab === "ManageDocuments" && <ManageDocuments />}
         {activeTab === "AccessDocuments" && <DocAccess />}
         {activeTab === "DocCategory" && <DocCategory />}
-        {activeTab === "ImpDocument" && <AdminImpDocument />}{/* ⬅ NEW: renders the Imp Document page */}
+        {activeTab === "ImpDocument" && <AdminImpDocument />}
       </motion.div>
 
-      {/* Styles (unchanged) */}
       <style>{`
         :root{
+          --nav-h: 64px; /* same height as other pages */
           --bg-grad: linear-gradient(135deg, #f6f8fc 0%, #e9eff7 100%);
-          --nav-grad: linear-gradient(90deg, #5f4bb6 0%, #1f5f78 100%);
-          --nav-overlay: rgba(255,255,255,.08);
-          --ink-900:#0f172a; --ink-700:#334155; --ink-600:#475569; --ink-500:#64748b;
+          --nav-grad: linear-gradient(90deg, #fde68a 0%, #facc15 55%, #f59e0b 100%); /* yellow */
+          --nav-overlay: rgba(0,0,0,.04);
+          --ink-900:#0f172a; --ink-700:#334155;
           --surface:#ffffff; --border:#e6e9ef;
           --gold:#f6c15a; --gold-press:#e3a83e;
-          --tab-ink:#f6c15a;
+          --tab-ink:#f59e0b;
           --tab-pill:#f7f8ff;
         }
+        @media (max-width: 575.98px){ :root{ --nav-h: 58px; } }
+        @media (min-width: 1400px){ :root{ --nav-h: 66px; } }
 
         .doc-page {
           background: var(--bg-grad);
-          min-height: 100vh;
           min-height: 100dvh;
           font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-          padding-top: calc(86px + env(safe-area-inset-top, 0px));
-          padding-bottom: env(safe-area-inset-bottom, 0px);
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          box-sizing: border-box;
-        }
-
-        /* Navbar */
-        .navbar-fixed {
-          position: fixed;
-          top: 0; left: 0; width: 100%;
-          background: var(--nav-grad);
-          color: #fff;
-          display: flex; align-items: center; justify-content: space-between;
-          padding: 12px 28px;
-          z-index: 1000;
-          border-bottom: 1px solid rgba(255,255,255,.15);
-          box-shadow: 0 12px 30px rgba(2,6,23,.18), inset 0 -1px 0 rgba(255,255,255,.08);
-          backdrop-filter: saturate(140%) blur(6px);
           overflow: hidden;
         }
-        .navbar-fixed::after{
-          content:""; position:absolute; inset:0; pointer-events:none;
-          background: linear-gradient(180deg, transparent 0%, var(--nav-overlay) 100%);
+
+        /* NAVBAR — exact same sizing behavior */
+        .navbar-fixed {
+          position: fixed; top: env(safe-area-inset-top, 0px); left: 0; right: 0;
+          height: var(--nav-h); z-index: 1000;
+          background: var(--nav-grad);
+          color: #111827; /* darker text to contrast yellow */
+          display: flex; align-items: center; justify-content: space-between;
+          padding: 12px 28px;
+          border-bottom: 1px solid rgba(0,0,0,.08);
+          box-shadow: 0 12px 30px rgba(0,0,0,.12), inset 0 -1px 0 rgba(255,255,255,.22);
+          backdrop-filter: saturate(140%) blur(6px);
         }
+        .nav-spacer { height: calc(var(--nav-h) + env(safe-area-inset-top, 0px)); }
+
         .navbar-title {
+          margin: 0;
           font-size: clamp(20px, 2.4vw, 28px);
-          font-weight: 900; letter-spacing: .3px; margin: 0;
-          text-shadow: 0 1px 2px rgba(0,0,0,.25);
+          font-weight: 900; letter-spacing: .3px;
+          color: #0b0b0b; /* bold black heading */
+          text-shadow: none;
         }
         .btn-dashboard {
           position: relative;
@@ -261,7 +254,7 @@ const DocumentTab = () => {
         /* Tabs */
         .tabs-container {
           width: min(1200px, 92%);
-          margin-top: 18px; margin-bottom: 14px;
+          margin: 6px auto 14px; /* small, consistent gap under navbar */
         }
         .tabs-rail{
           position: relative;
@@ -277,7 +270,6 @@ const DocumentTab = () => {
         }
         .tabs-rail::-webkit-scrollbar{ height: 8px; }
         .tabs-rail::-webkit-scrollbar-thumb{ background: #d6d9e2; border-radius: 8px; }
-        .tabs-rail::-webkit-scrollbar-track{ background: transparent; }
 
         .tab-item{
           position: relative;
@@ -295,14 +287,14 @@ const DocumentTab = () => {
           white-space: nowrap;
         }
         .tab-item .tab-ripple{
-          position:absolute; inset:auto; top:50%; left:50%; width:0; height:0; border-radius:999px;
-          background: radial-gradient(circle at center, rgba(165,180,252,.30) 0%, rgba(165,180,252,0) 70%);
+          position:absolute; top:50%; left:50%; width:0; height:0; border-radius:999px;
+          background: radial-gradient(circle at center, rgba(252,211,77,.30) 0%, rgba(252,211,77,0) 70%);
           transform: translate(-50%,-50%);
           opacity:0; pointer-events:none;
         }
         .tab-item:hover{
-          background: #f5f7fb; color: var(--ink-900); transform: translateY(-1px);
-          box-shadow: 0 2px 10px rgba(99,102,241,.10);
+          background: #fff9eb; color: var(--ink-900); transform: translateY(-1px);
+          box-shadow: 0 2px 10px rgba(245,158,11,.10);
         }
         .tab-item:active .tab-ripple{ animation: ripple .55s ease-out; }
         @keyframes ripple {
@@ -310,7 +302,7 @@ const DocumentTab = () => {
           100% { width: 280px; height: 280px; opacity:0; }
         }
         .tab-item.active{ color: var(--ink-900); }
-        .tab-item:focus-visible{ box-shadow: 0 0 0 3px rgba(99,102,241,.25); }
+        .tab-item:focus-visible{ box-shadow: 0 0 0 3px rgba(245,158,11,.28); }
         .tab-label{ position: relative; z-index: 2; }
 
         .tab-pill{
@@ -319,14 +311,13 @@ const DocumentTab = () => {
           background: var(--tab-pill);
           border-radius: 10px;
           z-index: 1;
-          box-shadow: inset 0 0 0 1px #eef1ff, 0 6px 16px rgba(99,102,241,.10);
+          box-shadow: inset 0 0 0 1px #fff3c4, 0 6px 16px rgba(245,158,11,.10);
         }
-
         .tab-ink{
           position: absolute;
           height: 3px; border-radius: 3px;
           background: var(--tab-ink);
-          box-shadow: 0 6px 16px rgba(246,193,90,.45);
+          box-shadow: 0 6px 16px rgba(245,158,11,.45);
           pointer-events:none;
         }
 
@@ -340,20 +331,20 @@ const DocumentTab = () => {
           box-shadow: 0 12px 34px rgba(2,6,23,.06);
           position: relative;
           isolation: isolate;
+          margin: 0 auto 12px;
         }
         .tab-content::before{
           content:""; position:absolute; inset:0; border-radius:18px; pointer-events:none;
-          background: radial-gradient(1200px 1200px at 0% 0%, rgba(165,180,252,.08), transparent 60%);
+          background: radial-gradient(1200px 1200px at 0% 0%, rgba(245,158,11,.08), transparent 60%);
           z-index:-1;
         }
 
         @media (max-width: 768px) {
-          .navbar-title { font-size: 1.4rem; }
+          .navbar-title { font-size: 1.35rem; }
           .btn-dashboard { padding: 9px 16px; font-size: 0.9rem; }
           .tab-item{ padding: 10px 14px; font-size: .95rem; }
           .tab-content{ padding: 12px; }
         }
-
         @media (prefers-reduced-motion: reduce){
           .tab-item, .btn-dashboard{ transition: none !important; }
           .btn-glint{ display:none; }

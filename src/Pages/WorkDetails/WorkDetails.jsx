@@ -18,13 +18,14 @@ const API_BASE = import.meta?.env?.VITE_API_BASE ?? "https://express-backend-mya
 const cleanName = (s) => (typeof s === "string" ? s.trim().replace(/\s+/g, " ") : "");
 const spring = { type: "spring", stiffness: 400, damping: 30, mass: 0.6 };
 
+/* ---------- Tab Button (mobile-safe label) ---------- */
 const TabButton = ({ active, color, icon, label, onClick, onKeyDown }) => (
   <motion.button
     whileTap={{ scale: 0.985 }}
     whileHover={{ y: -2 }}
     onClick={onClick}
     onKeyDown={onKeyDown}
-    className="nav-link d-inline-flex align-items-center gap-2 position-relative"
+    className="nav-link d-inline-flex align-items-center gap-2 position-relative wd-tab-btn"
     role="tab"
     tabIndex={0}
     aria-pressed={active}
@@ -41,6 +42,7 @@ const TabButton = ({ active, color, icon, label, onClick, onKeyDown }) => (
       minHeight: 42,
       minWidth: 136,
       whiteSpace: "nowrap",
+      maxWidth: "100%",
     }}
   >
     {active && (
@@ -58,8 +60,13 @@ const TabButton = ({ active, color, icon, label, onClick, onKeyDown }) => (
         }}
       />
     )}
-    <span style={{ display: "grid", placeItems: "center", fontSize: 16 }}>{icon}</span>
-    <span style={{ letterSpacing: 0.2 }}>{label}</span>
+    <span style={{ display: "grid", placeItems: "center", fontSize: 16, flex: "0 0 auto" }}>{icon}</span>
+
+    {/* Label that auto-sizes & never overflows */}
+    <span className="wd-tab-label" style={{ letterSpacing: 0.2 }}>
+      {label}
+    </span>
+
     {active && (
       <motion.span
         layoutId="tab-underline"
@@ -79,6 +86,7 @@ const TabButton = ({ active, color, icon, label, onClick, onKeyDown }) => (
   </motion.button>
 );
 
+/* ---------- Toast & Busy ---------- */
 const Toast = ({ open, type, msg, onClose }) => (
   <AnimatePresence>
     {open && (
@@ -120,6 +128,7 @@ const BusyOverlay = ({ show }) => (
   </AnimatePresence>
 );
 
+/* ---------- Main ---------- */
 export default function WorkDetails() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("DPR");
@@ -361,33 +370,26 @@ export default function WorkDetails() {
     <>
       <style>{`
         :root {
-          --nav-h: 64px; /* medium — clean and balanced */
+          --nav-h: 64px;
         }
-        @media (max-width: 575.98px) {
-          :root { --nav-h: 58px; } /* phone: slightly shorter */
-        }
-        @media (min-width: 1400px) {
-          :root { --nav-h: 66px; } /* very large screens: tiny bump */
-        }
+        @media (max-width: 575.98px) { :root { --nav-h: 58px; } }
+        @media (min-width: 1400px) { :root { --nav-h: 66px; } }
 
-        /* Full-page app; only content area scrolls */
         .wd-app { height: 100dvh; overflow: hidden; background: #f5f7fb; }
 
-        /* Fixed navbar (professional gradient) */
+        /* SAME SIZE NAVBAR (purple gradient); heading forced to black via inline style */
         .wd-nav {
           position: fixed; top: env(safe-area-inset-top, 0px); left: 0; right: 0;
           height: var(--nav-h); z-index: 1000;
           background: linear-gradient(135deg,#6d28d9,#7c3aed,#8b5cf6);
-          color:#fff; padding: 8px 16px;
+          color:#ffffff; padding: 8px 16px;
           box-shadow: 0 10px 24px rgba(124,58,237,.28);
           border-bottom: 1px solid rgba(255,255,255,.18);
           display:flex; align-items:center;
         }
 
-        /* Spacer matches navbar; zero extra gap */
         .wd-nav-spacer { height: calc(var(--nav-h) + env(safe-area-inset-top, 0px)); }
 
-        /* Scrollable work area; tiny padding so tabs don't touch */
         .wd-main {
           height: calc(100dvh - var(--nav-h) - env(safe-area-inset-top, 0px));
           overflow-y: auto;
@@ -396,20 +398,14 @@ export default function WorkDetails() {
           padding-bottom: env(safe-area-inset-bottom, 0px);
         }
 
-        /* Tabs: sticky + clean */
         .wd-tabs-wrap {
           position: sticky; top: 0; z-index: 5;
           background: rgba(255,255,255,.92);
           backdrop-filter: blur(8px);
           border-bottom: 1px solid #e5e7eb;
         }
-        .wd-tab-rail {
-          gap: 8px;
-          padding-top: 8px;
-          padding-bottom: 8px;
-        }
+        .wd-tab-rail { gap: 8px; padding-top: 8px; padding-bottom: 8px; }
 
-        /* Content card: compact spacing + soft shadow */
         .wd-content-card {
           margin-top: 10px;
           border: 1px solid #e5e7eb;
@@ -419,10 +415,28 @@ export default function WorkDetails() {
           background: #fff;
         }
 
-        /* Tighter container padding on phones */
+        /* Mobile label sizing */
+        .wd-tab-btn { max-width: 100%; }
+        .wd-tab-btn .wd-tab-label {
+          display: inline-block;
+          min-width: 0;
+          max-width: 60vw;
+          font-size: clamp(12px, 3.8vw, 15px);
+          line-height: 1.1;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+
+        @media (min-width: 576px) {
+          .wd-tab-btn { padding: 9px 14px; }
+          .wd-tab-btn .wd-tab-label { max-width: 280px; font-size: clamp(13px, 2vw, 16px); }
+        }
+        @media (min-width: 992px) {
+          .wd-tab-btn .wd-tab-label { max-width: 360px; font-size: 16px; }
+        }
         @media (max-width: 575.98px) {
           .container { padding-left: 10px; padding-right: 10px; }
           .wd-content-card { margin-top: 8px; padding: 12px; border-radius: 12px; }
+          .wd-tab-btn { padding: 8px 12px; min-width: 120px; }
         }
       `}</style>
 
@@ -446,7 +460,11 @@ export default function WorkDetails() {
               >
                 WD
               </div>
-              <h2 className="m-0" style={{ fontSize: "1.25rem", fontWeight: 800, letterSpacing: 0.3 }}>
+              {/* Bold black heading to match your spec */}
+              <h2
+                className="m-0"
+                style={{ fontSize: "1.25rem", fontWeight: 900, letterSpacing: 0.3, color: "#0b0b0b", textShadow: "none" }}
+              >
                 Work Details
               </h2>
             </div>

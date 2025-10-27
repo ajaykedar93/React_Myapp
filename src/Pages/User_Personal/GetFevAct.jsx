@@ -8,6 +8,7 @@ const API = {
   images: (id) => `${BASE}/api/user-act-favorite/${id}/images`,
 };
 
+/* ---------- helpers ---------- */
 const calcAge = (dobStr) => {
   if (!dobStr) return null;
   const dob = new Date(dobStr);
@@ -17,6 +18,36 @@ const calcAge = (dobStr) => {
   const m = today.getMonth() - dob.getMonth();
   if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
   return age >= 0 ? age : null;
+};
+
+// Trim + dedupe an array of image URLs, keep first occurrence only
+const uniqImages = (arr) => {
+  if (!Array.isArray(arr)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const u of arr) {
+    const key = String(u || "").trim();
+    if (!key) continue;
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(key);
+    }
+  }
+  return out;
+};
+
+// Ensure each row is unique by id. Also normalize images on each row.
+const normalizeRows = (rows) => {
+  if (!Array.isArray(rows)) return [];
+  const byId = new Map();
+  for (const r of rows) {
+    if (!r || r.id == null) continue;
+    // If duplicate ids come, keep the first
+    if (!byId.has(r.id)) {
+      byId.set(r.id, { ...r, images: uniqImages(r.images) });
+    }
+  }
+  return Array.from(byId.values());
 };
 
 export default function GetFevAct() {
@@ -59,7 +90,6 @@ export default function GetFevAct() {
       @keyframes scaleUp{from{transform:scale(.9);opacity:0}to{transform:scale(1);opacity:1}}
       .fullpage-loader{position:fixed;inset:0;display:grid;place-items:center;background:linear-gradient(180deg,#ffffff,#f1f5f9);z-index:2500}
       .brand-title{background:linear-gradient(90deg,var(--brand1),var(--brand2),var(--brand3));-webkit-background-clip:text;background-clip:text;color:transparent}
-      /* tighter mobile spacing under header */
       .page-top{padding-top:.5rem}
       @media(min-width:576px){.page-top{padding-top:1rem}}
     `;
@@ -74,9 +104,11 @@ export default function GetFevAct() {
       if (q.trim()) qs.set("q", q.trim());
       const res = await fetch(`${API.list}?${qs}`);
       const j = await res.json();
-      setRows(j?.data || []);
+      // 🔑 normalize to remove any duplicates (rows and images)
+      setRows(normalizeRows(j?.data || []));
     } catch (e) {
       console.error(e);
+      setRows([]);
     }
     setLoading(false);
   };
@@ -93,7 +125,6 @@ export default function GetFevAct() {
   const deleteRow = (id, name) => {
     askConfirm("Delete Entry?", `Delete “${name}”? This cannot be undone.`, async () => {
       setConfirmBox({ show: false });
-      // optimistic remove
       const prev = rows;
       setRows((r) => r.filter((x) => x.id !== id));
       setBusy(true);
@@ -102,9 +133,8 @@ export default function GetFevAct() {
         const j = await res.json();
         if (!j?.success) throw new Error(j?.message || "Failed");
         showPopup("Deleted", "Entry removed successfully", "success");
-        fetchList(); // refresh server state
+        fetchList();
       } catch (e) {
-        // rollback on failure
         setRows(prev);
         showPopup("Error", e.message || "Failed to delete", "danger");
       } finally {
@@ -115,14 +145,14 @@ export default function GetFevAct() {
 
   /* --- Remove selected images (optimistic) --- */
   const removeImages = async () => {
-    const toRemove = [...imgMgr.selected];
+    const toRemove = uniqImages([...imgMgr.selected]); // ensure unique selection
     if (!toRemove.length) return;
     askConfirm("Remove Images?", `Remove ${toRemove.length} image(s)?`, async () => {
       setConfirmBox({ show: false });
       setBusy(true);
       // optimistic update
       const prevItem = imgMgr.item;
-      const nextImages = (prevItem.images || []).filter((u) => !imgMgr.selected.has(u));
+      const nextImages = uniqImages((prevItem.images || []).filter((u) => !toRemove.includes(u)));
       setImgMgr((s) => ({ ...s, item: { ...s.item, images: nextImages }, selected: new Set() }));
       try {
         const res = await fetch(API.images(prevItem.id), {
@@ -136,7 +166,7 @@ export default function GetFevAct() {
         setImgMgr({ open: false, item: null, mode: "view", selected: new Set() });
         fetchList();
       } catch (e) {
-        // rollback if needed
+        // rollback
         setImgMgr((s) => ({ ...s, item: prevItem }));
         showPopup("Error", e.message || "Failed to delete images", "danger");
       } finally {
@@ -156,6 +186,9 @@ export default function GetFevAct() {
         (r.country_name || "").toLowerCase().includes(qq)
     );
   }, [rows, q]);
+
+  // Unique images for current modal item (extra guard)
+  const modalImages = useMemo(() => uniqImages(imgMgr.item?.images || []), [imgMgr.item]);
 
   /* --- UI --- */
   return (
@@ -215,13 +248,13 @@ export default function GetFevAct() {
                       <div className="d-flex flex-wrap justify-content-center gap-2 mt-3">
                         <button
                           className="btn btn-view btn-sm"
-                          onClick={() => setImgMgr({ open: true, item: r, mode: "view", selected: new Set() })}
+                          onClick={() => setImgMgr({ open: true, item: { ...r, images: uniqImages(r.images) }, mode: "view", selected: new Set() })}
                         >
                           View Images
                         </button>
                         <button
                           className="btn btn-delete btn-sm"
-                          onClick={() => setImgMgr({ open: true, item: r, mode: "delete", selected: new Set() })}
+                          onClick={() => setImgMgr({ open: true, item: { ...r, images: uniqImages(r.images) }, mode: "delete", selected: new Set() })}
                         >
                           Delete Images
                         </button>
@@ -256,12 +289,12 @@ export default function GetFevAct() {
                 ></button>
               </div>
               <div className="modal-body">
-                {(imgMgr.item?.images || []).length ? (
+                {modalImages.length ? (
                   <div className="thumb-grid">
-                    {imgMgr.item.images.map((src, i) => {
+                    {modalImages.map((src, i) => {
                       const checked = imgMgr.selected.has(src);
                       return (
-                        <label key={i} className="position-relative" style={{ cursor: imgMgr.mode === "view" ? "zoom-in" : "pointer" }}>
+                        <label key={src} className="position-relative" style={{ cursor: imgMgr.mode === "view" ? "zoom-in" : "pointer" }}>
                           {imgMgr.mode === "delete" && (
                             <input
                               type="checkbox"
