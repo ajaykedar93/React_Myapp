@@ -1,36 +1,21 @@
 // src/pages/WebsitesUrl.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import 'bootstrap/dist/css/bootstrap.min.css';
+import "bootstrap/dist/css/bootstrap.min.css";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
 import {
-  FiPlus,
-  FiSearch,
-  FiTrash2,
-  FiEdit2,
-  FiGlobe,
-  FiUploadCloud,
-  FiX,
-  FiImage,
-  FiExternalLink,
-  FiCheckCircle,
-  FiAlertTriangle,
-  FiInfo,
-  FiRotateCcw,
-  FiCopy,
-  FiZoomIn
+  FiPlus, FiSearch, FiTrash2, FiEdit2, FiGlobe, FiUploadCloud, FiX, FiImage,
+  FiExternalLink, FiCheckCircle, FiAlertTriangle, FiInfo, FiRotateCcw, FiCopy, FiZoomIn
 } from "react-icons/fi";
 
 /**
  * WebsitesUrl.jsx — Bootstrap version (fixed 10/page, mobile-perfect)
- * - Fixed pagination: ALWAYS 10 items per page (no per‑page selector)
- * - Page 1 → 1–10, Page 2 → 11–20, etc.
+ * - Fixed pagination: ALWAYS 10 items per page
  * - Smooth responsive grid, full-height on mobile (100dvh), sticky header
  */
 
-const API_BASE = "https://express-backend-myapp.onrender.com"; // no trailing slash
-const PAGE_SIZE = 10; // ← fixed 10 per page
+const API_BASE = "http://localhost:5000"; // no trailing slash
+const PAGE_SIZE = 10;
 
-// ----------------------------- helpers -----------------------------
 const spring = { type: "spring", stiffness: 420, damping: 32, mass: 0.7 };
 
 async function api(path, { method = "GET", body, headers, json = true } = {}) {
@@ -56,7 +41,35 @@ const normalizeUrl = (raw) => {
   return `https://${trimmed}`;
 };
 
-// ----------------------------- UI atoms -----------------------------
+/* ---------- image helpers (FIXED) ---------- */
+/** Make any relative URL absolute (KEEP /api prefix) */
+const toAbsUrl = (u) => {
+  if (!u) return "";
+  if (/^https?:\/\//i.test(u)) return u;
+  const path = u.startsWith("/") ? u : `/${u}`;
+  return `${API_BASE}${path}`;
+};
+
+/** Accepts multiple shapes: string, {href|url|src}, other known fields */
+const getImageSrc = (item) => {
+  const v =
+    item?.image ??
+    item?.image_url ??
+    item?.imageUrl ??
+    item?.thumbnail ??
+    item?.thumb ??
+    null;
+
+  if (!v) return "";
+  if (typeof v === "string") return toAbsUrl(v);
+  if (typeof v === "object") {
+    if (v.href) return toAbsUrl(v.href);
+    if (v.url) return toAbsUrl(v.url);
+    if (v.src) return toAbsUrl(v.src);
+  }
+  return "";
+};
+
 const Badge = ({ tone = "info", children }) => {
   const cls =
     tone === "success" ? "badge text-bg-success" :
@@ -203,7 +216,7 @@ function Dropzone({ file, setFile }) {
         <div className="small">
           <div className="fw-semibold text-dark">Drag & drop image (optional)</div>
           <div className="text-secondary">
-            or {" "}
+            or{" "}
             <button type="button" onClick={() => ref.current?.click()} className="btn btn-link p-0 align-baseline">
               browse
             </button>
@@ -248,8 +261,10 @@ export default function WebsitesUrl() {
   const [fFile, setFFile] = useState(null);
   const [saving, setSaving] = useState(false);
 
-  // NEW: per-card "show more" state for long URLs
+  // "show more" URL state
   const [expanded, setExpanded] = useState({});
+  // image ok/broken state
+  const [imgOk, setImgOk] = useState({}); // { [id]: boolean }
 
   const showNotice = (type, title, message) => setNotice({ open: true, type, title, message });
 
@@ -285,7 +300,7 @@ export default function WebsitesUrl() {
     try {
       const params = new URLSearchParams();
       params.set("page", String(page));
-      params.set("limit", String(PAGE_SIZE)); // ← always 10
+      params.set("limit", String(PAGE_SIZE));
       if (q) params.set("q", q);
       if (category) params.set("category", category);
       const data = await api(`/websites?${params.toString()}`);
@@ -351,29 +366,19 @@ export default function WebsitesUrl() {
 
   const doDelete = async () => {
     const id = confirm.id;
-    // close confirm immediately
     setConfirm({ open: false, id: null, name: "" });
-
-    // show busy while we reconcile pages
     setLoading(true);
     try {
       await api(`/websites/${id}`, { method: "DELETE" });
-
-      // Compute new totals/pages so the UI always shows a full 10 items when possible
       const newTotal = Math.max(0, total - 1);
       const newTotalPages = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
-
-      // If current page would become out-of-range after delete, jump to the last valid page;
-      // the effect on `page` will trigger a fresh load that fills the page to 10.
       if (page > newTotalPages) {
         setTotal(newTotal);
-        setPage(newTotalPages); // triggers useEffect(load)
+        setPage(newTotalPages);
       } else {
-        // Stay on the same page but force a reload so the next item from the next page slides in
         setTotal(newTotal);
         await load();
       }
-
       showNotice("success", "Deleted", "Website removed successfully.");
     } catch (e) {
       showNotice("error", "Delete Failed", e.message || "Unable to delete website.");
@@ -382,7 +387,6 @@ export default function WebsitesUrl() {
     }
   };
 
-  // styles for URL text (clamped vs expanded)
   const clampStyle = { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", wordBreak: "break-all", whiteSpace: "normal", maxWidth: "100%" };
   const expandedStyle = { wordBreak: "break-all", whiteSpace: "normal", maxWidth: "100%" };
 
@@ -479,7 +483,7 @@ export default function WebsitesUrl() {
             <div className="mt-3 d-flex justify-content-end gap-2">
               <button type="button" onClick={resetForm} className="btn btn-outline-secondary">Reset</button>
               <button type="submit" disabled={saving} className="btn btn-primary fw-bold d-inline-flex align-items-center gap-2">
-                {editing ? (saving ? "Saving..." : <> <FiCheckCircle/> Save Changes</>) : saving ? "Adding..." : <> <FiPlus/> Add Website</>}
+                {editing ? (saving ? "Saving..." : <> <FiCheckCircle/> Save Changes</>) : saving ? "Adding..." : <> <FiPlus/> Add Website</> }
               </button>
             </div>
           </div>
@@ -516,19 +520,27 @@ export default function WebsitesUrl() {
             <AnimatePresence>
               {items.map((it) => {
                 const displayUrl = normalizeUrl(it.url);
+                const imgSrc = getImageSrc(it); // e.g. /api/websites/:id/image → toAbsUrl → https://.../api/websites/:id/image
+                const showImg = !!imgSrc && imgOk[it.id] !== false; // hide if previously failed
                 const isExpanded = !!expanded[it.id];
+
                 return (
                   <motion.div key={it.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="col-12 col-sm-6 col-lg-4 col-xl-3">
                     <div className="card h-100 shadow-sm">
                       {/* Image area */}
                       <div
                         className="position-relative d-flex align-items-center justify-content-center bg-light"
-                        style={{ minHeight: 140, maxHeight: 340, overflow: "hidden", borderBottom: "1px solid rgba(0,0,0,.05)", cursor: it.image?.mime ? "zoom-in" : "default" }}
-                        onClick={() => { if (it.image?.mime) openPreview(`${API_BASE}${it.image.href}`, it.name || it.url); }}
-                        title={it.image?.mime ? "Click to preview" : undefined}
+                        style={{ minHeight: 140, maxHeight: 340, overflow: "hidden", borderBottom: "1px solid rgba(0,0,0,.05)", cursor: showImg ? "zoom-in" : "default" }}
+                        onClick={() => { if (showImg) openPreview(imgSrc, it.name || it.url); }}
+                        title={showImg ? "Click to preview" : undefined}
                       >
-                        {it.image?.mime ? (
-                          <img src={`${API_BASE}${it.image.href}`} alt={it.name || it.url} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+                        {showImg ? (
+                          <img
+                            src={imgSrc}
+                            alt={it.name || it.url}
+                            style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
+                            onError={() => setImgOk((m) => ({ ...m, [it.id]: false }))}
+                          />
                         ) : (
                           <div className="d-flex align-items-center justify-content-center position-absolute top-0 start-0 w-100 h-100 text-secondary">
                             <FiImage size={48} />
@@ -539,8 +551,8 @@ export default function WebsitesUrl() {
                           <button type="button" className="btn btn-dark btn-sm d-inline-flex align-items-center gap-1" onClick={(e) => { e.stopPropagation(); window.open(displayUrl, "_blank", "noopener"); }} title="Open">
                             <FiExternalLink /> Open
                           </button>
-                          {it.image?.mime && (
-                            <button type="button" className="btn btn-outline-light btn-sm d-inline-flex align-items-center gap-1" onClick={(e) => { e.stopPropagation(); openPreview(`${API_BASE}${it.image.href}`, it.name || it.url); }} title="Full Image">
+                          {showImg && (
+                            <button type="button" className="btn btn-outline-light btn-sm d-inline-flex align-items-center gap-1" onClick={(e) => { e.stopPropagation(); openPreview(imgSrc, it.name || it.url); }} title="Full Image">
                               <FiZoomIn /> Full
                             </button>
                           )}
@@ -567,7 +579,6 @@ export default function WebsitesUrl() {
                                   </span>
                                 </div>
 
-                                {/* Show more / less toggle */}
                                 <div>
                                   <button type="button" className="btn btn-link btn-sm p-0" onClick={() => setExpanded((m) => ({ ...m, [it.id]: !isExpanded }))}>
                                     {isExpanded ? "Show less" : "Show more"}
@@ -630,10 +641,22 @@ export default function WebsitesUrl() {
       </AnimatePresence>
 
       {/* Confirm delete */}
-      <Confirm open={confirm.open} title="Delete Website" message={<span>Are you sure you want to delete <b>{confirm.name}</b>? This action cannot be undone.</span>} onCancel={() => setConfirm({ open: false, id: null, name: "" })} onConfirm={doDelete} />
+      <Confirm
+        open={confirm.open}
+        title="Delete Website"
+        message={<span>Are you sure you want to delete <b>{confirm.name}</b>? This action cannot be undone.</span>}
+        onCancel={() => setConfirm({ open: false, id: null, name: "" })}
+        onConfirm={doDelete}
+      />
 
-      {/* Centered notice (no overlay, always at center) */}
-      <CenterNotice open={notice.open} type={notice.type} title={notice.title} message={notice.message} onClose={() => setNotice((n) => ({ ...n, open: false }))} />
+      {/* Centered notice */}
+      <CenterNotice
+        open={notice.open}
+        type={notice.type}
+        title={notice.title}
+        message={notice.message}
+        onClose={() => setNotice((n) => ({ ...n, open: false }))}
+      />
 
       {/* Busy overlay */}
       <BusyOverlay show={loading} />

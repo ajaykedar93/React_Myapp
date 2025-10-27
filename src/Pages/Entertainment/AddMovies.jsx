@@ -81,7 +81,10 @@ export default function AddMovies() {
   const onlyDigits = (s) => String(s || "").replace(/\D/g, "");
   const clamp4 = (s) => onlyDigits(s).slice(0, 4);
   const isYear = (v) => /^\d{4}$/.test(String(v)) && +v >= 1888 && +v <= 2100;
-  const isInt = (v) => Number.isInteger(Number(v));
+
+  // STRICT integer helpers (fixes empty-string / "0" issues)
+  const isInt = (v) => /^\d+$/.test(String(v));              // non-negative integer string
+  const isPositiveInt = (v) => /^\d+$/.test(String(v)) && Number(v) > 0;
 
   // Load meta (categories, genres, count)
   useEffect(() => {
@@ -119,7 +122,7 @@ export default function AddMovies() {
     let cancelled = false;
     (async () => {
       setSubcategoryId(""); // reset selection
-      if (!isInt(categoryId)) { setSubcategories([]); return; }
+      if (!isPositiveInt(categoryId)) { setSubcategories([]); return; }
       try {
         const u = new URL(EP.SUBCATEGORIES);
         u.searchParams.set("category_id", String(categoryId));
@@ -186,7 +189,7 @@ export default function AddMovies() {
     ) && new Set(parts.map((p) => Number(p.part_number))).size === parts.length;
 
   const canPreview =
-    movieName.trim() && isInt(categoryId) && yearOk && genresOk && partsOk;
+    movieName.trim() && isPositiveInt(categoryId) && yearOk && genresOk && partsOk;
 
   // Drag & Drop
   const onDragOver = (e) => {
@@ -278,7 +281,7 @@ export default function AddMovies() {
     let cancelled = false;
     const run = async () => {
       const name = movieName.trim();
-      if (!name || !isInt(categoryId) || !yearOk) {
+      if (!name || !isPositiveInt(categoryId) || !yearOk) {
         setDupComposite({ loading: false, duplicate: false });
         return;
       }
@@ -288,7 +291,7 @@ export default function AddMovies() {
         u.searchParams.set("movie_name", name);
         u.searchParams.set("category_id", String(categoryId));
         u.searchParams.set("release_year", String(year)); // <- matches API
-        if (isInt(subcategoryId)) u.searchParams.set("subcategory_id", String(subcategoryId));
+        if (isPositiveInt(subcategoryId)) u.searchParams.set("subcategory_id", String(subcategoryId));
         const r = await fetch(u.toString());
         if (!r.ok) throw new Error("Dup composite fetch failed");
         const j = await r.json();
@@ -305,7 +308,7 @@ export default function AddMovies() {
   // Submit
   const onSubmit = async (e) => {
     e.preventDefault();
-    if (!movieName.trim() || !isInt(categoryId) || !yearOk) {
+    if (!movieName.trim() || !isPositiveInt(categoryId) || !yearOk) {
       setErrorText("Movie name, Category and a valid Year (1888–2100) are required.");
       setShowError(true);
       return;
@@ -335,10 +338,10 @@ export default function AddMovies() {
         body: JSON.stringify({
           movie_name: toTitle(movieName),
           category_id: Number(categoryId),
-          subcategory_id: isInt(subcategoryId) ? Number(subcategoryId) : null,
+          subcategory_id: isPositiveInt(subcategoryId) ? Number(subcategoryId) : null, // optional
           release_year: Number(year),
           poster_url: posterDataUrl || null,
-          genre_ids: genreIds,
+          genre_ids: genreIds, // already numbers
           is_watched: Boolean(isWatched),
         }),
       });
@@ -448,7 +451,7 @@ export default function AddMovies() {
       value={subcategoryId || ""}
       onChange={(e) => setSubcategoryId(e.target.value)}
       aria-label="Subcategory"
-      disabled={!isInt(categoryId) || subcategories.length === 0}
+      disabled={!isPositiveInt(categoryId) || subcategories.length === 0}
     >
       <option value="">{subcategories.length ? "Select subcategory (optional)" : "No subcategories"}</option>
       {subcategories.map((s) => (
@@ -847,7 +850,7 @@ export default function AddMovies() {
                   </div>
 
                   {/* Duplicate composite flag */}
-                  {isInt(categoryId) && yearOk && (
+                  {isPositiveInt(categoryId) && yearOk && (
                     <div className="col-12">
                       {dupComposite.loading && <div className="form-text">Checking duplicate (name + category + year + subcategory)…</div>}
                       {!dupComposite.loading && dupComposite.duplicate && (

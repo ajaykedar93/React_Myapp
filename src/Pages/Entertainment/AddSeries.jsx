@@ -80,7 +80,10 @@ export default function AddSeries() {
   const clamp4 = (s) => onlyDigits(s).slice(0, 4);
   const isYear = (v) => /^\d{4}$/.test(String(v)) && +v >= 1888 && +v <= 2100;
   const isNullOrYear = (v) => v === "" || isYear(v);
-  const isInt = (v) => Number.isInteger(Number(v));
+
+  // STRICT integer helpers (avoid "" -> 0 and "0" as valid)
+  const isInt = (v) => /^\d+$/.test(String(v));               // non-negative
+  const isPositiveInt = (v) => /^\d+$/.test(String(v)) && Number(v) > 0;
 
   // Load meta (categories, genres, count)
   useEffect(() => {
@@ -116,7 +119,7 @@ export default function AddSeries() {
     let cancelled = false;
     (async () => {
       setSubcategoryId("");
-      if (!isInt(categoryId)) { setSubcategories([]); return; }
+      if (!isPositiveInt(categoryId)) { setSubcategories([]); return; }
       try {
         const u = new URL(EP.SUBCATEGORIES);
         u.searchParams.set("category_id", String(categoryId));
@@ -175,7 +178,7 @@ export default function AddSeries() {
     ) && new Set(seasons.map((s) => Number(s.season_no))).size === seasons.length;
 
   const canPreview =
-    seriesName.trim() && isInt(categoryId) && yearOk && genresOk && seasonsOk;
+    seriesName.trim() && isPositiveInt(categoryId) && yearOk && genresOk && seasonsOk;
 
   // Drag & Drop
   const onDragOver = (e) => { e.preventDefault(); e.stopPropagation(); setDragActive(true); };
@@ -256,14 +259,14 @@ export default function AddSeries() {
     let cancelled = false;
     const run = async () => {
       const name = seriesName.trim();
-      if (!name || !isInt(categoryId) || !yearOk) { setDupComposite({ loading: false, duplicate: false }); return; }
+      if (!name || !isPositiveInt(categoryId) || !yearOk) { setDupComposite({ loading: false, duplicate: false }); return; }
       try {
         setDupComposite({ loading: true, duplicate: false });
         const u = new URL(EP.DUP_SERIES);
         u.searchParams.set("series_name", name);
         u.searchParams.set("category_id", String(categoryId));
         if (year !== "") u.searchParams.set("release_year", String(year)); // <-- API expects release_year
-        if (isInt(subcategoryId)) u.searchParams.set("subcategory_id", String(subcategoryId));
+        if (isPositiveInt(subcategoryId)) u.searchParams.set("subcategory_id", String(subcategoryId));
         const r = await fetch(u.toString());
         const j = await r.json();
         if (!cancelled) setDupComposite({ loading: false, duplicate: Boolean(j?.duplicate) });
@@ -278,7 +281,7 @@ export default function AddSeries() {
   // Submit
   const onSubmit = async (e) => {
     e.preventDefault();
-    if (!seriesName.trim() || !isInt(categoryId) || !yearOk) {
+    if (!seriesName.trim() || !isPositiveInt(categoryId) || !yearOk) {
       setErrorText("Series name, Category and a valid Year (empty or 1888–2100) are required.");
       setShowError(true);
       return;
@@ -308,7 +311,7 @@ export default function AddSeries() {
         body: JSON.stringify({
           series_name: toTitle(seriesName),
           category_id: Number(categoryId),
-          subcategory_id: isInt(subcategoryId) ? Number(subcategoryId) : null,
+          subcategory_id: isPositiveInt(subcategoryId) ? Number(subcategoryId) : null, // optional
           release_year: year === "" ? null : Number(year),
           poster_url: posterDataUrl || null,
           genre_ids: genreIds,
@@ -421,7 +424,7 @@ export default function AddSeries() {
       value={subcategoryId || ""}
       onChange={(e) => setSubcategoryId(e.target.value)}
       aria-label="Subcategory"
-      disabled={!isInt(categoryId) || subcategories.length === 0}
+      disabled={!isPositiveInt(categoryId) || subcategories.length === 0}
     >
       <option value="">{subcategories.length ? "Select subcategory (optional)" : "No subcategories"}</option>
       {subcategories.map((s) => (
@@ -815,7 +818,7 @@ export default function AddSeries() {
                   </div>
 
                   {/* Duplicate composite flag */}
-                  {isInt(categoryId) && yearOk && (
+                  {isPositiveInt(categoryId) && yearOk && (
                     <div className="col-12">
                       {dupComposite.loading && <div className="form-text">Checking duplicate (name + category + year + subcategory)…</div>}
                       {!dupComposite.loading && dupComposite.duplicate && (
