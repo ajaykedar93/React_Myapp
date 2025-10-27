@@ -18,8 +18,8 @@ const COLORS = {
   surface: "rgba(255, 255, 255, 0.86)",
   border: "rgba(2, 6, 23, 0.10)",
   softShadow: "0 12px 38px rgba(2, 6, 23, 0.10)",
-  accent: "#22d3ee",        // cyan
-  accent2: "#a78bfa",       // violet
+  accent: "#22d3ee",
+  accent2: "#a78bfa",
   glow: "rgba(34, 211, 238, 0.35)",
   bgGradA: "rgba(56,189,248,.24)",
   bgGradB: "rgba(168,85,247,.22)",
@@ -43,19 +43,42 @@ export default function UserTabs() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("investment");
 
-  // fixed tabs height measurement (navbar is locked by --ut-nav-h)
+  // Live NAV height (prevents overlap)
+  const navRef = useRef(null);
+  const [navH, setNavH] = useState(72);
+
+  // Small-screen top offset above navbar
+  const [navOffset, setNavOffset] = useState(0); // px
+
+  useLayoutEffect(() => {
+    const applyOffsets = () => {
+      const h = navRef.current?.offsetHeight || 72;
+      setNavH(h);
+      // 8px gap on XS screens, 0 on others
+      setNavOffset(window.innerWidth <= 576 ? 8 : 0);
+    };
+    applyOffsets();
+
+    const ro = new ResizeObserver(applyOffsets);
+    if (navRef.current) ro.observe(navRef.current);
+
+    const onResize = () => applyOffsets();
+    window.addEventListener("resize", onResize);
+
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", onResize);
+    };
+  }, []);
+
+  // fixed tabs height measurement
   const tabsWrapRef = useRef(null);
   const [tabsH, setTabsH] = useState(56);
 
-  // tab strip & indicator
-  const tabListRef = useRef(null);
-  const tabRefs = useRef({});
-  const [indicator, setIndicator] = useState({ left: 0, width: 0 });
-
   useLayoutEffect(() => {
     const calcTabs = () => setTabsH(tabsWrapRef.current?.offsetHeight || 56);
-    calcTabs();
     const ro = new ResizeObserver(calcTabs);
+    calcTabs();
     if (tabsWrapRef.current) ro.observe(tabsWrapRef.current);
     window.addEventListener("resize", calcTabs);
     return () => {
@@ -64,7 +87,11 @@ export default function UserTabs() {
     };
   }, []);
 
-  // indicator position (accounts for horizontal scroll)
+  // tabs indicator
+  const tabListRef = useRef(null);
+  const tabRefs = useRef({});
+  const [indicator, setIndicator] = useState({ left: 0, width: 0 });
+
   const updateIndicator = () => {
     const el = tabRefs.current[activeTab];
     const bar = tabListRef.current;
@@ -103,7 +130,7 @@ export default function UserTabs() {
   return (
     <div
       style={{
-        height: "100vh",
+        height: "100dvh", // mobile-safe viewport
         width: "100vw",
         overflow: "hidden",
         color: COLORS.text,
@@ -114,10 +141,15 @@ export default function UserTabs() {
         fontFamily:
           "Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
         position: "relative",
+        paddingTop: "env(safe-area-inset-top, 0px)",
       }}
     >
-      {/* ===== FIXED NAVBAR (same size/layout as other pages; only color differs) ===== */}
-      <nav className="ut-nav">
+      {/* ===== FIXED NAVBAR (now with top offset on small screens) ===== */}
+      <nav
+        ref={navRef}
+        className="ut-nav"
+        style={{ top: navOffset }} // <— little space above navbar on small screens
+      >
         <div className="container-fluid d-flex justify-content-between align-items-center px-3">
           <div className="d-flex align-items-center gap-2">
             <div
@@ -131,7 +163,6 @@ export default function UserTabs() {
             >
               UD
             </div>
-            {/* Bold black heading to match others */}
             <h1 className="ut-title m-0">User Dashboard</h1>
           </div>
 
@@ -146,14 +177,14 @@ export default function UserTabs() {
         </div>
       </nav>
 
-      {/* Spacer so content starts beneath navbar (same as other pages) */}
-      <div className="ut-nav-spacer" />
+      {/* Spacer equals REAL navbar height + small top offset */}
+      <div style={{ height: navH + navOffset }} />
 
-      {/* ===== FIXED TABS under navbar ===== */}
+      {/* ===== FIXED TABS under navbar (account for navOffset) ===== */}
       <div
         ref={tabsWrapRef}
         className="ut-tabs-wrap"
-        style={{ top: "var(--ut-nav-h)" }}
+        style={{ top: navOffset + navH }}
       >
         <div className="container" style={{ maxWidth: 1180 }}>
           <div
@@ -200,11 +231,11 @@ export default function UserTabs() {
         </div>
       </div>
 
-      {/* ===== ONLY content scrolls ===== */}
+      {/* ===== ONLY content scrolls (also include navOffset) ===== */}
       <div
         style={{
           position: "absolute",
-          top: `calc(var(--ut-nav-h) + ${tabsH}px)`,
+          top: navOffset + navH + tabsH,
           left: 0,
           right: 0,
           bottom: FOOTER_H,
@@ -251,38 +282,31 @@ export default function UserTabs() {
         }}
       />
 
-      {/* ===== Styles to lock sizing & match other pages ===== */}
+      {/* ===== Styles ===== */}
       <style>{`
-        :root {
-          --ut-nav-h: 72px;            /* desktop/tablet = 72px */
-        }
-        @media (max-width: 575.98px) {
-          :root { --ut-nav-h: 64px; }  /* mobile = 64px */
-        }
-
         .ut-nav {
-          position: fixed; top: 0; left: 0; right: 0;
-          height: var(--ut-nav-h); z-index: 80;
+          position: fixed; left: 0; right: 0;
+          z-index: 80;
           display: flex; align-items: center;
-          padding: 0 14px;
-          padding-top: env(safe-area-inset-top, 0px);
-          /* Blue guardian gradient (different color, same size) */
+          min-height: 64px;
+          padding: 10px 14px;
+          padding-top: calc(env(safe-area-inset-top, 0px) + 6px);
           background: linear-gradient(90deg, #1e3a8a 0%, #2563eb 50%, #38bdf8 100%);
           border-bottom: 1px solid rgba(255,255,255,0.12);
           box-shadow: 0 10px 30px rgba(2,6,23,0.18), inset 0 -1px 0 rgba(255,255,255,0.06);
           backdrop-filter: saturate(140%) blur(6px);
           -webkit-backdrop-filter: saturate(140%) blur(6px);
+          /* 'top' is set inline via style to include navOffset */
         }
         .ut-title {
           font-weight: 900;
           font-size: clamp(18px, 2.4vw, 24px);
           letter-spacing: .2px;
-          color: #0b0b0b;    /* bold black heading to match others */
+          color: #0b0b0b;
           text-shadow: none;
+          line-height: 1.2;
         }
-        .ut-nav-spacer { height: var(--ut-nav-h); }
 
-        /* Tabs wrapper fixed under navbar */
         .ut-tabs-wrap {
           position: fixed; left: 0; right: 0; z-index: 60;
           background: ${COLORS.surface};
@@ -322,6 +346,7 @@ export default function UserTabs() {
           white-space: nowrap;
           scroll-snap-align: center;
           transition: transform .16s ease, box-shadow .16s ease, background .2s ease;
+          touch-action: manipulation;
         }
         .ut-chip:hover { transform: translateY(-1px); }
         .ut-chip.is-active {
@@ -339,8 +364,12 @@ export default function UserTabs() {
         @media (prefers-reduced-motion: reduce) {
           * { animation: none !important; transition: none !important; }
         }
+
+        /* Small-screen refinements */
         @media (max-width: 576px) {
           .ut-chip { padding: 0.55rem 0.85rem !important; font-size: .9rem !important; }
+          .ut-title { font-size: 18px; }
+          .ut-nav .btn { padding: .35rem .7rem; font-size: .875rem; }
         }
       `}</style>
     </div>

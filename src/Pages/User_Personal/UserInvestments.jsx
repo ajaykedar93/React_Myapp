@@ -33,22 +33,39 @@ export default function UserInvestments() {
         --vio:#a78bfa;
         --ink:#0b1221;
         --mut:#64748b;
-        --bg1:radial-gradient(1200px 600px at -10% -10%, rgba(6,182,212,0.18), transparent 60%),
-              radial-gradient(1200px 600px at 110% -10%, rgba(34,197,94,0.16), transparent 60%),
-              linear-gradient(180deg, #ffffff 0%, #fcfffb 45%, #f7fbff 100%);
+        --bg1:
+          radial-gradient(1000px 500px at -10% -10%, rgba(6,182,212,0.18), transparent 60%),
+          radial-gradient(1000px 500px at 110% -10%, rgba(34,197,94,0.16), transparent 60%),
+          linear-gradient(180deg, #ffffff 0%, #fcfffb 45%, #f7fbff 100%);
       }
-      .glass {backdrop-filter: blur(10px); background: rgba(255,255,255,0.86); border:1px solid rgba(15,23,42,0.12); border-radius:16px; box-shadow:0 12px 34px rgba(0,0,0,.08)}
-      .chip{padding:.15rem .55rem; border-radius:999px; font-weight:700; font-size:.78rem; letter-spacing:.3px}
+      .glass {
+        backdrop-filter: blur(8px);
+        background: rgba(255,255,255,0.9);
+        border:1px solid rgba(15,23,42,0.12);
+        border-radius:16px;
+        box-shadow:0 10px 28px rgba(0,0,0,.06)
+      }
+      .chip{padding:.2rem .6rem; border-radius:999px; font-weight:700; font-size:.78rem; letter-spacing:.3px}
       .chip-profit{background:linear-gradient(90deg,#dcfce7,#86efac); color:#065f46; border:1px solid rgba(16,185,129,.3)}
       .chip-loss{background:linear-gradient(90deg,#fee2e2,#fca5a5); color:#7f1d1d; border:1px solid rgba(239,68,68,.3)}
       .btn-gradient{background:linear-gradient(90deg,var(--sec),var(--pri)); color:#05212a; border:none; font-weight:700; box-shadow:0 8px 24px -12px rgba(6,182,212,.6)}
       .btn-outline-soft{border:1px solid rgba(15,23,42,.12)}
-      .sticky-top-shadow{position:sticky; top:0; z-index:9; box-shadow:0 10px 22px -18px rgba(0,0,0,.25); backdrop-filter: blur(6px)}
+      .sticky-top-shadow{
+        position:sticky; top:0; z-index:9;
+        box-shadow:0 10px 22px -18px rgba(0,0,0,.25);
+        backdrop-filter: blur(6px)
+      }
       .table thead th{position:sticky; top:0; z-index:1; background:#f8fafc}
       .card-hover{transition:transform .2s ease, box-shadow .2s ease}
-      .card-hover:hover{transform:translateY(-2px); box-shadow:0 12px 26px rgba(0,0,0,.08)}
+      .card-hover:hover{transform:translateY(-1px); box-shadow:0 12px 26px rgba(0,0,0,.08)}
+      /* Responsive visibility */
       @media (max-width: 991.98px){ .desktop-table{display:none !important} }
       @media (min-width: 992px){ .mobile-cards{display:none !important} }
+      /* Tighter on very small screens */
+      @media (max-width: 576px){
+        .form-label{font-size:.9rem}
+        .form-select, .form-control{font-size:.95rem; padding:.55rem .75rem}
+      }
     `;
     document.head.appendChild(s);
   }, []);
@@ -78,8 +95,7 @@ export default function UserInvestments() {
   const [total, setTotal] = useState(0);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-
-  // scroll to top on page change (nice UX)
+  // scroll to top on page change (within content scroller)
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [page]);
@@ -119,7 +135,7 @@ export default function UserInvestments() {
   const upsertRow = (row) => {
     setList((prev) => {
       const i = prev.findIndex((r) => r.id === row.id);
-      if (i === -1) return [row, ...prev]; // prepend if not in page
+      if (i === -1) return [row, ...prev];
       const copy = prev.slice();
       copy[i] = row;
       return copy;
@@ -164,7 +180,6 @@ export default function UserInvestments() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Add failed");
 
-      // Optimistic: if we’re on page 1 and filters match, show instantly
       if (page === 1) upsertRow(json);
       setTotal((t) => t + 1);
 
@@ -176,7 +191,6 @@ export default function UserInvestments() {
         showConfirmButton: false,
       });
 
-      // clear numbers but keep month selectors
       setForm((f) => ({
         ...f,
         job_income: "",
@@ -186,7 +200,6 @@ export default function UserInvestments() {
         other_kharch: "",
       }));
 
-      // Re-sync from server (keeps pagination correct)
       await fetchList({ resetPage: true });
     } catch (e) {
       Swal.fire("Error", e.message || "Add failed", "error");
@@ -208,7 +221,6 @@ export default function UserInvestments() {
     });
     if (!r.isConfirmed) return;
 
-    // Optimistic remove
     const prevList = list;
     const prevTotal = total;
     removeRow(id);
@@ -223,7 +235,6 @@ export default function UserInvestments() {
 
       Swal.fire({ icon: "success", title: "Deleted", timer: 1100, showConfirmButton: false });
 
-      // If we deleted last item on last page, go back a page, else re-fetch current
       const newCount = prevTotal - 1;
       const maxPage = Math.max(1, Math.ceil(newCount / PAGE_SIZE));
       if (page > maxPage) {
@@ -232,7 +243,6 @@ export default function UserInvestments() {
         fetchList();
       }
     } catch (e) {
-      // Revert optimistic on error
       setList(prevList);
       setTotal(prevTotal);
       Swal.fire("Error", e.message || "Delete failed", "error");
@@ -271,13 +281,10 @@ export default function UserInvestments() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Update failed");
 
-      // Optimistic: reflect immediately
       upsertRow(json);
 
       Swal.fire({ icon: "success", title: "Updated", timer: 1100, showConfirmButton: false });
       setEdit(null);
-
-      // Re-sync page from server
       fetchList();
     } catch (e) {
       Swal.fire("Error", e.message || "Update failed", "error");
@@ -295,29 +302,32 @@ export default function UserInvestments() {
   /* ---------- Render ---------- */
   return (
     <div
-      className="container-xxl py-4"
+      className="container-fluid py-3 py-sm-4"
       style={{
-        minHeight: "100vh",
+        minHeight: "100%",
         background: "var(--bg1)",
         color: "var(--ink)",
         fontFamily: "Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+        paddingLeft: "12px",
+        paddingRight: "12px",
       }}
     >
       {/* Header */}
-      <div className="glass p-3 p-md-4 mb-3 sticky-top-shadow">
-        <div className="d-flex justify-content-between align-items-center flex-wrap gap-3">
-          <div className="d-flex align-items-center gap-3">
+      <div className="glass p-2 p-sm-3 p-md-4 mb-3 sticky-top-shadow">
+        <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <div className="d-flex align-items-center gap-2">
             <div
               style={{
-                width: 44, height: 44, borderRadius: 12,
+                width: 40, height: 40, borderRadius: 10,
                 background: "linear-gradient(180deg,#06b6d4,#22c55e)",
                 display: "grid", placeItems: "center", color: "#05212a", fontWeight: 800,
+                fontSize: 13
               }}
             >
               UI
             </div>
             <div>
-              <h4
+              <h5
                 className="m-0"
                 style={{
                   background: "linear-gradient(90deg,#06b6d4,#22c55e,#a78bfa)",
@@ -327,20 +337,19 @@ export default function UserInvestments() {
                 }}
               >
                 User Investment (Monthly)
-              </h4>
+              </h5>
               <div className="text-muted small">
-                Add your month-end numbers. We auto-calc totals & Profit/Loss.
+                Add month-end numbers. We auto-calc totals & Profit/Loss.
               </div>
             </div>
           </div>
 
           {/* Quick filters */}
-          <div className="d-flex align-items-center gap-2">
+          <div className="d-flex align-items-center gap-2 w-100 w-sm-auto">
             <select
-              className="form-select form-select-sm"
+              className="form-select form-select-sm flex-grow-1"
               value={qMonth}
               onChange={(e) => setQMonth(e.target.value)}
-              style={{ minWidth: 140 }}
               aria-label="Filter month"
             >
               <option value="">All Months</option>
@@ -351,10 +360,9 @@ export default function UserInvestments() {
             </select>
 
             <select
-              className="form-select form-select-sm"
+              className="form-select form-select-sm flex-grow-1"
               value={qYear}
               onChange={(e) => setQYear(e.target.value)}
-              style={{ minWidth: 110 }}
               aria-label="Filter year"
             >
               <option value="">All Years</option>
@@ -372,8 +380,8 @@ export default function UserInvestments() {
       </div>
 
       {/* Add Form */}
-      <div className="glass p-3 p-md-4 mb-4">
-        <h5 className="mb-3">Add Month Investment</h5>
+      <div className="glass p-2 p-sm-3 p-md-4 mb-4">
+        <h6 className="mb-3">Add Month Investment</h6>
 
         {/* Month choice */}
         <div className="d-flex flex-wrap align-items-center gap-3 mb-2">
@@ -389,7 +397,7 @@ export default function UserInvestments() {
           </div>
 
           {!form.useCurrentMonth && (
-            <div className="d-flex flex-wrap align-items-center gap-2">
+            <div className="d-flex flex-wrap align-items-center gap-2 w-100 w-sm-auto">
               <select
                 className="form-select"
                 style={{ minWidth: 160 }}
@@ -411,32 +419,32 @@ export default function UserInvestments() {
           )}
         </div>
 
-        {/* Numbers grid */}
-        <div className="row g-3">
-          <div className="col-12 col-md-4">
+        {/* Numbers grid (mobile first) */}
+        <div className="row g-2 g-sm-3">
+          <div className="col-12 col-sm-6 col-lg-4">
             <label className="form-label">Job Income *</label>
             <input
-              inputMode="decimal"
+              type="number" step="0.01" inputMode="decimal"
               className="form-control"
               placeholder="e.g. 45000"
               value={form.job_income}
               onChange={(e) => setForm({ ...form, job_income: e.target.value })}
             />
           </div>
-          <div className="col-12 col-md-4">
+          <div className="col-12 col-sm-6 col-lg-4">
             <label className="form-label">Extra Income (optional)</label>
             <input
-              inputMode="decimal"
+              type="number" step="0.01" inputMode="decimal"
               className="form-control"
               placeholder="e.g. 5000"
               value={form.extra_income}
               onChange={(e) => setForm({ ...form, extra_income: e.target.value })}
             />
           </div>
-          <div className="col-12 col-md-4">
+          <div className="col-12 col-sm-6 col-lg-4">
             <label className="form-label">Month Kharch *</label>
             <input
-              inputMode="decimal"
+              type="number" step="0.01" inputMode="decimal"
               className="form-control"
               placeholder="e.g. 12000"
               value={form.month_kharch}
@@ -444,20 +452,20 @@ export default function UserInvestments() {
             />
           </div>
 
-          <div className="col-12 col-md-4">
+          <div className="col-12 col-sm-6 col-lg-4">
             <label className="form-label">Total EMI *</label>
             <input
-              inputMode="decimal"
+              type="number" step="0.01" inputMode="decimal"
               className="form-control"
               placeholder="e.g. 8000"
               value={form.total_emi}
               onChange={(e) => setForm({ ...form, total_emi: e.target.value })}
             />
           </div>
-          <div className="col-12 col-md-4">
+          <div className="col-12 col-sm-6 col-lg-4">
             <label className="form-label">Other Kharch (optional)</label>
             <input
-              inputMode="decimal"
+              type="number" step="0.01" inputMode="decimal"
               className="form-control"
               placeholder="e.g. 3000"
               value={form.other_kharch}
@@ -493,8 +501,8 @@ export default function UserInvestments() {
       </div>
 
       {/* List Section */}
-      <div className="glass p-2 p-md-3">
-        <div className="d-flex justify-content-between align-items-center px-2 px-md-1 py-2">
+      <div className="glass p-2 p-sm-3">
+        <div className="d-flex justify-content-between align-items-center px-1 py-2">
           <h6 className="m-0">Monthly Records</h6>
           <div className="text-muted small">Total: <b>{total}</b></div>
         </div>
@@ -605,7 +613,7 @@ export default function UserInvestments() {
         </div>
 
         {/* Mobile Cards */}
-        <div className="mobile-cards p-2">
+        <div className="mobile-cards p-1 p-sm-2">
           {loading ? (
             <div className="text-center py-4"><LoadingSpiner/></div>
           ) : list.length === 0 ? (
@@ -624,7 +632,7 @@ export default function UserInvestments() {
                     </span>
                   </div>
 
-                  <div className="mt-3">
+                  <div className="mt-2">
                     <div className="d-flex justify-content-between">
                       <div className="text-muted">Income</div>
                       <div className="fw-semibold">₹ {fmtMoney(r.total_income)}</div>
@@ -713,7 +721,7 @@ export default function UserInvestments() {
           style={{ background: "rgba(0,0,0,.25)", zIndex: 1050 }}
           onClick={(e) => e.target === e.currentTarget && setEdit(null)}
         >
-          <div className="glass mx-auto mt-5 p-3 p-md-4" style={{ maxWidth: 560 }}>
+          <div className="glass mx-auto my-4 p-3 p-sm-4" style={{ maxWidth: 560 }}>
             <div className="d-flex justify-content-between align-items-start">
               <h5 className="m-0">Edit {edit.month_label}</h5>
               <button className="btn btn-light btn-sm" onClick={() => setEdit(null)}>✕</button>
@@ -742,48 +750,48 @@ export default function UserInvestments() {
             </div>
 
             {/* Numbers */}
-            <div className="row g-3 mt-2">
-              <div className="col-12 col-md-6">
+            <div className="row g-2 g-sm-3 mt-2">
+              <div className="col-12 col-sm-6">
                 <label className="form-label">Job Income</label>
                 <input
                   className="form-control"
-                  inputMode="decimal"
+                  type="number" step="0.01" inputMode="decimal"
                   value={edit.job_income}
                   onChange={(e) => setEdit({ ...edit, job_income: e.target.value })}
                 />
               </div>
-              <div className="col-12 col-md-6">
+              <div className="col-12 col-sm-6">
                 <label className="form-label">Extra Income</label>
                 <input
                   className="form-control"
-                  inputMode="decimal"
+                  type="number" step="0.01" inputMode="decimal"
                   value={edit.extra_income}
                   onChange={(e) => setEdit({ ...edit, extra_income: e.target.value })}
                 />
               </div>
-              <div className="col-12 col-md-6">
+              <div className="col-12 col-sm-6">
                 <label className="form-label">Month Kharch</label>
                 <input
                   className="form-control"
-                  inputMode="decimal"
+                  type="number" step="0.01" inputMode="decimal"
                   value={edit.month_kharch}
                   onChange={(e) => setEdit({ ...edit, month_kharch: e.target.value })}
                 />
               </div>
-              <div className="col-12 col-md-6">
+              <div className="col-12 col-sm-6">
                 <label className="form-label">Total EMI</label>
                 <input
                   className="form-control"
-                  inputMode="decimal"
+                  type="number" step="0.01" inputMode="decimal"
                   value={edit.total_emi}
                   onChange={(e) => setEdit({ ...edit, total_emi: e.target.value })}
                 />
               </div>
-              <div className="col-12 col-md-6">
+              <div className="col-12 col-sm-6">
                 <label className="form-label">Other Kharch</label>
                 <input
                   className="form-control"
-                  inputMode="decimal"
+                  type="number" step="0.01" inputMode="decimal"
                   value={edit.other_kharch}
                   onChange={(e) => setEdit({ ...edit, other_kharch: e.target.value })}
                 />

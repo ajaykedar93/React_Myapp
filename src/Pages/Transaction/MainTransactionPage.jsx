@@ -20,141 +20,82 @@ export default function MainTransactionPage() {
   const [loading, setLoading] = useState(false);
   const [popup, setPopup] = useState({ show: false, message: "", type: "" });
 
-  // delete main-transaction confirm
   const [deleteConfirm, setDeleteConfirm] = useState({ show: false, transactionId: null });
-
-  // delete daily-transaction confirm
   const [deleteDaily, setDeleteDaily] = useState({ show: false, id: null, busy: false });
 
-  // edit daily-transaction modal
   const [editModal, setEditModal] = useState({
-    show: false,
-    busy: false,
-    id: null,
-    form: {
-      amount: "",
-      type: "debit",
-      category_id: "",
-      subcategory_id: "",
-      quantity: 0,
-      purpose: "",
-      transaction_date: "", // keep original date (not posted here)
-    },
+    show: false, busy: false, id: null,
+    form: { amount:"", type:"debit", category_id:"", subcategory_id:"", quantity:0, purpose:"", transaction_date:"" }
   });
 
-  // Get local current date in YYYY-MM-DD format
   const getToday = () => {
-    const today = new Date();
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, "0");
-    const dd = String(today.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
   };
 
-  // Fetch daily transactions and suggestions for a date
   const fetchAllForDate = async (date) => {
     if (!date) return;
     setLoading(true);
     try {
       const dailyRes = await axios.get(`${API_MAIN}/daily`, { params: { date } });
       setDailyTransactions(dailyRes.data.dailyTransactions || []);
-
       const suggRes = await axios.get(`${API_MAIN}/suggestions`, { params: { date } });
       setSuggestions(suggRes.data.suggestions || []);
-    } catch (err) {
-      console.error(err);
-      showPopup("Failed to fetch transactions", "error");
-      setDailyTransactions([]);
-      setSuggestions([]);
-    } finally {
-      setLoading(false);
-      setPage(1);
-    }
+    } catch (e) {
+      console.error(e); showPopup("Failed to fetch transactions","error");
+      setDailyTransactions([]); setSuggestions([]);
+    } finally { setLoading(false); setPage(1); }
   };
 
-  // Fetch main transactions for a date
   const fetchMainTransactions = async (date) => {
     try {
       const res = await axios.get(`${API_MAIN}`, { params: { date } });
       setMainTransactions(res.data);
-    } catch (err) {
-      console.error(err);
-      showPopup("Failed to fetch main transactions", "error");
-    }
+    } catch (e) { console.error(e); showPopup("Failed to fetch main transactions","error"); }
   };
 
-  // Fetch master data for edit form
   const fetchMasters = async () => {
     try {
-      const [c, s] = await Promise.all([axios.get(API_CAT), axios.get(API_SUBCAT)]);
-      setCategories(c.data || []);
-      setSubcategories(s.data || []);
-    } catch (err) {
-      console.error(err);
-      // non-blocking
-    }
+      const [c,s] = await Promise.all([axios.get(API_CAT), axios.get(API_SUBCAT)]);
+      setCategories(c.data||[]); setSubcategories(s.data||[]);
+    } catch {}
   };
 
-  // Save daily transactions to main
   const saveDetails = async () => {
-    if (!selectedDate) {
-      showPopup("Please select a date", "error");
-      return;
-    }
-    const allIds = dailyTransactions.map((t) => t.daily_transaction_id);
-    if (allIds.length === 0) {
-      showPopup("No transactions to save", "info");
-      return;
-    }
-
+    if (!selectedDate) return showPopup("Please select a date","error");
+    const ids = dailyTransactions.map(t=>t.daily_transaction_id);
+    if (ids.length===0) return showPopup("No transactions to save","info");
     try {
       setLoading(true);
-      await axios.post(`${API_MAIN}/save`, { date: selectedDate, daily_transaction_ids: allIds });
-      showPopup("Transactions saved successfully", "success");
+      await axios.post(`${API_MAIN}/save`, { date: selectedDate, daily_transaction_ids: ids });
+      showPopup("Transactions saved successfully","success");
       await Promise.all([fetchAllForDate(selectedDate), fetchMainTransactions(selectedDate)]);
-    } catch (err) {
-      console.error(err);
-      showPopup("Failed to save transactions", "error");
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { console.error(e); showPopup("Failed to save transactions","error"); }
+    finally { setLoading(false); }
   };
 
-  // Delete main transaction
-  const confirmDelete = (transactionId) => setDeleteConfirm({ show: true, transactionId });
+  const confirmDelete = (transactionId) => setDeleteConfirm({ show:true, transactionId });
   const handleDeleteConfirmed = async () => {
     if (!deleteConfirm.transactionId) return;
     try {
       setLoading(true);
       await axios.delete(`${API_MAIN}/${deleteConfirm.transactionId}`);
-      showPopup("Main transaction deleted", "success");
+      showPopup("Main transaction deleted","success");
       await Promise.all([fetchMainTransactions(selectedDate), fetchAllForDate(selectedDate)]);
-    } catch (err) {
-      console.error(err);
-      showPopup("Failed to delete transaction", "error");
-    } finally {
-      setLoading(false);
-      setDeleteConfirm({ show: false, transactionId: null });
-    }
+    } catch (e) { console.error(e); showPopup("Failed to delete transaction","error"); }
+    finally { setLoading(false); setDeleteConfirm({ show:false, transactionId:null }); }
   };
 
-  // Popup
-  const showPopup = (message, type) => {
-    setPopup({ show: true, message, type });
-    setTimeout(() => setPopup({ show: false, message: "", type: "" }), 2500);
+  const showPopup = (message,type) => {
+    setPopup({ show:true, message, type });
+    setTimeout(()=>setPopup({ show:false, message:"", type:""}), 2200);
   };
 
-  // Search handler
   const handleSearchClick = () => {
-    if (!selectedDate) {
-      showPopup("Please select a valid date", "error");
-      return;
-    }
-    fetchAllForDate(selectedDate);
-    fetchMainTransactions(selectedDate);
+    if (!selectedDate) return showPopup("Please select a valid date","error");
+    fetchAllForDate(selectedDate); fetchMainTransactions(selectedDate);
   };
 
-  // Pagination
   const startIdx = (page - 1) * PER_PAGE;
   const pagedDailyTransactions = useMemo(
     () => dailyTransactions.slice(startIdx, startIdx + PER_PAGE),
@@ -162,18 +103,10 @@ export default function MainTransactionPage() {
   );
   const totalPages = Math.max(1, Math.ceil(dailyTransactions.length / PER_PAGE));
 
-  // Totals
-  const totalDebit = dailyTransactions.reduce(
-    (acc, t) => acc + (t.type === "debit" ? Number(t.amount) : 0),
-    0
-  );
-  const totalCredit = dailyTransactions.reduce(
-    (acc, t) => acc + (t.type === "credit" ? Number(t.amount) : 0),
-    0
-  );
+  const totalDebit  = dailyTransactions.reduce((a,t)=>a+(t.type==="debit"?+t.amount:0),0);
+  const totalCredit = dailyTransactions.reduce((a,t)=>a+(t.type==="credit"?+t.amount:0),0);
   const totalTransactions = dailyTransactions.length;
 
-  // Initialize page with current date and auto-update daily
   useEffect(() => {
     const today = getToday();
     setSelectedDate(today);
@@ -181,191 +114,158 @@ export default function MainTransactionPage() {
     fetchMainTransactions(today);
     fetchMasters();
 
-    const updateAtMidnight = () => {
+    const tickToMidnight = () => {
       const now = new Date();
-      const nextMidnight = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate() + 1
-      );
-      const msUntilMidnight = nextMidnight - now;
-
-      const timer = setTimeout(() => {
-        const newDate = getToday();
-        setSelectedDate(newDate);
-        fetchAllForDate(newDate);
-        fetchMainTransactions(newDate);
-        updateAtMidnight(); // repeat for next day
-      }, msUntilMidnight);
-
-      return () => clearTimeout(timer);
+      const next = new Date(now.getFullYear(), now.getMonth(), now.getDate()+1);
+      const id = setTimeout(() => {
+        const nd = getToday();
+        setSelectedDate(nd);
+        fetchAllForDate(nd);
+        fetchMainTransactions(nd);
+        tickToMidnight();
+      }, next - now);
+      return () => clearTimeout(id);
     };
-
-    const cleanup = updateAtMidnight();
+    const cleanup = tickToMidnight();
     return cleanup;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line
   }, []);
 
-  // ===== Daily row actions (Update/Delete) =====
   const openEdit = (t) => {
     setEditModal({
-      show: true,
-      busy: false,
-      id: t.daily_transaction_id,
+      show:true, busy:false, id:t.daily_transaction_id,
       form: {
-        amount: t.amount ?? "",
-        type: t.type ?? "debit",
-        category_id: t.category_id ?? "",
-        subcategory_id: t.subcategory_id ?? "",
-        quantity: t.quantity ?? 0,
-        purpose: t.purpose ?? "",
-        transaction_date: t.transaction_date ?? selectedDate,
-      },
+        amount: t.amount??"", type: t.type??"debit",
+        category_id: t.category_id??"", subcategory_id: t.subcategory_id??"",
+        quantity: t.quantity??0, purpose: t.purpose??"", transaction_date: t.transaction_date??selectedDate
+      }
     });
   };
-
-  const closeEdit = () =>
-    setEditModal((m) => ({
-      ...m,
-      show: false,
-      busy: false,
-      id: null,
-    }));
-
+  const closeEdit = () => setEditModal(m=>({ ...m, show:false, busy:false, id:null }));
   const handleEditChange = (e) => {
     const { name, value } = e.target;
-    setEditModal((m) => ({
+    setEditModal(m => ({
       ...m,
       form: {
         ...m.form,
-        [name]: name === "quantity" ? Number(value) : value,
-        ...(name === "category_id" ? { subcategory_id: "" } : null),
-      },
+        [name]: name==="quantity" ? Number(value) : value,
+        ...(name==="category_id" ? { subcategory_id:"" } : null),
+      }
     }));
   };
-
   const saveEdit = async () => {
     if (!editModal.id) return;
     const f = editModal.form;
-    if (!f.amount || !f.category_id) {
-      showPopup("Please fill required fields (Amount, Category)", "error");
-      return;
-    }
+    if (!f.amount || !f.category_id) return showPopup("Please fill required fields (Amount, Category)","error");
     try {
-      setEditModal((m) => ({ ...m, busy: true }));
+      setEditModal(m=>({ ...m, busy:true }));
       await axios.put(`${API_DAILY}/${editModal.id}`, {
-        amount: f.amount,
-        type: f.type,
-        category_id: f.category_id,
-        subcategory_id: f.subcategory_id || null,
-        quantity: f.quantity ?? 0, // optional, default 0
-        purpose: f.purpose || null,
+        amount: f.amount, type: f.type, category_id: f.category_id,
+        subcategory_id: f.subcategory_id || null, quantity: f.quantity ?? 0, purpose: f.purpose || null
       });
-      showPopup("Transaction updated successfully", "success");
+      showPopup("Transaction updated successfully","success");
       closeEdit();
       await fetchAllForDate(selectedDate);
-    } catch (err) {
-      console.error(err);
-      showPopup("Failed to update transaction", "error");
-      setEditModal((m) => ({ ...m, busy: false }));
-    }
+    } catch (e) { console.error(e); showPopup("Failed to update transaction","error"); setEditModal(m=>({ ...m, busy:false })); }
   };
 
-  const askDeleteDaily = (id) => setDeleteDaily({ show: true, id, busy: false });
-  const cancelDeleteDaily = () => setDeleteDaily({ show: false, id: null, busy: false });
+  const askDeleteDaily = (id) => setDeleteDaily({ show:true, id, busy:false });
+  const cancelDeleteDaily = () => setDeleteDaily({ show:false, id:null, busy:false });
   const confirmDeleteDaily = async () => {
     if (!deleteDaily.id) return;
     try {
-      setDeleteDaily((d) => ({ ...d, busy: true }));
+      setDeleteDaily(d=>({ ...d, busy:true }));
       await axios.delete(`${API_DAILY}/${deleteDaily.id}`);
-      showPopup("Transaction deleted successfully", "success");
+      showPopup("Transaction deleted successfully","success");
       cancelDeleteDaily();
       await fetchAllForDate(selectedDate);
-    } catch (err) {
-      console.error(err);
-      showPopup("Failed to delete transaction", "error");
-      setDeleteDaily((d) => ({ ...d, busy: false }));
-    }
+    } catch (e) { console.error(e); showPopup("Failed to delete transaction","error"); setDeleteDaily(d=>({ ...d, busy:false })); }
   };
 
-  // Filter subcategories for edit modal
   const editSubs = useMemo(() => {
     const cid = Number(editModal.form.category_id || 0);
-    return subcategories.filter((s) => Number(s.category_id) === cid);
+    return subcategories.filter(s => Number(s.category_id)===cid);
   }, [subcategories, editModal.form.category_id]);
 
   return (
-    <div className="container my-4 position-relative">
-      {/* Overlay loading */}
+    <div className="container-fluid py-3" style={{ background: "var(--bg)" }}>
+      {/* Mobile-first styles */}
+      <style>{`
+        :root{
+          --ink-900:#0f172a; --ink-700:#334155; --ink-600:#475569;
+          --surface:#ffffff; --border:#e6e9ef; --bg:#f6f8fb;
+          --brand-grad: linear-gradient(90deg,#5f4bb6 0%, #1f5f78 100%);
+          --px: clamp(12px, 4vw, 22px);          /* side padding */
+          --rad: 14px;
+          --fs: clamp(14px, 3.5vw, 16px);        /* base font */
+          --fs-sm: clamp(12px, 3.2vw, 14px);
+          --fs-lg: clamp(16px, 4.3vw, 18px);
+        }
+        .page-wrap{ max-width: 1100px; margin: 0 auto; padding: 0 var(--px); }
+        .title{
+          font-size: clamp(18px,5.4vw,26px); font-weight: 800; letter-spacing:.3px;
+          background: var(--brand-grad); -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+        }
+        .card-ui{ background:var(--surface); border:1px solid var(--border); border-radius:var(--rad); box-shadow:0 8px 24px rgba(2,6,23,.06); padding:12px; }
+        .btn-solid{ background:#1f2937; color:#fff; border:none; border-radius:12px; padding:.6rem 1rem; font-weight:700; font-size:var(--fs); }
+        .btn-outline{ background:#f5f7fb; border:1px dashed #cfd6e4; color:var(--ink-700); border-radius:12px; padding:.6rem 1rem; font-weight:700; font-size:var(--fs); }
+
+        /* Tables visible ≥ md; cards on mobile */
+        @media (max-width: 767.98px){ .table-view{ display:none; } }
+        @media (min-width: 768px){ .mobile-view{ display:none; } }
+
+        .tx-card{ background:#fff; border:1px solid var(--border); border-radius:var(--rad); padding:10px 12px; box-shadow:0 6px 16px rgba(0,0,0,.05); }
+        .tx-top{ display:flex; justify-content:space-between; gap:8px; }
+        .tx-title{ font-weight:800; font-size:var(--fs); color:var(--ink-900); }
+        .tx-sub{ color:var(--ink-600); font-size:var(--fs-sm); }
+        .badge{ padding:3px 8px; border-radius:999px; font-size:var(--fs-sm); font-weight:800; }
+        .badge-debit{ background:#fee2e2; color:#b33a3a; }
+        .badge-credit{ background:#dcfce7; color:#0f8a5f; }
+        .tx-row{ display:flex; justify-content:space-between; margin-top:6px; }
+        .tx-amt{ font-weight:800; font-size:var(--fs-lg); }
+
+        .table thead th{ position:sticky; top:0; background:#0f172a; color:#fff; z-index:1; }
+        .toast{ position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:9999; color:#fff; padding:12px 16px; border-radius:10px; font-weight:800; min-width:280px; text-align:center; }
+      `}</style>
+
       {loading && (
-        <div
-          className="position-absolute w-100 h-100 d-flex justify-content-center align-items-center"
-          style={{ backgroundColor: "rgba(255,255,255,0.7)", zIndex: 10 }}
-        >
-          <LoadingSpiner />
+        <div className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center"
+             style={{ background:"rgba(255,255,255,.6)", zIndex: 9998 }}>
+          <LoadingSpiner/>
         </div>
       )}
 
-      {/* Center popup */}
       {popup.show && (
-        <div
-          className={`position-fixed top-50 start-50 translate-middle p-3 rounded shadow`}
-          style={{
-            backgroundColor:
-              popup.type === "success"
-                ? "#2E7D32"
-                : popup.type === "error"
-                ? "#C62828"
-                : "#6A1B9A",
-            color: "white",
-            zIndex: 9999,
-            minWidth: "280px",
-            textAlign: "center",
-            fontWeight: "bold",
-          }}
-        >
+        <div className="toast"
+             style={{ background: popup.type==="success" ? "#2E7D32" : popup.type==="error" ? "#C62828" : "#4C1D95" }}>
           {popup.message}
         </div>
       )}
 
-      {/* Confirm delete MAIN transaction */}
+      {/* Modals */}
       {deleteConfirm.show && (
-        <div
-          className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center"
-          style={{ backgroundColor: "rgba(0,0,0,0.6)", zIndex: 9998 }}
-        >
-          <div className="bg-white p-4 rounded shadow-lg" style={{ minWidth: "320px" }}>
-            <h5 className="mb-3">Confirm Delete</h5>
+        <div className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center"
+             style={{ background:"rgba(0,0,0,.6)", zIndex: 9998 }}>
+          <div className="bg-white p-4 rounded shadow-lg" style={{ minWidth: 320 }}>
+            <h5 className="mb-2">Confirm Delete</h5>
             <p>Are you sure you want to delete this transaction?</p>
             <div className="d-flex justify-content-end gap-2">
-              <button
-                className="btn btn-secondary"
-                onClick={() => setDeleteConfirm({ show: false, transactionId: null })}
-              >
-                Cancel
-              </button>
-              <button className="btn btn-danger" onClick={handleDeleteConfirmed}>
-                Delete
-              </button>
+              <button className="btn btn-secondary" onClick={() => setDeleteConfirm({ show:false, transactionId:null })}>Cancel</button>
+              <button className="btn btn-danger" onClick={handleDeleteConfirmed}>Delete</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Confirm delete DAILY transaction */}
       {deleteDaily.show && (
-        <div
-          className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center"
-          style={{ backgroundColor: "rgba(0,0,0,0.6)", zIndex: 9998 }}
-        >
-          <div className="bg-white p-4 rounded shadow-lg" style={{ minWidth: "320px" }}>
+        <div className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center"
+             style={{ background:"rgba(0,0,0,.6)", zIndex: 9998 }}>
+          <div className="bg-white p-4 rounded shadow-lg" style={{ minWidth: 320 }}>
             <h5 className="mb-2">Delete this daily transaction?</h5>
             <p className="mb-3">This action cannot be undone.</p>
             <div className="d-flex justify-content-end gap-2">
-              <button className="btn btn-secondary" onClick={cancelDeleteDaily} disabled={deleteDaily.busy}>
-                Cancel
-              </button>
-              <button className="btn btn-danger" onClick={confirmDeleteDaily} disabled={deleteDaily.busy}>
+              <button className="btn btn-secondary" onClick={()=>setDeleteDaily({ show:false, id:null, busy:false })} disabled={deleteDaily.busy}>Cancel</button>
+              <button className="btn btn-danger" onClick={async ()=>{ await confirmDeleteDaily(); }} disabled={deleteDaily.busy}>
                 {deleteDaily.busy ? "Deleting..." : "Delete"}
               </button>
             </div>
@@ -373,302 +273,272 @@ export default function MainTransactionPage() {
         </div>
       )}
 
-      {/* Edit DAILY transaction modal */}
       {editModal.show && (
-        <div
-          className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center"
-          style={{ backgroundColor: "rgba(0,0,0,0.6)", zIndex: 9998, padding: 16 }}
-        >
-          <div className="bg-white p-3 p-md-4 rounded shadow-lg" style={{ width: "100%", maxWidth: 560 }}>
+        <div className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center"
+             style={{ background:"rgba(0,0,0,.6)", zIndex: 9998, padding:16 }}>
+          <div className="bg-white p-3 p-md-4 rounded shadow-lg" style={{ width:"100%", maxWidth:560 }}>
             <div className="d-flex justify-content-between align-items-center mb-2">
               <h5 className="m-0">Update Transaction</h5>
-              <button className="btn btn-outline-secondary btn-sm" onClick={closeEdit} disabled={editModal.busy}>
-                Close
-              </button>
+              <button className="btn btn-outline-secondary btn-sm" onClick={closeEdit} disabled={editModal.busy}>Close</button>
             </div>
-
             <div className="row g-2">
               <div className="col-6 col-md-4">
                 <label className="form-label mb-1">Amount</label>
-                <input
-                  type="number"
-                  className="form-control form-control-sm"
-                  name="amount"
-                  value={editModal.form.amount}
-                  onChange={handleEditChange}
-                />
+                <input type="number" className="form-control form-control-sm" name="amount" value={editModal.form.amount} onChange={handleEditChange}/>
               </div>
               <div className="col-6 col-md-4">
                 <label className="form-label mb-1">Type</label>
-                <select
-                  className="form-select form-select-sm"
-                  name="type"
-                  value={editModal.form.type}
-                  onChange={handleEditChange}
-                >
-                  <option value="debit">Debit</option>
-                  <option value="credit">Credit</option>
+                <select className="form-select form-select-sm" name="type" value={editModal.form.type} onChange={handleEditChange}>
+                  <option value="debit">Debit</option><option value="credit">Credit</option>
                 </select>
               </div>
               <div className="col-12 col-md-4">
-                <label className="form-label mb-1">Quantity (optional)</label>
-                <input
-                  type="number"
-                  className="form-control form-control-sm"
-                  name="quantity"
-                  value={editModal.form.quantity}
-                  min={0}
-                  onChange={handleEditChange}
-                />
+                <label className="form-label mb-1">Quantity (opt)</label>
+                <input type="number" className="form-control form-control-sm" name="quantity" value={editModal.form.quantity} min={0} onChange={handleEditChange}/>
               </div>
-
               <div className="col-12 col-md-6">
                 <label className="form-label mb-1">Category</label>
-                <select
-                  className="form-select form-select-sm"
-                  name="category_id"
-                  value={editModal.form.category_id}
-                  onChange={handleEditChange}
-                >
+                <select className="form-select form-select-sm" name="category_id" value={editModal.form.category_id} onChange={handleEditChange}>
                   <option value="">Select Category</option>
-                  {categories.map((c) => (
-                    <option key={c.category_id} value={c.category_id}>
-                      {c.category_name}
-                    </option>
-                  ))}
+                  {categories.map(c=> <option key={c.category_id} value={c.category_id}>{c.category_name}</option>)}
                 </select>
               </div>
               <div className="col-12 col-md-6">
                 <label className="form-label mb-1">Subcategory</label>
-                <select
-                  className="form-select form-select-sm"
-                  name="subcategory_id"
-                  value={editModal.form.subcategory_id || ""}
-                  onChange={handleEditChange}
-                  disabled={!editModal.form.category_id}
-                >
+                <select className="form-select form-select-sm" name="subcategory_id" value={editModal.form.subcategory_id || ""} onChange={handleEditChange} disabled={!editModal.form.category_id}>
                   <option value="">Select Subcategory</option>
-                  {editSubs.map((s) => (
-                    <option key={s.subcategory_id} value={s.subcategory_id}>
-                      {s.subcategory_name}
-                    </option>
-                  ))}
+                  {subcategories.filter(s=> Number(s.category_id)===Number(editModal.form.category_id||0))
+                    .map(s=> <option key={s.subcategory_id} value={s.subcategory_id}>{s.subcategory_name}</option>)}
                 </select>
               </div>
-
               <div className="col-12">
-                <label className="form-label mb-1">Purpose (optional)</label>
-                <input
-                  type="text"
-                  className="form-control form-control-sm"
-                  name="purpose"
-                  value={editModal.form.purpose}
-                  onChange={handleEditChange}
-                />
+                <label className="form-label mb-1">Purpose (opt)</label>
+                <input type="text" className="form-control form-control-sm" name="purpose" value={editModal.form.purpose} onChange={handleEditChange}/>
               </div>
             </div>
-
             <div className="mt-3 d-flex justify-content-end gap-2">
-              <button className="btn btn-outline-secondary" onClick={closeEdit} disabled={editModal.busy}>
-                Cancel
-              </button>
-              <button className="btn btn-primary" onClick={saveEdit} disabled={editModal.busy}>
-                {editModal.busy ? "Saving..." : "Save Changes"}
-              </button>
+              <button className="btn btn-outline-secondary" onClick={closeEdit} disabled={editModal.busy}>Cancel</button>
+              <button className="btn btn-primary" onClick={saveEdit} disabled={editModal.busy}>{editModal.busy ? "Saving..." : "Save Changes"}</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Page Header */}
-      <div className="d-flex justify-content-between mb-3 flex-wrap align-items-center">
-        <h3 style={{ color: "#4E342E", fontWeight: "bold", fontSize: "1.6rem" }}>Main Transactions</h3>
-        <button className="btn btn-dark px-4 py-2" onClick={saveDetails}>
-          Save Details
-        </button>
-      </div>
+      <div className="page-wrap">
+        {/* Header */}
+        <div className="d-flex justify-content-between align-items-center flex-wrap mb-3">
+          <h3 className="title m-0">Main Transactions</h3>
+          <button className="btn-solid mt-2 mt-sm-0" onClick={saveDetails}>Save Details</button>
+        </div>
 
-      {/* Date selector & totals */}
-      <div className="card p-3 shadow-sm border-0 mb-4">
-        <div className="row g-2 align-items-end">
-          <div className="col-md-3 col-12">
-            <label htmlFor="datePicker" className="form-label fw-bold">
-              Select Date
-            </label>
-            <input
-              id="datePicker"
-              type="date"
-              className="form-control"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              max={getToday()}
-            />
-          </div>
-          <div className="col-md-2 col-12">
-            <button className="btn btn-outline-dark w-100" onClick={handleSearchClick}>
-              Search
-            </button>
-          </div>
-          <div className="col-md-4 col-12">
-            <div className="fw-semibold mt-2 mt-md-0">
-              Totals: &nbsp;
-              <span className="me-3">Debit: ₹ {totalDebit.toFixed(2)}</span>
-              <span className="me-3">Credit: ₹ {totalCredit.toFixed(2)}</span>
-              <span>Count: {totalTransactions}</span>
+        {/* Date & Totals */}
+        <div className="card-ui mb-3">
+          <div className="row g-2 align-items-end">
+            <div className="col-12 col-sm-6 col-md-3">
+              <label className="form-label fw-bold">Select Date</label>
+              <input type="date" className="form-control" value={selectedDate} onChange={(e)=>setSelectedDate(e.target.value)} max={getToday()}/>
+            </div>
+            <div className="col-12 col-sm-6 col-md-2">
+              <button className="btn-outline w-100" onClick={handleSearchClick}>Search</button>
+            </div>
+            <div className="col-12 col-md-7">
+              <div className="fw-semibold mt-2 mt-md-0" style={{ fontSize:"var(--fs)" }}>
+                Totals:
+                <span className="ms-2 me-3">Debit: ₹ {totalDebit.toFixed(2)}</span>
+                <span className="me-3">Credit: ₹ {totalCredit.toFixed(2)}</span>
+                <span>Count: {totalTransactions}</span>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Daily Transactions */}
-      <div className="card p-3 shadow-sm border-0 mb-4">
-        <h5 className="mb-3">Daily Transactions ({selectedDate})</h5>
-        {dailyTransactions.length === 0 ? (
-          <div className="text-center text-muted">No transactions found for this date.</div>
-        ) : (
-          <>
+        {/* DAILY: Mobile cards */}
+        <div className="mobile-view">
+          <div className="card-ui mb-3">
+            <h5 className="mb-2">Daily Transactions ({selectedDate})</h5>
+            {pagedDailyTransactions.length===0 ? (
+              <div className="text-muted">No transactions found for this date.</div>
+            ) : (
+              <div className="d-grid gap-2">
+                {pagedDailyTransactions.map((t, i) => {
+                  const cat = t.category_name || categories.find(c=>c.category_id===t.category_id)?.category_name || "-";
+                  const sub = t.subcategory_name || subcategories.find(s=>s.subcategory_id===t.subcategory_id)?.subcategory_name || "-";
+                  return (
+                    <div key={t.daily_transaction_id} className="tx-card">
+                      <div className="tx-top">
+                        <div>
+                          <div className="tx-title">{cat}</div>
+                          <div className="tx-sub">{sub} • {new Date(t.transaction_date).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}</div>
+                        </div>
+                        <span className={`badge ${t.type==="debit"?"badge-debit":"badge-credit"}`}>{t.type}</span>
+                      </div>
+                      <div className="tx-row"><div className="tx-sub">Amount</div><div className="tx-amt">₹ {Number(t.amount).toFixed(2)}</div></div>
+                      <div className="tx-row"><div className="tx-sub">Qty</div><div className="fw-semibold">{t.quantity ?? 0}</div></div>
+                      {t.purpose && <div className="mt-1 tx-sub">{t.purpose}</div>}
+                      <div className="d-flex gap-2 justify-content-end mt-2">
+                        <button className="btn btn-outline-primary btn-sm" onClick={()=>openEdit(t)}>Update</button>
+                        <button className="btn btn-outline-danger btn-sm" onClick={()=>askDeleteDaily(t.daily_transaction_id)}>Delete</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Pagination (mobile) */}
+            {totalPages>1 && (
+              <div className="d-flex justify-content-between align-items-center mt-2">
+                <button className="btn btn-outline-secondary btn-sm" disabled={page<=1} onClick={()=>setPage(p=>Math.max(1,p-1))}>Prev</button>
+                <span style={{ fontSize:"var(--fs-sm)" }}>Page {page} / {totalPages}</span>
+                <button className="btn btn-outline-secondary btn-sm" disabled={page>=totalPages} onClick={()=>setPage(p=>Math.min(totalPages,p+1))}>Next</button>
+              </div>
+            )}
+          </div>
+
+          {/* Suggestions (cards) */}
+          <div className="card-ui mb-3">
+            <h5 className="mb-2">Unsaved Transactions</h5>
+            {suggestions.length===0 ? (
+              <div className="text-muted">No unsaved transactions.</div>
+            ) : (
+              <div className="d-grid gap-2">
+                {suggestions.map((s, idx)=>(
+                  <div key={s.daily_transaction_id} className="tx-card">
+                    <div className="tx-top">
+                      <div className="tx-title">{s.category_name || s.category_id}</div>
+                      <span className={`badge ${s.type==="debit"?"badge-debit":"badge-credit"}`}>{s.type}</span>
+                    </div>
+                    <div className="tx-row"><div className="tx-sub">Amount</div><div className="tx-amt">₹ {Number(s.amount).toFixed(2)}</div></div>
+                    <div className="tx-row"><div className="tx-sub">Qty</div><div className="fw-semibold">{s.quantity ?? 0}</div></div>
+                    {s.purpose && <div className="mt-1 tx-sub">{s.purpose}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Main transactions (cards) */}
+          <div className="card-ui mb-4">
+            <h5 className="mb-2">All Main Transactions</h5>
+            {mainTransactions.length===0 ? (
+              <div className="text-muted">No main transactions available</div>
+            ) : (
+              <div className="d-grid gap-2">
+                {mainTransactions.map(mt=>(
+                  <div key={mt.transaction_id} className="tx-card">
+                    <div className="tx-top">
+                      <div className="tx-title">{new Date(mt.date).toLocaleDateString()}</div>
+                      <button className="btn btn-danger btn-sm" onClick={()=>confirmDelete(mt.transaction_id)}>Delete</button>
+                    </div>
+                    <div className="tx-row"><div className="tx-sub">Total Debit</div><div className="tx-amt">₹ {Number(mt.total_debit).toFixed(2)}</div></div>
+                    <div className="tx-row"><div className="tx-sub">Total Credit</div><div className="tx-amt">₹ {Number(mt.total_credit).toFixed(2)}</div></div>
+                    <div className="tx-row"><div className="tx-sub">Transactions</div><div className="fw-bold">{mt.total_transactions}</div></div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ≥ md: tables */}
+        <div className="table-view">
+          <div className="card-ui mb-3">
+            <h5 className="mb-3">Daily Transactions ({selectedDate})</h5>
+            {dailyTransactions.length===0 ? (
+              <div className="text-center text-muted">No transactions found for this date.</div>
+            ) : (
+              <>
+                <div className="table-responsive">
+                  <table className="table table-bordered table-striped align-middle mb-2">
+                    <thead className="table-dark">
+                      <tr>
+                        <th>#</th><th>Amount</th><th>Type</th><th>Category</th><th>Subcategory</th><th>Qty</th><th>Purpose</th><th style={{minWidth:160}}>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pagedDailyTransactions.map((t,i)=>(
+                        <tr key={t.daily_transaction_id}>
+                          <td>{startIdx + i + 1}</td>
+                          <td>₹ {Number(t.amount).toFixed(2)}</td>
+                          <td className={t.type==="debit"?"text-danger":"text-success"}>{t.type}</td>
+                          <td>{t.category_name || t.category_id}</td>
+                          <td>{t.subcategory_name || t.subcategory_id || "-"}</td>
+                          <td>{t.quantity ?? 0}</td>
+                          <td>{t.purpose || "-"}</td>
+                          <td>
+                            <div className="d-flex gap-1">
+                              <button className="btn btn-outline-primary btn-sm" onClick={()=>openEdit(t)}>Update</button>
+                              <button className="btn btn-outline-danger btn-sm" onClick={()=>askDeleteDaily(t.daily_transaction_id)}>Delete</button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="d-flex justify-content-between align-items-center flex-wrap">
+                  <div>Page {page} of {totalPages}</div>
+                  <div className="mt-2 mt-md-0">
+                    <button className="btn btn-sm btn-outline-secondary me-2" disabled={page<=1} onClick={()=>setPage(p=>Math.max(1,p-1))}>Prev</button>
+                    <button className="btn btn-sm btn-outline-secondary" disabled={page>=totalPages} onClick={()=>setPage(p=>Math.min(totalPages,p+1))}>Next</button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="card-ui mb-3">
+            <h5 className="mb-3">Unsaved Transactions</h5>
+            {suggestions.length===0 ? (
+              <div className="text-muted">No unsaved transactions.</div>
+            ) : (
+              <div className="table-responsive">
+                <table className="table table-sm table-bordered">
+                  <thead className="table-light">
+                    <tr><th>#</th><th>Amount</th><th>Type</th><th>Category</th><th>Qty</th><th>Purpose</th></tr>
+                  </thead>
+                  <tbody>
+                    {suggestions.map((s,idx)=>(
+                      <tr key={s.daily_transaction_id}>
+                        <td>{idx+1}</td>
+                        <td>₹ {Number(s.amount).toFixed(2)}</td>
+                        <td className={s.type==="debit"?"text-danger":"text-success"}>{s.type}</td>
+                        <td>{s.category_name || s.category_id}</td>
+                        <td>{s.quantity ?? 0}</td>
+                        <td>{s.purpose || "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div className="card-ui mb-4">
+            <h5 className="mb-3">All Main Transactions</h5>
             <div className="table-responsive">
-              <table className="table table-bordered table-striped align-middle mb-2">
+              <table className="table table-bordered table-striped align-middle">
                 <thead className="table-dark">
-                  <tr>
-                    <th>#</th>
-                    <th>Amount</th>
-                    <th>Type</th>
-                    <th>Category</th>
-                    <th>Subcategory</th>
-                    <th>Qty</th>
-                    <th>Purpose</th>
-                    <th style={{ minWidth: 160 }}>Action</th>
-                  </tr>
+                  <tr><th>Date</th><th>Total Debit</th><th>Total Credit</th><th>Total Transactions</th><th>Action</th></tr>
                 </thead>
                 <tbody>
-                  {pagedDailyTransactions.map((t, i) => (
-                    <tr key={t.daily_transaction_id}>
-                      <td>{startIdx + i + 1}</td>
-                      <td>₹ {Number(t.amount).toFixed(2)}</td>
-                      <td className={t.type === "debit" ? "text-danger" : "text-success"}>{t.type}</td>
-                      <td>{t.category_name || t.category_id}</td>
-                      <td>{t.subcategory_name || t.subcategory_id || "-"}</td>
-                      <td>{t.quantity ?? 0}</td>
-                      <td>{t.purpose || "-"}</td>
-                      <td>
-                        <div className="d-flex gap-1">
-                          <button
-                            className="btn btn-outline-primary btn-sm"
-                            onClick={() => openEdit(t)}
-                          >
-                            Update
-                          </button>
-                          <button
-                            className="btn btn-outline-danger btn-sm"
-                            onClick={() => askDeleteDaily(t.daily_transaction_id)}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {mainTransactions.length===0 ? (
+                    <tr><td colSpan="5" className="text-center text-muted">No main transactions available</td></tr>
+                  ) : (
+                    mainTransactions.map(mt=>(
+                      <tr key={mt.transaction_id}>
+                        <td>{new Date(mt.date).toLocaleDateString()}</td>
+                        <td>₹ {Number(mt.total_debit).toFixed(2)}</td>
+                        <td>₹ {Number(mt.total_credit).toFixed(2)}</td>
+                        <td>{mt.total_transactions}</td>
+                        <td><button className="btn btn-danger btn-sm" onClick={()=>confirmDelete(mt.transaction_id)}>Delete</button></td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
-            <div className="d-flex justify-content-between align-items-center flex-wrap">
-              <div>Page {page} of {totalPages}</div>
-              <div className="mt-2 mt-md-0">
-                <button
-                  className="btn btn-sm btn-outline-secondary me-2"
-                  disabled={page <= 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  Prev
-                </button>
-                <button
-                  className="btn btn-sm btn-outline-secondary"
-                  disabled={page >= totalPages}
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Suggestions */}
-      <div className="card p-3 shadow-sm border-0 mb-4">
-        <h5 className="mb-3">Unsaved Transactions</h5>
-        {suggestions.length === 0 ? (
-          <div className="text-muted">No unsaved transactions.</div>
-        ) : (
-          <div className="table-responsive">
-            <table className="table table-sm table-bordered">
-              <thead className="table-light">
-                <tr>
-                  <th>#</th>
-                  <th>Amount</th>
-                  <th>Type</th>
-                  <th>Category</th>
-                  <th>Qty</th>
-                  <th>Purpose</th>
-                </tr>
-              </thead>
-              <tbody>
-                {suggestions.map((s, idx) => (
-                  <tr key={s.daily_transaction_id}>
-                    <td>{idx + 1}</td>
-                    <td>₹ {Number(s.amount).toFixed(2)}</td>
-                    <td className={s.type === "debit" ? "text-danger" : "text-success"}>{s.type}</td>
-                    <td>{s.category_name || s.category_id}</td>
-                    <td>{s.quantity ?? 0}</td>
-                    <td>{s.purpose || "-"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
-        )}
-      </div>
-
-      {/* Main Transactions */}
-      <div className="card p-3 shadow-sm border-0 mb-4">
-        <h5 className="mb-3">All Main Transactions</h5>
-        <div className="table-responsive">
-          <table className="table table-bordered table-striped align-middle">
-            <thead className="table-dark">
-              <tr>
-                <th>Date</th>
-                <th>Total Debit</th>
-                <th>Total Credit</th>
-                <th>Total Transactions</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {mainTransactions.length === 0 ? (
-                <tr>
-                  <td colSpan="5" className="text-center text-muted">No main transactions available</td>
-                </tr>
-              ) : (
-                mainTransactions.map((mt) => (
-                  <tr key={mt.transaction_id}>
-                    <td>{new Date(mt.date).toLocaleDateString()}</td>
-                    <td>₹ {Number(mt.total_debit).toFixed(2)}</td>
-                    <td>₹ {Number(mt.total_credit).toFixed(2)}</td>
-                    <td>{mt.total_transactions}</td>
-                    <td>
-                      <button
-                        className="btn btn-danger btn-sm"
-                        onClick={() => confirmDelete(mt.transaction_id)}
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
         </div>
       </div>
     </div>

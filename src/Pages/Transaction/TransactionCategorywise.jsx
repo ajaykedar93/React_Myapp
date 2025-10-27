@@ -1,4 +1,3 @@
-// src/pages/TransactionCategorywise.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import "bootstrap/dist/css/bootstrap.min.css";
@@ -317,7 +316,7 @@ const TransactionCategorywise = () => {
 
       {/* Filters */}
       <div className="row mb-4">
-        <div className="col-md-3 mb-2">
+        <div className="col-12 col-sm-6 col-md-3 mb-2">
           <label className="form-label fw-semibold">Category</label>
           <select
             className="form-select"
@@ -333,7 +332,7 @@ const TransactionCategorywise = () => {
           </select>
         </div>
 
-        <div className="col-md-3 mb-2">
+        <div className="col-12 col-sm-6 col-md-3 mb-2">
           <label className="form-label fw-semibold">Subcategory</label>
           <select
             className="form-select"
@@ -350,7 +349,7 @@ const TransactionCategorywise = () => {
           </select>
         </div>
 
-        <div className="col-md-3 mb-2">
+        <div className="col-12 col-sm-6 col-md-3 mb-2">
           <label className="form-label fw-semibold">Select Date</label>
           <input
             type="date"
@@ -360,7 +359,7 @@ const TransactionCategorywise = () => {
           />
         </div>
 
-        <div className="col-md-3 d-flex align-items-end">
+        <div className="col-12 col-sm-6 col-md-3 d-flex align-items-end">
           <motion.button
             className="btn btn-primary w-100"
             whileHover={{ scale: 1.05 }}
@@ -416,7 +415,6 @@ const TransactionCategorywise = () => {
                       <th>Subcategory</th>
                       <th>Amount</th>
                       <th>Type</th>
-                      {/* NEW: Qty column before Purpose */}
                       <th>Qty</th>
                       <th>Purpose</th>
                     </tr>
@@ -430,14 +428,11 @@ const TransactionCategorywise = () => {
                         <td className="fw-bold">{inr.format(Number(t.amount || 0))}</td>
                         <td>
                           <span
-                            className={`badge ${
-                              t.type === "debit" ? "bg-danger" : "bg-success"
-                            }`}
+                            className={`badge ${t.type === "debit" ? "bg-danger" : "bg-success"}`}
                           >
                             {t.type}
                           </span>
                         </td>
-                        {/* Quantity value (fallback 0) */}
                         <td>{t.quantity ?? 0}</td>
                         <td>{t.purpose || "-"}</td>
                       </tr>
@@ -448,13 +443,13 @@ const TransactionCategorywise = () => {
 
               {/* Summary */}
               <div className="row text-center mt-3">
-                <div className="col-md-3 mb-2">
+                <div className="col-6 col-md-3 mb-2">
                   <div className="p-3 bg-light rounded shadow-sm">
                     <strong>Total Transactions</strong>
                     <div className="fw-bold">{sum.total_transactions}</div>
                   </div>
                 </div>
-                <div className="col-md-3 mb-2">
+                <div className="col-6 col-md-3 mb-2">
                   <div className="p-3 bg-light rounded shadow-sm">
                     <strong>Total Debit</strong>
                     <div className="text-danger fw-bold">
@@ -462,7 +457,7 @@ const TransactionCategorywise = () => {
                     </div>
                   </div>
                 </div>
-                <div className="col-md-3 mb-2">
+                <div className="col-6 col-md-3 mb-2">
                   <div className="p-3 bg-light rounded shadow-sm">
                     <strong>Total Credit</strong>
                     <div className="text-success fw-bold">
@@ -470,16 +465,11 @@ const TransactionCategorywise = () => {
                     </div>
                   </div>
                 </div>
-                {/* NEW: Total Quantity card */}
-                <div className="col-md-3 mb-2">
+                <div className="col-6 col-md-3 mb-2">
                   <div className="p-3 bg-light rounded shadow-sm">
                     <strong>Total Quantity</strong>
                     <div className="fw-bold">
-                      {Number(
-                        sum.total_quantity ??
-                          sum.totalQuantity ??
-                          0
-                      )}
+                      {Number(sum.total_quantity ?? 0)}
                     </div>
                   </div>
                 </div>
@@ -510,17 +500,15 @@ const TransactionCategorywise = () => {
         <div className="card shadow-lg border-0 rounded-3 p-3">
           <h5 className="fw-bold mb-3 text-center">Monthly Totals</h5>
           <div className="row text-center">
-            <div className="col-md-3 mb-2">
+            <div className="col-6 col-md-3 mb-2">
               <div className="p-3 bg-light rounded shadow-sm">
                 <strong>Total Transactions</strong>
                 <div className="fw-bold">
-                  {monthlyTotals.totalTransactions ??
-                    monthlyTotals.total_transactions ??
-                    0}
+                  {monthlyTotals.totalTransactions ?? monthlyTotals.total_transactions ?? 0}
                 </div>
               </div>
             </div>
-            <div className="col-md-3 mb-2">
+            <div className="col-6 col-md-3 mb-2">
               <div className="p-3 bg-light rounded shadow-sm">
                 <strong>Total Debit</strong>
                 <div className="text-danger fw-bold">
@@ -530,7 +518,7 @@ const TransactionCategorywise = () => {
                 </div>
               </div>
             </div>
-            <div className="col-md-3 mb-2">
+            <div className="col-6 col-md-3 mb-2">
               <div className="p-3 bg-light rounded shadow-sm">
                 <strong>Total Credit</strong>
                 <div className="text-success fw-bold">
@@ -540,15 +528,12 @@ const TransactionCategorywise = () => {
                 </div>
               </div>
             </div>
-            {/* NEW: Monthly total quantity */}
-            <div className="col-md-3 mb-2">
+            <div className="col-6 col-md-3 mb-2">
               <div className="p-3 bg-light rounded shadow-sm">
                 <strong>Total Quantity</strong>
                 <div className="fw-bold">
                   {Number(
-                    monthlyTotals.totalQuantity ??
-                      monthlyTotals.total_quantity ??
-                      0
+                    monthlyTotals.totalQuantity ?? monthlyTotals.total_quantity ?? 0
                   )}
                 </div>
               </div>
