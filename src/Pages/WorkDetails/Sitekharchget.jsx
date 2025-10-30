@@ -32,6 +32,7 @@ const SitekharchGet = () => {
 
   // --- PDF Export ---
   const handleDownloadPDF = () => {
+    // Here, we generate PDF for all records, not just the current page
     const input = document.getElementById("siteKharchTable");
     html2canvas(input, { scale: 2 }).then((canvas) => {
       const imgData = canvas.toDataURL("image/png");
@@ -112,6 +113,15 @@ const SitekharchGet = () => {
   );
   const totalPages = Math.ceil(siteKharchList.length / recordsPerPage);
 
+  // Calculate total amount for all pages
+  const totalAmountAllPages = siteKharchList.reduce((total, item) => {
+    const itemAmount = Number(item.amount || 0);
+    const extraAmount = item.extra_items
+      ? item.extra_items.reduce((sum, e) => sum + Number(e.amount || 0), 0)
+      : 0;
+    return total + itemAmount + extraAmount;
+  }, 0);
+
   return (
     <div className="wrap">
       <style>{`
@@ -131,7 +141,7 @@ const SitekharchGet = () => {
           --table-hover: #e0e7ff;
         }
         body { background: var(--bg); margin: 0; font-family: 'Poppins', sans-serif; }
-        .wrap { max-width: 1000px; margin: 0 auto; padding: 24px; }
+        .wrap { max-width: 100%; margin: 0 auto; padding: 24px; }
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.08); padding: 24px; }
         .hd { text-align: center; margin: 8px 0 20px; font-weight: 700; font-size: clamp(1.75rem, 6vw, 2.3rem); color: var(--title); }
         .filters { display:flex; gap:16px; margin-bottom:20px; flex-wrap:wrap; }
@@ -161,6 +171,16 @@ const SitekharchGet = () => {
         .btn { padding: 8px 16px; border-radius: 8px; border:none; cursor:pointer; font-weight:600; }
         .btn-cancel { background: var(--muted); color:white; }
         .btn-ok { background: var(--danger); color:white; }
+
+        /* Mobile adjustments */
+        @media screen and (max-width: 600px) {
+          .filters { flex-direction: column; }
+          .field { width: 100%; }
+          .table-container { margin-top: 16px; }
+          table { font-size: 0.9rem; }
+          th, td { padding: 8px; }
+          .pagination { flex-direction: column; gap: 6px; }
+        }
       `}</style>
 
       <div className="card">
@@ -209,7 +229,7 @@ const SitekharchGet = () => {
               </tr>
             </thead>
             <tbody>
-              {currentRecords.map((item, idx) => {
+              {siteKharchList.map((item, idx) => {
                 const totalAmount =
                   Number(item.amount || 0) +
                   (item.extra_items?.reduce((sum, e) => sum + Number(e.amount || 0), 0) || 0);
@@ -217,7 +237,7 @@ const SitekharchGet = () => {
                 return (
                   <React.Fragment key={idx}>
                     <tr>
-                      <td>{startIndex + idx + 1}</td>
+                      <td>{idx + 1}</td>
                       <td>{formatDate(item.kharch_date)}</td>
                       <td><b>{item.category_name}</b></td>
                       <td>{item.amount}</td>
@@ -234,7 +254,7 @@ const SitekharchGet = () => {
 
                     {item.extra_items && item.extra_items.map((extra, eIdx) => (
                       <tr className="extra-row" key={`${idx}-extra-${eIdx}`}>
-                        <td>{`${startIndex + idx + 1}.${eIdx + 1}`}</td>
+                        <td>{`${idx + 1}.${eIdx + 1}`}</td>
                         <td></td>
                         <td>Extra</td>
                         <td>{extra.amount}</td>
@@ -267,7 +287,7 @@ const SitekharchGet = () => {
           </div>
         )}
 
-        {!loading && !error && currentRecords.length > 0 && (
+        {!loading && !error && siteKharchList.length > 0 && (
           <div className="pagination">
             <button
               onClick={() => setCurrentPage(currentPage - 1)}
@@ -283,6 +303,10 @@ const SitekharchGet = () => {
             </button>
           </div>
         )}
+
+        <div style={{ textAlign: "center", marginTop: "10px" }}>
+          <strong>Total Amount for All Pages: ₹{totalAmountAllPages}</strong>
+        </div>
       </div>
 
       {showConfirm && (
