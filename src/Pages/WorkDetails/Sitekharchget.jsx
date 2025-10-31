@@ -4,24 +4,30 @@ import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 
 const SitekharchGet = () => {
-  const [siteKharchList, setSiteKharchList] = useState([]);
+  const [siteKharchList, setSiteKharchList] = useState([]); // actual rows
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
   const [showConfirm, setShowConfirm] = useState(false);
+
+  // totals coming from backend
+  const [totals, setTotals] = useState({
+    expense: 0,
+    received: 0,
+    balance: 0,
+  });
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(0);
   const recordsPerPage = 10;
 
   // Date/Month Filters
-  const today = new Date().toISOString().split("T")[0];
   const currentMonth = new Date().toISOString().slice(0, 7);
-
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
 
   const formatDate = (dateStr) => {
+    if (!dateStr) return "-";
     const d = new Date(dateStr);
     return d.toLocaleDateString("en-GB", {
       day: "2-digit",
@@ -32,8 +38,8 @@ const SitekharchGet = () => {
 
   // --- PDF Export ---
   const handleDownloadPDF = () => {
-    // Here, we generate PDF for all records, not just the current page
     const input = document.getElementById("siteKharchTable");
+    if (!input) return;
     html2canvas(input, { scale: 2 }).then((canvas) => {
       const imgData = canvas.toDataURL("image/png");
       const pdf = new jsPDF("p", "mm", "a4");
@@ -55,30 +61,67 @@ const SitekharchGet = () => {
   const fetchSiteKharch = async () => {
     setLoading(true);
     setError(null);
-    setSiteKharchList([]);
     setCurrentPage(0);
     try {
       let url = "";
+
       if (selectedDate) {
         url = `https://express-backend-myapp.onrender.com/api/sitekharch?from=${selectedDate}&to=${selectedDate}`;
       } else if (selectedMonth) {
         const [year, month] = selectedMonth.split("-");
+        // month in Date() is 0-based, so pass Number(month)
         const from = `${year}-${month}-01`;
-        const to = new Date(year, month, 0).toISOString().split("T")[0];
+        const to = new Date(year, Number(month), 0).toISOString().split("T")[0];
         url = `https://express-backend-myapp.onrender.com/api/sitekharch?from=${from}&to=${to}`;
+      } else {
+        // fallback: all
+        url = `https://express-backend-myapp.onrender.com/api/sitekharch`;
       }
 
       const res = await fetch(url);
       const data = await res.json();
+
+      // 🔴 IMPORTANT:
+      // our new API returns { totals: {...}, data: [...] }
       if (res.ok) {
-        if (data.length === 0) setError("No records found");
-        setSiteKharchList(data);
+        if (Array.isArray(data)) {
+          // older API shape fallback
+          setSiteKharchList(data);
+          setTotals({
+            expense: data.reduce((t, it) => {
+              const base = Number(it.amount || 0);
+              const extra = it.extra_items
+                ? it.extra_items.reduce(
+                    (s, e) => s + Number(e.amount || 0),
+                    0
+                  )
+                : 0;
+              return t + base + extra;
+            }, 0),
+            received: 0,
+            balance: 0,
+          });
+          if (data.length === 0) setError("No records found");
+        } else {
+          // ✅ new shape
+          const { data: rows, totals } = data;
+          if (!rows || rows.length === 0) {
+            setError("No records found");
+          }
+          setSiteKharchList(rows || []);
+          setTotals({
+            expense: totals?.expense || 0,
+            received: totals?.received || 0,
+            balance: totals?.balance || 0,
+          });
+        }
       } else {
         throw new Error(data.error || "Failed to fetch data.");
       }
     } catch (err) {
       setError(err.message);
       setSiteKharchList([]);
+      setTotals({ expense: 0, received: 0, balance: 0 });
     } finally {
       setLoading(false);
     }
@@ -86,9 +129,12 @@ const SitekharchGet = () => {
 
   const handleDelete = async (id) => {
     try {
-      const res = await fetch(`https://express-backend-myapp.onrender.com/api/sitekharch/${id}`, {
-        method: "DELETE",
-      });
+      const res = await fetch(
+        `https://express-backend-myapp.onrender.com/api/sitekharch/${id}`,
+        {
+          method: "DELETE",
+        }
+      );
       if (res.ok) {
         setShowConfirm(false);
         fetchSiteKharch();
@@ -103,24 +149,16 @@ const SitekharchGet = () => {
 
   useEffect(() => {
     fetchSiteKharch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate, selectedMonth]);
 
-  // Pagination logic
+  // -------- Pagination logic --------
   const startIndex = currentPage * recordsPerPage;
   const currentRecords = siteKharchList.slice(
     startIndex,
     startIndex + recordsPerPage
   );
   const totalPages = Math.ceil(siteKharchList.length / recordsPerPage);
-
-  // Calculate total amount for all pages
-  const totalAmountAllPages = siteKharchList.reduce((total, item) => {
-    const itemAmount = Number(item.amount || 0);
-    const extraAmount = item.extra_items
-      ? item.extra_items.reduce((sum, e) => sum + Number(e.amount || 0), 0)
-      : 0;
-    return total + itemAmount + extraAmount;
-  }, 0);
 
   return (
     <div className="wrap">
@@ -162,7 +200,7 @@ const SitekharchGet = () => {
         .total-row td { font-weight: 700; background: #e0e7ff; }
         .delete-btn { color: white; background: var(--danger); border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; transition: 0.3s; }
         .delete-btn:hover { opacity: 0.9; }
-        .pagination { display:flex; justify-content:center; gap:10px; margin-top:15px; }
+        .pagination { display:flex; justify-content:center; gap:10px; margin-top:15px; align-items:center; }
         .pagination button { padding:6px 12px; border-radius:6px; border:1px solid var(--brand-2); background:#fff; color:var(--brand-2); cursor:pointer; font-weight:600; }
         .pagination button:disabled { opacity:0.5; cursor:default; }
         .confirm-overlay { position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.5); display:flex; justify-content:center; align-items:center; z-index:9999; }
@@ -171,21 +209,12 @@ const SitekharchGet = () => {
         .btn { padding: 8px 16px; border-radius: 8px; border:none; cursor:pointer; font-weight:600; }
         .btn-cancel { background: var(--muted); color:white; }
         .btn-ok { background: var(--danger); color:white; }
-
-        /* Mobile adjustments */
-        @media screen and (max-width: 600px) {
-          .filters { flex-direction: column; }
-          .field { width: 100%; }
-          .table-container { margin-top: 16px; }
-          table { font-size: 0.9rem; }
-          th, td { padding: 8px; }
-          .pagination { flex-direction: column; gap: 6px; }
-        }
       `}</style>
 
       <div className="card">
         <h2 className="hd">Site Kharch Records</h2>
 
+        {/* Filters */}
         <div className="filters">
           <div className="field">
             <label>Select Date</label>
@@ -194,7 +223,7 @@ const SitekharchGet = () => {
               value={selectedDate}
               onChange={(e) => {
                 setSelectedDate(e.target.value);
-                setSelectedMonth(""); // clear month if date chosen
+                setSelectedMonth("");
               }}
             />
           </div>
@@ -206,7 +235,7 @@ const SitekharchGet = () => {
               value={selectedMonth}
               onChange={(e) => {
                 setSelectedMonth(e.target.value);
-                setSelectedDate(""); // clear date if month chosen
+                setSelectedDate("");
               }}
             />
           </div>
@@ -216,6 +245,7 @@ const SitekharchGet = () => {
           Download PDF
         </button>
 
+        {/* TABLE */}
         <div className="table-container" id="siteKharchTable">
           <table>
             <thead>
@@ -229,32 +259,48 @@ const SitekharchGet = () => {
               </tr>
             </thead>
             <tbody>
-              {siteKharchList.map((item, idx) => {
+              {/* ✅ use paginated list */}
+              {currentRecords.map((item, idx) => {
+                const globalIndex = startIndex + idx; // keep numbering correct across pages
+                const extras = Array.isArray(item.extra_items)
+                  ? item.extra_items
+                  : [];
                 const totalAmount =
                   Number(item.amount || 0) +
-                  (item.extra_items?.reduce((sum, e) => sum + Number(e.amount || 0), 0) || 0);
+                  extras.reduce(
+                    (sum, e) => sum + Number(e.amount || 0),
+                    0
+                  );
 
                 return (
-                  <React.Fragment key={idx}>
+                  <React.Fragment key={item.id || globalIndex}>
                     <tr>
-                      <td>{idx + 1}</td>
+                      <td>{globalIndex + 1}</td>
                       <td>{formatDate(item.kharch_date)}</td>
-                      <td><b>{item.category_name}</b></td>
+                      <td>
+                        <b>{item.category_name || "-"}</b>
+                      </td>
                       <td>{item.amount}</td>
                       <td>{item.details}</td>
                       <td>
                         <button
                           className="delete-btn"
-                          onClick={() => { setDeleteId(item.id); setShowConfirm(true); }}
+                          onClick={() => {
+                            setDeleteId(item.id);
+                            setShowConfirm(true);
+                          }}
                         >
                           Delete
                         </button>
                       </td>
                     </tr>
 
-                    {item.extra_items && item.extra_items.map((extra, eIdx) => (
-                      <tr className="extra-row" key={`${idx}-extra-${eIdx}`}>
-                        <td>{`${idx + 1}.${eIdx + 1}`}</td>
+                    {extras.map((extra, eIdx) => (
+                      <tr
+                        className="extra-row"
+                        key={`${item.id || globalIndex}-extra-${eIdx}`}
+                      >
+                        <td>{`${globalIndex + 1}.${eIdx + 1}`}</td>
                         <td></td>
                         <td>Extra</td>
                         <td>{extra.amount}</td>
@@ -264,7 +310,9 @@ const SitekharchGet = () => {
                     ))}
 
                     <tr className="total-row">
-                      <td colSpan="4" style={{ textAlign: "right" }}>Total:</td>
+                      <td colSpan="4" style={{ textAlign: "right" }}>
+                        Total:
+                      </td>
                       <td>{totalAmount}</td>
                       <td></td>
                     </tr>
@@ -275,6 +323,7 @@ const SitekharchGet = () => {
           </table>
         </div>
 
+        {/* Loading / Error */}
         {loading && (
           <div style={{ textAlign: "center", padding: "20px" }}>
             <LoadingSpiner />
@@ -282,21 +331,32 @@ const SitekharchGet = () => {
         )}
 
         {error && !loading && (
-          <div style={{ color: "red", fontWeight: "600", marginTop: "10px", textAlign:"center" }}>
+          <div
+            style={{
+              color: "red",
+              fontWeight: "600",
+              marginTop: "10px",
+              textAlign: "center",
+            }}
+          >
             {error}
           </div>
         )}
 
+        {/* Pagination */}
         {!loading && !error && siteKharchList.length > 0 && (
           <div className="pagination">
             <button
-              onClick={() => setCurrentPage(currentPage - 1)}
+              onClick={() => setCurrentPage((p) => p - 1)}
               disabled={currentPage === 0}
             >
               Prev
             </button>
+            <span>
+              Page {currentPage + 1} of {totalPages || 1}
+            </span>
             <button
-              onClick={() => setCurrentPage(currentPage + 1)}
+              onClick={() => setCurrentPage((p) => p + 1)}
               disabled={currentPage + 1 >= totalPages}
             >
               Next
@@ -304,18 +364,37 @@ const SitekharchGet = () => {
           </div>
         )}
 
-        <div style={{ textAlign: "center", marginTop: "10px" }}>
-          <strong>Total Amount for All Pages: ₹{totalAmountAllPages}</strong>
+        {/* ✅ bottom totals (for ALL pages, from backend) */}
+        <div style={{ textAlign: "center", marginTop: "18px", lineHeight: 1.5 }}>
+          <strong>Total Expense (all): ₹{totals.expense}</strong><br />
+          <strong>Total Received: ₹{totals.received}</strong><br />
+          <strong>
+            Balance:{" "}
+            <span style={{ color: totals.balance < 0 ? "red" : "green" }}>
+              ₹{totals.balance}
+            </span>
+          </strong>
         </div>
       </div>
 
+      {/* delete confirm */}
       {showConfirm && (
         <div className="confirm-overlay">
           <div className="confirm-box">
             <div>Are you sure you want to delete this record?</div>
             <div className="confirm-buttons">
-              <button className="btn btn-cancel" onClick={() => setShowConfirm(false)}>Cancel</button>
-              <button className="btn btn-ok" onClick={() => handleDelete(deleteId)}>OK</button>
+              <button
+                className="btn btn-cancel"
+                onClick={() => setShowConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-ok"
+                onClick={() => handleDelete(deleteId)}
+              >
+                OK
+              </button>
             </div>
           </div>
         </div>
