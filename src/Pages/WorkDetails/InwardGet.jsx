@@ -1,264 +1,380 @@
 // src/pages/InwardGet.jsx
 import React, { useEffect, useState } from "react";
-import "bootstrap/dist/css/bootstrap.min.css";
-import LoadingSpiner from "../Entertainment/LoadingSpiner";
 
-const API_URL = "https://express-backend-myapp.onrender.com/api/inward";
+const BASE_URL = "https://express-backend-myapp.onrender.com/api/inward";
+
+function getCurrentMonthName() {
+  return new Date().toLocaleString("en-US", { month: "long" });
+}
 
 export default function InwardGet() {
-  const [records, setRecords] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [month, setMonth] = useState(getCurrentMonthName());
+  const [inwards, setInwards] = useState([]);
+  const [page, setPage] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [popup, setPopup] = useState({ show: false, type: "success", message: "" });
+  const [editRow, setEditRow] = useState(null);
+  const [deleteRow, setDeleteRow] = useState(null);
+  const pageSize = 10;
 
-  const [selectedDate, setSelectedDate] = useState("");
-  const [selectedMonth, setSelectedMonth] = useState("");
+  const showPopup = (type, message) => {
+    setPopup({ show: true, type, message });
+    setTimeout(() => setPopup({ show: false }), 2000);
+  };
 
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [deleteId, setDeleteId] = useState(null);
-
-  const [showUpdateModal, setShowUpdateModal] = useState(false);
-  const [updateRecord, setUpdateRecord] = useState(null);
-
-  const months = [
-    "January","February","March","April","May","June",
-    "July","August","September","October","November","December"
-  ];
-
-  // -------- Fetch Data --------
-  const fetchData = async () => {
+  const fetchInward = async (m) => {
+    setLoading(true);
     try {
-      setLoading(true);
-      setError("");
-      const url = new URL(API_URL);
-      if (selectedDate) url.searchParams.append("date", selectedDate);
-      else if (selectedMonth) url.searchParams.append("month", selectedMonth);
-
-      const res = await fetch(url.toString());
-      if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
+      const res = await fetch(`${BASE_URL}?month=${m}`);
       const data = await res.json();
-      setRecords(data.data || []);
+      if (data.data) setInwards(data.data);
+      else showPopup("error", data.error || "Failed to load records");
     } catch (err) {
-      console.error(err);
-      setError("⚠️ Failed to load inward records.");
+      showPopup("error", "Server error fetching data");
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { fetchData(); }, [selectedDate, selectedMonth]);
+  useEffect(() => {
+    fetchInward(month);
+  }, [month]);
 
-  // -------- Delete --------
+  const handleDownload = () => {
+    window.open(`${BASE_URL}/export?month=${month}`, "_blank");
+  };
+
   const handleDelete = async () => {
-    if (!deleteId) return;
+    if (!deleteRow) return;
     try {
-      setLoading(true);
-      const res = await fetch(`${API_URL}/${deleteId}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to delete record");
-      setShowDeleteConfirm(false);
-      setDeleteId(null);
-      await fetchData();
-    } catch (err) {
-      console.error(err);
-      setError("⚠️ Failed to delete record.");
-    } finally {
-      setLoading(false);
+      const res = await fetch(`${BASE_URL}/${deleteRow.id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (data.ok) {
+        showPopup("success", "Deleted successfully ✅");
+        setDeleteRow(null);
+        fetchInward(month);
+      } else showPopup("error", data.error || "Delete failed");
+    } catch {
+      showPopup("error", "Delete failed");
     }
   };
 
-  // -------- Update --------
-  const handleUpdate = async () => {
-    if (!updateRecord?.id) return;
+  const handleUpdate = async (e) => {
+    e.preventDefault();
     try {
-      setLoading(true);
-      const { id, work_date, work_time, details, quantity, quantity_type } = updateRecord;
-      const res = await fetch(`${API_URL}/${id}`, {
+      const payload = {
+        work_date: editRow.work_date,
+        work_time: editRow.work_time,
+        details: editRow.details,
+        quantity: editRow.quantity,
+        quantity_type: editRow.quantity_type,
+      };
+      const res = await fetch(`${BASE_URL}/${editRow.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ work_date, work_time, details, quantity, quantity_type })
+        body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error("Failed to update record");
-      setShowUpdateModal(false);
-      setUpdateRecord(null);
-      await fetchData();
-    } catch (err) {
-      console.error(err);
-      setError("⚠️ Failed to update record.");
-    } finally {
-      setLoading(false);
+      const data = await res.json();
+      if (data.id) {
+        showPopup("success", "Updated successfully ✅");
+        setEditRow(null);
+        fetchInward(month);
+      } else showPopup("error", data.error || "Update failed");
+    } catch {
+      showPopup("error", "Update failed");
     }
   };
 
-  // -------- Download PDF --------
-  const handleDownloadPDF = async () => {
-    try {
-      setLoading(true);
-      setError("");
-
-      const url = new URL(`${API_URL}/export`);
-      if (selectedDate) url.searchParams.append("date", selectedDate);
-      else if (selectedMonth) url.searchParams.append("month", selectedMonth);
-
-      const res = await fetch(url.toString());
-      if (!res.ok) throw new Error(`Failed to download PDF. Status: ${res.status}`);
-
-      const blob = await res.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = downloadUrl;
-      link.download = `inward_export_${new Date().toISOString().split("T")[0]}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    } catch (err) {
-      console.error(err);
-      setError("⚠️ Failed to download PDF.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const paged = inwards.slice(page * pageSize, page * pageSize + pageSize);
+  const totalPages = Math.ceil(inwards.length / pageSize);
 
   return (
-    <div className="container py-4">
-      <h2 className="text-center fw-bold mb-4" style={{ color: "#ff5722" }}>
-        📦 Inward Details
-      </h2>
+    <>
+      <style>{`
+        body {
+          font-family: 'Inter', 'Poppins', sans-serif;
+          background-color: #fffaf5;
+        }
 
-      {/* Filters */}
-      <div className="row mb-3 g-3 justify-content-center">
-        <div className="col-md-4">
-          <label className="form-label fw-semibold text-secondary">Select Date</label>
-          <input
-            type="date"
-            className="form-control"
-            value={selectedDate}
-            onChange={(e) => { setSelectedDate(e.target.value); setSelectedMonth(""); }}
-          />
+        /* ====== Background Theme ====== */
+        .page-wrap {
+          min-height: 100vh;
+          background: linear-gradient(180deg, #ff8a00 0%, #ff5f6d 45%, #ff758c 70%, #fbc2eb 100%);
+          padding: 1rem;
+          color: #fff;
+          overflow-x: hidden;
+        }
+
+        /* ====== Header ====== */
+        .header-card {
+          background: rgba(255, 255, 255, 0.25);
+          border-radius: 1.2rem;
+          backdrop-filter: blur(10px);
+          border: 1px solid rgba(255, 255, 255, 0.35);
+          box-shadow: 0 8px 25px rgba(255, 94, 98, 0.3);
+          padding: 1.2rem 1.5rem;
+          margin-bottom: 1.2rem;
+          transition: all .4s ease;
+        }
+        .header-card:hover {
+          transform: scale(1.01);
+          box-shadow: 0 10px 35px rgba(255, 88, 88, 0.4);
+        }
+
+        /* ====== Record Cards ====== */
+        .record-card {
+          background: linear-gradient(145deg, #fffdfc, #fff0e6);
+          border-radius: 1rem;
+          padding: 1rem 1.2rem;
+          box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
+          transition: all 0.3s ease;
+          color: #212121;
+        }
+        .record-card:hover {
+          transform: translateY(-3px);
+          box-shadow: 0 10px 28px rgba(255, 111, 97, 0.3);
+        }
+
+        /* ====== Buttons ====== */
+        .btn-glow {
+          background: linear-gradient(90deg, #ff8a00, #ff3d7f);
+          border: none;
+          color: #fff;
+          border-radius: 8px;
+          padding: .45rem 1rem;
+          font-weight: 500;
+          transition: all 0.3s ease;
+        }
+        .btn-glow:hover {
+          background: linear-gradient(90deg, #ff3d7f, #ff8a00);
+          box-shadow: 0 0 15px rgba(255, 83, 73, 0.6);
+        }
+
+        /* ====== Month Selector ====== */
+        .select-month {
+          border-radius: 8px;
+          border: 1px solid rgba(255,255,255,0.4);
+          background: rgba(255,255,255,0.5);
+          color: #111;
+          font-weight: 600;
+        }
+        .select-month:focus {
+          outline: none;
+          box-shadow: 0 0 6px rgba(255,140,0,0.6);
+        }
+
+        /* ====== Popup Modals ====== */
+        .popup-center {
+          position: fixed;
+          inset: 0;
+          background: rgba(0,0,0,0.55);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 9999;
+        }
+        .popup-box {
+          background: #fffaf5;
+          border-radius: 1rem;
+          padding: 1.5rem;
+          text-align: center;
+          box-shadow: 0 10px 40px rgba(255, 98, 81, 0.3);
+          max-width: 340px;
+          width: 100%;
+          animation: fadeIn .4s ease;
+        }
+        .popup-box.success { border-top: 6px solid #22c55e; }
+        .popup-box.error { border-top: 6px solid #ef4444; }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: scale(0.92); }
+          to { opacity: 1; transform: scale(1); }
+        }
+
+        /* ====== Badges ====== */
+        .badge-date {
+          background: rgba(255,165,0,0.15);
+          color: #b45309;
+          border-radius: 8px;
+          padding: 4px 8px;
+          font-size: .75rem;
+        }
+      `}</style>
+
+      {/* Popup */}
+      {popup.show && (
+        <div className="popup-center">
+          <div className={`popup-box ${popup.type}`}>
+            <h5>{popup.type === "success" ? "✅ Success" : "⚠️ Error"}</h5>
+            <p>{popup.message}</p>
+            <small>Closing in 2s…</small>
+          </div>
         </div>
-        <div className="col-md-4">
-          <label className="form-label fw-semibold text-secondary">Select Month</label>
-          <select
-            className="form-select"
-            value={selectedMonth}
-            onChange={(e) => { setSelectedMonth(e.target.value); setSelectedDate(""); }}
-          >
-            <option value="">All Months</option>
-            {months.map((m) => <option key={m} value={m}>{m}</option>)}
-          </select>
-        </div>
-      </div>
-
-      {/* Download Button */}
-      <div className="text-center mb-3">
-        <button className="btn btn-primary" onClick={handleDownloadPDF}>
-          📥 Download PDF
-        </button>
-      </div>
-
-      {/* Loading Spinner */}
-      {loading && <LoadingSpiner />}
-
-      {/* Error / Empty */}
-      {error && <div className="alert alert-danger text-center fw-semibold">{error}</div>}
-      {!loading && !error && records.length === 0 && (
-        <div className="alert alert-warning text-center fw-semibold">No records found</div>
       )}
 
-      {/* Records Table */}
-      {!loading && !error && records.length > 0 && (
-        <div className="table-responsive">
-          <table className="table table-bordered table-hover align-middle text-center">
-            <thead className="table-light">
-              <tr>
-                <th>Seq</th>
-                <th>Date</th>
-                <th>Details</th>
-                <th>Quantity</th>
-                <th>Quantity Type</th>
-                <th>Work Time</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {records.map((rec, idx) => (
-                <tr key={rec.id}>
-                  <td>{rec.seq_no ?? idx + 1}</td>
-                  <td>{new Date(rec.work_date).toLocaleDateString()}</td>
-                  <td>{rec.details}</td>
-                  <td>{rec.quantity ?? "-"}</td>
-                  <td>{rec.quantity_type ?? "-"}</td>
-                  <td>{rec.work_time ?? "-"}</td>
-                  <td>
-                    <button
-                      className="btn btn-success btn-sm me-2"
-                      onClick={() => { setUpdateRecord(rec); setShowUpdateModal(true); }}
-                    >
-                      Update
-                    </button>
-                    <button
-                      className="btn btn-danger btn-sm"
-                      onClick={() => { setDeleteId(rec.id); setShowDeleteConfirm(true); }}
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* Edit Modal */}
+      {editRow && (
+        <div className="popup-center">
+          <div className="popup-box" style={{ textAlign: "left" }}>
+            <h6>Edit Inward Record</h6>
+            <form onSubmit={handleUpdate}>
+              <label>Date</label>
+              <input
+                type="date"
+                className="form-control mb-2"
+                value={editRow.work_date?.slice(0, 10) || ""}
+                onChange={(e) => setEditRow({ ...editRow, work_date: e.target.value })}
+              />
+              <label>Details</label>
+              <input
+                className="form-control mb-2"
+                value={editRow.details || ""}
+                onChange={(e) => setEditRow({ ...editRow, details: e.target.value })}
+              />
+              <label>Quantity</label>
+              <input
+                className="form-control mb-2"
+                type="number"
+                value={editRow.quantity || ""}
+                onChange={(e) => setEditRow({ ...editRow, quantity: e.target.value })}
+              />
+              <label>Quantity Type</label>
+              <input
+                className="form-control mb-2"
+                value={editRow.quantity_type || ""}
+                onChange={(e) => setEditRow({ ...editRow, quantity_type: e.target.value })}
+              />
+              <label>Work Time</label>
+              <input
+                className="form-control mb-3"
+                value={editRow.work_time || ""}
+                onChange={(e) => setEditRow({ ...editRow, work_time: e.target.value })}
+              />
+              <button className="btn-glow w-100 mb-2">Save</button>
+              <button
+                type="button"
+                className="btn btn-outline-secondary w-100"
+                onClick={() => setEditRow(null)}
+              >
+                Cancel
+              </button>
+            </form>
+          </div>
         </div>
       )}
 
-      {/* Delete Modal */}
-      {showDeleteConfirm && (
-        <div className="modal d-block" tabIndex="-1" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
-          <div className="modal-dialog modal-dialog-centered">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Confirm Delete</h5>
-                <button type="button" className="btn-close" onClick={() => setShowDeleteConfirm(false)}></button>
-              </div>
-              <div className="modal-body">
-                <p>Are you sure you want to delete this record?</p>
-              </div>
-              <div className="modal-footer">
-                <button className="btn btn-secondary" onClick={() => setShowDeleteConfirm(false)}>Cancel</button>
-                <button className="btn btn-danger" onClick={handleDelete}>Delete</button>
-              </div>
+      {/* Delete Confirm */}
+      {deleteRow && (
+        <div className="popup-center">
+          <div className="popup-box">
+            <h6>🗑️ Delete this record?</h6>
+            <p>{deleteRow.details}</p>
+            <div className="d-flex justify-content-center gap-2 mt-3">
+              <button className="btn btn-outline-secondary" onClick={() => setDeleteRow(null)}>
+                Cancel
+              </button>
+              <button className="btn btn-danger" onClick={handleDelete}>
+                Delete
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Update Modal */}
-      {showUpdateModal && updateRecord && (
-        <div className="modal d-block" tabIndex="-1" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
-          <div className="modal-dialog modal-dialog-centered">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Update Record</h5>
-                <button type="button" className="btn-close" onClick={() => setShowUpdateModal(false)}></button>
-              </div>
-              <div className="modal-body">
-                {["work_date","work_time","details","quantity","quantity_type"].map(field => (
-                  <div className="mb-2" key={field}>
-                    <label className="form-label">{field.replace("_"," ").toUpperCase()}</label>
-                    <input
-                      type={field==="quantity"?"number":field==="work_date"?"date":"text"}
-                      className="form-control"
-                      value={field==="work_date"?updateRecord[field]?.split("T")[0]||"":updateRecord[field]||""}
-                      onChange={(e)=>setUpdateRecord({...updateRecord,[field]:field==="quantity"?Number(e.target.value):e.target.value})}
-                    />
+      {/* Main Page */}
+      <div className="page-wrap">
+        <div className="container-fluid" style={{ maxWidth: "1000px" }}>
+          <div className="header-card d-flex flex-column flex-sm-row justify-content-between align-items-sm-center">
+            <div>
+              <h5 className="mb-1 fw-semibold">🧾 Inward Records – {month}</h5>
+              <small>Manage inward entries: view, edit, delete, or download</small>
+            </div>
+            <div className="d-flex gap-2 flex-wrap mt-2 mt-sm-0">
+              <select
+                className="form-select select-month"
+                value={month}
+                onChange={(e) => setMonth(e.target.value)}
+              >
+                {[
+                  "January","February","March","April","May","June",
+                  "July","August","September","October","November","December",
+                ].map((m) => (
+                  <option key={m}>{m}</option>
+                ))}
+              </select>
+              <button className="btn-glow" onClick={handleDownload}>
+                ⬇️ Download PDF
+              </button>
+            </div>
+          </div>
+
+          {loading ? (
+            <p className="text-center text-light my-4 fs-5">Loading records...</p>
+          ) : inwards.length === 0 ? (
+            <p className="text-center text-light my-4 fs-5">No inward records found for {month}.</p>
+          ) : (
+            <>
+              <div className="d-flex flex-column gap-3">
+                {paged.map((rec) => (
+                  <div key={rec.id} className="record-card">
+                    <div className="d-flex justify-content-between align-items-center mb-2 flex-wrap">
+                      <div className="d-flex align-items-center gap-2">
+                        <span className="badge bg-danger">#{rec.seq_no}</span>
+                        <span className="badge-date">
+                          {new Date(rec.work_date).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <div className="d-flex gap-2 mt-2 mt-sm-0">
+                        <button
+                          className="btn btn-sm btn-outline-warning"
+                          onClick={() => setEditRow(rec)}
+                        >
+                          ✏️ Edit
+                        </button>
+                        <button
+                          className="btn btn-sm btn-outline-danger"
+                          onClick={() => setDeleteRow(rec)}
+                        >
+                          🗑️ Delete
+                        </button>
+                      </div>
+                    </div>
+                    <p className="fw-semibold mb-1 text-dark">{rec.details}</p>
+                    <p className="small text-muted mb-1">
+                      Qty: <b>{rec.quantity ?? "-"}</b> {rec.quantity_type || ""}
+                    </p>
+                    <p className="small text-muted mb-0">
+                      Work Time: {rec.work_time || "-"}
+                    </p>
                   </div>
                 ))}
               </div>
-              <div className="modal-footer">
-                <button className="btn btn-secondary" onClick={() => setShowUpdateModal(false)}>Cancel</button>
-                <button className="btn btn-success" onClick={handleUpdate}>Update</button>
+
+              {/* Pagination */}
+              <div className="d-flex justify-content-between align-items-center mt-4">
+                <small className="text-light fw-medium">
+                  Page {page + 1} of {totalPages || 1}
+                </small>
+                <div className="d-flex gap-2">
+                  <button
+                    className="btn btn-sm btn-outline-light"
+                    disabled={page === 0}
+                    onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  >
+                    ← Prev
+                  </button>
+                  <button
+                    className="btn btn-sm btn-outline-light"
+                    disabled={page + 1 >= totalPages}
+                    onClick={() => setPage((p) => p + 1)}
+                  >
+                    Next →
+                  </button>
+                </div>
               </div>
-            </div>
-          </div>
+            </>
+          )}
         </div>
-      )}
-    </div>
+      </div>
+    </>
   );
 }

@@ -1,213 +1,357 @@
-import React, { useState, useEffect } from "react";
-import LoadingSpiner from "../Entertainment/LoadingSpiner";
+// src/pages/TotalSiteKharch.jsx
+import React, { useEffect, useState } from "react";
 
-const monthsList = [
-  { id: 1, name: "January" }, { id: 2, name: "February" }, { id: 3, name: "March" },
-  { id: 4, name: "April" }, { id: 5, name: "May" }, { id: 6, name: "June" },
-  { id: 7, name: "July" }, { id: 8, name: "August" }, { id: 9, name: "September" },
-  { id: 10, name: "October" }, { id: 11, name: "November" }, { id: 12, name: "December" },
+const BASE_URL = "http://localhost:5000/api/sitekharch";
+
+const MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
-const TotalSiteKharch = () => {
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
-  const [receivedAmount, setReceivedAmount] = useState("");
-  const [receivedDate, setReceivedDate] = useState(new Date().toISOString().split("T")[0]);
+// make YYYY-MM from year + monthIndex (0..11)
+function ym(year, monthIndex) {
+  const m = String(monthIndex + 1).padStart(2, "0");
+  return `${year}-${m}`;
+}
+
+export default function TotalSiteKharch() {
+  const currentYear = new Date().getFullYear();
+  const [year, setYear] = useState(currentYear);
+
+  // array of 12 items: [{month:'2025-01', totalKharch, totalReceived, balance, hasData}]
+  const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [totalReceived, setTotalReceived] = useState(0);
-  const [totalKharch, setTotalKharch] = useState(0);
 
-  const addReceivedAmount = async () => {
-    if (!receivedAmount || isNaN(receivedAmount) || Number(receivedAmount) <= 0) {
-      alert("Enter a valid amount");
-      return;
-    }
-    try {
-      const res = await fetch("https://express-backend-myapp.onrender.com/api/add-received-amount", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount_received: receivedAmount, payment_date: receivedDate }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to add amount");
-      setReceivedAmount("");
-      fetchMonthSummary(selectedMonth);
-    } catch (err) {
-      alert(err.message);
-    }
-  };
+  const [error, setError] = useState("");
 
-  const fetchMonthSummary = async (month) => {
+  const loadYearData = async (y) => {
+    setLoading(true);
+    setError("");
     try {
-      setLoading(true);
-      setError(null);
-      const res = await fetch(`https://express-backend-myapp.onrender.com/api/monthly-summary-sitekharch?month=${month}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to fetch summary");
-      if (data.length > 0) {
-        const monthData = data[0];
-        setTotalReceived(monthData.total_received_rs || 0);
-        setTotalKharch(monthData.total_kharch_rs || 0);
-      } else {
-        setTotalReceived(0);
-        setTotalKharch(0);
+      // 12 promises (kharch + received for each month)
+      const promises = [];
+      for (let i = 0; i < 12; i++) {
+        const monthStr = ym(y, i);
+        // kharch
+        const khP = fetch(`${BASE_URL}/kharch?month=${monthStr}`).then((r) =>
+          r.json()
+        );
+        // received
+        const recP = fetch(`${BASE_URL}/received?month=${monthStr}`).then((r) =>
+          r.json()
+        );
+        promises.push(Promise.all([khP, recP]));
       }
+
+      const all = await Promise.all(promises);
+
+      const final = all.map(([khJson, recJson], index) => {
+        const monthStr = ym(y, index);
+
+        let totalKharch = 0;
+        if (khJson.ok && Array.isArray(khJson.data)) {
+          totalKharch = khJson.data.reduce((sum, r) => {
+            // same logic as you used (amount + extra_amount + extra_items)
+            let t = 0;
+            t += Number(r.amount || 0);
+            t += Number(r.extra_amount || 0);
+
+            let extras = [];
+            if (typeof r.extra_items === "string") {
+              try {
+                extras = JSON.parse(r.extra_items);
+              } catch {
+                extras = [];
+              }
+            } else if (Array.isArray(r.extra_items)) {
+              extras = r.extra_items;
+            }
+            for (const x of extras) {
+              t += Number(x.amount || 0);
+            }
+
+            return sum + t;
+          }, 0);
+        }
+
+        let totalReceived = 0;
+        let recData = [];
+        if (recJson.ok && Array.isArray(recJson.data)) {
+          recData = recJson.data;
+          totalReceived = recJson.data.reduce(
+            (sum, r) => sum + Number(r.amount_received || 0),
+            0
+          );
+        }
+
+        const balance = totalReceived - totalKharch;
+        const hasData =
+          (khJson.ok && khJson.data && khJson.data.length > 0) ||
+          (recJson.ok && recJson.data && recJson.data.length > 0);
+
+        return {
+          monthStr,
+          label: `${MONTH_NAMES[index]} ${y}`,
+          totalKharch,
+          totalReceived,
+          balance,
+          hasData,
+          recCount: recData.length,
+          khCount: khJson.ok && Array.isArray(khJson.data)
+            ? khJson.data.length
+            : 0,
+        };
+      });
+
+      setRows(final);
     } catch (err) {
-      setError(err.message);
-      setTotalReceived(0);
-      setTotalKharch(0);
+      console.error(err);
+      setError("Failed to load year data");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchMonthSummary(selectedMonth);
-  }, [selectedMonth]);
+    loadYearData(year);
+  }, [year]);
 
   return (
-    <div className="wrap">
+    <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
-        :root {
-          --bg: #f5f6fa;
-          --card: #ffffff;
-          --border: #e0e0e0;
-          --muted: #6b7280;
-          --text: #111827;
-          --title: #4b0082;
-          --brand: #7c3aed;
-          --highlight: #f59e0b;
-          --success: #16a34a;
-          --danger: #dc2626;
-          --shadow-light: rgba(0,0,0,0.05);
-          --shadow-strong: rgba(0,0,0,0.12);
+        .page-wrap {
+          min-height: 100vh;
+          background: linear-gradient(180deg, #0f172a 0%, #312e81 25%, #1d4ed8 65%, #f97316 100%);
+          padding: 1rem .5rem 4rem;
         }
-
-        body { background: var(--bg); font-family: 'Inter', sans-serif; margin:0; }
-        .wrap { max-width: 960px; margin: 0 auto; padding: 25px 15px; }
-
-        .hd { text-align:center; font-weight:700; font-size:clamp(1.8rem,5vw,2.6rem); color:var(--title); margin-bottom:25px; }
-
-        .card {
-          background: var(--card);
-          border-radius: 18px;
-          box-shadow: 0 8px 18px var(--shadow-light), 0 3px 10px var(--shadow-strong);
-          padding: 20px;
-          margin-bottom:25px;
-          transition: transform 0.2s ease, box-shadow 0.2s ease;
+        @media (min-width: 576px) {
+          .page-wrap { padding: 1.3rem 1rem 4rem; }
         }
-        .card:hover { transform: translateY(-3px); box-shadow: 0 10px 25px var(--shadow-strong); }
-
-        h3 { font-weight:600; color: var(--brand); margin-bottom:16px; font-size:1.1rem; }
-
-        .field { margin-bottom:16px; }
-        label { display:block; font-weight:500; color:var(--muted); margin-bottom:6px; font-size:0.9rem; }
-        input[type="number"], input[type="date"], select {
-          width:100%; padding:12px 10px; border-radius:12px; border:1px solid var(--border);
-          font-size:1rem; outline:none; transition: 0.3s; box-shadow: inset 0 1px 3px var(--shadow-light);
+        .header-card {
+          background: rgba(15, 23, 42, 0.9);
+          border-radius: 1.2rem;
+          border: 1px solid rgba(255,255,255,0.08);
+          color: #fff;
+          box-shadow: 0 18px 35px rgba(0,0,0,0.18);
         }
-        input:focus, select:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(124,58,237,0.2); }
-
-        button {
-          width:100%; padding:12px 20px; border:none; border-radius:12px; background: linear-gradient(90deg,#7c3aed,#a78bfa);
-          color:white; font-weight:600; cursor:pointer; transition:0.3s; box-shadow:0 6px 15px rgba(124,58,237,0.25);
+        .year-input {
+          max-width: 130px;
         }
-        button:hover { opacity:0.9; transform: translateY(-1px); box-shadow:0 8px 20px rgba(124,58,237,0.3); }
-
-        .summary {
-          display:flex; justify-content:space-between; flex-wrap:wrap; gap:18px; margin-top:22px;
+        .months-grid {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 1rem;
         }
-        .summary div {
-          flex:1; min-width:200px; background: var(--card); padding:16px; border-radius:14px;
-          text-align:center; box-shadow: 0 4px 12px var(--shadow-light); transition: all 0.2s ease;
+        @media (min-width: 768px) {
+          .months-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
         }
-        .summary div:hover { transform: translateY(-3px); box-shadow: 0 10px 25px var(--shadow-strong); }
-        .summary div h3 { margin-bottom:10px; font-size:1rem; color: var(--muted); font-weight:500; }
-        .summary div p { font-size:1.6rem; font-weight:700; color:var(--title); }
-
-        .cash-label { color: var(--highlight); font-weight:700; font-size:1rem; }
-
-        /* ✅ Mobile Responsiveness */
-        @media(max-width:768px) {
-          .wrap { padding:18px 12px; }
-          .card { padding:16px; border-radius:14px; }
-          input, select, button { font-size:0.95rem; }
-          .summary { flex-direction:column; gap:14px; }
-          .summary div p { font-size:1.4rem; }
+        @media (min-width: 1100px) {
+          .months-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+          }
         }
-
-        @media(max-width:480px) {
-          .hd { font-size:1.8rem; }
-          .card { padding:14px; }
-          label { font-size:0.85rem; }
-          .summary div h3 { font-size:0.9rem; }
+        .month-card {
+          background: #fff;
+          border-radius: 1rem;
+          box-shadow: 0 10px 28px rgba(15,23,42,.08);
+          border: 1px solid rgba(148,163,184,.22);
+          padding: 1rem 1rem 0.8rem;
+          display: flex;
+          flex-direction: column;
+          gap: .6rem;
+          min-height: 150px;
+        }
+        .month-title {
+          font-weight: 600;
+          font-size: .9rem;
+          color: #0f172a;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        .pill-month {
+          background: rgba(49,46,129,.1);
+          color: #312e81;
+          padding: .2rem .6rem;
+          border-radius: 999px;
+          font-size: .65rem;
+          font-weight: 500;
+        }
+        .metric-line {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          font-size: .8rem;
+        }
+        .metric-label {
+          color: #475569;
+        }
+        .metric-value {
+          font-weight: 600;
+        }
+        .metric-value.positive {
+          color: #15803d;
+        }
+        .metric-value.negative {
+          color: #b91c1c;
+        }
+        .empty-box {
+          background: #f8fafc;
+          border: 1px dashed rgba(148,163,184,.75);
+          border-radius: .7rem;
+          padding: .4rem .5rem;
+          font-size: .7rem;
+          color: #94a3b8;
+          text-align: center;
+        }
+        .small-footer {
+          font-size: .67rem;
+          color: #94a3b8;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-top: .2rem;
+          margin-bottom: .2rem;
+        }
+        .balance-pill {
+          font-size: .65rem;
+          padding: .15rem .5rem;
+          border-radius: 999px;
+        }
+        .loading-block {
+          background: rgba(15,23,42,.12);
+          height: 12px;
+          border-radius: 999px;
+          animation: pulse 1.3s ease-in-out infinite;
+        }
+        @keyframes pulse {
+          0% { opacity: .4; }
+          50% { opacity: 1; }
+          100% { opacity: .4; }
         }
       `}</style>
 
-      <h2 className="hd">Total Site Kharch & Received</h2>
-
-      {/* Add Received Amount */}
-      <div className="card">
-        <h3>Add Received Amount</h3>
-        <div className="field">
-          <label>Amount (Rs.)</label>
-          <input
-            type="number"
-            value={receivedAmount}
-            onChange={(e) => setReceivedAmount(e.target.value)}
-            placeholder="Enter amount in Rs."
-          />
-        </div>
-        <div className="field">
-          <label>Date</label>
-          <input
-            type="date"
-            value={receivedDate}
-            onChange={(e) => setReceivedDate(e.target.value)}
-          />
-        </div>
-        <div className="field">
-          <label>Payment Mode</label>
-          <p className="cash-label">Cash</p>
-        </div>
-        <button onClick={addReceivedAmount}>Add Amount</button>
-      </div>
-
-      {/* Month Selector + Summary */}
-      <div className="card">
-        <h3>Select Month</h3>
-        <div className="field">
-          <select value={selectedMonth} onChange={(e) => setSelectedMonth(Number(e.target.value))}>
-            {monthsList.map((m) => (
-              <option key={m.id} value={m.id}>{m.name}</option>
-            ))}
-          </select>
-        </div>
-
-        {loading && <div style={{textAlign:'center',padding:'25px'}}><LoadingSpiner /></div>}
-        {error && <p style={{color:'var(--danger)',fontWeight:'600'}}>{error}</p>}
-
-        {!loading && !error && (
-          <div className="summary">
+      <div className="page-wrap">
+        <div className="container-fluid" style={{ maxWidth: "1150px" }}>
+          {/* HEADER */}
+          <div className="header-card p-3 p-sm-4 mb-4 d-flex flex-column gap-3 gap-sm-0 flex-sm-row justify-content-between align-items-sm-center">
             <div>
-              <h3>Total Received ({monthsList[selectedMonth-1].name})</h3>
-              <p>Rs. {totalReceived.toLocaleString()}</p>
+              <p
+                className="text-uppercase mb-1"
+                style={{ letterSpacing: "0.12em", fontSize: "0.65rem" }}
+              >
+                Site Kharch – Yearly View
+              </p>
+              <h5 className="mb-1">Month-wise totals for {year}</h5>
+              <p className="mb-0 small opacity-75">
+                Each block = 1 month. Shows Total Kharch, Total Received and Balance.
+              </p>
             </div>
-            <div>
-              <h3>Total Kharch ({monthsList[selectedMonth-1].name})</h3>
-              <p>Rs. {totalKharch.toLocaleString()}</p>
-            </div>
-            <div>
-              <h3>Remaining Amount ({monthsList[selectedMonth-1].name})</h3>
-              <p>Rs. {(totalReceived - totalKharch).toLocaleString()}</p>
+            <div className="d-flex gap-2 flex-wrap align-items-center">
+              <input
+                type="number"
+                className="form-control year-input"
+                value={year}
+                onChange={(e) => setYear(Number(e.target.value || currentYear))}
+                min="2000"
+                max="2100"
+              />
+              <button
+                className="btn btn-outline-light"
+                type="button"
+                onClick={() => loadYearData(year)}
+              >
+                Reload
+              </button>
             </div>
           </div>
-        )}
-      </div>
-    </div>
-  );
-};
 
-export default TotalSiteKharch;
+          {/* ERROR */}
+          {error ? (
+            <div className="alert alert-danger py-2">{error}</div>
+          ) : null}
+
+          {/* MONTHS GRID */}
+          <div className="months-grid">
+            {loading && rows.length === 0
+              ? // skeleton for 12 cards
+                Array.from({ length: 12 }).map((_, idx) => (
+                  <div key={idx} className="month-card">
+                    <div className="loading-block" style={{ width: "60%" }}></div>
+                    <div className="loading-block" style={{ width: "40%" }}></div>
+                    <div className="loading-block" style={{ width: "75%" }}></div>
+                    <div className="loading-block" style={{ width: "50%" }}></div>
+                  </div>
+                ))
+              : rows.map((mRow, idx) => (
+                  <div key={mRow.monthStr} className="month-card">
+                    <div className="month-title">
+                      <span>{mRow.label}</span>
+                      <span className="pill-month">{idx + 1} / 12</span>
+                    </div>
+
+                    <div className="metric-line">
+                      <span className="metric-label">Total Kharch</span>
+                      <span className="metric-value">
+                        ₹{mRow.totalKharch.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="metric-line">
+                      <span className="metric-label">Total Received</span>
+                      <span className="metric-value">
+                        ₹{mRow.totalReceived.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="metric-line">
+                      <span className="metric-label">Balance</span>
+                      <span
+                        className={`metric-value ${
+                          mRow.balance >= 0 ? "positive" : "negative"
+                        }`}
+                      >
+                        ₹{mRow.balance.toFixed(2)}
+                      </span>
+                    </div>
+
+                    {!mRow.hasData ? (
+                      <div className="empty-box mt-1">
+                        No history found for this month
+                      </div>
+                    ) : (
+                      <div className="small-footer">
+                        <span>
+                          Kharch: {mRow.khCount} • Rec: {mRow.recCount}
+                        </span>
+                        <span
+                          className={`balance-pill ${
+                            mRow.balance >= 0
+                              ? "bg-success-subtle text-success-emphasis"
+                              : "bg-danger-subtle text-danger-emphasis"
+                          }`}
+                        >
+                          {mRow.balance >= 0 ? "OK" : "Need ₹"}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+          </div>
+
+          <div style={{ height: "50px" }}></div>
+        </div>
+      </div>
+    </>
+  );
+}

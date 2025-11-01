@@ -10,19 +10,13 @@ const AddInward = () => {
   const [details, setDetails] = useState("");
   const [quantity, setQuantity] = useState("");
   const [quantityType, setQuantityType] = useState("");
-
-  // Multiple extra rows
-  const [extras, setExtras] = useState([]); // [{details:"", quantity:"", quantity_type:""}]
+  const [extras, setExtras] = useState([]);
   const [showExtras, setShowExtras] = useState(false);
-
-  // Loading flags
-  const [loadingCats, setLoadingCats] = useState(false); // no spinner for this now
-  const [saving, setSaving] = useState(false);           // spinner ONLY while saving
-
-  // Popup state
+  const [loadingCats, setLoadingCats] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [popup, setPopup] = useState({
     open: false,
-    type: "success", // success | error | info
+    type: "success",
     title: "",
     message: "",
   });
@@ -38,7 +32,6 @@ const AddInward = () => {
     setWorkDate((v) => v || todayISO);
   }, [todayISO]);
 
-  // Fetch categories (no spinner overlay for this now)
   useEffect(() => {
     const run = async () => {
       try {
@@ -56,93 +49,53 @@ const AddInward = () => {
     run();
   }, []);
 
-  // ---------- Extras management ----------
-  const addExtraRow = () => {
-    setExtras((prev) => [...prev, { details: "", quantity: "", quantity_type: "" }]);
-    setShowExtras(true);
-  };
+  const addExtraRow = () => setExtras((p) => [...p, { details: "", quantity: "", quantity_type: "" }]);
+  const updateExtraRow = (i, f, v) => setExtras((p) => p.map((r, x) => (x === i ? { ...r, [f]: v } : r)));
+  const removeExtraRow = (i) => setExtras((p) => p.filter((_, x) => x !== i));
 
-  const updateExtraRow = (idx, field, value) => {
-    setExtras((prev) => {
-      const copy = [...prev];
-      copy[idx] = { ...copy[idx], [field]: value };
-      return copy;
-    });
-  };
-
-  const removeExtraRow = (idx) => {
-    setExtras((prev) => prev.filter((_, i) => i !== idx));
-  };
-
-  // ---------- Popup helpers ----------
   function showPopup(type, title, message) {
     setPopup({ open: true, type, title, message });
-    clearTimeout(window.__inwardPopupTimer);
-    window.__inwardPopupTimer = setTimeout(() => {
-      setPopup((p) => ({ ...p, open: false }));
-    }, 2600);
+    clearTimeout(window.__popupTimer);
+    window.__popupTimer = setTimeout(() => setPopup((p) => ({ ...p, open: false })), 2600);
   }
-  function closePopup() {
-    clearTimeout(window.__inwardPopupTimer);
+  const closePopup = () => {
+    clearTimeout(window.__popupTimer);
     setPopup((p) => ({ ...p, open: false }));
-  }
+  };
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && closePopup();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // ---------- Submit ----------
   const handleSubmit = async () => {
-    const finalDate = workDate?.trim() ? workDate : todayISO;
-
     if (!categoryId) return showPopup("error", "Missing Category", "Please select a category.");
     if (!details.trim()) return showPopup("error", "Details Required", "Please enter details of the inward.");
 
-    // Map the first extra to legacy columns; also send all in extras_all (backend may use JSONB).
-    const firstExtra = extras[0] || { details: null, quantity: null, quantity_type: null };
-
     const payload = {
       category_id: Number(categoryId),
-      work_date: finalDate,
+      work_date: workDate || todayISO,
       work_time: workTime || null,
-      details: details || null,
+      details,
       quantity: quantity !== "" ? Number(quantity) : null,
       quantity_type: quantityType || null,
-
-      extra_details: firstExtra.details || null,
-      extra_quantity:
-        firstExtra.quantity !== "" && firstExtra.quantity != null
-          ? Number(firstExtra.quantity)
-          : null,
-      extra_quantity_type: firstExtra.quantity_type || null,
-
       extras_all: extras.map((e) => ({
         details: e.details || null,
-        quantity: e.quantity !== "" && e.quantity != null ? Number(e.quantity) : null,
+        quantity: e.quantity !== "" ? Number(e.quantity) : null,
         quantity_type: e.quantity_type || null,
       })),
     };
 
     try {
-      setSaving(true); // ⬅️ spinner ON only during save
+      setSaving(true);
       const res = await fetch("https://express-backend-myapp.onrender.com/api/inward", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || "Failed to save");
 
-      if (!res.ok) {
-        let body;
-        try {
-          body = await res.json();
-        } catch {
-          body = {};
-        }
-        throw new Error(body.error || `Failed to save (status ${res.status})`);
-      }
-
-      // Reset (keep date & category for faster next entry)
       setWorkTime("");
       setDetails("");
       setQuantity("");
@@ -154,229 +107,184 @@ const AddInward = () => {
     } catch (err) {
       showPopup("error", "Save Failed", err?.message || "Could not add inward entry.");
     } finally {
-      setSaving(false); // ⬅️ spinner OFF
+      setSaving(false);
     }
   };
 
   return (
-    <div className="wrap">
-      {/* Internal CSS only */}
-     <style>{`
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=Poppins:wght@700;800;900&display=swap');
+    <div className="inward-wrap">
+      <style>{`
+        :root {
+          --bg: #f9fafb;
+          --card: #fff;
+          --accent: #7c3aed;
+          --accent-light: #c4b5fd;
+          --border: #e5e7eb;
+          --text: #111827;
+          --muted: #6b7280;
+        }
 
-  :root{
-    --bg:#f7f7fb;
-    --bg-grad:
-      radial-gradient(1200px 520px at -10% -10%, rgba(14,165,233,.08), transparent 60%),
-      radial-gradient(900px 520px at 110% 10%, rgba(168,85,247,.10), transparent 60%),
-      var(--bg);
+        .inward-wrap {
+          max-width: 680px;
+          margin: 0 auto;
+          padding: 16px;
+          background: var(--bg);
+          min-height: 100vh;
+          font-family: 'Inter', sans-serif;
+        }
 
-    --card:#ffffff;
-    --card-tint: rgba(139,92,246,.10);
-    --border:#e8eaf1;
-    --muted:#64748b;
-    --text:#0f172a;
+        .card {
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 16px;
+          padding: 20px;
+          box-shadow: 0 6px 24px rgba(0,0,0,.05);
+          margin-bottom: 30px;
+        }
 
-    --brand:#7e22ce;      /* purple */
-    --brand-2:#a855f7;    /* lighter */
-    --brand-3:#6b21a8;    /* darker */
+        h2 {
+          text-align: center;
+          font-size: 1.8rem;
+          font-weight: 900;
+          background: linear-gradient(90deg,#7c3aed,#c084fc);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          margin-bottom: 1rem;
+        }
 
-    --ring: rgba(168,85,247,.28);
-    --danger:#ef4444;
-    --warn:#f59e0b;       /* yellow for Add Extra */
-    --warn-2:#fbbf24;
+        .grid {
+          display: grid;
+          gap: 14px;
+          grid-template-columns: 1fr;
+        }
 
-    --ink-700:#2b3447; --ink-600:#475569; --ink-500:#667085;
+        @media (min-width: 600px) {
+          .grid-2 { grid-template-columns: 1fr 1fr; }
+        }
 
-    --shadow-card: 0 28px 80px rgba(23,34,66,.12), 0 10px 26px rgba(23,34,66,.07);
-    --shadow-soft: 0 10px 28px rgba(23,34,66,.08);
-  }
+        label {
+          font-weight: 700;
+          font-size: 0.9rem;
+          color: var(--muted);
+        }
 
-  *{ box-sizing:border-box }
-  html,body,#root{ height:100% }
-  body{
-    margin:0;
-    color:var(--text);
-    background: var(--bg-grad);
-    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-  }
+        input, select, textarea {
+          width: 100%;
+          padding: 11px 14px;
+          font-size: 0.95rem;
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          transition: all 0.2s ease;
+        }
 
-  .wrap{ max-width: 760px; margin: 0 auto; padding: 20px 14px 64px; }
+        input:focus, select:focus, textarea:focus {
+          outline: none;
+          border-color: var(--accent);
+          box-shadow: 0 0 0 3px var(--accent-light);
+        }
 
-  .card{
-    background: var(--card);
-    border:1px solid var(--border);
-    border-radius:18px;
-    box-shadow: var(--shadow-card);
-    padding: 20px;
-    position: relative;
-    overflow: hidden;
-    animation: cardIn .24s ease-out;
-  }
-  @keyframes cardIn{
-    from{ transform: translateY(6px); opacity:.85; }
-    to{ transform: translateY(0); opacity:1; }
-  }
-  .card::after{
-    content:"";
-    position:absolute; inset:auto -8% -8% auto;
-    width: 360px; height: 360px; border-radius: 50%;
-    background: radial-gradient(closest-side, var(--card-tint), transparent 70%);
-    filter: blur(6px);
-    pointer-events:none;
-  }
+        textarea {
+          resize: vertical;
+          min-height: 90px;
+        }
 
-  /* Heading */
-  .hd{
-    text-align:center;
-    margin: 6px 0 18px;
-    font-weight: 900;
-    font-family: 'Poppins', sans-serif;
-    font-size: clamp(1.75rem, 6vw, 2.5rem);
-    line-height: 1.15;
-    letter-spacing: .3px;
-    color: #facc15;
-    text-shadow:
-      -1px -1px 0 #000,
-       1px -1px 0 #000,
-      -1px  1px 0 #000,
-       1px  1px 0 #000;
-  }
+        .btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 10px;
+          border: none;
+          padding: 12px;
+          font-weight: 700;
+          width: 100%;
+          transition: all 0.2s ease;
+          cursor: pointer;
+        }
 
-  /* Layout & spacing */
-  .grid{ display:grid; gap:14px; grid-template-columns: 1fr; }
-  @media (min-width: 540px){ .grid-2{ grid-template-columns: 1fr 1fr; } }
+        .btn-primary {
+          background: linear-gradient(90deg,#7c3aed,#a855f7);
+          color: white;
+        }
 
-  .section{ display:flex; flex-direction:column; gap:14px; margin-bottom: 8px; }
+        .btn-primary:hover { opacity: .9; }
 
-  /* Fields */
-  .field{ display:flex; flex-direction:column; gap:8px; position:relative; }
-  label{
-    font-size:.85rem; color:var(--ink-600); font-weight:800; letter-spacing:.2px;
-  }
-  input, select, textarea{
-    width:100%;
-    padding:12px 14px;
-    border-radius:14px;
-    border:1px solid var(--border);
-    outline:none;
-    background:#fff;
-    color:var(--text);
-    font-size:.98rem;
-    transition: border-color .12s ease, box-shadow .12s ease, transform .04s ease, background .2s ease;
-  }
-  input::placeholder, textarea::placeholder{ color:#9aa5b4; }
-  textarea{ min-height: 96px; resize: vertical; }
+        .btn-yellow {
+          background: linear-gradient(90deg,#facc15,#fbbf24);
+          color: #1f2937;
+          font-weight: 800;
+        }
 
-  /* Active / focus states */
-  input:hover, select:hover, textarea:hover{
-    border-color:#d8dcf0;
-    background:#fcfdff;
-  }
-  input:focus, select:focus, textarea:focus{
-    border-color: var(--brand-2);
-    box-shadow: 0 0 0 3px var(--ring);
-    background:#ffffff;
-  }
-  input:disabled, select:disabled, textarea:disabled{
-    background:#f6f7fb; color:#9aa0ad; cursor:not-allowed;
-  }
+        .extra-row {
+          border: 1px dashed var(--border);
+          padding: 12px;
+          border-radius: 10px;
+          margin-top: 10px;
+          background: #fff;
+        }
 
-  /* Buttons */
-  .btn{
-    display:inline-flex; align-items:center; justify-content:center; gap:.55rem;
-    font-weight:900; letter-spacing:.2px;
-    border-radius:14px; border:1px solid transparent;
-    padding:.8rem 1rem; cursor:pointer; user-select:none;
-    transition: transform .12s ease, filter .12s ease, box-shadow .12s ease, background .12s ease;
-    box-shadow: var(--shadow-soft);
-  }
-  .btn:focus-visible{ outline:none; box-shadow: 0 0 0 3px var(--ring), var(--shadow-soft); }
-  .btn:active{ transform: translateY(.5px) scale(.995); }
+        .btn-danger {
+          background: linear-gradient(90deg,#ef4444,#dc2626);
+          color: white;
+          margin-top: 6px;
+        }
 
-  .btn-primary{
-    background: linear-gradient(180deg, var(--brand-2), var(--brand-3));
-    color:#fff; border-color: rgba(124,58,237,.32);
-    width:100%;
-  }
-  .btn-primary:hover{ filter: brightness(.98); transform: translateY(-1px); }
+        .popup-center {
+          position: fixed;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          z-index: 2000;
+          background: white;
+          border-radius: 14px;
+          border: 1px solid var(--border);
+          width: 90%;
+          max-width: 360px;
+          box-shadow: 0 8px 28px rgba(0,0,0,.15);
+          animation: fadeIn .2s ease;
+        }
 
-  .btn-danger{
-    background: linear-gradient(180deg, #ef4444, #dc2626);
-    color:#fff; border-color:#dc2626;
-  }
-  .btn-danger:hover{ filter: brightness(.98); transform: translateY(-1px); }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translate(-50%, -45%); }
+          to { opacity: 1; transform: translate(-50%, -50%); }
+        }
 
-  .btn-yellow{
-    background: linear-gradient(180deg, var(--warn-2), var(--warn));
-    color:#1f2937; border-color:#eab308;
-  }
-  .btn-yellow:hover{ filter: brightness(.98); transform: translateY(-1px); }
+        .popup-header {
+          padding: 12px 16px;
+          font-weight: 800;
+          font-size: 1rem;
+          border-bottom: 1px solid var(--border);
+          color: var(--text);
+        }
 
-  .controls-inline{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+        .popup-body {
+          padding: 14px 16px;
+          color: var(--muted);
+        }
 
-  /* Extras */
-  .extra-wrap{ display:flex; flex-direction:column; gap:12px; }
-  .extra-row{
-    display:flex; flex-wrap:wrap; gap:12px; padding:12px;
-    border:1px dashed var(--border); border-radius:14px; background:#fff;
-    transition: background .12s ease, box-shadow .12s ease;
-  }
-  .extra-row:hover{ background:#f9fbff; box-shadow: 0 6px 18px rgba(23,34,66,.06); }
-  .extra-col{ flex: 1 1 160px; display:flex; flex-direction:column; gap:8px; }
+        .popup-footer {
+          padding: 12px 16px;
+          border-top: 1px solid var(--border);
+          display: flex;
+          justify-content: flex-end;
+        }
 
-  /* Centered popup with NO dark overlay */
-  .popup-center {
-    position: fixed; top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 9999;
-    width: 100%;
-    max-width: 440px;
-    background: #fff;
-    border: 1px solid var(--border);
-    border-radius: 18px;
-    box-shadow: 0 28px 80px rgba(23,34,66,.22);
-    overflow: hidden;
-    animation: pop .18s ease-out;
-  }
-  @keyframes pop{
-    from{ transform: translate(-50%, calc(-50% + 6px)) scale(.985); opacity:.85; }
-    to{ transform: translate(-50%, -50%) scale(1); opacity:1; }
-  }
-  .modal-head{ display:flex; align-items:center; gap:10px; padding:14px 16px 6px; }
-  .badge{
-    width:34px;height:34px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;font-weight:900;
-  }
-  .ok{ background:#ecfdf5; color:#059669; border:1px solid #a7f3d0; }
-  .err{ background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; }
-  .inf{ background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; }
-  .modal-title{ margin:0; font-weight:900; font-size:1.05rem; color:var(--text); }
-  .modal-body{ padding:8px 16px 14px; color:var(--ink-600); line-height:1.55; }
-  .modal-actions{ padding: 0 16px 16px; display:flex; justify-content:flex-end; }
+        .busy {
+          position: fixed;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: rgba(255,255,255,.5);
+          z-index: 3000;
+        }
 
-  /* Saving spinner: centered, NO dark background */
-  .busy{
-    position: fixed;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 10000;
-    background: transparent;
-    pointer-events: none;
-  }
+        @media (max-width: 480px) {
+          .card { padding: 16px; }
+          input, select, textarea { font-size: 0.9rem; }
+          h2 { font-size: 1.5rem; }
+        }
+      `}</style>
 
-  /* Small helper text */
-  .note{ font-size:.82rem; color:#94a3b8; margin-top:-6px; margin-bottom:6px; }
-
-  /* Reduced motion */
-  @media (prefers-reduced-motion: reduce){
-    .card, .popup-center, .btn { animation: none !important; transition: none !important; }
-  }
-`}</style>
-
-
-      {/* Spinner ONLY while saving */}
       {saving && (
         <div className="busy">
           <LoadingSpiner />
@@ -384,11 +292,10 @@ const AddInward = () => {
       )}
 
       <div className="card">
-        <h2 className="hd">Add Inward</h2>
+        <h2>Add Inward</h2>
 
-        {/* Category + Date */}
-        <div className="grid grid-2 section">
-          <div className="field">
+        <div className="grid grid-2">
+          <div>
             <label>Category</label>
             <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
               <option value="">Select category</option>
@@ -400,60 +307,36 @@ const AddInward = () => {
             </select>
           </div>
 
-          <div className="field">
-            <label>Date (defaults to today)</label>
-            <input
-              type="date"
-              value={workDate}
-              onChange={(e) => setWorkDate(e.target.value)}
-            />
+          <div>
+            <label>Date</label>
+            <input type="date" value={workDate} onChange={(e) => setWorkDate(e.target.value)} />
           </div>
         </div>
 
-        {/* Time (optional) */}
-        <div className="section">
-          <div className="field">
-            <label>Time (optional)</label>
-            <input
-              type="text"
-              placeholder="e.g., 10:00 AM – 12:30 PM"
-              value={workTime}
-              onChange={(e) => setWorkTime(e.target.value)}
-            />
-          </div>
+        <div>
+          <label>Time (optional)</label>
+          <input
+            type="text"
+            placeholder="e.g., 10:00 AM – 12:30 PM"
+            value={workTime}
+            onChange={(e) => setWorkTime(e.target.value)}
+          />
         </div>
 
-        {/* Details + (Only here: Add Extra controls in yellow) */}
-        <div className="section">
-          <div className="field">
-            <div className="controls-inline" style={{ justifyContent: "space-between" }}>
-              <label style={{ margin: 0 }}>Details</label>
-              <div className="controls-inline">
-                <button
-                  type="button"
-                  className="btn btn-yellow"
-                  onClick={() => setShowExtras((v) => !v)}
-                >
-                  {showExtras ? "Hide Extras" : "Add Extra Item"}
-                </button>
-                {showExtras && (
-                  <button type="button" className="btn btn-yellow" onClick={addExtraRow}>
-                    + Add Row
-                  </button>
-                )}
-              </div>
-            </div>
-            <textarea
-              placeholder="Describe the inward item/work..."
-              value={details}
-              onChange={(e) => setDetails(e.target.value)}
-            />
-          </div>
+        <div>
+          <label>Details</label>
+          <textarea
+            placeholder="Describe the inward item/work..."
+            value={details}
+            onChange={(e) => setDetails(e.target.value)}
+          />
+          <button className="btn btn-yellow" onClick={() => setShowExtras((v) => !v)}>
+            {showExtras ? "Hide Extras" : "Add Extra Item"}
+          </button>
         </div>
 
-        {/* Quantity + Type */}
-        <div className="grid grid-2 section">
-          <div className="field">
+        <div className="grid grid-2">
+          <div>
             <label>Quantity</label>
             <input
               type="number"
@@ -463,7 +346,7 @@ const AddInward = () => {
               onChange={(e) => setQuantity(e.target.value)}
             />
           </div>
-          <div className="field">
+          <div>
             <label>Quantity Type</label>
             <input
               type="text"
@@ -474,83 +357,52 @@ const AddInward = () => {
           </div>
         </div>
 
-        {/* Extras (multiple) */}
-        {showExtras && (
-          <div className="extra-wrap">
-            {extras.length === 0 && (
-              <div style={{ color: "#64748b", fontSize: ".85rem" }}>
-                Click <b>+ Add Row</b> to insert extra items. All extras use the same date.
-              </div>
-            )}
+        {showExtras &&
+          extras.map((ex, i) => (
+            <div key={i} className="extra-row">
+              <label>Extra Details</label>
+              <input
+                type="text"
+                value={ex.details}
+                onChange={(e) => updateExtraRow(i, "details", e.target.value)}
+                placeholder="Extra item details..."
+              />
+              <label>Extra Quantity</label>
+              <input
+                type="number"
+                step="any"
+                value={ex.quantity}
+                onChange={(e) => updateExtraRow(i, "quantity", e.target.value)}
+                placeholder="e.g., 2.5"
+              />
+              <label>Extra Quantity Type</label>
+              <input
+                type="text"
+                value={ex.quantity_type}
+                onChange={(e) => updateExtraRow(i, "quantity_type", e.target.value)}
+                placeholder="e.g., ton, bags"
+              />
+              <button className="btn btn-danger" onClick={() => removeExtraRow(i)}>
+                Remove
+              </button>
+            </div>
+          ))}
 
-            {extras.map((ex, idx) => (
-              <div key={idx} className="extra-row">
-                <div className="extra-col">
-                  <label>Extra Details</label>
-                  <input
-                    type="text"
-                    placeholder="Extra item details..."
-                    value={ex.details}
-                    onChange={(e) => updateExtraRow(idx, "details", e.target.value)}
-                  />
-                </div>
-                <div className="extra-col">
-                  <label>Extra Quantity</label>
-                  <input
-                    type="number"
-                    step="any"
-                    placeholder="e.g., 2.5"
-                    value={ex.quantity}
-                    onChange={(e) => updateExtraRow(idx, "quantity", e.target.value)}
-                  />
-                </div>
-                <div className="extra-col">
-                  <label>Extra Quantity Type</label>
-                  <input
-                    type="text"
-                    placeholder="e.g., ton, bags"
-                    value={ex.quantity_type}
-                    onChange={(e) => updateExtraRow(idx, "quantity_type", e.target.value)}
-                  />
-                </div>
-                <div style={{ flex: "0 0 100%", display: "flex", justifyContent: "flex-end" }}>
-                  <button
-                    type="button"
-                    className="btn btn-danger"
-                    onClick={() => removeExtraRow(idx)}
-                  >
-                    Remove
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Submit */}
-        <div className="section">
+        <div style={{ marginTop: 20 }}>
           <button className="btn btn-primary" onClick={handleSubmit} disabled={saving}>
             {saving ? "Saving..." : "Save Inward"}
           </button>
         </div>
       </div>
 
-      {/* Center Popup (NO overlay) */}
       {popup.open && (
-        <div className="popup-center" role="dialog" aria-modal="true">
-          <div className="modal-head">
-            <span
-              className={`badge ${
-                popup.type === "success" ? "ok" : popup.type === "error" ? "err" : "inf"
-              }`}
-            >
-              {popup.type === "success" ? "✓" : popup.type === "error" ? "!" : "i"}
-            </span>
-            <h3 className="modal-title">{popup.title}</h3>
-          </div>
-          <div className="modal-body">{popup.message}</div>
-          <div className="modal-actions">
-            <button className="btn btn-yellow" onClick={closePopup}>OK</button>
+        <div className="popup-center">
+          <div className="popup-header">{popup.title}</div>
+          <div className="popup-body">{popup.message}</div>
+          <div className="popup-footer">
+            <button className="btn btn-yellow" onClick={closePopup}>
+              OK
+            </button>
           </div>
         </div>
       )}
