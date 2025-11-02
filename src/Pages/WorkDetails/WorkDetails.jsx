@@ -1,7 +1,19 @@
 // src/pages/WorkDetails.jsx
-import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
-import { FaClipboardList, FaInbox, FaHammer, FaPlus, FaEye } from "react-icons/fa";
+import {
+  FaClipboardList,
+  FaInbox,
+  FaHammer,
+  FaPlus,
+  FaEye,
+} from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 
 import AddDpr from "./AddDpr";
@@ -13,10 +25,10 @@ import DprGet from "./DprGet";
 import InwardGet from "./InwardGet";
 import LoadingSpiner from "../Entertainment/LoadingSpiner";
 
-const API_BASE = import.meta?.env?.VITE_API_BASE ?? "http://localhost:5000/api";
+const API_BASE =
+  import.meta?.env?.VITE_API_BASE ??
+  "https://express-backend-myapp.onrender.com/api";
 
-/* ---------- helpers ---------- */
-const cleanName = (s) => (typeof s === "string" ? s.trim().replace(/\s+/g, " ") : "");
 const spring = { type: "spring", stiffness: 280, damping: 22, mass: 0.5 };
 
 /* ---------- Tab Button ---------- */
@@ -36,7 +48,9 @@ const TabButton = ({ active, color, icon, label, onClick, onKeyDown }) => (
       border: active ? `1px solid ${color.border}` : "1px solid #e2e8f0",
       background: active ? color.bgActive : "#ffffff",
       color: active ? color.fgActive : "#374151",
-      boxShadow: active ? `0 10px 26px ${color.shadow}` : "0 1px 6px rgba(0,0,0,.06)",
+      boxShadow: active
+        ? `0 10px 26px ${color.shadow}`
+        : "0 1px 6px rgba(0,0,0,.06)",
       fontWeight: 700,
       transition: "all .25s ease",
       minHeight: 44,
@@ -59,7 +73,9 @@ const TabButton = ({ active, color, icon, label, onClick, onKeyDown }) => (
         }}
       />
     )}
-    <span style={{ display: "grid", placeItems: "center", fontSize: 16 }}>{icon}</span>
+    <span style={{ display: "grid", placeItems: "center", fontSize: 16 }}>
+      {icon}
+    </span>
     <span className="wd-tab-label">{label}</span>
     {active && (
       <motion.span
@@ -124,18 +140,28 @@ export default function WorkDetails() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("DPR");
   const [busy, setBusy] = useState(false);
-  const [toast, setToast] = useState({ open: false, type: "success", msg: "" });
+  const [toast, setToast] = useState({
+    open: false,
+    type: "success",
+    msg: "",
+  });
   const toastTimer = useRef(null);
 
   const showToast = useCallback((type, msg) => {
     setToast({ open: true, type, msg });
     if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast((t) => ({ ...t, open: false })), 2600);
+    toastTimer.current = setTimeout(
+      () => setToast((t) => ({ ...t, open: false })),
+      2600
+    );
   }, []);
 
-  useEffect(() => () => toastTimer.current && clearTimeout(toastTimer.current), []);
+  useEffect(
+    () => () => toastTimer.current && clearTimeout(toastTimer.current),
+    []
+  );
 
-  // color palette per tab
+  // color palette per tab (only tabs from your image)
   const palette = {
     DPR: {
       bgActive: "linear-gradient(135deg,#fef3c7,#fde68a)",
@@ -161,13 +187,13 @@ export default function WorkDetails() {
       glow: "radial-gradient(20px 12px at 50% 50%, rgba(147,197,253,.35), transparent)",
       underline: "#0284c7",
     },
-    CATEGORY: {
-      bgActive: "linear-gradient(135deg,#ede9fe,#ddd6fe)",
-      fgActive: "#4c1d95",
-      border: "#a78bfa",
-      shadow: "rgba(124,58,237,.25)",
-      glow: "radial-gradient(20px 12px at 50% 50%, rgba(196,181,253,.35), transparent)",
-      underline: "#6d28d9",
+    "SITE KHARCH GET": {
+      bgActive: "linear-gradient(135deg,#eef2ff,#e0e7ff)",
+      fgActive: "#312e81",
+      border: "#6366f1",
+      shadow: "rgba(99,102,241,.22)",
+      glow: "radial-gradient(20px 12px at 50% 50%, rgba(99,102,241,.35), transparent)",
+      underline: "#4f46e5",
     },
     "TOTAL KHARCH": {
       bgActive: "linear-gradient(135deg,#dcfce7,#bbf7d0)",
@@ -195,12 +221,13 @@ export default function WorkDetails() {
     },
   };
 
+  // tabs: only the ones in your folder (image)
   const tabs = useMemo(
     () => [
       { name: "DPR", icon: <FaClipboardList /> },
       { name: "INWARD", icon: <FaInbox /> },
       { name: "SITE KHARCH", icon: <FaHammer /> },
-      { name: "CATEGORY", icon: <FaPlus /> },
+      { name: "SITE KHARCH GET", icon: <FaEye /> }, // this shows list
       { name: "TOTAL KHARCH", icon: <FaHammer /> },
       { name: "DPR GET", icon: <FaEye /> },
       { name: "INWARD GET", icon: <FaEye /> },
@@ -210,14 +237,22 @@ export default function WorkDetails() {
 
   const renderContent = () => {
     switch (activeTab) {
-      case "DPR": return <AddDpr />;
-      case "INWARD": return <AddInward />;
-      case "SITE KHARCH": return <AddSitekharch />;
-      case "CATEGORY": return <div>Category Management</div>;
-      case "TOTAL KHARCH": return <TotalSiteKharch />;
-      case "DPR GET": return <DprGet />;
-      case "INWARD GET": return <InwardGet />;
-      default: return null;
+      case "DPR":
+        return <AddDpr />;
+      case "INWARD":
+        return <AddInward />;
+      case "SITE KHARCH":
+        return <AddSitekharch />;
+      case "SITE KHARCH GET":
+        return <SitekharchGet />;
+      case "TOTAL KHARCH":
+        return <TotalSiteKharch />;
+      case "DPR GET":
+        return <DprGet />;
+      case "INWARD GET":
+        return <InwardGet />;
+      default:
+        return null;
     }
   };
 
@@ -227,7 +262,6 @@ export default function WorkDetails() {
         body, html { background: #fafafa; overflow-x: hidden; }
         .wd-app { height: 100dvh; overflow: hidden; background: #fff; }
 
-        /* Animated Navbar */
         .wd-nav {
           position: fixed;
           top: 0; left: 0; right: 0;
@@ -246,6 +280,7 @@ export default function WorkDetails() {
           overflow-y: auto;
           padding: 16px;
           background: #fefefe;
+          margin-top: 60px;
         }
         .wd-tab-label {
           font-size: 15px;
@@ -257,6 +292,29 @@ export default function WorkDetails() {
           border-radius: 14px;
           padding: 16px;
           box-shadow: 0 10px 30px rgba(0,0,0,.06);
+        }
+
+        /* make tab row scrollable */
+        .wd-tabs-row {
+          display: flex;
+          flex-wrap: nowrap;
+          gap: 8px;
+          overflow-x: auto;
+          scrollbar-width: none;
+        }
+        .wd-tabs-row::-webkit-scrollbar {
+          display: none;
+        }
+
+        @media (max-width: 576px) {
+          .wd-tab-btn {
+            min-width: 70px;
+            padding: 8px 10px;
+            justify-content: center;
+          }
+          .wd-tab-label {
+            display: none;
+          }
         }
       `}</style>
 
@@ -281,8 +339,8 @@ export default function WorkDetails() {
         {/* Main */}
         <main className="wd-main">
           <LayoutGroup>
-            <div className="d-flex flex-nowrap overflow-auto gap-2 mb-3 pb-2" style={{ scrollbarWidth: "none" }}>
-              {tabs.map(({ name, icon }, idx) => (
+            <div className="wd-tabs-row mb-3 pb-2">
+              {tabs.map(({ name, icon }) => (
                 <TabButton
                   key={name}
                   active={activeTab === name}
@@ -294,7 +352,7 @@ export default function WorkDetails() {
               ))}
             </div>
 
-            {/* Smooth tab switch */}
+            {/* Content */}
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeTab}
@@ -313,7 +371,12 @@ export default function WorkDetails() {
 
       {/* Busy & Toast */}
       <BusyOverlay show={busy} />
-      <Toast open={toast.open} type={toast.type} msg={toast.msg} onClose={() => setToast({ ...toast, open: false })} />
+      <Toast
+        open={toast.open}
+        type={toast.type}
+        msg={toast.msg}
+        onClose={() => setToast({ ...toast, open: false })}
+      />
     </>
   );
 }

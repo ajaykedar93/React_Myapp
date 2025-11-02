@@ -1,7 +1,7 @@
 // src/pages/TotalSiteKharch.jsx
 import React, { useEffect, useState } from "react";
 
-const BASE_URL = "http://localhost:5000/api/sitekharch";
+const BASE_URL = "https://express-backend-myapp.onrender.com/api/sitekharch";
 
 const MONTH_NAMES = [
   "January",

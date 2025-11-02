@@ -294,24 +294,26 @@ export default function SitekharchGet() {
       <style>{`
         .page-wrap {
           min-height: 100vh;
-          background: linear-gradient(180deg, #0f172a 0%, #312e81 25%, #1d4ed8 65%, #f97316 100%);
+          background: linear-gradient(180deg, #f97316 0%, #fb7185 35%, #f97316 70%, #fde68a 100%);
           padding: 1rem .5rem 4rem;
         }
         @media (min-width: 576px) {
           .page-wrap { padding: 1.3rem 1rem 4rem; }
         }
         .header-card {
-          background: rgba(15, 23, 42, 0.9);
+          background: rgba(255, 247, 237, 0.15);
           border-radius: 1.2rem;
-          border: 1px solid rgba(255,255,255,0.08);
+          border: 1px solid rgba(254, 243, 199, 0.25);
           color: #fff;
           box-shadow: 0 18px 35px rgba(0,0,0,0.18);
         }
         .stat-box {
-          background: #1d4ed8;
+          background: rgba(250, 250, 250, 0.18);
+          border: 1px solid rgba(255,255,255,0.25);
           border-radius: .9rem;
           padding: .65rem .9rem;
           color: #fff;
+          backdrop-filter: blur(4px);
         }
         .stat-box h5 {
           color: #fff;
@@ -324,7 +326,7 @@ export default function SitekharchGet() {
           box-shadow: 0 10px 30px rgba(15,23,42,.08);
         }
         .kharch-item {
-          border: 1px solid rgba(99,102,241,.08);
+          border: 1px solid rgba(249,115,22,.15);
           border-radius: 1rem;
           background: #fff;
           position: relative;
@@ -338,17 +340,18 @@ export default function SitekharchGet() {
           width: 2.2rem;
           height: 2.2rem;
           border-radius: 9999px;
-          background: #1d4ed8;
+          background: #fb7185;
           color: #fff;
           display: flex;
           align-items: center;
           justify-content: center;
           font-weight: 700;
           font-size: .85rem;
+          box-shadow: 0 4px 16px rgba(251,113,133,.35);
         }
         .badge-date {
-          background: rgba(76,29,149,0.09);
-          color: #4c1d95;
+          background: rgba(253, 186, 116, 0.18);
+          color: #92400e;
           font-size: .7rem;
         }
         .popup-overlay-center {
@@ -368,9 +371,9 @@ export default function SitekharchGet() {
           border-radius: 1rem;
         }
         .received-card {
-          border: 1px solid rgba(15,23,42,.05);
+          border: 1px solid rgba(248,113,113,.15);
           border-radius: .8rem;
-          background: #f8fafc;
+          background: #fff7ed;
         }
       `}</style>
 
