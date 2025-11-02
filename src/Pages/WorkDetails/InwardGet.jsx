@@ -1,7 +1,8 @@
 // src/pages/InwardGet.jsx
 import React, { useEffect, useState } from "react";
 
-const BASE_URL = "https://express-backend-myapp.onrender.com/api/inward";
+const API_BASE = "https://express-backend-myapp.onrender.com/api"; // backend root
+const PAGE_SIZE = 10;
 
 function getCurrentMonthName() {
   return new Date().toLocaleString("en-US", { month: "long" });
@@ -12,81 +13,120 @@ export default function InwardGet() {
   const [inwards, setInwards] = useState([]);
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [popup, setPopup] = useState({ show: false, type: "success", message: "" });
+  const [popup, setPopup] = useState({
+    show: false,
+    type: "success",
+    message: "",
+  });
   const [editRow, setEditRow] = useState(null);
   const [deleteRow, setDeleteRow] = useState(null);
-  const pageSize = 10;
 
+  // simple center popup
   const showPopup = (type, message) => {
     setPopup({ show: true, type, message });
-    setTimeout(() => setPopup({ show: false }), 2000);
+    setTimeout(() => setPopup({ show: false, type: "success", message: "" }), 2000);
   };
 
-  const fetchInward = async (m) => {
+  // fetch with page awareness
+  const fetchInward = async (m, currentPage = 0) => {
     setLoading(true);
     try {
-      const res = await fetch(`${BASE_URL}?month=${m}`);
+      const res = await fetch(`${API_BASE}/inward?month=${encodeURIComponent(m)}`);
       const data = await res.json();
-      if (data.data) setInwards(data.data);
-      else showPopup("error", data.error || "Failed to load records");
+      if (data.data) {
+        const list = data.data;
+        // if current page is now too big (e.g. we deleted last item on last page), shift back
+        const totalPages = Math.ceil(list.length / PAGE_SIZE) || 1;
+        let newPage = currentPage;
+        if (newPage >= totalPages) {
+          newPage = totalPages - 1;
+        }
+        setInwards(list);
+        setPage(newPage);
+      } else {
+        showPopup("error", data.error || "Failed to load records");
+      }
     } catch (err) {
+      console.error(err);
       showPopup("error", "Server error fetching data");
     } finally {
       setLoading(false);
     }
   };
 
+  // initial + when month changes
   useEffect(() => {
-    fetchInward(month);
+    fetchInward(month, 0);
   }, [month]);
 
   const handleDownload = () => {
-    window.open(`${BASE_URL}/export?month=${month}`, "_blank");
+    // frontend download
+    window.open(
+      `${API_BASE}/inward/export?month=${encodeURIComponent(month)}`,
+      "_blank"
+    );
   };
 
   const handleDelete = async () => {
     if (!deleteRow) return;
     try {
-      const res = await fetch(`${BASE_URL}/${deleteRow.id}`, { method: "DELETE" });
+      const res = await fetch(`${API_BASE}/inward/${deleteRow.id}`, {
+        method: "DELETE",
+      });
       const data = await res.json();
-      if (data.ok) {
+      if (res.ok && data.success) {
         showPopup("success", "Deleted successfully ✅");
         setDeleteRow(null);
-        fetchInward(month);
-      } else showPopup("error", data.error || "Delete failed");
-    } catch {
+        // refetch but stay on current page
+        fetchInward(month, page);
+      } else {
+        showPopup("error", data.error || "Delete failed");
+      }
+    } catch (err) {
+      console.error(err);
       showPopup("error", "Delete failed");
     }
   };
 
   const handleUpdate = async (e) => {
     e.preventDefault();
+    if (!editRow) return;
+
+    // clean payload
+    const payload = {
+      work_date: editRow.work_date ? editRow.work_date.toString().slice(0, 10) : null,
+      work_time: editRow.work_time || null,
+      details: editRow.details || "",
+      quantity:
+        editRow.quantity === "" || editRow.quantity == null
+          ? null
+          : Number(editRow.quantity),
+      quantity_type: editRow.quantity_type || null,
+    };
+
     try {
-      const payload = {
-        work_date: editRow.work_date,
-        work_time: editRow.work_time,
-        details: editRow.details,
-        quantity: editRow.quantity,
-        quantity_type: editRow.quantity_type,
-      };
-      const res = await fetch(`${BASE_URL}/${editRow.id}`, {
+      const res = await fetch(`${API_BASE}/inward/${editRow.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (data.id) {
+      if (res.ok && data.id) {
         showPopup("success", "Updated successfully ✅");
         setEditRow(null);
-        fetchInward(month);
-      } else showPopup("error", data.error || "Update failed");
-    } catch {
+        fetchInward(month, page);
+      } else {
+        showPopup("error", data.error || "Update failed");
+      }
+    } catch (err) {
+      console.error(err);
       showPopup("error", "Update failed");
     }
   };
 
-  const paged = inwards.slice(page * pageSize, page * pageSize + pageSize);
-  const totalPages = Math.ceil(inwards.length / pageSize);
+  // pagination
+  const totalPages = Math.ceil(inwards.length / PAGE_SIZE) || 1;
+  const paged = inwards.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
 
   return (
     <>
@@ -95,8 +135,6 @@ export default function InwardGet() {
           font-family: 'Inter', 'Poppins', sans-serif;
           background-color: #fffaf5;
         }
-
-        /* ====== Background Theme ====== */
         .page-wrap {
           min-height: 100vh;
           background: linear-gradient(180deg, #ff8a00 0%, #ff5f6d 45%, #ff758c 70%, #fbc2eb 100%);
@@ -104,8 +142,6 @@ export default function InwardGet() {
           color: #fff;
           overflow-x: hidden;
         }
-
-        /* ====== Header ====== */
         .header-card {
           background: rgba(255, 255, 255, 0.25);
           border-radius: 1.2rem;
@@ -120,8 +156,6 @@ export default function InwardGet() {
           transform: scale(1.01);
           box-shadow: 0 10px 35px rgba(255, 88, 88, 0.4);
         }
-
-        /* ====== Record Cards ====== */
         .record-card {
           background: linear-gradient(145deg, #fffdfc, #fff0e6);
           border-radius: 1rem;
@@ -134,8 +168,6 @@ export default function InwardGet() {
           transform: translateY(-3px);
           box-shadow: 0 10px 28px rgba(255, 111, 97, 0.3);
         }
-
-        /* ====== Buttons ====== */
         .btn-glow {
           background: linear-gradient(90deg, #ff8a00, #ff3d7f);
           border: none;
@@ -149,8 +181,6 @@ export default function InwardGet() {
           background: linear-gradient(90deg, #ff3d7f, #ff8a00);
           box-shadow: 0 0 15px rgba(255, 83, 73, 0.6);
         }
-
-        /* ====== Month Selector ====== */
         .select-month {
           border-radius: 8px;
           border: 1px solid rgba(255,255,255,0.4);
@@ -162,8 +192,6 @@ export default function InwardGet() {
           outline: none;
           box-shadow: 0 0 6px rgba(255,140,0,0.6);
         }
-
-        /* ====== Popup Modals ====== */
         .popup-center {
           position: fixed;
           inset: 0;
@@ -189,8 +217,6 @@ export default function InwardGet() {
           from { opacity: 0; transform: scale(0.92); }
           to { opacity: 1; transform: scale(1); }
         }
-
-        /* ====== Badges ====== */
         .badge-date {
           background: rgba(255,165,0,0.15);
           color: #b45309;
@@ -198,9 +224,30 @@ export default function InwardGet() {
           padding: 4px 8px;
           font-size: .75rem;
         }
+        /* center loader */
+        .loader-wrap {
+          position: fixed;
+          inset: 0;
+          background: rgba(0,0,0,0.25);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 9998;
+        }
+        .spinner {
+          width: 50px;
+          height: 50px;
+          border: 4px solid rgba(255,255,255,0.25);
+          border-top-color: #fff;
+          border-radius: 50%;
+          animation: spin 0.7s linear infinite;
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
       `}</style>
 
-      {/* Popup */}
+      {/* Global popup */}
       {popup.show && (
         <div className="popup-center">
           <div className={`popup-box ${popup.type}`}>
@@ -221,35 +268,51 @@ export default function InwardGet() {
               <input
                 type="date"
                 className="form-control mb-2"
-                value={editRow.work_date?.slice(0, 10) || ""}
-                onChange={(e) => setEditRow({ ...editRow, work_date: e.target.value })}
+                value={
+                  editRow.work_date
+                    ? editRow.work_date.toString().slice(0, 10)
+                    : ""
+                }
+                onChange={(e) =>
+                  setEditRow({ ...editRow, work_date: e.target.value })
+                }
               />
               <label>Details</label>
               <input
                 className="form-control mb-2"
                 value={editRow.details || ""}
-                onChange={(e) => setEditRow({ ...editRow, details: e.target.value })}
+                onChange={(e) =>
+                  setEditRow({ ...editRow, details: e.target.value })
+                }
               />
               <label>Quantity</label>
               <input
                 className="form-control mb-2"
                 type="number"
-                value={editRow.quantity || ""}
-                onChange={(e) => setEditRow({ ...editRow, quantity: e.target.value })}
+                value={editRow.quantity ?? ""}
+                onChange={(e) =>
+                  setEditRow({ ...editRow, quantity: e.target.value })
+                }
               />
               <label>Quantity Type</label>
               <input
                 className="form-control mb-2"
                 value={editRow.quantity_type || ""}
-                onChange={(e) => setEditRow({ ...editRow, quantity_type: e.target.value })}
+                onChange={(e) =>
+                  setEditRow({ ...editRow, quantity_type: e.target.value })
+                }
               />
               <label>Work Time</label>
               <input
                 className="form-control mb-3"
                 value={editRow.work_time || ""}
-                onChange={(e) => setEditRow({ ...editRow, work_time: e.target.value })}
+                onChange={(e) =>
+                  setEditRow({ ...editRow, work_time: e.target.value })
+                }
               />
-              <button className="btn-glow w-100 mb-2">Save</button>
+              <button className="btn-glow w-100 mb-2" type="submit">
+                Save
+              </button>
               <button
                 type="button"
                 className="btn btn-outline-secondary w-100"
@@ -269,7 +332,10 @@ export default function InwardGet() {
             <h6>🗑️ Delete this record?</h6>
             <p>{deleteRow.details}</p>
             <div className="d-flex justify-content-center gap-2 mt-3">
-              <button className="btn btn-outline-secondary" onClick={() => setDeleteRow(null)}>
+              <button
+                className="btn btn-outline-secondary"
+                onClick={() => setDeleteRow(null)}
+              >
                 Cancel
               </button>
               <button className="btn btn-danger" onClick={handleDelete}>
@@ -280,12 +346,21 @@ export default function InwardGet() {
         </div>
       )}
 
+      {/* loading overlay */}
+      {loading && (
+        <div className="loader-wrap">
+          <div className="spinner"></div>
+        </div>
+      )}
+
       {/* Main Page */}
       <div className="page-wrap">
         <div className="container-fluid" style={{ maxWidth: "1000px" }}>
           <div className="header-card d-flex flex-column flex-sm-row justify-content-between align-items-sm-center">
             <div>
-              <h5 className="mb-1 fw-semibold">🧾 Inward Records – {month}</h5>
+              <h5 className="mb-1 fw-semibold">
+                🧾 Inward Records – {month}
+              </h5>
               <small>Manage inward entries: view, edit, delete, or download</small>
             </div>
             <div className="d-flex gap-2 flex-wrap mt-2 mt-sm-0">
@@ -295,8 +370,18 @@ export default function InwardGet() {
                 onChange={(e) => setMonth(e.target.value)}
               >
                 {[
-                  "January","February","March","April","May","June",
-                  "July","August","September","October","November","December",
+                  "January",
+                  "February",
+                  "March",
+                  "April",
+                  "May",
+                  "June",
+                  "July",
+                  "August",
+                  "September",
+                  "October",
+                  "November",
+                  "December",
                 ].map((m) => (
                   <option key={m}>{m}</option>
                 ))}
@@ -307,10 +392,10 @@ export default function InwardGet() {
             </div>
           </div>
 
-          {loading ? (
-            <p className="text-center text-light my-4 fs-5">Loading records...</p>
-          ) : inwards.length === 0 ? (
-            <p className="text-center text-light my-4 fs-5">No inward records found for {month}.</p>
+          {!loading && inwards.length === 0 ? (
+            <p className="text-center text-light my-4 fs-5">
+              No inward records found for {month}.
+            </p>
           ) : (
             <>
               <div className="d-flex flex-column gap-3">
@@ -320,7 +405,9 @@ export default function InwardGet() {
                       <div className="d-flex align-items-center gap-2">
                         <span className="badge bg-danger">#{rec.seq_no}</span>
                         <span className="badge-date">
-                          {new Date(rec.work_date).toLocaleDateString()}
+                          {rec.work_date
+                            ? new Date(rec.work_date).toLocaleDateString()
+                            : "-"}
                         </span>
                       </div>
                       <div className="d-flex gap-2 mt-2 mt-sm-0">
@@ -338,9 +425,12 @@ export default function InwardGet() {
                         </button>
                       </div>
                     </div>
-                    <p className="fw-semibold mb-1 text-dark">{rec.details}</p>
+                    <p className="fw-semibold mb-1 text-dark">
+                      {rec.details}
+                    </p>
                     <p className="small text-muted mb-1">
-                      Qty: <b>{rec.quantity ?? "-"}</b> {rec.quantity_type || ""}
+                      Qty: <b>{rec.quantity ?? "-"}</b>{" "}
+                      {rec.quantity_type || ""}
                     </p>
                     <p className="small text-muted mb-0">
                       Work Time: {rec.work_time || "-"}

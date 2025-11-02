@@ -7,13 +7,7 @@ import React, {
   useCallback,
 } from "react";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
-import {
-  FaClipboardList,
-  FaInbox,
-  FaHammer,
-  FaPlus,
-  FaEye,
-} from "react-icons/fa";
+import { FaClipboardList, FaInbox, FaHammer, FaEye } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 
 import AddDpr from "./AddDpr";
@@ -161,7 +155,7 @@ export default function WorkDetails() {
     []
   );
 
-  // color palette per tab (only tabs from your image)
+  // color palette per tab
   const palette = {
     DPR: {
       bgActive: "linear-gradient(135deg,#fef3c7,#fde68a)",
@@ -221,13 +215,13 @@ export default function WorkDetails() {
     },
   };
 
-  // tabs: only the ones in your folder (image)
+  // tabs
   const tabs = useMemo(
     () => [
       { name: "DPR", icon: <FaClipboardList /> },
       { name: "INWARD", icon: <FaInbox /> },
       { name: "SITE KHARCH", icon: <FaHammer /> },
-      { name: "SITE KHARCH GET", icon: <FaEye /> }, // this shows list
+      { name: "SITE KHARCH GET", icon: <FaEye /> },
       { name: "TOTAL KHARCH", icon: <FaHammer /> },
       { name: "DPR GET", icon: <FaEye /> },
       { name: "INWARD GET", icon: <FaEye /> },
@@ -294,7 +288,7 @@ export default function WorkDetails() {
           box-shadow: 0 10px 30px rgba(0,0,0,.06);
         }
 
-        /* make tab row scrollable */
+        /* tab row scrollable */
         .wd-tabs-row {
           display: flex;
           flex-wrap: nowrap;
@@ -306,14 +300,22 @@ export default function WorkDetails() {
           display: none;
         }
 
+        /* ---------- MOBILE FIX ---------- */
         @media (max-width: 576px) {
           .wd-tab-btn {
-            min-width: 70px;
-            padding: 8px 10px;
+            min-width: 92px;
+            padding: 8px 8px;
+            flex-direction: column;
+            gap: 4px;
+            align-items: center;
             justify-content: center;
+            text-align: center;
           }
           .wd-tab-label {
-            display: none;
+            display: block;
+            font-size: 11px;
+            line-height: 1.1;
+            white-space: normal;
           }
         }
       `}</style>

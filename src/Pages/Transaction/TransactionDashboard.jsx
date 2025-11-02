@@ -9,21 +9,35 @@ import CalculateTotal from "./CalculateTotal.jsx";
 import TransactionCategory from "./TransactionCategory.jsx";
 import TransactionCategorywise from "./TransactionCategorywise.jsx";
 import LoadingSpiner from "../Entertainment/LoadingSpiner.jsx";
-import { FaCalendarAlt, FaRegFileAlt, FaChartBar, FaCalculator, FaTags ,FaLayerGroup  } from "react-icons/fa";
+import {
+  FaCalendarAlt,
+  FaRegFileAlt,
+  FaChartBar,
+  FaCalculator,
+  FaTags,
+  FaLayerGroup,
+} from "react-icons/fa";
 
 export default function TransactionDashboard() {
   const [activeTab, setActiveTab] = useState("daily");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const tabs = useMemo(() => ([
-    { key: "daily", label: "Daily Transactions", icon: <FaCalendarAlt /> },
-    { key: "main", label: "Main Transactions", icon: <FaRegFileAlt /> },
-    { key: "monthly", label: "Monthly Report", icon: <FaChartBar /> },
-    { key: "total", label: "Calculate Total", icon: <FaCalculator /> },
-    { key: "category", label: "Transaction Category", icon: <FaTags /> },
-    { key: "categorywise", label: "Transaction Categorywise", icon: <FaLayerGroup /> },
-  ]), []);
+  const tabs = useMemo(
+    () => [
+      { key: "daily", label: "Daily Transactions", icon: <FaCalendarAlt /> },
+      { key: "main", label: "Main Transactions", icon: <FaRegFileAlt /> },
+      { key: "monthly", label: "Monthly Report", icon: <FaChartBar /> },
+      { key: "total", label: "Calculate Total", icon: <FaCalculator /> },
+      { key: "category", label: "Transaction Category", icon: <FaTags /> },
+      {
+        key: "categorywise",
+        label: "Transaction Categorywise",
+        icon: <FaLayerGroup />,
+      },
+    ],
+    []
+  );
 
   const tabColors = {
     daily: "#2b7a8b",
@@ -42,7 +56,9 @@ export default function TransactionDashboard() {
     if (!el) return;
     const handler = (e) => {
       const items = Array.from(el.querySelectorAll('[role="tab"]'));
-      const idx = items.findIndex((n) => n.getAttribute("data-key") === activeTab);
+      const idx = items.findIndex(
+        (n) => n.getAttribute("data-key") === activeTab
+      );
       if (idx < 0) return;
       let nextIdx = idx;
       if (e.key === "ArrowRight") nextIdx = (idx + 1) % items.length;
@@ -59,7 +75,7 @@ export default function TransactionDashboard() {
     return () => el.removeEventListener("keydown", handler);
   }, [activeTab]);
 
-  // underline/ink position (accounts for horizontal scroll)
+  // underline/ink position
   const [underlineStyle, setUnderlineStyle] = useState({});
   const recalcUnderline = () => {
     const container = listRef.current;
@@ -99,14 +115,13 @@ export default function TransactionDashboard() {
           --ink-700: #334155;
           --ink-600: #475569;
           --border: #e6e9ef;
-          /* ⬇ Red gradient navbar */
           --accent-grad: linear-gradient(90deg, #b91c1c 0%, #dc2626 50%, #ef4444 100%);
           --overlay: rgba(255,255,255,.75);
         }
 
         .td-app { height: 100dvh; overflow: hidden; background: var(--bg); }
 
-        /* FIXED NAVBAR (size/layout identical across pages) */
+        /* NAVBAR */
         .td-nav {
           position: fixed; top: 0; left: 0; right: 0;
           height: var(--nav-h); z-index: 80;
@@ -118,22 +133,42 @@ export default function TransactionDashboard() {
           display:flex; align-items:center;
           padding-top: calc(10px + env(safe-area-inset-top, 0px));
         }
-        /* ⬇ Bold black heading on navbar */
-        .td-title { margin:0; color:#0b0b0b; font-weight:900; letter-spacing:.2px; font-size:clamp(18px,2.4vw,24px); text-shadow:none; }
+        .td-title {
+          margin:0;
+          color:#0b0b0b;
+          font-weight:900;
+          letter-spacing:.2px;
+          font-size: clamp(1.05rem, 2.3vw, 1.5rem);
+          text-shadow:none;
+        }
+        .td-nav-btn {
+          font-weight:700;
+          border-radius:999px;
+          font-size: clamp(.68rem, 1.8vw, .8rem);
+          padding: .35rem .9rem;
+        }
+        @media (max-width: 480px) {
+          .td-nav {
+            gap: .5rem;
+          }
+          .td-title {
+            max-width: 60%;
+            line-height: 1.05;
+          }
+        }
 
-        /* Spacer equals navbar height (ensures tabs are NOT under the navbar) */
         .td-nav-spacer { height: calc(var(--nav-h) + env(safe-area-inset-top, 0px)); }
 
-        /* Main scroll area */
+        /* MAIN SCROLL AREA */
         .td-main {
           height: calc(100dvh - var(--nav-h) - env(safe-area-inset-top, 0px));
           overflow-y: auto;
           -webkit-overflow-scrolling: touch;
-          padding-top: 6px; /* small space under navbar */
+          padding-top: 6px;
           padding-bottom: env(safe-area-inset-bottom, 0px);
         }
 
-        /* Tabs Container (card style) */
+        /* Tabs wrapper */
         .td-tabs {
           background: var(--surface);
           border-radius: 14px;
@@ -144,7 +179,7 @@ export default function TransactionDashboard() {
           max-width: 100%;
         }
 
-        /* Horizontal strip */
+        /* horizontal tab list */
         .td-tablist {
           position: relative;
           display:flex; flex-wrap:nowrap; gap:10px;
@@ -159,7 +194,7 @@ export default function TransactionDashboard() {
         .td-tablist::-webkit-scrollbar { height: 6px; }
         .td-tablist::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 999px; }
 
-        /* Ink bar (sits behind buttons; cannot block taps) */
+        /* background bar */
         .td-inkbar {
           position:absolute; height:38px; border-radius:12px;
           top: 50%; transform: translateY(-50%); left:0;
@@ -168,24 +203,24 @@ export default function TransactionDashboard() {
           pointer-events: none;
         }
 
-        /* Individual tab chips */
+        /* TAB */
         .td-tab {
           position: relative;
           display:inline-flex; align-items:center; justify-content:center;
           min-width: 140px; padding: 10px 14px;
-          font-size: 0.95rem; border-radius:12px; font-weight:700;
+          font-size: clamp(.78rem, 1.9vw, .95rem);
+          border-radius:12px; font-weight:700;
           background:#fff; color: var(--ink-700);
           border: 1px solid var(--border);
           transition: background .18s ease, color .18s ease, transform .15s ease, box-shadow .15s ease, border-color .18s ease;
           scroll-snap-align:center;
-          z-index: 1;                 /* above inkbar */
-          pointer-events: auto;       /* ensure taps always land */
-          touch-action: manipulation; /* better mobile tap */
+          z-index: 1;
+          pointer-events: auto;
+          touch-action: manipulation;
           white-space: nowrap;
         }
         .td-tab:hover { transform: translateY(-1px); box-shadow: 0 10px 20px rgba(2,6,23,.06); }
 
-        /* ACTIVE: only this one gets color */
         .td-tab[aria-selected="true"] {
           color:#fff;
           background: var(--chip-active);
@@ -205,11 +240,21 @@ export default function TransactionDashboard() {
           padding:16px;
         }
 
-        /* Mobile first tweaks */
+        /* MOBILE TWEAKS */
         @media (max-width: 576px){
-          .td-tabs { margin: 4px 0; padding: 6px; }
-          .td-tablist { padding: 4px; gap: 8px; }
-          .td-tab { min-width: 128px; padding: 9px 12px; font-size: .92rem; }
+          .td-tabs { margin: 4px 0; padding: 5px; }
+          .td-tablist { padding: 4px; gap: 6px; }
+          .td-tab {
+            min-width: 118px;
+            padding: 8px 10px;
+            font-size: .72rem;         /* smaller text but visible */
+            gap: 4px;
+          }
+          .td-tab span.text-truncate {
+            max-width: 140px;
+            white-space: normal;        /* allow wrap on 2 lines */
+            line-height: 1.05;
+          }
           .td-inkbar { height: 34px; }
           .td-card { margin: 6px auto 12px; padding: 12px; border-radius: 14px; }
         }
@@ -222,12 +267,12 @@ export default function TransactionDashboard() {
       `}</style>
 
       <div className="td-app">
-        {/* FIXED Navbar */}
+        {/* NAVBAR */}
         <nav className="td-nav">
           <div className="container-fluid d-flex justify-content-between align-items-center px-0">
             <h1 className="td-title">Transaction Dashboard</h1>
             <button
-              className="btn btn-warning fw-bold rounded-pill px-3 py-2"
+              className="btn btn-warning td-nav-btn"
               onClick={() => navigate("/dashboard")}
             >
               Dashboard
@@ -235,10 +280,10 @@ export default function TransactionDashboard() {
           </div>
         </nav>
 
-        {/* Spacer to place content below navbar */}
+        {/* spacer below navbar */}
         <div className="td-nav-spacer" />
 
-        {/* ONLY this area scrolls */}
+        {/* MAIN */}
         <main className="td-main">
           <div className="container-fluid px-2 px-sm-3">
             {/* Tabs */}
@@ -249,12 +294,12 @@ export default function TransactionDashboard() {
                 aria-label="Transaction tabs"
                 className="td-tablist"
               >
-                {/* Ink bar behind buttons */}
+                {/* moving ink bar */}
                 <div
                   className="td-inkbar"
                   style={{
                     ...underlineStyle,
-                    background: tabColors[activeTab] || "#444"
+                    background: tabColors[activeTab] || "#444",
                   }}
                 />
                 {tabs.map((tab) => {
@@ -270,21 +315,33 @@ export default function TransactionDashboard() {
                       aria-controls={`panel-${tab.key}`}
                       className="td-tab"
                       style={{
-                        ["--chip-active"]: color
+                        ["--chip-active"]: color,
                       }}
                       onClick={() => setActiveTab(tab.key)}
                     >
-                      <span aria-hidden style={{ marginRight: 8, display: "inline-flex" }}>
+                      <span
+                        aria-hidden
+                        style={{
+                          marginRight: 6,
+                          display: "inline-flex",
+                          fontSize: "1rem",
+                        }}
+                      >
                         {tab.icon}
                       </span>
-                      <span className="text-truncate" style={{ maxWidth: 260 }}>{tab.label}</span>
+                      <span
+                        className="text-truncate"
+                        style={{ maxWidth: 260 }}
+                      >
+                        {tab.label}
+                      </span>
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            {/* Content card */}
+            {/* CONTENT */}
             <div className="td-card bg-white rounded">
               {loading && (
                 <div className="td-overlay">
@@ -292,13 +349,29 @@ export default function TransactionDashboard() {
                 </div>
               )}
 
-              <div role="tabpanel" id={`panel-${activeTab}`} aria-labelledby={`tab-${activeTab}`}>
-                {activeTab === "daily" && <DailyTransactionPage setLoading={setLoading} />}
-                {activeTab === "main" && <MainTransactionPage setLoading={setLoading} />}
-                {activeTab === "monthly" && <MonthlySummary setLoading={setLoading} />}
-                {activeTab === "total" && <CalculateTotal setLoading={setLoading} />}
-                {activeTab === "category" && <TransactionCategory setLoading={setLoading} />}
-                {activeTab === "categorywise" && <TransactionCategorywise setLoading={setLoading} />}
+              <div
+                role="tabpanel"
+                id={`panel-${activeTab}`}
+                aria-labelledby={`tab-${activeTab}`}
+              >
+                {activeTab === "daily" && (
+                  <DailyTransactionPage setLoading={setLoading} />
+                )}
+                {activeTab === "main" && (
+                  <MainTransactionPage setLoading={setLoading} />
+                )}
+                {activeTab === "monthly" && (
+                  <MonthlySummary setLoading={setLoading} />
+                )}
+                {activeTab === "total" && (
+                  <CalculateTotal setLoading={setLoading} />
+                )}
+                {activeTab === "category" && (
+                  <TransactionCategory setLoading={setLoading} />
+                )}
+                {activeTab === "categorywise" && (
+                  <TransactionCategorywise setLoading={setLoading} />
+                )}
               </div>
             </div>
           </div>

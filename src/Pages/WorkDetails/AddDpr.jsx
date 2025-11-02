@@ -4,14 +4,12 @@ import LoadingSpiner from "../Entertainment/LoadingSpiner";
 
 /**
  * AddDpr – Professional, full-page, animated version
- * - Mobile-first responsive layout (max 1100px center + fluid spacing)
- * - Polished gradient header + card sections
- * - Smooth animations on mount and interactions
- * - Better input focus styles and accessible labels
- * - Optional categories via props (falls back to API fetch)
+ * Now: Category is ALWAYS auto-selected as "DPR" (no manual select)
  */
 
-const API_BASE = import.meta?.env?.VITE_API_BASE ?? "https://express-backend-myapp.onrender.com/api";
+const API_BASE =
+  import.meta?.env?.VITE_API_BASE ??
+  "https://express-backend-myapp.onrender.com/api";
 
 const fieldWrap = {
   marginBottom: 16,
@@ -45,9 +43,17 @@ const Badge = ({ tone = "info", children }) => (
       borderRadius: 999,
       border: "1px solid",
       ...(tone === "success"
-        ? { color: "#065f46", background: "#ecfdf5", borderColor: "#a7f3d0" }
+        ? {
+            color: "#065f46",
+            background: "#ecfdf5",
+            borderColor: "#a7f3d0",
+          }
         : tone === "error"
-        ? { color: "#7f1d1d", background: "#fef2f2", borderColor: "#fecaca" }
+        ? {
+            color: "#7f1d1d",
+            background: "#fef2f2",
+            borderColor: "#fecaca",
+          }
         : { color: "#1e293b", background: "#f1f5f9", borderColor: "#cbd5e1" }),
     }}
   >
@@ -64,7 +70,15 @@ const Popup = ({ open, type, title, message, onClose }) => (
         exit={{ opacity: 0 }}
         className="modal-overlay"
         onClick={onClose}
-        style={{ position: "fixed", inset: 0, background: "rgba(2,6,23,.55)", zIndex: 9999, display: "grid", placeItems: "center", padding: 16 }}
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(2,6,23,.55)",
+          zIndex: 9999,
+          display: "grid",
+          placeItems: "center",
+          padding: 16,
+        }}
       >
         <motion.div
           initial={{ y: 16, opacity: 0 }}
@@ -73,22 +87,62 @@ const Popup = ({ open, type, title, message, onClose }) => (
           transition={{ type: "spring", stiffness: 300, damping: 22 }}
           onClick={(e) => e.stopPropagation()}
           className="modal-card"
-          style={{ width: "100%", maxWidth: 480, background: "#fff", borderRadius: 18, boxShadow: "0 24px 60px rgba(2,6,23,.28)", overflow: "hidden" }}
+          style={{
+            width: "100%",
+            maxWidth: 480,
+            background: "#fff",
+            borderRadius: 18,
+            boxShadow: "0 24px 60px rgba(2,6,23,.28)",
+            overflow: "hidden",
+          }}
         >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 18px 8px" }}>
-            <h3 style={{ margin: 0, fontWeight: 800, fontSize: "1.05rem", color: "#0f172a" }}>{title}</h3>
-            <Badge tone={type === "success" ? "success" : "error"}>{type === "success" ? "✓ Success" : "! Error"}</Badge>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "16px 18px 8px",
+            }}
+          >
+            <h3
+              style={{
+                margin: 0,
+                fontWeight: 800,
+                fontSize: "1.05rem",
+                color: "#0f172a",
+              }}
+            >
+              {title}
+            </h3>
+            <Badge tone={type === "success" ? "success" : "error"}>
+              {type === "success" ? "✓ Success" : "! Error"}
+            </Badge>
           </div>
-          <div style={{ padding: "8px 18px 18px", color: "#334155", lineHeight: 1.55 }}>{message}</div>
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, padding: "0 18px 18px" }}>
-            <button className="btn" onClick={onClose} style={{
-              borderRadius: 10,
-              padding: "10px 14px",
-              fontWeight: 700,
-              border: "1px solid #e5e7eb",
-              background: "#fff",
-              color: "#0f172a",
-            }}>OK</button>
+          <div style={{ padding: "8px 18px 18px", color: "#334155", lineHeight: 1.55 }}>
+            {message}
+          </div>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              gap: 10,
+              padding: "0 18px 18px",
+            }}
+          >
+            <button
+              className="btn"
+              onClick={onClose}
+              style={{
+                borderRadius: 10,
+                padding: "10px 14px",
+                fontWeight: 700,
+                border: "1px solid #e5e7eb",
+                background: "#fff",
+                color: "#0f172a",
+              }}
+            >
+              OK
+            </button>
           </div>
         </motion.div>
       </motion.div>
@@ -106,9 +160,12 @@ function useFocusStyle() {
   };
 }
 
+const DEFAULT_CATEGORY_NAME = "DPR"; // <- always try to pick this
+
 const AddDpr = ({ categories: categoriesProp }) => {
   const [categories, setCategories] = useState(categoriesProp ?? []);
   const [categoryId, setCategoryId] = useState("");
+  const [categoryLabel, setCategoryLabel] = useState("DPR");
   const [mainDetails, setMainDetails] = useState("");
   const [mainTime, setMainTime] = useState("");
   const [extraEntries, setExtraEntries] = useState([]);
@@ -117,7 +174,12 @@ const AddDpr = ({ categories: categoriesProp }) => {
   const [error, setError] = useState("");
 
   // Centered professional popup
-  const [popup, setPopup] = useState({ open: false, type: "success", title: "", message: "" });
+  const [popup, setPopup] = useState({
+    open: false,
+    type: "success",
+    title: "",
+    message: "",
+  });
   const popupTimer = useRef(null);
 
   // ===== Helpers for current date =====
@@ -134,7 +196,12 @@ const AddDpr = ({ categories: categoriesProp }) => {
 
   // Fetch categories if not provided
   useEffect(() => {
-    if (categoriesProp && Array.isArray(categoriesProp)) return; // trust parent
+    // if parent passed categories, use them
+    if (categoriesProp && Array.isArray(categoriesProp)) {
+      setCategories(categoriesProp);
+      return;
+    }
+
     (async () => {
       try {
         const res = await fetch(`${API_BASE}/workcategory`);
@@ -146,17 +213,45 @@ const AddDpr = ({ categories: categoriesProp }) => {
     })();
   }, [categoriesProp]);
 
+  // whenever categories come, auto-pick "DPR"
+  useEffect(() => {
+    if (!categories || categories.length === 0) return;
+    // try to find DPR
+    const dprCat = categories.find(
+      (c) =>
+        c.category_name?.toLowerCase().trim() ===
+        DEFAULT_CATEGORY_NAME.toLowerCase()
+    );
+    if (dprCat) {
+      setCategoryId(dprCat.id);
+      setCategoryLabel(dprCat.category_name);
+    } else {
+      // fallback to first
+      const first = categories[0];
+      if (first) {
+        setCategoryId(first.id);
+        setCategoryLabel(first.category_name || "Auto-selected");
+      }
+    }
+  }, [categories]);
+
   // Popup handlers
   const showPopup = (type, title, message) => {
     setPopup({ open: true, type, title, message });
     if (popupTimer.current) clearTimeout(popupTimer.current);
-    popupTimer.current = setTimeout(() => setPopup((p) => ({ ...p, open: false })), 2600);
+    popupTimer.current = setTimeout(
+      () => setPopup((p) => ({ ...p, open: false })),
+      2600
+    );
   };
   const closePopup = () => {
     if (popupTimer.current) clearTimeout(popupTimer.current);
     setPopup((p) => ({ ...p, open: false }));
   };
-  useEffect(() => () => popupTimer.current && clearTimeout(popupTimer.current), []);
+  useEffect(
+    () => () => popupTimer.current && clearTimeout(popupTimer.current),
+    []
+  );
 
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && closePopup();
@@ -167,7 +262,11 @@ const AddDpr = ({ categories: categoriesProp }) => {
   // Add DPR entry
   const handleAddDpr = async () => {
     if (!categoryId || !mainDetails || !mainTime || !entryDate) {
-      showPopup("error", "Missing Fields", "All fields including date are required.");
+      showPopup(
+        "error",
+        "Missing Fields",
+        "All fields including date are required."
+      );
       return;
     }
 
@@ -176,7 +275,10 @@ const AddDpr = ({ categories: categoriesProp }) => {
       details: mainDetails,
       work_time: mainTime,
       extra_entries: extraEntries
-        .map((e) => ({ detail: (e.detail || "").trim(), time: (e.time || "").trim() }))
+        .map((e) => ({
+          detail: (e.detail || "").trim(),
+          time: (e.time || "").trim(),
+        }))
         .filter((e) => e.detail || e.time),
       work_date: entryDate, // Correct field expected by backend
     };
@@ -194,7 +296,9 @@ const AddDpr = ({ categories: categoriesProp }) => {
       const body = await res.json().catch(() => null);
 
       if (!res.ok) {
-        const msg = (body && (body.message || body.error)) || `Failed to add DPR (${res.status})`;
+        const msg =
+          (body && (body.message || body.error)) ||
+          `Failed to add DPR (${res.status})`;
         throw new Error(msg);
       }
 
@@ -214,8 +318,10 @@ const AddDpr = ({ categories: categoriesProp }) => {
   };
 
   // Extra entries handlers
-  const addExtraEntry = () => setExtraEntries((prev) => [...prev, { detail: "", time: "" }]);
-  const removeExtraEntry = (idx) => setExtraEntries((prev) => prev.filter((_, i) => i !== idx));
+  const addExtraEntry = () =>
+    setExtraEntries((prev) => [...prev, { detail: "", time: "" }]);
+  const removeExtraEntry = (idx) =>
+    setExtraEntries((prev) => prev.filter((_, i) => i !== idx));
   const handleExtraChange = (idx, field, value) => {
     setExtraEntries((prev) => {
       const updated = [...prev];
@@ -225,13 +331,19 @@ const AddDpr = ({ categories: categoriesProp }) => {
   };
 
   // Focus styles hooks
-  const catFocus = useFocusStyle();
   const dateFocus = useFocusStyle();
   const detailsFocus = useFocusStyle();
   const timeFocus = useFocusStyle();
 
   return (
-    <div style={{ minHeight: "calc(100vh - 16px)", display: "grid", gridTemplateRows: "auto 1fr", gap: 16 }}>
+    <div
+      style={{
+        minHeight: "calc(100vh - 16px)",
+        display: "grid",
+        gridTemplateRows: "auto 1fr",
+        gap: 16,
+      }}
+    >
       {/* Header */}
       <motion.div
         initial={{ y: -10, opacity: 0 }}
@@ -245,10 +357,40 @@ const AddDpr = ({ categories: categoriesProp }) => {
           boxShadow: "0 14px 32px rgba(124,58,237,.32)",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ width: 42, height: 42, display: "grid", placeItems: "center", fontWeight: 800, borderRadius: 12, background: "rgba(255,255,255,.18)", border: "1px solid rgba(255,255,255,.35)" }}>DPR</div>
-            <h2 style={{ margin: 0, fontSize: "1.35rem", fontWeight: 800, letterSpacing: .3 }}>Daily Progress Report</h2>
+            <div
+              style={{
+                width: 42,
+                height: 42,
+                display: "grid",
+                placeItems: "center",
+                fontWeight: 800,
+                borderRadius: 12,
+                background: "rgba(255,255,255,.18)",
+                border: "1px solid rgba(255,255,255,.35)",
+              }}
+            >
+              DPR
+            </div>
+            <h2
+              style={{
+                margin: 0,
+                fontSize: "1.35rem",
+                fontWeight: 800,
+                letterSpacing: 0.3,
+              }}
+            >
+              Daily Progress Report
+            </h2>
           </div>
           <Badge>Professional Mode</Badge>
         </div>
@@ -260,7 +402,7 @@ const AddDpr = ({ categories: categoriesProp }) => {
           initial={{ y: 8, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: -8, opacity: 0 }}
-          transition={{ duration: .18 }}
+          transition={{ duration: 0.18 }}
           style={{
             background: "#ffffff",
             border: "1px solid #e5e7eb",
@@ -276,59 +418,135 @@ const AddDpr = ({ categories: categoriesProp }) => {
           )}
 
           {error && (
-            <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", color: "#7c2d12", padding: "10px 12px", borderRadius: 10, marginBottom: 14, fontWeight: 600 }}>{error}</div>
+            <div
+              style={{
+                background: "#fff7ed",
+                border: "1px solid #fed7aa",
+                color: "#7c2d12",
+                padding: "10px 12px",
+                borderRadius: 10,
+                marginBottom: 14,
+                fontWeight: 600,
+              }}
+            >
+              {error}
+            </div>
           )}
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 14 }}>
-            {/* Row 1: Category + Date */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12 }}>
+          <div
+            style={{ display: "grid", gridTemplateColumns: "1fr", gap: 14 }}
+          >
+            {/* Row 1: Category (read-only) + Date */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr",
+                gap: 12,
+              }}
+            >
+              {/* CATEGORY (fixed) */}
               <div style={fieldWrap}>
-                <label style={{ display: "block", marginBottom: 6, fontWeight: 800, color: "#0f172a" }}>Category</label>
-                <select
-                  value={categoryId}
-                  onChange={(e) => setCategoryId(e.target.value)}
-                  onFocus={catFocus.onFocus}
-                  onBlur={catFocus.onBlur}
-                  style={{ ...inputBase, ...(catFocus.focus ? inputFocus : null) }}
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: 6,
+                    fontWeight: 800,
+                    color: "#0f172a",
+                  }}
                 >
-                  <option value="">Select Category</option>
-                  {categories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.category_name}
-                    </option>
-                  ))}
-                </select>
+                  Category
+                </label>
+                <div
+                  style={{
+                    background: "#f3e8ff",
+                    border: "1px solid rgba(168,85,247,.35)",
+                    color: "#581c87",
+                    padding: "10px 12px",
+                    borderRadius: 10,
+                    fontWeight: 700,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: 999,
+                      background: "#a855f7",
+                      display: "inline-block",
+                    }}
+                  ></span>
+                  {categoryLabel || "DPR"} (auto-selected)
+                </div>
               </div>
 
+              {/* DATE */}
               <div style={fieldWrap}>
-                <label style={{ display: "block", marginBottom: 6, fontWeight: 800, color: "#0f172a" }}>Date</label>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: 6,
+                    fontWeight: 800,
+                    color: "#0f172a",
+                  }}
+                >
+                  Date
+                </label>
                 <input
                   type="date"
                   value={entryDate}
                   onChange={(e) => setEntryDate(e.target.value)}
                   onFocus={dateFocus.onFocus}
                   onBlur={dateFocus.onBlur}
-                  style={{ ...inputBase, ...(dateFocus.focus ? inputFocus : null) }}
+                  style={{
+                    ...inputBase,
+                    ...(dateFocus.focus ? inputFocus : null),
+                  }}
                 />
               </div>
             </div>
 
             {/* Row 2: Details */}
             <div style={fieldWrap}>
-              <label style={{ display: "block", marginBottom: 6, fontWeight: 800, color: "#0f172a" }}>Main Details</label>
+              <label
+                style={{
+                  display: "block",
+                  marginBottom: 6,
+                  fontWeight: 800,
+                  color: "#0f172a",
+                }}
+              >
+                Main Details
+              </label>
               <textarea
                 value={mainDetails}
                 onChange={(e) => setMainDetails(e.target.value)}
                 onFocus={detailsFocus.onFocus}
                 onBlur={detailsFocus.onBlur}
-                style={{ ...inputBase, ...(detailsFocus.focus ? inputFocus : null), minHeight: 110, resize: "vertical" }}
+                style={{
+                  ...inputBase,
+                  ...(detailsFocus.focus ? inputFocus : null),
+                  minHeight: 110,
+                  resize: "vertical",
+                }}
                 placeholder="Describe the progress, checkpoints, notes..."
               />
             </div>
 
             {/* Row 3: Time */}
             <div style={fieldWrap}>
-              <label style={{ display: "block", marginBottom: 6, fontWeight: 800, color: "#0f172a" }}>Work Time</label>
+              <label
+                style={{
+                  display: "block",
+                  marginBottom: 6,
+                  fontWeight: 800,
+                  color: "#0f172a",
+                }}
+              >
+                Work Time
+              </label>
               <input
                 type="text"
                 value={mainTime}
@@ -347,13 +565,21 @@ const AddDpr = ({ categories: categoriesProp }) => {
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: .15 }}
-                style={{ display: "flex", gap: 10, marginBottom: 6, flexWrap: "wrap", alignItems: "center" }}
+                transition={{ duration: 0.15 }}
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  marginBottom: 6,
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                }}
               >
                 <input
                   type="text"
                   value={entry.detail}
-                  onChange={(e) => handleExtraChange(idx, "detail", e.target.value)}
+                  onChange={(e) =>
+                    handleExtraChange(idx, "detail", e.target.value)
+                  }
                   placeholder="Extra Detail"
                   style={{ ...inputBase, flex: "1 1 45%", minWidth: 220 }}
                 />
@@ -368,7 +594,14 @@ const AddDpr = ({ categories: categoriesProp }) => {
                   type="button"
                   onClick={() => removeExtraEntry(idx)}
                   className="btn"
-                  style={{ background: "#ef4444", color: "#fff", border: 0, padding: "10px 12px", borderRadius: 10, fontWeight: 800 }}
+                  style={{
+                    background: "#ef4444",
+                    color: "#fff",
+                    border: 0,
+                    padding: "10px 12px",
+                    borderRadius: 10,
+                    fontWeight: 800,
+                  }}
                 >
                   Remove
                 </button>
@@ -380,9 +613,16 @@ const AddDpr = ({ categories: categoriesProp }) => {
                 type="button"
                 onClick={addExtraEntry}
                 className="btn"
-                style={{ background: "#facc15", color: "#1f2937", border: 0, padding: "10px 12px", borderRadius: 10, fontWeight: 800 }}
+                style={{
+                    background: "#facc15",
+                    color: "#1f2937",
+                    border: 0,
+                    padding: "10px 12px",
+                    borderRadius: 10,
+                    fontWeight: 800,
+                }}
               >
-                + Add Extra Detail & Time
+                + Add Extra Detail &amp; Time
               </button>
 
               <div style={{ marginLeft: "auto" }} />
@@ -392,7 +632,16 @@ const AddDpr = ({ categories: categoriesProp }) => {
                 className="btn"
                 disabled={loading}
                 aria-busy={loading ? "true" : "false"}
-                style={{ background: "#a855f7", color: "#fff", border: 0, padding: "12px 16px", borderRadius: 12, fontWeight: 900, minWidth: 160, boxShadow: "0 10px 26px rgba(168,85,247,.35)" }}
+                style={{
+                  background: "#a855f7",
+                  color: "#fff",
+                  border: 0,
+                  padding: "12px 16px",
+                  borderRadius: 12,
+                  fontWeight: 900,
+                  minWidth: 160,
+                  boxShadow: "0 10px 26px rgba(168,85,247,.35)",
+                }}
               >
                 {loading ? "Submitting..." : "Submit DPR"}
               </button>
@@ -402,7 +651,13 @@ const AddDpr = ({ categories: categoriesProp }) => {
       </div>
 
       {/* Popup */}
-      <Popup open={popup.open} type={popup.type} title={popup.title} message={popup.message} onClose={closePopup} />
+      <Popup
+        open={popup.open}
+        type={popup.type}
+        title={popup.title}
+        message={popup.message}
+        onClose={closePopup}
+      />
     </div>
   );
 };

@@ -11,23 +11,32 @@ export default function DprGet() {
   const [month, setMonth] = useState(getCurrentMonthName());
   const [dprs, setDprs] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [popup, setPopup] = useState({ show: false, type: "success", message: "" });
+  const [popup, setPopup] = useState({
+    show: false,
+    type: "success",
+    message: "",
+  });
   const [editRow, setEditRow] = useState(null);
   const [deleteRow, setDeleteRow] = useState(null);
 
   const showPopup = (type, message) => {
     setPopup({ show: true, type, message });
-    setTimeout(() => setPopup({ show: false }), 2000);
+    setTimeout(() => setPopup({ show: false, type: "success", message: "" }), 2000);
   };
 
+  // fetch DPRs for month
   const fetchDpr = async (m) => {
     setLoading(true);
     try {
-      const res = await fetch(`${BASE_URL}/month/${m}`);
+      const res = await fetch(`${BASE_URL}/month/${encodeURIComponent(m)}`);
       const data = await res.json();
-      if (data.ok) setDprs(data.data);
-      else showPopup("error", data.error || "Failed to load DPR");
-    } catch {
+      if (data.ok) {
+        setDprs(data.data || []);
+      } else {
+        showPopup("error", data.error || "Failed to load DPR");
+      }
+    } catch (err) {
+      console.error(err);
       showPopup("error", "Server error loading DPR");
     } finally {
       setLoading(false);
@@ -38,53 +47,80 @@ export default function DprGet() {
     fetchDpr(month);
   }, [month]);
 
+  // delete ------------
   const handleDelete = async () => {
     if (!deleteRow) return;
+    setLoading(true);
     try {
-      const res = await fetch(`${BASE_URL}/${deleteRow.id}`, { method: "DELETE" });
+      const res = await fetch(`${BASE_URL}/${deleteRow.id}`, {
+        method: "DELETE",
+      });
       const data = await res.json();
-      if (data.ok) {
+      if (res.ok && data.ok) {
         showPopup("success", "Deleted successfully ✅");
         setDeleteRow(null);
+        // reload same month
         fetchDpr(month);
-      } else showPopup("error", data.error || "Delete failed");
-    } catch {
+      } else {
+        showPopup("error", data.error || "Delete failed");
+      }
+    } catch (err) {
+      console.error(err);
       showPopup("error", "Delete failed");
+    } finally {
+      setLoading(false);
     }
   };
 
+  // update ------------
   const handleUpdate = async (e) => {
     e.preventDefault();
+    if (!editRow) return;
+    setLoading(true);
+
+    // ensure date is yyyy-mm-dd
+    const cleanDate = editRow.work_date
+      ? editRow.work_date.toString().slice(0, 10)
+      : null;
+
+    const payload = {
+      details: editRow.details,
+      work_time: editRow.work_time,
+      work_date: cleanDate,
+    };
+
     try {
-      const payload = {
-        details: editRow.details,
-        work_time: editRow.work_time,
-        work_date: editRow.work_date,
-      };
       const res = await fetch(`${BASE_URL}/${editRow.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (data.ok) {
+      if (res.ok && data.ok) {
         showPopup("success", "Updated successfully ✅");
         setEditRow(null);
+        // reload same month
         fetchDpr(month);
-      } else showPopup("error", data.error || "Update failed");
-    } catch {
+      } else {
+        showPopup("error", data.error || "Update failed");
+      }
+    } catch (err) {
+      console.error(err);
       showPopup("error", "Update failed");
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleDownload = () => {
-    window.open(`${BASE_URL}/export/${month}`, "_blank");
+    window.open(`${BASE_URL}/export/${encodeURIComponent(month)}`, "_blank");
   };
 
   return (
     <>
       <style>{`
         body { font-family: 'Segoe UI', sans-serif; }
+
         .page-wrap { 
           min-height: 100vh; 
           background: linear-gradient(180deg,#0f172a,#312e81 25%,#1e3a8a 60%,#f59e0b 100%);
@@ -173,9 +209,31 @@ export default function DprGet() {
           from { opacity: 0; transform: translateY(-10px); }
           to { opacity: 1; transform: translateY(0); }
         }
+
+        /* loading overlay */
+        .loading-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(0,0,0,.35);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 9990;
+        }
+        .spinner {
+          width: 58px;
+          height: 58px;
+          border: 5px solid rgba(255,255,255,0.3);
+          border-top-color: #fff;
+          border-radius: 50%;
+          animation: spin .6s linear infinite;
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
       `}</style>
 
-      {/* Popup */}
+      {/* global popup */}
       {popup.show && (
         <div className="popup-center">
           <div className={`popup-box ${popup.type}`}>
@@ -186,7 +244,7 @@ export default function DprGet() {
         </div>
       )}
 
-      {/* Edit Modal */}
+      {/* edit modal */}
       {editRow && (
         <div className="popup-center">
           <div className="popup-box" style={{ textAlign: "left" }}>
@@ -196,22 +254,30 @@ export default function DprGet() {
               <input
                 type="date"
                 className="form-control mb-2"
-                value={editRow.work_date?.slice(0, 10) || ""}
-                onChange={(e) => setEditRow({ ...editRow, work_date: e.target.value })}
+                value={editRow.work_date ? editRow.work_date.toString().slice(0, 10) : ""}
+                onChange={(e) =>
+                  setEditRow({ ...editRow, work_date: e.target.value })
+                }
               />
               <label>Details</label>
               <input
                 className="form-control mb-2"
                 value={editRow.details || ""}
-                onChange={(e) => setEditRow({ ...editRow, details: e.target.value })}
+                onChange={(e) =>
+                  setEditRow({ ...editRow, details: e.target.value })
+                }
               />
               <label>Time</label>
               <input
                 className="form-control mb-3"
                 value={editRow.work_time || ""}
-                onChange={(e) => setEditRow({ ...editRow, work_time: e.target.value })}
+                onChange={(e) =>
+                  setEditRow({ ...editRow, work_time: e.target.value })
+                }
               />
-              <button className="btn btn-edit w-100 mb-2">Save</button>
+              <button className="btn btn-edit w-100 mb-2" type="submit">
+                Save
+              </button>
               <button
                 type="button"
                 className="btn btn-outline-secondary w-100"
@@ -224,14 +290,17 @@ export default function DprGet() {
         </div>
       )}
 
-      {/* Delete Modal */}
+      {/* delete modal */}
       {deleteRow && (
         <div className="popup-center">
           <div className="popup-box">
             <h6>Delete this DPR?</h6>
             <p>{deleteRow.details}</p>
             <div className="d-flex justify-content-center gap-2 mt-3">
-              <button className="btn btn-outline-secondary" onClick={() => setDeleteRow(null)}>
+              <button
+                className="btn btn-outline-secondary"
+                onClick={() => setDeleteRow(null)}
+              >
                 Cancel
               </button>
               <button className="btn btn-delete" onClick={handleDelete}>
@@ -242,7 +311,14 @@ export default function DprGet() {
         </div>
       )}
 
-      {/* Page Content */}
+      {/* loading overlay */}
+      {loading && (
+        <div className="loading-overlay">
+          <div className="spinner"></div>
+        </div>
+      )}
+
+      {/* page */}
       <div className="page-wrap">
         <div className="container-fluid" style={{ maxWidth: "1100px" }}>
           <div className="header-card d-flex flex-column flex-sm-row justify-content-between align-items-sm-center">
@@ -251,10 +327,24 @@ export default function DprGet() {
               <small>Manage, update, or download professional monthly DPR details</small>
             </div>
             <div className="d-flex gap-2 flex-wrap mt-2 mt-sm-0">
-              <select className="month-select" value={month} onChange={(e) => setMonth(e.target.value)}>
+              <select
+                className="month-select"
+                value={month}
+                onChange={(e) => setMonth(e.target.value)}
+              >
                 {[
-                  "January","February","March","April","May","June",
-                  "July","August","September","October","November","December",
+                  "January",
+                  "February",
+                  "March",
+                  "April",
+                  "May",
+                  "June",
+                  "July",
+                  "August",
+                  "September",
+                  "October",
+                  "November",
+                  "December",
                 ].map((m) => (
                   <option key={m}>{m}</option>
                 ))}
@@ -265,44 +355,61 @@ export default function DprGet() {
             </div>
           </div>
 
-          {loading ? (
-            <p className="text-center text-light my-4">Loading DPR entries...</p>
-          ) : dprs.length === 0 ? (
-            <p className="text-center text-light my-4">No DPR entries found for {month}.</p>
+          {!loading && dprs.length === 0 ? (
+            <p className="text-center text-light my-4">
+              No DPR entries found for {month}.
+            </p>
           ) : (
             <div className="d-flex flex-column gap-3">
               {dprs.map((dpr, i) => (
                 <div key={dpr.id} className="dpr-card">
                   <div className="d-flex flex-wrap justify-content-between align-items-center mb-2">
                     <div className="d-flex align-items-center gap-2">
-                      <span className="badge bg-slate-200 text-dark">#{i + 1}</span>
-                      <span className="date-bold">{dpr.work_date}</span>
+                      <span className="badge bg-secondary-subtle text-dark">
+                        #{i + 1}
+                      </span>
+                      <span className="date-bold">
+                        {dpr.work_date
+                          ? dpr.work_date.toString().slice(0, 10)
+                          : "-"}
+                      </span>
                       {dpr.category_name && (
-                        <span className="badge bg-gray-600 text-white">{dpr.category_name}</span>
+                        <span className="badge bg-dark text-white">
+                          {dpr.category_name}
+                        </span>
                       )}
                     </div>
                     <div className="d-flex gap-2 mt-2 mt-sm-0">
-                      <button className="btn-edit" onClick={() => setEditRow(dpr)}>
+                      <button
+                        className="btn-edit"
+                        onClick={() => setEditRow(dpr)}
+                      >
                         ✏ Edit
                       </button>
-                      <button className="btn-delete" onClick={() => setDeleteRow(dpr)}>
+                      <button
+                        className="btn-delete"
+                        onClick={() => setDeleteRow(dpr)}
+                      >
                         🗑 Delete
                       </button>
                     </div>
                   </div>
                   <p className="fw-semibold mb-1">{dpr.details}</p>
                   <p className="text-muted small mb-2">
-                    ⏰ Time: <b>{dpr.work_time}</b>
+                    ⏰ Time: <b>{dpr.work_time || "-"}</b>
                   </p>
-                  {Array.isArray(dpr.extra_details) && dpr.extra_details.length > 0 && (
-                    <ul className="small text-muted mb-0">
-                      {dpr.extra_details.map((extra, idx) => (
-                        <li key={idx}>
-                          {extra} {dpr.extra_times?.[idx] && `(${dpr.extra_times[idx]})`}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                  {Array.isArray(dpr.extra_details) &&
+                    dpr.extra_details.length > 0 && (
+                      <ul className="small text-muted mb-0">
+                        {dpr.extra_details.map((extra, idx) => (
+                          <li key={idx}>
+                            {extra}{" "}
+                            {dpr.extra_times?.[idx] &&
+                              `(${dpr.extra_times[idx]})`}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                 </div>
               ))}
             </div>

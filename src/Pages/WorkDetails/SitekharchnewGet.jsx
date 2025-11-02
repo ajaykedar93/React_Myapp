@@ -89,7 +89,7 @@ export default function SitekharchGet() {
   };
 
   // fetch kharch + received
-  const fetchData = async (m) => {
+  const fetchData = async (m, currentPage = 0) => {
     if (!isValidMonth(m)) {
       showPopup("error", "Invalid month");
       return;
@@ -114,8 +114,18 @@ export default function SitekharchGet() {
         }
         return row;
       });
+
+      // pagination clamp: if we deleted something on the last page, go back 1
+      const totalRows = normalized.length;
+      const totalPages = Math.ceil(totalRows / pageSize) || 1;
+      let newPage = currentPage;
+      if (newPage >= totalPages) {
+        newPage = totalPages - 1;
+      }
+      if (newPage < 0) newPage = 0;
+
       setKharchRows(normalized);
-      setPage(0);
+      setPage(newPage);
 
       // 2) RECEIVED
       const recRes = await fetch(`${BASE_URL}/received?month=${m}`);
@@ -139,8 +149,9 @@ export default function SitekharchGet() {
     }
   };
 
+  // initial + month change
   useEffect(() => {
-    fetchData(month);
+    fetchData(month, 0);
   }, [month]);
 
   // computed
@@ -151,7 +162,7 @@ export default function SitekharchGet() {
   const start = page * pageSize;
   const end = start + pageSize;
   const pagedKharch = kharchRows.slice(start, end);
-  const totalPages = Math.ceil(kharchRows.length / pageSize);
+  const totalPages = Math.ceil(kharchRows.length / pageSize) || 1;
 
   /* ------------ actions: kharch ------------ */
 
@@ -189,7 +200,8 @@ export default function SitekharchGet() {
 
       showPopup("success", "Kharch updated ✔");
       setEditKharch(null);
-      fetchData(month);
+      // stay on same page
+      fetchData(month, page);
     } catch (err) {
       console.error(err);
       showPopup("error", err.message || "Update failed");
@@ -213,7 +225,8 @@ export default function SitekharchGet() {
 
       showPopup("success", "Kharch deleted ✅");
       setDeleteKharch(null);
-      fetchData(month);
+      // stay on same page (but fetch will clamp if page got empty)
+      fetchData(month, page);
     } catch (err) {
       console.error(err);
       showPopup("error", err.message || "Delete failed");
@@ -252,7 +265,8 @@ export default function SitekharchGet() {
 
       showPopup("success", "Received updated ✔");
       setEditReceived(null);
-      fetchData(month);
+      // even for received keep the same kharch page
+      fetchData(month, page);
     } catch (err) {
       console.error(err);
       showPopup("error", err.message || "Update failed");
@@ -276,7 +290,7 @@ export default function SitekharchGet() {
 
       showPopup("success", "Received deleted ✅");
       setDeleteReceived(null);
-      fetchData(month);
+      fetchData(month, page);
     } catch (err) {
       console.error(err);
       showPopup("error", err.message || "Delete failed");
@@ -332,7 +346,6 @@ export default function SitekharchGet() {
           position: relative;
           padding-left: 3.5rem !important;
         }
-        /* left circle number */
         .kharch-num {
           position: absolute;
           top: 1.1rem;
@@ -374,6 +387,28 @@ export default function SitekharchGet() {
           border: 1px solid rgba(248,113,113,.15);
           border-radius: .8rem;
           background: #fff7ed;
+        }
+
+        /* center loading overlay */
+        .loading-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(0,0,0,.35);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 9998;
+        }
+        .spinner {
+          width: 60px;
+          height: 60px;
+          border: 5px solid rgba(255,255,255,0.35);
+          border-top-color: #fff;
+          border-radius: 50%;
+          animation: spin .6s linear infinite;
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
         }
       `}</style>
 
@@ -650,6 +685,13 @@ export default function SitekharchGet() {
         </div>
       )}
 
+      {/* CENTER LOADING OVERLAY */}
+      {loading && (
+        <div className="loading-overlay">
+          <div className="spinner"></div>
+        </div>
+      )}
+
       {/* PAGE */}
       <div className="page-wrap">
         <div className="container-fluid" style={{ maxWidth: "1100px" }}>
@@ -719,9 +761,7 @@ export default function SitekharchGet() {
               </small>
             </div>
 
-            {loading ? (
-              <p className="text-center my-4">Loading...</p>
-            ) : kharchRows.length === 0 ? (
+            {!loading && kharchRows.length === 0 ? (
               <p className="text-center my-4 text-muted">
                 No kharch for this month.
               </p>

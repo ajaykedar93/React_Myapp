@@ -1,8 +1,14 @@
 // src/Pages/Entertainment/Manage.jsx
-// Two-tab wrapper for MoviesManager & SeriesManager (Bootstrap-only, no JS libs)
+// Two-tab wrapper for MoviesManager & SeriesManager (Bootstrap-only, mobile-first)
 
-import React, { useState, useCallback, useEffect, useRef } from "react";
-import MoviesManager from "./MoviesManager";
+import React, {
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  useLayoutEffect,
+} from "react";
+import MoviesManager from "./Manage_Movies";
 import SeriesManager from "./SeriesManager";
 
 export default function Manage() {
@@ -10,13 +16,25 @@ export default function Manage() {
   const [switching, setSwitching] = useState(false);
   const tablistRef = useRef(null);
 
-  // small top progress bar when switching tabs
+  // preview modal state (for "view" click in child components)
+  const [preview, setPreview] = useState({
+    show: false,
+    type: "",
+    title: "",
+    year: "",
+    poster: "",
+    description: "",
+    meta: null,
+  });
+
+  /* ========== tiny progress bar when switching ========== */
   useEffect(() => {
     setSwitching(true);
     const t = setTimeout(() => setSwitching(false), 420);
     return () => clearTimeout(t);
   }, [tab]);
 
+  /* ========== keyboard left/right for tabs ========== */
   const onKeyDownTabs = useCallback(
     (e) => {
       if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
@@ -30,9 +48,9 @@ export default function Manage() {
     [tab]
   );
 
-  // underline positioning
+  /* ========== underline positioning (React, no <script>) ========== */
   const [underline, setUnderline] = useState({ x: 0, w: 0, visible: false });
-  useEffect(() => {
+  useLayoutEffect(() => {
     const list = tablistRef.current;
     if (!list) return;
     const btn = list.querySelector(`#tab-${tab}`);
@@ -46,7 +64,20 @@ export default function Manage() {
     });
   }, [tab]);
 
-  // ripple pointer for tabs
+  // sync underline gradient to active tab colors
+  useEffect(() => {
+    const list = tablistRef.current;
+    if (!list) return;
+    const underlineEl = list.querySelector(".tab-underline");
+    if (!underlineEl) return;
+    const active = list.querySelector(".tab-pill.tab-active");
+    if (!active) return;
+    const c1 = active.getAttribute("data-c1") || "#41c7a7";
+    const c2 = active.getAttribute("data-c2") || "#8f55e6";
+    underlineEl.style.background = `linear-gradient(90deg, ${c1}, ${c2})`;
+  }, [tab, underline]);
+
+  /* ========== ripple pointer ========== */
   useEffect(() => {
     const onPointer = (e) => {
       const pill = e.target.closest(".tab-pill");
@@ -61,6 +92,23 @@ export default function Manage() {
     return () => document.removeEventListener("pointerdown", onPointer);
   }, []);
 
+  /* ========== when child clicks VIEW ========== */
+  const handlePreview = (item = {}, from = tab) => {
+    setPreview({
+      show: true,
+      type: from,
+      title: item.title || item.name || "Untitled",
+      year: item.release_year || item.year || "",
+      poster: item.poster_url || item.poster || "",
+      description:
+        item.description ||
+        item.overview ||
+        "No description available for this entry.",
+      meta: item,
+    });
+  };
+  const closePreview = () => setPreview((p) => ({ ...p, show: false }));
+
   return (
     <>
       {/* Header */}
@@ -68,7 +116,7 @@ export default function Manage() {
         className="border-bottom"
         style={{
           background:
-            "linear-gradient(135deg, rgba(32,201,151,.08), rgba(111,66,193,.08))",
+            "radial-gradient(circle at top, rgba(32,201,151,.08), rgba(111,66,193,.04) 45%, #fff 80%)",
         }}
       >
         <div className="container py-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
@@ -83,14 +131,32 @@ export default function Manage() {
                 </li>
               </ol>
             </nav>
-            <h3 className="mb-0">🎛️ Manage Library</h3>
+            <h3
+              className="mb-0"
+              style={{
+                fontWeight: 800,
+                letterSpacing: "-0.02rem",
+                fontSize: "clamp(1.25rem, 2.5vw, 1.55rem)",
+              }}
+            >
+              🎛️ Manage Library
+            </h3>
+            <p
+              className="text-muted mb-0"
+              style={{ fontSize: "clamp(.7rem, 2.4vw, .82rem)" }}
+            >
+              Maintain movies and series — clean, sorted, mobile-first.
+            </p>
           </div>
         </div>
       </header>
 
       {/* Tabs */}
       <main className="container my-3 my-md-4">
-        <div className="card border-0 shadow-sm mb-3">
+        <div
+          className="card border-0 shadow-sm mb-3"
+          style={{ borderRadius: "1.25rem", overflow: "hidden" }}
+        >
           {/* tiny progress bar */}
           {switching && <div className="progress-thin" aria-hidden="true" />}
 
@@ -150,7 +216,7 @@ export default function Manage() {
           </div>
         </div>
 
-        {/* Panels (animated swap) */}
+        {/* Panels */}
         <section
           id="tab-panel-movies"
           role="tabpanel"
@@ -158,7 +224,8 @@ export default function Manage() {
           hidden={tab !== "movies"}
           className={`fade-panel ${tab === "movies" ? "show" : ""}`}
         >
-          <MoviesManager />
+          {/* pass preview handler » children will call onPreview(item) */}
+          <MoviesManager onPreview={handlePreview} />
         </section>
 
         <section
@@ -168,13 +235,94 @@ export default function Manage() {
           hidden={tab !== "series"}
           className={`fade-panel ${tab === "series" ? "show" : ""}`}
         >
-          <SeriesManager />
+          <SeriesManager onPreview={handlePreview} />
         </section>
       </main>
 
-      {/* Local styles (neutral/emerald/purple; no blue) */}
+      {/* Center Preview Modal */}
+      {preview.show && (
+        <div
+          className="manage-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          onClick={closePreview}
+        >
+          <div
+            className="manage-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="d-flex justify-content-between align-items-start gap-2 mb-2">
+              <div>
+                <h5 className="mb-0" style={{ fontWeight: 700 }}>
+                  {preview.title}
+                </h5>
+                <small className="text-muted">
+                  {preview.type === "movies" ? "Movie" : "Series"}
+                  {preview.year ? ` • ${preview.year}` : ""}
+                </small>
+              </div>
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-secondary"
+                onClick={closePreview}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="d-flex gap-3 flex-wrap">
+              {preview.poster ? (
+                <img
+                  src={preview.poster}
+                  alt={preview.title}
+                  style={{
+                    width: 120,
+                    height: 160,
+                    objectFit: "cover",
+                    borderRadius: 14,
+                    boxShadow: "0 12px 26px rgba(0,0,0,.15)",
+                  }}
+                />
+              ) : (
+                <div className="poster-placeholder">
+                  <span>{preview.title?.[0] || "?"}</span>
+                </div>
+              )}
+
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <p
+                  className="mb-2"
+                  style={{ fontSize: "clamp(.7rem, 2.3vw, .85rem)" }}
+                >
+                  {preview.description}
+                </p>
+                {preview.meta?.genres?.length ? (
+                  <div className="d-flex flex-wrap gap-1 mb-2">
+                    {preview.meta.genres.map((g) => (
+                      <span key={g} className="badge bg-light text-dark">
+                        {g}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                <p className="text-muted mb-0" style={{ fontSize: "0.7rem" }}>
+                  *Quick view — open item in full page to edit or manage parts.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Local styles */}
       <style>{`
-        /* thin progress bar on tab switch */
+        :root{
+          --ink-900:#0f172a;
+          --ink-700:#334155;
+          --ink-500:#64748b;
+        }
+
+        /* progress */
         .progress-thin{
           height:3px;
           background: linear-gradient(90deg, rgba(32,201,151,1), rgba(111,66,193,1));
@@ -196,76 +344,86 @@ export default function Manage() {
           position: relative;
           overflow: hidden;
           isolation: isolate;
+          font-size: clamp(.7rem, 2.3vw, .85rem);
         }
         .tab-pill.tab-idle{
           color:#343a40;
-          border-color: rgba(0,0,0,.14);
-          background: #fff;
+          border-color: rgba(0,0,0,.10);
+          background: rgba(255,255,255,.7);
+          backdrop-filter: blur(4px);
         }
         .tab-pill.tab-idle:hover{
           transform: translateY(-1px);
           box-shadow: 0 .6rem 1.2rem rgba(0,0,0,.07);
-          border-color: rgba(32,201,151,.55);
-          background: rgba(32,201,151,.06);
+          border-color: rgba(32,201,151,.35);
+          background: rgba(32,201,151,.04);
         }
         .tab-pill.tab-active{
           color:#fff;
           border-color: transparent;
           background: linear-gradient(135deg, rgba(32,201,151,.92), rgba(111,66,193,.82));
-          box-shadow: 0 10px 26px rgba(111,66,193,.22);
+          box-shadow: 0 10px 26px rgba(111,66,193,.2);
           transform: translateY(-1px);
         }
         .tab-pill:focus-visible{
           outline: none;
-          box-shadow: 0 0 0 .22rem rgba(111,66,193,.3);
+          box-shadow: 0 0 0 .22rem rgba(111,66,193,.26);
         }
 
         /* ripple */
         .pill-ripple{
           position:absolute; inset:0; pointer-events:none; opacity:0;
           background: radial-gradient(140px 70px at var(--x,50%) var(--y,50%),
-            rgba(32,201,151,.25), transparent 60%);
+            rgba(255,255,255,.35), transparent 60%);
           transition: opacity .35s ease;
         }
-        .tab-pill:active .pill-ripple{ opacity:.6; transition: opacity .2s ease; }
+        .tab-pill:active .pill-ripple{ opacity:.55; transition: opacity .2s ease; }
 
-        /* underline that picks gradient from active button */
+        /* underline */
         .tab-underline{
-          position:absolute; left:0; bottom:-2px; height:4px; border-radius:8px;
+          position:absolute; left:0; bottom:-6px; height:4px; border-radius:999px;
           background: linear-gradient(90deg, rgba(32,201,151,1), rgba(111,66,193,1));
           box-shadow: 0 6px 18px rgba(0,0,0,.12);
           transition: transform .28s cubic-bezier(.2,.8,.2,1), width .28s cubic-bezier(.2,.8,.2,1), opacity .15s ease;
         }
 
-        /* content transition */
+        /* panels */
         .fade-panel{opacity:0; transform: translateY(6px); transition: opacity .22s ease, transform .22s ease;}
         .fade-panel.show{opacity:1; transform: translateY(0);}
 
         .breadcrumb { --bs-breadcrumb-divider-color: rgba(0,0,0,.35); }
-      `}</style>
 
-      {/* dynamic underline gradient syncing to active button colors */}
-      <script
-        dangerouslySetInnerHTML={{
-          __html: `
-          (function(){
-            const list=document.querySelector('[role="tablist"]');
-            if(!list) return;
-            const underline=list.querySelector('.tab-underline');
-            const apply=() => {
-              const active=list.querySelector('.tab-pill.tab-active');
-              if(!active || !underline) return;
-              const c1=active.getAttribute('data-c1')||'#41c7a7';
-              const c2=active.getAttribute('data-c2')||'#8f55e6';
-              underline.style.background = 'linear-gradient(90deg,'+c1+','+c2+')';
-            };
-            const ro=new MutationObserver(apply);
-            ro.observe(list,{attributes:true,subtree:true,attributeFilter:['class']});
-            apply();
-          })();
-        `,
-        }}
-      />
+        /* modal */
+        .manage-modal-backdrop{
+          position:fixed; inset:0; background:rgba(15,23,42,.4);
+          backdrop-filter:blur(3px);
+          display:flex; align-items:center; justify-content:center;
+          padding:1rem; z-index:9999;
+        }
+        .manage-modal{
+          background:#fff;
+          border-radius:1rem;
+          width:min(560px, 100%);
+          max-height:92vh;
+          overflow-y:auto;
+          box-shadow:0 20px 45px rgba(15,23,42,.22);
+          padding:1rem 1.1rem 1.1rem;
+        }
+        .poster-placeholder{
+          width:120px; height:160px;
+          border-radius:14px;
+          background:linear-gradient(140deg, rgba(32,201,151,.5), rgba(111,66,193,.4));
+          display:flex; align-items:center; justify-content:center;
+          color:#fff;
+          font-size:2.2rem; font-weight:800;
+        }
+
+        /* mobile first */
+        @media (max-width: 575.98px){
+          .tab-btn{ flex:1 1 calc(50% - .45rem); justify-content:center; }
+          .manage-modal{ width:100%; border-radius:.75rem; }
+        }
+      `}</style>
     </>
   );
 }

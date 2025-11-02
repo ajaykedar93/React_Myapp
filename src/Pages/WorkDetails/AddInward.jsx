@@ -2,9 +2,10 @@ import React, { useEffect, useMemo, useState } from "react";
 import LoadingSpiner from "../Entertainment/LoadingSpiner";
 
 const AddInward = () => {
-  // ---------- State ----------
-  const [categories, setCategories] = useState([]);
-  const [categoryId, setCategoryId] = useState("");
+  // ============= CONFIG =============
+  const API_BASE = "https://express-backend-myapp.onrender.com/api"; // your express app
+
+  // ============= STATE =============
   const [workDate, setWorkDate] = useState("");
   const [workTime, setWorkTime] = useState("");
   const [details, setDetails] = useState("");
@@ -12,7 +13,6 @@ const AddInward = () => {
   const [quantityType, setQuantityType] = useState("");
   const [extras, setExtras] = useState([]);
   const [showExtras, setShowExtras] = useState(false);
-  const [loadingCats, setLoadingCats] = useState(false);
   const [saving, setSaving] = useState(false);
   const [popup, setPopup] = useState({
     open: false,
@@ -21,64 +21,69 @@ const AddInward = () => {
     message: "",
   });
 
-  // ---------- Helpers ----------
+  // ============= HELPERS =============
   const todayISO = useMemo(() => {
     const d = new Date();
     const pad = (v) => String(v).padStart(2, "0");
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   }, []);
 
+  // set default date once
   useEffect(() => {
     setWorkDate((v) => v || todayISO);
   }, [todayISO]);
 
-  useEffect(() => {
-    const run = async () => {
-      try {
-        setLoadingCats(true);
-        const res = await fetch("https://express-backend-myapp.onrender.com/api/workcategory");
-        const data = await res.json();
-        setCategories(Array.isArray(data) ? data : []);
-      } catch {
-        setCategories([]);
-        showPopup("error", "Load Failed", "Could not load categories. Please try again.");
-      } finally {
-        setLoadingCats(false);
-      }
-    };
-    run();
-  }, []);
+  const addExtraRow = () =>
+    setExtras((prev) => [
+      ...prev,
+      { details: "", quantity: "", quantity_type: "" },
+    ]);
 
-  const addExtraRow = () => setExtras((p) => [...p, { details: "", quantity: "", quantity_type: "" }]);
-  const updateExtraRow = (i, f, v) => setExtras((p) => p.map((r, x) => (x === i ? { ...r, [f]: v } : r)));
-  const removeExtraRow = (i) => setExtras((p) => p.filter((_, x) => x !== i));
+  const updateExtraRow = (idx, field, value) =>
+    setExtras((prev) =>
+      prev.map((row, i) => (i === idx ? { ...row, [field]: value } : row))
+    );
+
+  const removeExtraRow = (idx) =>
+    setExtras((prev) => prev.filter((_, i) => i !== idx));
 
   function showPopup(type, title, message) {
     setPopup({ open: true, type, title, message });
     clearTimeout(window.__popupTimer);
-    window.__popupTimer = setTimeout(() => setPopup((p) => ({ ...p, open: false })), 2600);
+    window.__popupTimer = setTimeout(() => {
+      setPopup((p) => ({ ...p, open: false }));
+    }, 2600);
   }
+
   const closePopup = () => {
     clearTimeout(window.__popupTimer);
     setPopup((p) => ({ ...p, open: false }));
   };
+
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && closePopup();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // this is the main SAVE
   const handleSubmit = async () => {
-    if (!categoryId) return showPopup("error", "Missing Category", "Please select a category.");
-    if (!details.trim()) return showPopup("error", "Details Required", "Please enter details of the inward.");
+    if (!details.trim()) {
+      return showPopup(
+        "error",
+        "Details Required",
+        "Please enter details of the inward."
+      );
+    }
 
+    // build payload exactly for /api/inward POST
     const payload = {
-      category_id: Number(categoryId),
       work_date: workDate || todayISO,
       work_time: workTime || null,
       details,
       quantity: quantity !== "" ? Number(quantity) : null,
       quantity_type: quantityType || null,
+      // backend will normalize this → extra_items
       extras_all: extras.map((e) => ({
         details: e.details || null,
         quantity: e.quantity !== "" ? Number(e.quantity) : null,
@@ -88,26 +93,47 @@ const AddInward = () => {
 
     try {
       setSaving(true);
-      const res = await fetch("https://express-backend-myapp.onrender.com/api/inward", {
+      const res = await fetch(`${API_BASE}/inward`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error || "Failed to save");
 
+      const body = await res.json();
+      if (!res.ok) {
+        throw new Error(body.error || "Failed to save");
+      }
+
+      // reset form
       setWorkTime("");
       setDetails("");
       setQuantity("");
       setQuantityType("");
       setExtras([]);
       setShowExtras(false);
+      setWorkDate(todayISO);
 
       showPopup("success", "Saved", "Inward entry added successfully.");
     } catch (err) {
-      showPopup("error", "Save Failed", err?.message || "Could not add inward entry.");
+      showPopup(
+        "error",
+        "Save Failed",
+        err?.message || "Could not add inward entry."
+      );
     } finally {
       setSaving(false);
+    }
+  };
+
+  // when user clicks "Add Extra Item"
+  const handleExtrasClick = () => {
+    // first time → show + add a row
+    if (!showExtras) {
+      setShowExtras(true);
+      setExtras([{ details: "", quantity: "", quantity_type: "" }]);
+    } else {
+      // already visible → add one more row
+      addExtraRow();
     }
   };
 
@@ -168,7 +194,7 @@ const AddInward = () => {
           color: var(--muted);
         }
 
-        input, select, textarea {
+        input, textarea {
           width: 100%;
           padding: 11px 14px;
           font-size: 0.95rem;
@@ -177,7 +203,7 @@ const AddInward = () => {
           transition: all 0.2s ease;
         }
 
-        input:focus, select:focus, textarea:focus {
+        input:focus, textarea:focus {
           outline: none;
           border-color: var(--accent);
           box-shadow: 0 0 0 3px var(--accent-light);
@@ -280,7 +306,7 @@ const AddInward = () => {
 
         @media (max-width: 480px) {
           .card { padding: 16px; }
-          input, select, textarea { font-size: 0.9rem; }
+          input, textarea { font-size: 0.9rem; }
           h2 { font-size: 1.5rem; }
         }
       `}</style>
@@ -296,31 +322,23 @@ const AddInward = () => {
 
         <div className="grid grid-2">
           <div>
-            <label>Category</label>
-            <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-              <option value="">Select category</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.category_name}
-                </option>
-              ))}
-            </select>
+            <label>Date</label>
+            <input
+              type="date"
+              value={workDate}
+              onChange={(e) => setWorkDate(e.target.value)}
+            />
           </div>
 
           <div>
-            <label>Date</label>
-            <input type="date" value={workDate} onChange={(e) => setWorkDate(e.target.value)} />
+            <label>Time (optional)</label>
+            <input
+              type="text"
+              placeholder="e.g., 10:00 AM – 12:30 PM"
+              value={workTime}
+              onChange={(e) => setWorkTime(e.target.value)}
+            />
           </div>
-        </div>
-
-        <div>
-          <label>Time (optional)</label>
-          <input
-            type="text"
-            placeholder="e.g., 10:00 AM – 12:30 PM"
-            value={workTime}
-            onChange={(e) => setWorkTime(e.target.value)}
-          />
         </div>
 
         <div>
@@ -330,8 +348,8 @@ const AddInward = () => {
             value={details}
             onChange={(e) => setDetails(e.target.value)}
           />
-          <button className="btn btn-yellow" onClick={() => setShowExtras((v) => !v)}>
-            {showExtras ? "Hide Extras" : "Add Extra Item"}
+          <button className="btn btn-yellow" onClick={handleExtrasClick}>
+            {showExtras ? "Add One More Extra" : "Add Extra Item"}
           </button>
         </div>
 
@@ -367,6 +385,7 @@ const AddInward = () => {
                 onChange={(e) => updateExtraRow(i, "details", e.target.value)}
                 placeholder="Extra item details..."
               />
+
               <label>Extra Quantity</label>
               <input
                 type="number"
@@ -375,21 +394,32 @@ const AddInward = () => {
                 onChange={(e) => updateExtraRow(i, "quantity", e.target.value)}
                 placeholder="e.g., 2.5"
               />
+
               <label>Extra Quantity Type</label>
               <input
                 type="text"
                 value={ex.quantity_type}
-                onChange={(e) => updateExtraRow(i, "quantity_type", e.target.value)}
+                onChange={(e) =>
+                  updateExtraRow(i, "quantity_type", e.target.value)
+                }
                 placeholder="e.g., ton, bags"
               />
-              <button className="btn btn-danger" onClick={() => removeExtraRow(i)}>
+
+              <button
+                className="btn btn-danger"
+                onClick={() => removeExtraRow(i)}
+              >
                 Remove
               </button>
             </div>
           ))}
 
         <div style={{ marginTop: 20 }}>
-          <button className="btn btn-primary" onClick={handleSubmit} disabled={saving}>
+          <button
+            className="btn btn-primary"
+            onClick={handleSubmit}
+            disabled={saving}
+          >
             {saving ? "Saving..." : "Save Inward"}
           </button>
         </div>
