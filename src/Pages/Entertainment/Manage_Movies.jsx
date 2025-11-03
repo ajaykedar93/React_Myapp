@@ -595,8 +595,8 @@ export default function Manage_Movies() {
             <span className="text-muted small">Page {page + 1}</span>
           </div>
 
-          {/* mobile cards */}
-          <div className="d-md-none p-2">
+          {/* mobile cards (improved) */}
+          <div className="d-md-none p-2 mm-mobile-list">
             {loadingList ? (
               <div className="text-center py-3 text-muted">
                 <div className="spinner-border spinner-border-sm me-2" />
@@ -605,52 +605,70 @@ export default function Manage_Movies() {
             ) : movies.length ? (
               <div className="d-flex flex-column gap-2">
                 {movies.map((m) => (
-                  <div
-                    key={m.movie_id}
-                    className="mm-card shadow-sm rounded-3 p-2 bg-white"
-                  >
-                    <div className="d-flex justify-content-between gap-2">
-                      <div>
-                        <div className="fw-semibold">{m.movie_name}</div>
-                        <div className="text-muted small">
-                          {m.release_year || "—"}
-                          {m.category_name ? ` • ${m.category_name}` : ""}
+                  <div key={m.movie_id} className="mm-mobile-card">
+                    <div className="mm-mobile-top">
+                      <div className="mm-mobile-media">
+                        {m.poster_url ? (
+                          <img src={m.poster_url} alt={m.movie_name} />
+                        ) : (
+                          <div className="mm-mobile-avatar">
+                            {(m.movie_name || "?").charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                      </div>
+                      <div className="mm-mobile-meta">
+                        <div className="mm-mobile-title">{m.movie_name}</div>
+                        <div className="mm-mobile-tags">
+                          {m.category_name ? (
+                            <span className="mm-tag mm-tag-cat">
+                              {m.category_name}
+                            </span>
+                          ) : null}
+                          {m.release_year ? (
+                            <span className="mm-tag">{m.release_year}</span>
+                          ) : null}
+                          <span
+                            className={`mm-tag ${
+                              m.is_watched ? "mm-tag-ok" : "mm-tag-muted"
+                            }`}
+                          >
+                            {m.is_watched ? "Watched" : "Pending"}
+                          </span>
+                        </div>
+                        <div className="mm-mobile-extra">
+                          Parts:{" "}
+                          {m.parts?.length
+                            ? m.parts
+                                .map((p) => `P${p.part_number}(${p.year})`)
+                                .join(", ")
+                            : "—"}
                         </div>
                       </div>
-                      <span
-                        className={`badge ${
-                          m.is_watched
-                            ? "bg-success-subtle"
-                            : "bg-secondary-subtle"
-                        }`}
-                        style={{ color: m.is_watched ? "#0f766e" : "#475569" }}
-                      >
-                        {m.is_watched ? "Watched" : "Pending"}
-                      </span>
+                      {/* mini toggle icon on right */}
+                      <div className="mm-mobile-right">
+                        <div
+                          className={`mm-watch-dot ${
+                            m.is_watched ? "yes" : "no"
+                          }`}
+                          title={m.is_watched ? "Watched" : "Not watched"}
+                        />
+                      </div>
                     </div>
-                    <div className="text-muted xsmall mt-1">
-                      Parts:{" "}
-                      {m.parts?.length
-                        ? m.parts
-                            .map((p) => `P${p.part_number}(${p.year})`)
-                            .join(", ")
-                        : "—"}
-                    </div>
-                    <div className="mt-2 d-flex gap-1 flex-wrap">
+                    <div className="mm-mobile-actions">
                       <button
-                        className="btn btn-sm btn-soft btn-anim flex-fill"
+                        className="mm-btn mm-btn-soft"
                         onClick={() => openView(m.movie_id)}
                       >
-                        View
+                        👁 View
                       </button>
                       <button
-                        className="btn btn-sm btn-emerald btn-anim flex-fill"
+                        className="mm-btn mm-btn-green"
                         onClick={() => openEdit(m.movie_id)}
                       >
-                        Edit
+                        ✏️ Edit
                       </button>
                       <button
-                        className="btn btn-sm btn-outline-danger btn-anim flex-fill"
+                        className="mm-btn mm-btn-danger"
                         onClick={() =>
                           setConfirmDel({
                             movie_id: m.movie_id,
@@ -658,7 +676,7 @@ export default function Manage_Movies() {
                           })
                         }
                       >
-                        Delete
+                        🗑 Delete
                       </button>
                     </div>
                   </div>
@@ -740,7 +758,7 @@ export default function Manage_Movies() {
         </div>
       </div>
 
-      {/* VIEW — full mobile professional sheet */}
+      {/* VIEW — full-screen style on mobile */}
       {viewMovie && (
         <CenterModal onClose={() => setViewMovie(null)} size="lg">
           <div className="movie-view-sheet">
@@ -819,7 +837,7 @@ export default function Manage_Movies() {
         </CenterModal>
       )}
 
-      {/* EDIT modal (same feature, new colors) */}
+      {/* EDIT modal */}
       {editMovie && (
         <CenterModal onClose={() => setEditMovie(null)} size="lg">
           <h5 className="mb-2">
@@ -1119,6 +1137,135 @@ export default function Manage_Movies() {
           .toastish{ left: .5rem; right: .5rem; }
         }
 
+        /* MOBILE LIST – new styles */
+        .mm-mobile-list{
+          background: radial-gradient(circle at 10% 10%, rgba(99,102,241,.03), #fff 70%);
+        }
+        .mm-mobile-card{
+          background: #ffffff;
+          border: 1px solid rgba(15,23,42,.03);
+          border-radius: 1rem;
+          padding: .75rem .8rem .6rem;
+          display: flex;
+          flex-direction: column;
+          gap: .55rem;
+          box-shadow: 0 8px 30px rgba(15,23,42,.05);
+        }
+        .mm-mobile-top{
+          display: flex;
+          gap: .65rem;
+          align-items: flex-start;
+        }
+        .mm-mobile-media img{
+          width: 52px;
+          height: 70px;
+          object-fit: cover;
+          border-radius: .75rem;
+          box-shadow: 0 9px 18px rgba(15,23,42,.25);
+        }
+        .mm-mobile-avatar{
+          width: 52px;
+          height: 52px;
+          border-radius: 1rem;
+          background: linear-gradient(135deg,#6366f1,#10b981);
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          color:#fff;
+          font-weight:700;
+        }
+        .mm-mobile-meta{
+          flex: 1;
+          min-width: 0;
+        }
+        .mm-mobile-title{
+          font-weight: 600;
+          font-size: .92rem;
+          color: #0f172a;
+          line-height: 1.05;
+          margin-bottom: .25rem;
+        }
+        .mm-mobile-tags{
+          display:flex;
+          flex-wrap:wrap;
+          gap:.25rem;
+          margin-bottom:.25rem;
+        }
+        .mm-tag{
+          background: rgba(148,163,184,.12);
+          border-radius: 999px;
+          padding: .08rem .55rem .15rem;
+          font-size: .65rem;
+          line-height: 1.2;
+          color: #0f172a;
+        }
+        .mm-tag-cat{
+          background: linear-gradient(135deg,rgba(99,102,241,.18),rgba(16,185,129,.25));
+        }
+        .mm-tag-ok{
+          background: rgba(16,185,129,.15);
+          color: #065f46;
+          font-weight: 500;
+        }
+        .mm-tag-muted{
+          background: rgba(148,163,184,.12);
+          color: #475569;
+        }
+        .mm-mobile-extra{
+          font-size: .63rem;
+          color: #94a3b8;
+        }
+        .mm-mobile-right{
+          display:flex;
+          align-items:flex-start;
+        }
+        .mm-watch-dot{
+          width: 16px;
+          height: 16px;
+          border-radius: 999px;
+          border: 2px solid #fff;
+          box-shadow: 0 0 0 2px rgba(15,23,42,.12);
+        }
+        .mm-watch-dot.yes{
+          background: linear-gradient(135deg,#10b981,#22c55e);
+        }
+        .mm-watch-dot.no{
+          background: rgba(148,163,184,.35);
+        }
+
+        .mm-mobile-actions{
+          display:flex;
+          gap:.4rem;
+        }
+        .mm-btn{
+          flex:1;
+          border:none;
+          border-radius:.7rem;
+          font-size:.7rem;
+          font-weight:500;
+          padding:.35rem .4rem .45rem;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          gap:.25rem;
+          transition: transform .12s ease, box-shadow .12s ease;
+        }
+        .mm-btn:active{
+          transform: translateY(1px);
+        }
+        .mm-btn-soft{
+          background: rgba(15,23,42,.015);
+          border:1px solid rgba(148,163,184,.12);
+        }
+        .mm-btn-green{
+          background: linear-gradient(135deg,#10b981,#0f766e);
+          color:#fff;
+        }
+        .mm-btn-danger{
+          background: rgba(248,113,113,.12);
+          color:#b91c1c;
+        }
+
         /* movie view layout */
         .movie-view-sheet{
           display:flex;
@@ -1126,14 +1273,16 @@ export default function Manage_Movies() {
         }
         .movie-view-poster img{
           width:180px;
-          height:250px;
+          max-height:250px;
+          height:auto;
           object-fit:cover;
           border-radius:1.1rem;
           box-shadow:0 18px 35px rgba(15,23,42,.3);
         }
         .movie-view-placeholder{
           width:180px;
-          height:250px;
+          max-height:250px;
+          aspect-ratio: 9 / 12;
           border-radius:1.1rem;
           background:linear-gradient(140deg, rgba(99,102,241,.6), rgba(16,185,129,.6));
           display:flex; align-items:center; justify-content:center;
@@ -1196,7 +1345,7 @@ export default function Manage_Movies() {
           color:#1f2937;
         }
 
-        /* MOBILE full-screen view modal */
+        /* MOBILE view: poster should not zoom / crop */
         @media (max-width:768px){
           .movie-view-sheet{
             flex-direction:column;
@@ -1204,8 +1353,21 @@ export default function Manage_Movies() {
           .movie-view-poster img,
           .movie-view-placeholder{
             width:100%;
-            height:240px;
+            height:auto;
+            max-height:260px;
+            object-fit:contain;
             border-radius:1rem;
+          }
+        }
+
+        /* scroll area inside modal so buttons don't hide */
+        .scroll-area{
+          max-height:60vh;
+          overflow-y:auto;
+        }
+        @media (max-width:575.98px){
+          .scroll-area{
+            max-height:58vh;
           }
         }
       `}</style>
@@ -1269,12 +1431,14 @@ function CenterModal({ children, onClose, size = "md" }) {
             from{transform:scale(.97); opacity:.6}
             to{transform:scale(1); opacity:1}
           }
+
+          /* mobile: FULL PAGE view for details */
           @media (max-width:575.98px){
             .mm-modal{
-              width:100%;
-              height:100%;
-              max-height:100vh;
-              border-radius:0;
+              width: 100%;
+              height: 100%;
+              max-height: 100vh;
+              border-radius: 0;
             }
           }
         `}</style>

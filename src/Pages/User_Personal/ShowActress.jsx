@@ -1,6 +1,21 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+} from "react";
 import axios from "axios";
-import { Container, Row, Col, Card, Button, Modal, Form, InputGroup, Badge } from "react-bootstrap";
+import {
+  Container,
+  Row,
+  Col,
+  Card,
+  Button,
+  Modal,
+  Form,
+  InputGroup,
+  Badge,
+} from "react-bootstrap";
 import { motion } from "framer-motion";
 import Swal from "sweetalert2";
 import LoadingSpinner from "../Entertainment/LoadingSpiner.jsx";
@@ -74,8 +89,19 @@ const styles = {
     padding: "4px 0",
     flexWrap: "wrap",
   },
-  metaLabel: { color: "#64748b", fontWeight: 600, flex: "0 0 170px", maxWidth: "100%" },
-  metaValue: { color: "#0b1221", fontWeight: 600, flex: "1 1 auto", wordBreak: "break-word", whiteSpace: "normal" },
+  metaLabel: {
+    color: "#64748b",
+    fontWeight: 600,
+    flex: "0 0 170px",
+    maxWidth: "100%",
+  },
+  metaValue: {
+    color: "#0b1221",
+    fontWeight: 600,
+    flex: "1 1 auto",
+    wordBreak: "break-word",
+    whiteSpace: "normal",
+  },
   btnPrimary: {
     background: `linear-gradient(90deg,${theme.secondary},${theme.primary})`,
     border: "none",
@@ -84,15 +110,6 @@ const styles = {
     borderRadius: 10,
     padding: "8px 14px",
     boxShadow: "0 4px 12px -6px rgba(6,182,212,.4)",
-  },
-  btnSecondary: {
-    background: "#0ea5e9",
-    border: "none",
-    color: "#05212a",
-    fontWeight: 600,
-    borderRadius: 10,
-    padding: "8px 14px",
-    boxShadow: "0 4px 12px -6px rgba(14,165,233,.4)",
   },
   btnDanger: {
     background: theme.danger,
@@ -106,7 +123,6 @@ const styles = {
   fullImage: {
     width: "100%",
     height: "auto",
-    maxHeight: "80vh",
     objectFit: "contain",
     borderRadius: 12,
     background: "#000",
@@ -169,7 +185,6 @@ const styles = {
   },
 };
 
-/* ===== Animation ===== */
 const fadeUp = {
   initial: { opacity: 0, y: 12 },
   animate: { opacity: 1, y: 0 },
@@ -196,7 +211,7 @@ function setLocalImages(id, arr) {
   try {
     localStorage.setItem(LS_KEY(id), JSON.stringify(arr || []));
   } catch {
-    // ignore quota errors etc.
+    // ignore
   }
 }
 function uniqueList(arr) {
@@ -212,8 +227,6 @@ function uniqueList(arr) {
   }
   return out;
 }
-
-/* ===== File utilities ===== */
 async function fileToDataURL(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -222,12 +235,11 @@ async function fileToDataURL(file) {
     reader.readAsDataURL(file);
   });
 }
-
-/* Build merged image list with provenance to support selective delete */
 function buildImageItems(act) {
-  const serverImgs = Array.isArray(act.images) ? act.images.filter(Boolean) : [];
+  const serverImgs = Array.isArray(act.images)
+    ? act.images.filter(Boolean)
+    : [];
   const localImgs = getLocalImages(act.id);
-  // de-dupe by URL across both sources
   const merged = uniqueList([...serverImgs, ...localImgs]);
   return merged.map((src) => ({
     src,
@@ -240,25 +252,24 @@ export default function ShowActress() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
-  // UI: search + pagination
   const [query, setQuery] = useState("");
   const PAGE_SIZE = 10;
   const [page, setPage] = useState(1);
 
-  // Slideshow modal
+  // slideshow
   const [slideshowOpen, setSlideshowOpen] = useState(false);
   const [slideshowImages, setSlideshowImages] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  // Grid modal (now supports select & delete)
+  // grid modal
   const [gridOpen, setGridOpen] = useState(false);
-  const [gridItems, setGridItems] = useState([]); // [{src, from}]
+  const [gridItems, setGridItems] = useState([]);
   const [gridActressName, setGridActressName] = useState("");
   const [gridActressId, setGridActressId] = useState(null);
   const [selectMode, setSelectMode] = useState(false);
-  const [selected, setSelected] = useState(new Set()); // indices in gridItems
+  const [selected, setSelected] = useState(new Set());
 
-  // Edit modal
+  // edit
   const [editOpen, setEditOpen] = useState(false);
   const [editId, setEditId] = useState(null);
   const [editForm, setEditForm] = useState({
@@ -272,13 +283,13 @@ export default function ShowActress() {
   });
   const [savingEdit, setSavingEdit] = useState(false);
 
-  // Add Images (drag & drop) modal
+  // add local images
   const [addImgOpen, setAddImgOpen] = useState(false);
   const [addImgId, setAddImgId] = useState(null);
   const [addImgName, setAddImgName] = useState("");
-  const [pendingFiles, setPendingFiles] = useState([]); // {name, size, preview(dataURL)}
+  const [pendingFiles, setPendingFiles] = useState([]);
 
-  /* ===== Load Actress List ===== */
+  /* ===== Load ===== */
   const fetchActresses = useCallback(async (signal) => {
     setLoading(true);
     setLoadError("");
@@ -287,7 +298,7 @@ export default function ShowActress() {
       setActresses(res.data || []);
     } catch (err) {
       if (!axios.isCancel(err)) {
-        console.error("Error loading actresses:", err);
+        console.error(err);
         setLoadError("Unable to load data right now.");
       }
     } finally {
@@ -301,14 +312,17 @@ export default function ShowActress() {
     return () => controller.abort();
   }, [fetchActresses]);
 
-  // Reset to page 1 when list or query changes
-  useEffect(() => { setPage(1); }, [actresses.length, query]);
+  useEffect(() => {
+    setPage(1);
+  }, [actresses.length, query]);
 
-  /* ===== Delete Actress (server) ===== */
+  /* ===== Delete actress ===== */
   const handleDelete = async (id, name) => {
     const result = await Swal.fire({
       title: "Are you sure?",
-      html: `<strong style="font-size:1.05rem;">Delete <span style="color:#ef4444;">${name ?? "this profile"}</span> from your favorites?</strong>`,
+      html: `<strong style="font-size:1.05rem;">Delete <span style="color:#ef4444;">${
+        name ?? "this profile"
+      }</span> from your favorites?</strong>`,
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: theme.primary,
@@ -324,10 +338,19 @@ export default function ShowActress() {
     try {
       await axios.delete(`${endpoint}/${id}`);
       localStorage.removeItem(LS_KEY(id));
-      setActresses(prev => prev.filter(a => a.id !== id));
-      await Swal.fire({ icon: "success", title: "Deleted", timer: 1200, showConfirmButton: false });
+      setActresses((prev) => prev.filter((a) => a.id !== id));
+      await Swal.fire({
+        icon: "success",
+        title: "Deleted",
+        timer: 1200,
+        showConfirmButton: false,
+      });
     } catch {
-      Swal.fire({ icon: "error", title: "Error", text: "Something went wrong while deleting." });
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "Something went wrong while deleting.",
+      });
     }
   };
 
@@ -340,8 +363,14 @@ export default function ShowActress() {
     setSlideshowOpen(true);
   };
   const closeSlideshow = () => setSlideshowOpen(false);
-  const nextImage = () => setCurrentIndex(prev => (prev + 1) % slideshowImages.length);
-  const prevImage = () => setCurrentIndex(prev => (prev === 0 ? slideshowImages.length - 1 : prev - 1));
+  const nextImage = () =>
+    setCurrentIndex((prev) => (prev + 1) % slideshowImages.length);
+  const prevImage = () =>
+    setCurrentIndex((prev) =>
+      prev === 0 ? slideshowImages.length - 1 : prev - 1
+    );
+
+  // keyboard for slideshow
   useEffect(() => {
     if (!slideshowOpen) return;
     const onKey = (e) => {
@@ -353,7 +382,7 @@ export default function ShowActress() {
     return () => window.removeEventListener("keydown", onKey);
   }, [slideshowOpen, slideshowImages.length]);
 
-  /* ===== Grid (View & Manage) ===== */
+  /* ===== Grid ===== */
   const openGrid = (act, startSelectMode = false) => {
     const items = buildImageItems(act);
     if (!items.length) return;
@@ -386,7 +415,12 @@ export default function ShowActress() {
 
   const deleteSelected = async () => {
     if (!gridOpen || selected.size === 0 || !gridActressId) {
-      return Swal.fire({ icon: "info", title: "Nothing selected", timer: 1000, showConfirmButton: false });
+      return Swal.fire({
+        icon: "info",
+        title: "Nothing selected",
+        timer: 1000,
+        showConfirmButton: false,
+      });
     }
 
     const confirm = await Swal.fire({
@@ -401,39 +435,53 @@ export default function ShowActress() {
     if (!confirm.isConfirmed) return;
 
     const selectedItems = Array.from(selected).map((i) => gridItems[i]);
-    const serverUrls = selectedItems.filter(it => it.from === "server").map(it => it.src);
-    const allSelectedUrls = selectedItems.map(it => it.src);
+    const serverUrls = selectedItems
+      .filter((it) => it.from === "server")
+      .map((it) => it.src);
+    const allSelectedUrls = selectedItems.map((it) => it.src);
 
     try {
-      // 1) Delete server images via your single API (by URLs)
       if (serverUrls.length) {
-        await axios.post(`${endpoint}/${gridActressId}/images/delete`, { urls: serverUrls });
+        await axios.post(`${endpoint}/${gridActressId}/images/delete`, {
+          urls: serverUrls,
+        });
       }
 
-      // 2) Delete local images (filter out selected urls)
       const currentLocal = getLocalImages(gridActressId);
-      const keptLocal = currentLocal.filter(url => !allSelectedUrls.includes(url));
+      const keptLocal = currentLocal.filter(
+        (url) => !allSelectedUrls.includes(url)
+      );
       setLocalImages(gridActressId, keptLocal);
 
-      // 3) Refresh list & grid
       await fetchActresses();
-      const actAfter = actresses.find(a => a.id === gridActressId);
+      const actAfter = actresses.find((a) => a.id === gridActressId);
       const rebuilt = actAfter ? buildImageItems(actAfter) : [];
       setGridItems(rebuilt);
       setSelected(new Set());
       setSelectMode(false);
 
-      Swal.fire({ icon: "success", title: "Deleted", timer: 900, showConfirmButton: false });
+      Swal.fire({
+        icon: "success",
+        title: "Deleted",
+        timer: 900,
+        showConfirmButton: false,
+      });
     } catch (e) {
       console.error(e);
-      Swal.fire({ icon: "error", title: "Delete failed", text: e?.response?.data?.error || "Try again." });
+      Swal.fire({
+        icon: "error",
+        title: "Delete failed",
+        text: e?.response?.data?.error || "Try again.",
+      });
     }
   };
 
   const deleteAllInGrid = async () => {
     if (!gridOpen || !gridActressId) return;
     const confirm = await Swal.fire({
-      title: `Delete ALL images for ${gridActressName || "this actress"}?`,
+      title: `Delete ALL images for ${
+        gridActressName || "this actress"
+      }?`,
       text: "This removes both server and local images.",
       icon: "warning",
       showCancelButton: true,
@@ -444,25 +492,34 @@ export default function ShowActress() {
     if (!confirm.isConfirmed) return;
 
     try {
-      // server all
-      await axios.post(`${endpoint}/${gridActressId}/images/delete`, { all: true });
-      // local clear
+      await axios.post(`${endpoint}/${gridActressId}/images/delete`, {
+        all: true,
+      });
       localStorage.removeItem(LS_KEY(gridActressId));
 
       await fetchActresses();
       closeGrid();
-      Swal.fire({ icon: "success", title: "All images deleted", timer: 900, showConfirmButton: false });
+      Swal.fire({
+        icon: "success",
+        title: "All images deleted",
+        timer: 900,
+        showConfirmButton: false,
+      });
     } catch (e) {
       console.error(e);
-      Swal.fire({ icon: "error", title: "Delete failed", text: e?.response?.data?.error || "Try again." });
+      Swal.fire({
+        icon: "error",
+        title: "Delete failed",
+        text: e?.response?.data?.error || "Try again.",
+      });
     }
   };
 
-  /* ===== Filtering + Pagination ===== */
+  /* ===== Filter + pagination ===== */
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return actresses;
-    return actresses.filter(a => {
+    return actresses.filter((a) => {
       const name = (a.favorite_actress_name || "").toLowerCase();
       const country = (a.country_name || "").toLowerCase();
       const fav = (a.favorite_movie_series || "").toLowerCase();
@@ -477,7 +534,7 @@ export default function ShowActress() {
     return filtered.slice(start, start + PAGE_SIZE);
   }, [filtered, page]);
 
-  /* ===== Edit flow (server) ===== */
+  /* ===== Edit ===== */
   const openEdit = (act) => {
     setEditId(act.id);
     setEditForm({
@@ -505,8 +562,16 @@ export default function ShowActress() {
     else body.age = Number(editForm.age);
     body.actress_dob = editForm.actress_dob ? editForm.actress_dob : null;
 
-    if (!body.favorite_actress_name || !body.favorite_movie_series || !body.profile_image) {
-      return Swal.fire({ icon: "warning", title: "Required", text: "Name, Series, and Profile Image are required." });
+    if (
+      !body.favorite_actress_name ||
+      !body.favorite_movie_series ||
+      !body.profile_image
+    ) {
+      return Swal.fire({
+        icon: "warning",
+        title: "Required",
+        text: "Name, Series, and Profile Image are required.",
+      });
     }
 
     setSavingEdit(true);
@@ -514,40 +579,56 @@ export default function ShowActress() {
       await axios.patch(`${endpoint}/${editId}`, body);
       await fetchActresses();
       setEditOpen(false);
-      Swal.fire({ icon: "success", title: "Updated", timer: 1200, showConfirmButton: false });
+      Swal.fire({
+        icon: "success",
+        title: "Updated",
+        timer: 1200,
+        showConfirmButton: false,
+      });
     } catch (e) {
       console.error(e);
-      Swal.fire({ icon: "error", title: "Update failed", text: e?.response?.data?.error || "Try again." });
+      Swal.fire({
+        icon: "error",
+        title: "Update failed",
+        text: e?.response?.data?.error || "Try again.",
+      });
     } finally {
       setSavingEdit(false);
     }
   };
 
-  /* ===== Local Add Images (drag & drop) ===== */
+  /* ===== Add Local Images ===== */
   const openAddImages = (act) => {
     setAddImgId(act.id);
     setAddImgName(act.favorite_actress_name || "Selected Actress");
-    setPendingFiles([]); // reset
+    setPendingFiles([]);
     setAddImgOpen(true);
   };
   const closeAddImages = () => setAddImgOpen(false);
 
   const onDropFiles = async (fileList) => {
-    const files = Array.from(fileList || []).filter((f) => f.type.startsWith("image/"));
+    const files = Array.from(fileList || []).filter((f) =>
+      f.type.startsWith("image/")
+    );
     if (!files.length) return;
-    const previews = await Promise.all(files.map(async (f) => ({
-      name: f.name,
-      size: f.size,
-      preview: await fileToDataURL(f),
-    })));
+    const previews = await Promise.all(
+      files.map(async (f) => ({
+        name: f.name,
+        size: f.size,
+        preview: await fileToDataURL(f),
+      }))
+    );
     setPendingFiles((prev) => [...prev, ...previews]);
   };
 
+  // paste to add image
   useEffect(() => {
     if (!addImgOpen) return;
     const onPaste = async (e) => {
       const items = Array.from(e.clipboardData?.items || []);
-      const imgs = items.filter((it) => it.type && it.type.startsWith("image/"));
+      const imgs = items.filter(
+        (it) => it.type && it.type.startsWith("image/")
+      );
       if (!imgs.length) return;
       const files = await Promise.all(imgs.map(async (it) => it.getAsFile()));
       await onDropFiles(files);
@@ -559,7 +640,11 @@ export default function ShowActress() {
   const saveLocalImages = async () => {
     if (!addImgId) return;
     if (!pendingFiles.length) {
-      return Swal.fire({ icon: "warning", title: "No images", text: "Drag & drop or choose images first." });
+      return Swal.fire({
+        icon: "warning",
+        title: "No images",
+        text: "Drag & drop or choose images first.",
+      });
     }
     const existing = getLocalImages(addImgId);
     const incoming = pendingFiles.map((p) => p.preview);
@@ -567,14 +652,34 @@ export default function ShowActress() {
     setLocalImages(addImgId, merged);
     setAddImgOpen(false);
 
-    // If grid is open for the same actress, update live
     if (gridOpen && gridActressId === addImgId) {
-      const act = actresses.find(a => a.id === addImgId);
+      const act = actresses.find((a) => a.id === addImgId);
       if (act) setGridItems(buildImageItems(act));
     }
 
-    Swal.fire({ icon: "success", title: "Images added locally", timer: 1200, showConfirmButton: false });
+    Swal.fire({
+      icon: "success",
+      title: "Images added locally",
+      timer: 1200,
+      showConfirmButton: false,
+    });
   };
+
+  /* ===== BODY SCROLL LOCK when any modal open ===== */
+  const anyModalOpen =
+    slideshowOpen || gridOpen || editOpen || addImgOpen;
+
+  useEffect(() => {
+    const original = document.body.style.overflow;
+    if (anyModalOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = original || "";
+    }
+    return () => {
+      document.body.style.overflow = original || "";
+    };
+  }, [anyModalOpen]);
 
   /* ===== Render ===== */
   if (loading) return <LoadingSpinner />;
@@ -583,9 +688,14 @@ export default function ShowActress() {
     <Container
       fluid
       className="py-3"
-      style={{ minHeight: "100vh", background: theme.bg, display: "flex", flexDirection: "column" }}
+      style={{
+        minHeight: "100vh",
+        background: theme.bg,
+        display: "flex",
+        flexDirection: "column",
+      }}
     >
-      {/* Sticky Top Bar (ONLY SEARCH HERE) */}
+      {/* sticky bar */}
       <motion.div
         className="px-3 py-3 mb-3"
         style={{
@@ -600,7 +710,10 @@ export default function ShowActress() {
         animate={{ opacity: 1, y: 0 }}
       >
         <div className="d-flex flex-column flex-md-row align-items-stretch align-items-md-center gap-2">
-          <h2 className="m-0 me-md-3" style={{ fontWeight: 800, lineHeight: 1.1 }}>
+          <h2
+            className="m-0 me-md-3"
+            style={{ fontWeight: 800, lineHeight: 1.1 }}
+          >
             <span
               style={{
                 background: `linear-gradient(90deg,${theme.primary},${theme.secondary})`,
@@ -612,7 +725,6 @@ export default function ShowActress() {
             </span>
           </h2>
 
-          {/* Search only */}
           <div className="ms-md-auto w-100" style={{ maxWidth: 480 }}>
             <InputGroup>
               <InputGroup.Text className="bg-white">🔎</InputGroup.Text>
@@ -622,14 +734,19 @@ export default function ShowActress() {
                 onChange={(e) => setQuery(e.target.value)}
               />
               {query && (
-                <Button variant="outline-secondary" onClick={() => setQuery("")}>Clear</Button>
+                <Button
+                  variant="outline-secondary"
+                  onClick={() => setQuery("")}
+                >
+                  Clear
+                </Button>
               )}
             </InputGroup>
           </div>
         </div>
       </motion.div>
 
-      {/* Helper card */}
+      {/* helper card */}
       <div
         className="px-3 py-3 mb-3 text-center"
         style={{
@@ -643,13 +760,17 @@ export default function ShowActress() {
         }}
       >
         <p className="text-muted mb-0">
-          Search above. Each card lets you <b>add images (drag & drop)</b>, view, <b>manage & delete</b> images, or edit details.
+          Search above. Each card lets you <b>add images</b>, <b>view</b>, and{" "}
+          <b>manage & delete</b> images.
         </p>
       </div>
 
-      {/* Error State */}
+      {/* error */}
       {loadError && (
-        <div className="px-3" style={{ maxWidth: 900, margin: "0 auto", width: "100%" }}>
+        <div
+          className="px-3"
+          style={{ maxWidth: 900, margin: "0 auto", width: "100%" }}
+        >
           <Card className="mb-3">
             <Card.Body className="d-flex flex-column flex-sm-row align-items-sm-center gap-2">
               <span className="text-danger fw-bold">⚠ {loadError}</span>
@@ -663,15 +784,21 @@ export default function ShowActress() {
         </div>
       )}
 
-      {/* List / Empty */}
+      {/* list */}
       <div style={{ width: "100%" }}>
         {total === 0 ? (
-          <div className="text-center text-muted py-5" style={{ fontSize: "1.05rem" }}>
+          <div
+            className="text-center text-muted py-5"
+            style={{ fontSize: "1.05rem" }}
+          >
             {query ? "No matches found." : "No actress profiles added yet."}
           </div>
         ) : (
           <>
-            <Row className="g-3 g-md-4 px-3" style={{ maxWidth: 1300, margin: "0 auto" }}>
+            <Row
+              className="g-3 g-md-4 px-3 justify-content-start"
+              style={{ maxWidth: 1300, margin: "0 auto" }}
+            >
               {pageItems.map((act, indexOnPage) => {
                 const index = (page - 1) * PAGE_SIZE + indexOnPage;
                 const profileSrc = act.profile_image || PLACEHOLDER;
@@ -682,7 +809,7 @@ export default function ShowActress() {
                   <Col xs={12} sm={6} md={4} lg={3} key={act.id}>
                     <motion.div {...fadeUp} className="h-100">
                       <Card style={styles.card} className="h-100 d-flex">
-                        {/* Image */}
+                        {/* image */}
                         <div
                           style={styles.imageWrap}
                           onClick={() => openSlideshow([profileSrc], 0)}
@@ -694,18 +821,24 @@ export default function ShowActress() {
                             alt={act.favorite_actress_name || "actress"}
                             style={styles.image}
                             loading="lazy"
-                            onError={(e) => { e.currentTarget.src = PLACEHOLDER; }}
+                            onError={(e) => {
+                              e.currentTarget.src = PLACEHOLDER;
+                            }}
                           />
                         </div>
 
-                        {/* Name */}
+                        {/* name */}
                         <div style={styles.nameBanner}>
-                          {index + 1}. {act.favorite_actress_name || "Unknown"}
+                          {index + 1}.{" "}
+                          {act.favorite_actress_name || "Unknown"}
                         </div>
 
-                        {/* Buttons under name */}
+                        {/* buttons */}
                         <div className="px-3 pb-2 d-grid gap-2">
-                          <Button variant="outline-primary" onClick={() => openAddImages(act)}>
+                          <Button
+                            variant="outline-primary"
+                            onClick={() => openAddImages(act)}
+                          >
                             ➕ Add Images (Drag & Drop)
                           </Button>
                           <Button
@@ -724,27 +857,36 @@ export default function ShowActress() {
                           </Button>
                         </div>
 
-                        {/* Meta */}
+                        {/* meta */}
                         <div style={styles.metaWrap} className="mt-1">
                           <div style={styles.metaItem}>
                             <span style={styles.metaLabel}>Country:</span>
-                            <span style={styles.metaValue}>{act.country_name || "-"}</span>
+                            <span style={styles.metaValue}>
+                              {act.country_name || "-"}
+                            </span>
                           </div>
                           <div style={styles.metaItem}>
-                            <span style={styles.metaLabel}>Favorite Movie / Series:</span>
-                            <span style={styles.metaValue}>{act.favorite_movie_series || "-"}</span>
+                            <span style={styles.metaLabel}>
+                              Favorite Movie / Series:
+                            </span>
+                            <span style={styles.metaValue}>
+                              {act.favorite_movie_series || "-"}
+                            </span>
                           </div>
                         </div>
 
                         <Card.Body className="d-flex flex-column">
-                          {/* Actions */}
                           <div className="d-grid gap-2 mb-3">
                             <Button
                               style={styles.btnPrimary}
                               className="w-100"
                               disabled={!hasImages}
-                              onClick={() => openSlideshow(mergedItems.map(i => i.src), 0)}
-                              title={hasImages ? "View one-by-one" : "No images"}
+                              onClick={() =>
+                                openSlideshow(
+                                  mergedItems.map((i) => i.src),
+                                  0
+                                )
+                              }
                             >
                               ▶️ View Slideshow
                             </Button>
@@ -760,23 +902,39 @@ export default function ShowActress() {
                             <Button
                               style={styles.btnDanger}
                               className="w-100"
-                              onClick={() => handleDelete(act.id, act.favorite_actress_name)}
+                              onClick={() =>
+                                handleDelete(
+                                  act.id,
+                                  act.favorite_actress_name
+                                )
+                              }
                             >
                               🗑 Delete Actress
                             </Button>
                           </div>
 
-                          {/* Extras */}
                           <div className="mt-auto">
                             {act.age && (
-                              <div style={{ fontSize: ".9rem", color: theme.muted }}>
+                              <div
+                                style={{
+                                  fontSize: ".9rem",
+                                  color: theme.muted,
+                                }}
+                              >
                                 <strong>Age:</strong> {act.age}
                               </div>
                             )}
                             {act.actress_dob && (
-                              <div style={{ fontSize: ".9rem", color: theme.muted }}>
+                              <div
+                                style={{
+                                  fontSize: ".9rem",
+                                  color: theme.muted,
+                                }}
+                              >
                                 <strong>DOB:</strong>{" "}
-                                {new Date(act.actress_dob).toLocaleDateString(undefined, {
+                                {new Date(
+                                  act.actress_dob
+                                ).toLocaleDateString(undefined, {
                                   day: "2-digit",
                                   month: "short",
                                   year: "numeric",
@@ -805,21 +963,21 @@ export default function ShowActress() {
               })}
             </Row>
 
-            {/* Pagination */}
+            {/* pagination */}
             <div
               className="d-flex flex-column flex-sm-row align-items-center justify-content-between gap-2 mt-4 px-3"
               style={{ maxWidth: 1300, margin: "0 auto" }}
             >
               <div className="text-muted small">
-                Showing <b>{(page - 1) * PAGE_SIZE + 1}</b>–<b>{Math.min(page * PAGE_SIZE, total)}</b> of{" "}
-                <b>{total}</b>
+                Showing <b>{(page - 1) * PAGE_SIZE + 1}</b>–
+                <b>{Math.min(page * PAGE_SIZE, total)}</b> of <b>{total}</b>
               </div>
               <div className="btn-group">
                 <Button
                   variant="outline-secondary"
                   size="sm"
                   disabled={page <= 1}
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
                 >
                   ‹ Prev
                 </Button>
@@ -830,7 +988,7 @@ export default function ShowActress() {
                   variant="outline-secondary"
                   size="sm"
                   disabled={page >= totalPages}
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 >
                   Next ›
                 </Button>
@@ -854,12 +1012,13 @@ export default function ShowActress() {
           style={{
             position: "relative",
             background: "rgba(0,0,0,0.92)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
             padding: 16,
+            display: "block",
+            maxHeight: "100vh",
+            overflowY: "auto",
           }}
         >
+          {/* close */}
           <Button
             variant="light"
             style={{
@@ -869,6 +1028,7 @@ export default function ShowActress() {
               borderRadius: "50%",
               fontSize: "1.2rem",
               fontWeight: "bold",
+              zIndex: 5,
             }}
             onClick={closeSlideshow}
             aria-label="Close"
@@ -876,25 +1036,45 @@ export default function ShowActress() {
             ×
           </Button>
 
-          {slideshowImages.length > 0 && (
-            <>
+          {/* SCROLL WRAP for mobile */}
+          <div
+            style={{
+              minHeight: "60vh",
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+            }}
+          >
+            {slideshowImages.length > 0 && (
               <img
                 src={slideshowImages[currentIndex]}
                 alt={`image ${currentIndex + 1}`}
                 style={styles.fullImage}
                 loading="lazy"
-                onError={(e) => { e.currentTarget.src = PLACEHOLDER; }}
+                onError={(e) => {
+                  e.currentTarget.src = PLACEHOLDER;
+                }}
               />
-              {slideshowImages.length > 1 && (
-                <>
-                  <button onClick={prevImage} style={{ ...styles.navArrow, left: 16 }} aria-label="Previous">
-                    ‹
-                  </button>
-                  <button onClick={nextImage} style={{ ...styles.navArrow, right: 16 }} aria-label="Next">
-                    ›
-                  </button>
-                </>
-              )}
+            )}
+          </div>
+
+          {/* arrows */}
+          {slideshowImages.length > 1 && (
+            <>
+              <button
+                onClick={prevImage}
+                style={{ ...styles.navArrow, left: 16 }}
+                aria-label="Previous"
+              >
+                ‹
+              </button>
+              <button
+                onClick={nextImage}
+                style={{ ...styles.navArrow, right: 16 }}
+                aria-label="Next"
+              >
+                ›
+              </button>
             </>
           )}
         </Modal.Body>
@@ -913,34 +1093,80 @@ export default function ShowActress() {
       >
         <Modal.Header closeButton>
           <Modal.Title className="d-flex align-items-center gap-2">
-            {gridActressName ? `${gridActressName} — All Images` : "All Images"}
-            {selectMode && <Badge bg="warning" text="dark">Select mode</Badge>}
+            {gridActressName
+              ? `${gridActressName} — All Images`
+              : "All Images"}
+            {selectMode && (
+              <Badge bg="warning" text="dark">
+                Select mode
+              </Badge>
+            )}
           </Modal.Title>
           <div className="ms-auto d-flex gap-2">
             {!selectMode ? (
-              <Button variant="outline-dark" size="sm" onClick={() => setSelectMode(true)}>
+              <Button
+                variant="outline-dark"
+                size="sm"
+                onClick={() => setSelectMode(true)}
+              >
                 Select
               </Button>
             ) : (
               <>
-                <Button variant="outline-secondary" size="sm" onClick={selectAll}>Select All</Button>
-                <Button variant="outline-secondary" size="sm" onClick={clearSelection}>Clear</Button>
-                <Button variant="danger" size="sm" onClick={deleteSelected} disabled={selected.size === 0}>
-                  Delete Selected {selected.size ? `(${selected.size})` : ""}
+                <Button
+                  variant="outline-secondary"
+                  size="sm"
+                  onClick={selectAll}
+                >
+                  Select All
                 </Button>
-                <Button variant="outline-danger" size="sm" onClick={deleteAllInGrid}>
+                <Button
+                  variant="outline-secondary"
+                  size="sm"
+                  onClick={clearSelection}
+                >
+                  Clear
+                </Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={deleteSelected}
+                  disabled={selected.size === 0}
+                >
+                  Delete Selected{" "}
+                  {selected.size ? `(${selected.size})` : ""}
+                </Button>
+                <Button
+                  variant="outline-danger"
+                  size="sm"
+                  onClick={deleteAllInGrid}
+                >
                   Delete All
                 </Button>
-                <Button variant="outline-dark" size="sm" onClick={() => { setSelectMode(false); setSelected(new Set()); }}>
+                <Button
+                  variant="outline-dark"
+                  size="sm"
+                  onClick={() => {
+                    setSelectMode(false);
+                    setSelected(new Set());
+                  }}
+                >
                   Done
                 </Button>
               </>
             )}
           </div>
         </Modal.Header>
-        <Modal.Body>
+        <Modal.Body
+          style={{
+            maxHeight: "calc(100vh - 140px)",
+            overflowY: "auto",
+          }}
+        >
           {gridItems.length === 0 ? (
-            <div className="text-center text-muted py-4">No images.</div>
+            <div className="text-center text-muted py-4">
+              No images.
+            </div>
           ) : (
             <Row className="g-3">
               {gridItems.map((it, idx) => {
@@ -951,20 +1177,42 @@ export default function ShowActress() {
                       style={styles.thumbWrap}
                       onClick={() => {
                         if (selectMode) toggleSelect(idx);
-                        else openSlideshow(gridItems.map(g => g.src), idx);
+                        else
+                          openSlideshow(
+                            gridItems.map((g) => g.src),
+                            idx
+                          );
                       }}
                       role="button"
                     >
                       <img
                         src={it.src}
                         alt={`thumb-${idx}`}
-                        style={{ ...styles.thumb, opacity: selectMode && isSel ? 0.6 : 1 }}
+                        style={{
+                          ...styles.thumb,
+                          opacity: selectMode && isSel ? 0.6 : 1,
+                        }}
                         loading="lazy"
-                        onError={(e) => { e.currentTarget.src = PLACEHOLDER; }}
-                        title={selectMode ? (isSel ? "Selected" : "Select") : "Open full size"}
+                        onError={(e) => {
+                          e.currentTarget.src = PLACEHOLDER;
+                        }}
+                        title={
+                          selectMode
+                            ? isSel
+                              ? "Selected"
+                              : "Select"
+                            : "Open full size"
+                        }
                       />
                       {selectMode && (
-                        <div style={{ ...styles.checkbox, background: isSel ? theme.primary : "rgba(0,0,0,.35)" }}>
+                        <div
+                          style={{
+                            ...styles.checkbox,
+                            background: isSel
+                              ? theme.primary
+                              : "rgba(0,0,0,.35)",
+                          }}
+                        >
                           {isSel ? "✓" : ""}
                         </div>
                       )}
@@ -991,18 +1239,32 @@ export default function ShowActress() {
         </Modal.Body>
         <Modal.Footer>
           {!selectMode ? (
-            <Button variant="secondary" onClick={closeGrid}>Close</Button>
+            <Button variant="secondary" onClick={closeGrid}>
+              Close
+            </Button>
           ) : (
             <div className="d-flex w-100 justify-content-between">
               <div className="text-muted small">
                 Selected: <b>{selected.size}</b> / {gridItems.length}
               </div>
               <div className="d-flex gap-2">
-                <Button variant="danger" onClick={deleteSelected} disabled={selected.size === 0}>
+                <Button
+                  variant="danger"
+                  onClick={deleteSelected}
+                  disabled={selected.size === 0}
+                >
                   Delete Selected
                 </Button>
-                <Button variant="outline-danger" onClick={deleteAllInGrid}>Delete All</Button>
-                <Button variant="secondary" onClick={() => { setSelectMode(false); setSelected(new Set()); }}>
+                <Button variant="outline-danger" onClick={deleteAllInGrid}>
+                  Delete All
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setSelectMode(false);
+                    setSelected(new Set());
+                  }}
+                >
                   Done
                 </Button>
               </div>
@@ -1011,12 +1273,23 @@ export default function ShowActress() {
         </Modal.Footer>
       </Modal>
 
-      {/* ===== Edit Modal (server PATCH) ===== */}
-      <Modal show={editOpen} onHide={closeEdit} centered size="lg" backdrop="static">
+      {/* ===== Edit Modal ===== */}
+      <Modal
+        show={editOpen}
+        onHide={closeEdit}
+        centered
+        size="lg"
+        backdrop="static"
+      >
         <Modal.Header closeButton>
           <Modal.Title>Edit Actress Details</Modal.Title>
         </Modal.Header>
-        <Modal.Body>
+        <Modal.Body
+          style={{
+            maxHeight: "70vh",
+            overflowY: "auto",
+          }}
+        >
           <Form>
             <Row className="g-3">
               <Col md={6}>
@@ -1024,7 +1297,9 @@ export default function ShowActress() {
                   <Form.Label>Country (id or exact name)</Form.Label>
                   <Form.Control
                     value={editForm.country}
-                    onChange={(e) => setEditForm({ ...editForm, country: e.target.value })}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, country: e.target.value })
+                    }
                     placeholder="India or 101"
                   />
                 </Form.Group>
@@ -1034,7 +1309,12 @@ export default function ShowActress() {
                   <Form.Label>Favorite Actress Name *</Form.Label>
                   <Form.Control
                     value={editForm.favorite_actress_name}
-                    onChange={(e) => setEditForm({ ...editForm, favorite_actress_name: e.target.value })}
+                    onChange={(e) =>
+                      setEditForm({
+                        ...editForm,
+                        favorite_actress_name: e.target.value,
+                      })
+                    }
                     placeholder="Name"
                   />
                 </Form.Group>
@@ -1044,7 +1324,12 @@ export default function ShowActress() {
                   <Form.Label>Favorite Movie / Series *</Form.Label>
                   <Form.Control
                     value={editForm.favorite_movie_series}
-                    onChange={(e) => setEditForm({ ...editForm, favorite_movie_series: e.target.value })}
+                    onChange={(e) =>
+                      setEditForm({
+                        ...editForm,
+                        favorite_movie_series: e.target.value,
+                      })
+                    }
                     placeholder="Movie or Series"
                   />
                 </Form.Group>
@@ -1054,7 +1339,12 @@ export default function ShowActress() {
                   <Form.Label>Profile Image URL *</Form.Label>
                   <Form.Control
                     value={editForm.profile_image}
-                    onChange={(e) => setEditForm({ ...editForm, profile_image: e.target.value })}
+                    onChange={(e) =>
+                      setEditForm({
+                        ...editForm,
+                        profile_image: e.target.value,
+                      })
+                    }
                     placeholder="https://..."
                   />
                 </Form.Group>
@@ -1066,7 +1356,9 @@ export default function ShowActress() {
                     type="number"
                     min="1"
                     value={editForm.age}
-                    onChange={(e) => setEditForm({ ...editForm, age: e.target.value })}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, age: e.target.value })
+                    }
                     placeholder="e.g. 27"
                   />
                 </Form.Group>
@@ -1077,7 +1369,12 @@ export default function ShowActress() {
                   <Form.Control
                     type="date"
                     value={editForm.actress_dob || ""}
-                    onChange={(e) => setEditForm({ ...editForm, actress_dob: e.target.value })}
+                    onChange={(e) =>
+                      setEditForm({
+                        ...editForm,
+                        actress_dob: e.target.value,
+                      })
+                    }
                   />
                 </Form.Group>
               </Col>
@@ -1088,7 +1385,9 @@ export default function ShowActress() {
                     as="textarea"
                     rows={3}
                     value={editForm.notes}
-                    onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, notes: e.target.value })
+                    }
                     placeholder="Any notes..."
                   />
                 </Form.Group>
@@ -1100,25 +1399,46 @@ export default function ShowActress() {
           </div>
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={closeEdit} disabled={savingEdit}>Cancel</Button>
+          <Button variant="secondary" onClick={closeEdit} disabled={savingEdit}>
+            Cancel
+          </Button>
           <Button variant="primary" onClick={saveEdit} disabled={savingEdit}>
             {savingEdit ? "Saving..." : "Save Changes"}
           </Button>
         </Modal.Footer>
       </Modal>
 
-      {/* ===== Add Images (Drag & Drop, LOCAL ONLY) ===== */}
-      <Modal show={addImgOpen} onHide={closeAddImages} centered size="lg" backdrop="static">
+      {/* ===== Add Images (local) ===== */}
+      <Modal
+        show={addImgOpen}
+        onHide={closeAddImages}
+        centered
+        size="lg"
+        backdrop="static"
+      >
         <Modal.Header closeButton>
           <Modal.Title>➕ Add Images — {addImgName}</Modal.Title>
         </Modal.Header>
-        <Modal.Body>
+        <Modal.Body
+          style={{
+            maxHeight: "70vh",
+            overflowY: "auto",
+          }}
+        >
           <div
             style={styles.dropzone}
-            onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; }}
-            onDrop={async (e) => { e.preventDefault(); await onDropFiles(e.dataTransfer.files); }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "copy";
+            }}
+            onDrop={async (e) => {
+              e.preventDefault();
+              await onDropFiles(e.dataTransfer.files);
+            }}
           >
-            <p className="mb-1"><b>Drag & drop</b> images here, or</p>
+            <p className="mb-1">
+              <b>Drag & drop</b> images here, or
+            </p>
             <Form.Label className="btn btn-outline-primary mt-2">
               Choose Files
               <Form.Control
@@ -1126,23 +1446,36 @@ export default function ShowActress() {
                 accept="image/*"
                 multiple
                 hidden
-                onChange={async (e) => { await onDropFiles(e.target.files); e.target.value = ""; }}
+                onChange={async (e) => {
+                  await onDropFiles(e.target.files);
+                  e.target.value = "";
+                }}
               />
             </Form.Label>
-            <div className="text-muted mt-2 small">Tip: you can also paste an image (Ctrl/⌘+V) while this modal is open.</div>
+            <div className="text-muted mt-2 small">
+              Tip: you can also paste an image (Ctrl/⌘+V) while this modal is
+              open.
+            </div>
           </div>
 
-          {/* Previews */}
           {pendingFiles.length > 0 && (
             <div className="mt-3">
-              <div className="mb-2 fw-bold">To be added ({pendingFiles.length}):</div>
+              <div className="mb-2 fw-bold">
+                To be added ({pendingFiles.length}):
+              </div>
               <Row className="g-2">
                 {pendingFiles.map((pf, i) => (
                   <Col xs={6} sm={4} md={3} key={i}>
                     <img
                       src={pf.preview}
                       alt={pf.name}
-                      style={{ width: "100%", height: 120, objectFit: "cover", borderRadius: 8, border: `1px solid ${theme.border}` }}
+                      style={{
+                        width: "100%",
+                        height: 120,
+                        objectFit: "cover",
+                        borderRadius: 8,
+                        border: `1px solid ${theme.border}`,
+                      }}
                     />
                   </Col>
                 ))}
@@ -1151,12 +1484,19 @@ export default function ShowActress() {
           )}
 
           <div className="small text-muted mt-3">
-            These images are stored <b>locally in your browser</b> (no upload). They will appear together with server images, de-duplicated.
+            These images are stored <b>locally in your browser</b> (no upload).
+            They will appear together with server images, de-duplicated.
           </div>
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={closeAddImages}>Cancel</Button>
-          <Button variant="success" onClick={saveLocalImages} disabled={!pendingFiles.length}>
+          <Button variant="secondary" onClick={closeAddImages}>
+            Cancel
+          </Button>
+          <Button
+            variant="success"
+            onClick={saveLocalImages}
+            disabled={!pendingFiles.length}
+          >
             Add {pendingFiles.length ? `(${pendingFiles.length})` : ""} Images
           </Button>
         </Modal.Footer>

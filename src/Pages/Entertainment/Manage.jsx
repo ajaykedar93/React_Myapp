@@ -9,7 +9,7 @@ import React, {
   useLayoutEffect,
 } from "react";
 import MoviesManager from "./Manage_Movies";
-import SeriesManager from "./SeriesManager";
+import SeriesManager from "./Manage_Series";
 
 export default function Manage() {
   const [tab, setTab] = useState("movies"); // 'movies' | 'series'
