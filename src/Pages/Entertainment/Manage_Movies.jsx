@@ -1,7 +1,4 @@
 // src/pages/Entertainment/Manage_Movies.jsx
-// Professional, attractive, mobile-first movie management page
-// uses your existing API endpoints (no change in URLs)
-
 import React, {
   useCallback,
   useEffect,
@@ -12,7 +9,6 @@ import React, {
 } from "react";
 import LoadingSpiner from "./LoadingSpiner";
 
-// ==== SAME API ROOT ====
 const API_BASE = "https://express-backend-myapp.onrender.com/api";
 
 const EP = {
@@ -33,6 +29,7 @@ export default function Manage_Movies() {
   const [busyCount, setBusyCount] = useState(0);
   const [movies, setMovies] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
+  const [listProgress, setListProgress] = useState(0); // % for list loading
   const [q, setQ] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [page, setPage] = useState(0);
@@ -57,6 +54,14 @@ export default function Manage_Movies() {
   const [editSubmitting, setEditSubmitting] = useState(false);
   const fileInputRef = useRef(null);
   const [dragActive, setDragActive] = useState(false);
+
+  // list loading controllers
+  const listAbortRef = useRef(null);
+  const fakeProgRef = useRef(null);
+
+  // keep/restore scroll position for list area
+  const listWrapRef = useRef(null);
+  const lastScrollRef = useRef(0);
 
   // ---- helpers ----
   const withSpinner = useCallback(async (fn) => {
@@ -93,7 +98,7 @@ export default function Manage_Movies() {
   const isDataUrl = (s) =>
     typeof s === "string" && /^data:image\/(png|jpe?g|webp);base64,/.test(s);
 
-  // ---- load meta once ----
+  // ---- meta once ----
   useEffect(() => {
     let cancelled = false;
     const ac = new AbortController();
@@ -112,9 +117,7 @@ export default function Manage_Movies() {
         setStatsTotal(Number(total?.total) || 0);
         setStatsByCat(Array.isArray(byCat) ? byCat : []);
       } catch (e) {
-        if (e.name !== "AbortError") {
-          setErrorMsg("Could not load movie metadata.");
-        }
+        if (e.name !== "AbortError") setErrorMsg("Could not load movie metadata.");
       } finally {
         setBusyCount((c) => Math.max(0, c - 1));
       }
@@ -131,37 +134,99 @@ export default function Manage_Movies() {
     return statsByCat.find((c) => c.category_id === id) || null;
   }, [categoryFilter, statsByCat]);
 
-  // ---- load list ----
-  const listAbortRef = useRef(null);
-  const loadList = useCallback(async () => {
-    listAbortRef.current?.abort();
-    const ac = new AbortController();
-    listAbortRef.current = ac;
-    setLoadingList(true);
-    try {
-      setBusyCount((c) => c + 1);
-      const u = new URL(EP.MOVIES);
-      if (q.trim()) u.searchParams.set("q", q.trim());
-      if (categoryFilter) u.searchParams.set("category_id", categoryFilter);
-      u.searchParams.set("limit", String(limit));
-      u.searchParams.set("offset", String(page * limit));
-      const r = await fetch(u.toString(), { signal: ac.signal });
-      if (!r.ok) throw new Error("List fetch failed");
-      const j = await r.json();
-      setMovies(Array.isArray(j) ? j : []);
-    } catch (e) {
-      if (e.name !== "AbortError") {
+  // ---- smooth fake progress helpers ----
+  const clearFake = () => {
+    if (fakeProgRef.current) {
+      clearInterval(fakeProgRef.current);
+      fakeProgRef.current = null;
+    }
+  };
+  const startFake = () => {
+    clearFake();
+    setListProgress(8);
+    fakeProgRef.current = setInterval(() => {
+      setListProgress((p) => (p < 90 ? p + 2 : p));
+    }, 110);
+  };
+  const finishProgress = () => {
+    clearFake();
+    setListProgress(100);
+    setTimeout(() => setListProgress(0), 250);
+  };
+
+  // ---- load list (single page only, one request at a time) ----
+  const loadList = useCallback(
+    async (opts = { restoreScroll: false }) => {
+      if (opts.restoreScroll && listWrapRef.current) {
+        lastScrollRef.current = listWrapRef.current.scrollTop;
+      }
+
+      // cancel any in-flight list fetch
+      listAbortRef.current?.abort();
+      const ac = new AbortController();
+      listAbortRef.current = ac;
+
+      setLoadingList(true);
+      startFake();
+
+      try {
+        setBusyCount((c) => c + 1);
+        const u = new URL(EP.MOVIES);
+        if (q.trim()) u.searchParams.set("q", q.trim());
+        if (categoryFilter) u.searchParams.set("category_id", categoryFilter);
+        u.searchParams.set("limit", String(limit));
+        u.searchParams.set("offset", String(page * limit));
+
+        const res = await fetch(u.toString(), { signal: ac.signal });
+        if (!res.ok) throw new Error("List fetch failed");
+
+        const contentLen = Number(res.headers.get("content-length") || 0);
+        if (res.body && contentLen > 0) {
+          const reader = res.body.getReader();
+          let received = 0;
+          const chunks = [];
+          // progressive stream
+          // eslint-disable-next-line no-constant-condition
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            received += value.byteLength;
+            chunks.push(value);
+            const pct = Math.min(99, Math.floor((received / contentLen) * 100));
+            setListProgress(pct);
+          }
+          const blob = new Blob(chunks, { type: "application/json" });
+          const text = await blob.text();
+          const json = JSON.parse(text || "[]");
+          setMovies(Array.isArray(json) ? json : []);
+        } else {
+          const j = await res.json();
+          setMovies(Array.isArray(j) ? j : []);
+        }
+
+        finishProgress();
+      } catch (e) {
+        if (e.name === "AbortError") return;
         setMovies([]);
         setErrorMsg("Could not fetch movies.");
+        clearFake();
+        setListProgress(0);
+      } finally {
+        setLoadingList(false);
+        setBusyCount((c) => Math.max(0, c - 1));
+        requestAnimationFrame(() => {
+          if (opts.restoreScroll && listWrapRef.current) {
+            listWrapRef.current.scrollTop = lastScrollRef.current || 0;
+          }
+        });
       }
-    } finally {
-      setLoadingList(false);
-      setBusyCount((c) => Math.max(0, c - 1));
-    }
-  }, [q, categoryFilter, page]);
+    },
+    [q, categoryFilter, page]
+  );
 
   useEffect(() => {
     loadList();
+    return () => listAbortRef.current?.abort();
   }, [loadList]);
 
   // ---- VIEW movie ----
@@ -198,7 +263,7 @@ export default function Manage_Movies() {
     }
   };
 
-  // drag/drop
+  // drag/drop poster
   const onDragOver = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -238,10 +303,7 @@ export default function Manage_Movies() {
   const saveEdit = async () => {
     if (!editMovie) return;
 
-    if (
-      editPoster &&
-      !(isDataUrl(editPoster) || /^https?:\/\//i.test(editPoster))
-    ) {
+    if (editPoster && !(isDataUrl(editPoster) || /^https?:\/\//i.test(editPoster))) {
       setErrorMsg("Poster must be a data:image/* or http(s) URL.");
       return;
     }
@@ -270,7 +332,16 @@ export default function Manage_Movies() {
 
     setEditSubmitting(true);
     try {
-      // 1) update movie minimal
+      // Optimistic UI
+      setMovies((arr) =>
+        arr.map((m) =>
+          m.movie_id === editMovie.movie_id
+            ? { ...m, poster_url: editPoster || null, is_watched: !!editIsWatched }
+            : m
+        )
+      );
+
+      // 1) update base fields
       await fetchJson(EP.MOVIE_ONE(editMovie.movie_id), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -280,14 +351,12 @@ export default function Manage_Movies() {
         }),
       });
 
-      // 2) fetch current parts & diff
+      // 2) sync parts (diff)
       const j2 = await fetchJson(EP.MOVIE_ONE(editMovie.movie_id));
       const currentParts = Array.isArray(j2.parts) ? j2.parts : [];
 
       const byId = new Map(
-        currentParts
-          .filter((p) => p.part_id != null)
-          .map((p) => [Number(p.part_id), p])
+        currentParts.filter((p) => p.part_id != null).map((p) => [Number(p.part_id), p])
       );
       const byKey = new Map(currentParts.map((p) => [`${p.part_number}`, p]));
 
@@ -302,13 +371,7 @@ export default function Manage_Movies() {
           const needsUpdate =
             Number(srv.part_number) !== Number(np.part_number) ||
             Number(srv.year || 0) !== Number(np.year || 0);
-          if (needsUpdate) {
-            toUpdate.push({
-              part_id: Number(np.part_id),
-              part_number: Number(np.part_number),
-              year: np.year,
-            });
-          }
+          if (needsUpdate) toUpdate.push({ part_id: Number(np.part_id), part_number: Number(np.part_number), year: np.year });
         } else {
           const matched = byKey.get(String(np.part_number));
           if (matched && matched.part_id != null) {
@@ -317,11 +380,7 @@ export default function Manage_Movies() {
               Number(matched.part_number) !== Number(np.part_number) ||
               Number(matched.year || 0) !== Number(np.year || 0);
             if (needsUpdate) {
-              toUpdate.push({
-                part_id: Number(matched.part_id),
-                part_number: Number(np.part_number),
-                year: np.year,
-              });
+              toUpdate.push({ part_id: Number(matched.part_id), part_number: Number(np.part_number), year: np.year });
             }
           } else {
             if (Number(np.part_number) < 2) {
@@ -329,10 +388,7 @@ export default function Manage_Movies() {
               setEditSubmitting(false);
               return;
             }
-            toCreate.push({
-              part_number: Number(np.part_number),
-              year: np.year,
-            });
+            toCreate.push({ part_number: Number(np.part_number), year: np.year });
           }
         }
       }
@@ -341,17 +397,12 @@ export default function Manage_Movies() {
         .filter((p) => p.part_id != null && !seenIds.has(Number(p.part_id)))
         .map((p) => Number(p.part_id));
 
-      // apply
       for (const c of toCreate) {
         // eslint-disable-next-line no-await-in-loop
         await fetchJson(EP.CREATE_PART, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            movie_id: editMovie.movie_id,
-            part_number: c.part_number,
-            year: c.year,
-          }),
+          body: JSON.stringify({ movie_id: editMovie.movie_id, part_number: c.part_number, year: c.year }),
         });
       }
       for (const u of toUpdate) {
@@ -359,10 +410,7 @@ export default function Manage_Movies() {
         await fetchJson(EP.UPDATE_PART(u.part_id), {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            part_number: u.part_number,
-            year: u.year,
-          }),
+          body: JSON.stringify({ part_number: u.part_number, year: u.year }),
         });
       }
       for (const did of toDelete) {
@@ -371,7 +419,7 @@ export default function Manage_Movies() {
       }
 
       setEditMovie(null);
-      await loadList();
+      await loadList({ restoreScroll: true }); // keep page & position
       setSuccessMsg("Movie updated.");
     } catch (e) {
       setErrorMsg(e.message || "Could not update movie.");
@@ -383,13 +431,27 @@ export default function Manage_Movies() {
   // ---- DELETE movie ----
   const doDelete = async () => {
     if (!confirmDel) return;
+    const deletingId = confirmDel.movie_id;
+
+    // Optimistic remove
+    setMovies((arr) => arr.filter((m) => m.movie_id !== deletingId));
+
     try {
-      await fetchJson(EP.MOVIE_ONE(confirmDel.movie_id), { method: "DELETE" });
+      await fetchJson(EP.MOVIE_ONE(deletingId), { method: "DELETE" });
       setConfirmDel(null);
-      await loadList();
+
+      const willBeEmpty = movies.length <= 1;
+      if (willBeEmpty && page > 0) {
+        setPage((p) => p - 1);
+        await loadList({ restoreScroll: false });
+      } else {
+        await loadList({ restoreScroll: true });
+      }
+
       setSuccessMsg("Movie deleted.");
     } catch (e) {
       setErrorMsg(e.message || "Could not delete movie.");
+      await loadList({ restoreScroll: true });
     }
   };
 
@@ -422,32 +484,22 @@ export default function Manage_Movies() {
         </td>
         <td>
           <span
-            className={`badge ${
-              row.is_watched ? "bg-success-subtle" : "bg-secondary-subtle"
-            }`}
+            className={`badge ${row.is_watched ? "bg-success-subtle" : "bg-secondary-subtle"}`}
             style={{ color: row.is_watched ? "#0f766e" : "#475569" }}
           >
             {row.is_watched ? "Watched" : "Pending"}
           </span>
         </td>
         <td className="text-end">
-          <button
-            className="btn btn-sm btn-outline-secondary btn-anim me-1"
-            onClick={() => onView(row.movie_id)}
-          >
+          <button className="btn btn-sm btn-outline-secondary btn-anim me-1" onClick={() => onView(row.movie_id)}>
             View
           </button>
-          <button
-            className="btn btn-sm btn-outline-primary btn-anim me-1"
-            onClick={() => onEdit(row.movie_id)}
-          >
+          <button className="btn btn-sm btn-outline-primary btn-anim me-1" onClick={() => onEdit(row.movie_id)}>
             Edit
           </button>
           <button
             className="btn btn-sm btn-outline-danger btn-anim"
-            onClick={() =>
-              onDelete({ movie_id: row.movie_id, movie_name: row.movie_name })
-            }
+            onClick={() => onDelete({ movie_id: row.movie_id, movie_name: row.movie_name })}
           >
             Delete
           </button>
@@ -458,7 +510,11 @@ export default function Manage_Movies() {
 
   return (
     <>
+      {/* global spinner for non-list work (view/edit/delete) */}
       {busyCount > 0 && <LoadingSpiner message="Loading…" fullScreen />}
+
+      {/* SINGLE full-page centered progress for LIST loading */}
+      {loadingList && <CenterPageProgress percent={listProgress} label="Loading movies…" />}
 
       {/* top hero */}
       <header
@@ -471,10 +527,7 @@ export default function Manage_Movies() {
         <div className="container py-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
           <div>
             <div className="text-muted small mb-1">Entertainment / Movies</div>
-            <h3
-              className="mb-1"
-              style={{ fontWeight: 800, letterSpacing: "-.025rem" }}
-            >
+            <h3 className="mb-1" style={{ fontWeight: 800, letterSpacing: "-.025rem" }}>
               🎥 Manage Movies
             </h3>
             <p className="text-muted mb-0" style={{ maxWidth: 480 }}>
@@ -497,10 +550,7 @@ export default function Manage_Movies() {
 
       {/* filters */}
       <div className="container mt-3">
-        <div
-          className="card border-0 shadow-sm"
-          style={{ borderRadius: "1.15rem" }}
-        >
+        <div className="card border-0 shadow-sm" style={{ borderRadius: "1.15rem" }}>
           <div className="card-body">
             <div className="row g-3 align-items-end">
               <div className="col-12 col-md-4">
@@ -535,9 +585,7 @@ export default function Manage_Movies() {
                 </select>
               </div>
               <div className="col-12 col-md-4 text-md-end">
-                <label className="form-label d-block small text-muted">
-                  &nbsp;
-                </label>
+                <label className="form-label d-block small text-muted">&nbsp;</label>
                 <button
                   className="btn btn-soft me-2 btn-anim"
                   onClick={() => {
@@ -548,10 +596,7 @@ export default function Manage_Movies() {
                 >
                   Reset
                 </button>
-                <button
-                  className="btn btn-emerald btn-anim"
-                  onClick={() => loadList()}
-                >
+                <button className="btn btn-emerald btn-anim" onClick={() => loadList({ restoreScroll: false })}>
                   Refresh
                 </button>
               </div>
@@ -562,16 +607,13 @@ export default function Manage_Movies() {
                 <span
                   className="badge rounded-pill me-2"
                   style={{
-                    backgroundColor:
-                      selectedCatMeta?.category_color || "rgba(99,102,241,.14)",
+                    backgroundColor: selectedCatMeta?.category_color || "rgba(99,102,241,.14)",
                     color: "#0f172a",
                   }}
                 >
                   {selectedCatMeta?.category_name || "Selected"}
                 </span>
-                {selectedCatMeta
-                  ? `Total in this category: ${selectedCatMeta.total}`
-                  : "—"}
+                {selectedCatMeta ? `Total in this category: ${selectedCatMeta.total}` : "—"}
               </div>
             ) : null}
           </div>
@@ -580,29 +622,22 @@ export default function Manage_Movies() {
 
       {/* list */}
       <div className="container my-3">
-        <div
-          className="card border-0 shadow-sm"
-          style={{ borderRadius: "1.15rem", overflow: "hidden" }}
-        >
+        <div className="card border-0 shadow-sm" style={{ borderRadius: "1.15rem", overflow: "hidden" }}>
           <div
             className="card-header d-flex justify-content-between align-items-center"
-            style={{
-              background:
-                "linear-gradient(90deg, rgba(15,118,110,.08), rgba(99,102,241,.14))",
-            }}
+            style={{ background: "linear-gradient(90deg, rgba(15,118,110,.08), rgba(99,102,241,.14))" }}
           >
             <span className="fw-semibold">Movies</span>
-            <span className="text-muted small">Page {page + 1}</span>
+            <div className="d-flex align-items-center gap-2">
+              <span className="text-muted small">Page {page + 1}</span>
+              {/* header progress removed (full-page overlay is used) */}
+            </div>
           </div>
 
-          {/* mobile cards (improved) */}
-          <div className="d-md-none p-2 mm-mobile-list">
-            {loadingList ? (
-              <div className="text-center py-3 text-muted">
-                <div className="spinner-border spinner-border-sm me-2" />
-                Loading…
-              </div>
-            ) : movies.length ? (
+          {/* mobile cards */}
+          <div className="d-md-none p-2 mm-mobile-list" ref={listWrapRef}>
+            {/* per-request: no per-section spinners; full-page overlay handles loading */}
+            {movies.length ? (
               <div className="d-flex flex-column gap-2">
                 {movies.map((m) => (
                   <div key={m.movie_id} className="mm-mobile-card">
@@ -619,61 +654,35 @@ export default function Manage_Movies() {
                       <div className="mm-mobile-meta">
                         <div className="mm-mobile-title">{m.movie_name}</div>
                         <div className="mm-mobile-tags">
-                          {m.category_name ? (
-                            <span className="mm-tag mm-tag-cat">
-                              {m.category_name}
-                            </span>
-                          ) : null}
-                          {m.release_year ? (
-                            <span className="mm-tag">{m.release_year}</span>
-                          ) : null}
-                          <span
-                            className={`mm-tag ${
-                              m.is_watched ? "mm-tag-ok" : "mm-tag-muted"
-                            }`}
-                          >
+                          {m.category_name ? <span className="mm-tag mm-tag-cat">{m.category_name}</span> : null}
+                          {m.release_year ? <span className="mm-tag">{m.release_year}</span> : null}
+                          <span className={`mm-tag ${m.is_watched ? "mm-tag-ok" : "mm-tag-muted"}`}>
                             {m.is_watched ? "Watched" : "Pending"}
                           </span>
                         </div>
                         <div className="mm-mobile-extra">
                           Parts:{" "}
-                          {m.parts?.length
-                            ? m.parts
-                                .map((p) => `P${p.part_number}(${p.year})`)
-                                .join(", ")
-                            : "—"}
+                          {m.parts?.length ? m.parts.map((p) => `P${p.part_number}(${p.year})`).join(", ") : "—"}
                         </div>
                       </div>
-                      {/* mini toggle icon on right */}
                       <div className="mm-mobile-right">
                         <div
-                          className={`mm-watch-dot ${
-                            m.is_watched ? "yes" : "no"
-                          }`}
+                          className={`mm-watch-dot ${m.is_watched ? "yes" : "no"}`}
                           title={m.is_watched ? "Watched" : "Not watched"}
                         />
                       </div>
                     </div>
                     <div className="mm-mobile-actions">
-                      <button
-                        className="mm-btn mm-btn-soft"
-                        onClick={() => openView(m.movie_id)}
-                      >
+                      <button className="mm-btn mm-btn-soft" onClick={() => openView(m.movie_id)}>
                         👁 View
                       </button>
-                      <button
-                        className="mm-btn mm-btn-green"
-                        onClick={() => openEdit(m.movie_id)}
-                      >
+                      <button className="mm-btn mm-btn-green" onClick={() => openEdit(m.movie_id)}>
                         ✏️ Edit
                       </button>
                       <button
                         className="mm-btn mm-btn-danger"
                         onClick={() =>
-                          setConfirmDel({
-                            movie_id: m.movie_id,
-                            movie_name: m.movie_name,
-                          })
+                          setConfirmDel({ movie_id: m.movie_id, movie_name: m.movie_name })
                         }
                       >
                         🗑 Delete
@@ -688,20 +697,8 @@ export default function Manage_Movies() {
           </div>
 
           {/* desktop table */}
-          <div className="table-responsive d-none d-md-block position-relative">
-            {loadingList && (
-              <div
-                className="position-absolute w-100 h-100 d-flex align-items-center justify-content-center"
-                style={{
-                  inset: 0,
-                  background: "rgba(255,255,255,.6)",
-                  zIndex: 1,
-                }}
-              >
-                <div className="spinner-border" role="status" aria-hidden="true"></div>
-                <span className="ms-2 text-muted">Loading…</span>
-              </div>
-            )}
+          <div className="table-responsive d-none d-md-block position-relative" ref={listWrapRef}>
+            {/* section overlay removed — full-page overlay handles loading */}
             <table className="table align-middle mb-0">
               <thead style={{ background: "#f8fafc" }}>
                 <tr>
@@ -715,7 +712,7 @@ export default function Manage_Movies() {
                 </tr>
               </thead>
               <tbody>
-                {!loadingList && movies.length ? (
+                {movies.length ? (
                   movies.map((m) => (
                     <Row
                       key={m.movie_id}
@@ -725,13 +722,13 @@ export default function Manage_Movies() {
                       onDelete={setConfirmDel}
                     />
                   ))
-                ) : !loadingList ? (
+                ) : (
                   <tr>
                     <td colSpan="7" className="text-center py-4 text-muted">
                       No movies found.
                     </td>
                   </tr>
-                ) : null}
+                )}
               </tbody>
             </table>
           </div>
@@ -741,15 +738,21 @@ export default function Manage_Movies() {
             <div className="btn-group">
               <button
                 className="btn btn-soft btn-sm btn-anim"
-                disabled={page === 0}
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0 || loadingList}
+                onClick={async () => {
+                  setPage((p) => Math.max(0, p - 1));
+                  await new Promise((r) => setTimeout(r, 0));
+                }}
               >
                 ← Prev
               </button>
               <button
                 className="btn btn-soft btn-sm btn-anim"
-                disabled={movies.length < limit}
-                onClick={() => setPage((p) => p + 1)}
+                disabled={movies.length < limit || loadingList}
+                onClick={async () => {
+                  setPage((p) => p + 1);
+                  await new Promise((r) => setTimeout(r, 0));
+                }}
               >
                 Next →
               </button>
@@ -758,11 +761,10 @@ export default function Manage_Movies() {
         </div>
       </div>
 
-      {/* VIEW — full-screen style on mobile */}
+      {/* VIEW modal */}
       {viewMovie && (
         <CenterModal onClose={() => setViewMovie(null)} size="lg">
           <div className="movie-view-sheet">
-            {/* Poster top (mobile) / left (desktop) */}
             <div className="movie-view-poster">
               {viewMovie.poster_url ? (
                 <img src={viewMovie.poster_url} alt={viewMovie.movie_name} />
@@ -775,28 +777,18 @@ export default function Manage_Movies() {
             <div className="movie-view-body">
               <h4 className="mv-title">{viewMovie.movie_name}</h4>
               <div className="mv-meta">
-                {viewMovie.release_year ? (
-                  <span className="mv-chip">{viewMovie.release_year}</span>
-                ) : null}
+                {viewMovie.release_year ? <span className="mv-chip">{viewMovie.release_year}</span> : null}
                 {viewMovie.category_name ? (
-                  <span className="mv-chip mv-chip-accent">
-                    {viewMovie.category_name}
-                  </span>
+                  <span className="mv-chip mv-chip-accent">{viewMovie.category_name}</span>
                 ) : null}
-                <span
-                  className={`mv-chip ${
-                    viewMovie.is_watched ? "mv-chip-success" : "mv-chip-muted"
-                  }`}
-                >
+                <span className={`mv-chip ${viewMovie.is_watched ? "mv-chip-success" : "mv-chip-muted"}`}>
                   {viewMovie.is_watched ? "Watched" : "Not Watched"}
                 </span>
               </div>
 
               <div className="mv-block">
                 <span className="mv-label">Subcategory</span>
-                <div className="mv-value">
-                  {viewMovie.subcategory_name || "—"}
-                </div>
+                <div className="mv-value">{viewMovie.subcategory_name || "—"}</div>
               </div>
 
               <div className="mv-block">
@@ -856,9 +848,7 @@ export default function Manage_Movies() {
               <div className="fw-semibold mb-1">
                 Drop image here {editPoster ? " (selected)" : ""}
               </div>
-              <div className="text-muted small">
-                JPG/PNG/WebP. Click to browse.
-              </div>
+              <div className="text-muted small">JPG/PNG/WebP. Click to browse.</div>
               {editPoster ? (
                 <img
                   src={editPoster}
@@ -867,20 +857,12 @@ export default function Manage_Movies() {
                   style={{ maxHeight: 150, objectFit: "cover" }}
                 />
               ) : null}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="d-none"
-                onChange={onFileChange}
-              />
+              <input ref={fileInputRef} type="file" accept="image/*" className="d-none" onChange={onFileChange} />
             </div>
 
             <label className="form-label">Watched?</label>
             <div className="d-flex align-items-center justify-content-between border rounded p-2 mb-3">
-              <span className="text-muted small">
-                Mark this if you already watched it.
-              </span>
+              <span className="text-muted small">Mark this if you already watched it.</span>
               <label className="mm-switch ms-2">
                 <input
                   type="checkbox"
@@ -888,9 +870,7 @@ export default function Manage_Movies() {
                   onChange={(e) => setEditIsWatched(e.target.checked)}
                 />
                 <span className="mm-slider" />
-                <span className="mm-switch-label">
-                  {editIsWatched ? "Yes" : "No"}
-                </span>
+                <span className="mm-switch-label">{editIsWatched ? "Yes" : "No"}</span>
               </label>
             </div>
 
@@ -903,10 +883,7 @@ export default function Manage_Movies() {
                   setEditParts((p) => [
                     ...p,
                     {
-                      part_number: Math.max(
-                        2,
-                        (p[p.length - 1]?.part_number || p.length + 1)
-                      ),
+                      part_number: Math.max(2, (p[p.length - 1]?.part_number || p.length + 1)),
                       year: "",
                     },
                   ])
@@ -939,23 +916,16 @@ export default function Manage_Movies() {
                               const v = onlyDigits(e.target.value);
                               setEditParts((arr) => {
                                 const copy = [...arr];
-                                copy[idx] = {
-                                  ...copy[idx],
-                                  part_number: v ? Number(v) : "",
-                                };
+                                copy[idx] = { ...copy[idx], part_number: v ? Number(v) : "" };
                                 return copy;
                               });
                             }}
                           />
-                          <small className="text-muted">
-                            New parts must be ≥ 2
-                          </small>
+                          <small className="text-muted">New parts must be ≥ 2</small>
                         </td>
                         <td>
                           <input
-                            className={`form-control form-control-sm ${
-                              p.year && isYear(p.year) ? "" : "is-invalid"
-                            }`}
+                            className={`form-control form-control-sm ${p.year && isYear(p.year) ? "" : "is-invalid"}`}
                             value={p.year}
                             onChange={(e) => {
                               const v = clamp4(e.target.value);
@@ -967,20 +937,12 @@ export default function Manage_Movies() {
                             }}
                             placeholder="2024"
                           />
-                          {(!p.year || !isYear(p.year)) && (
-                            <div className="invalid-feedback">
-                              Year 1888–2100
-                            </div>
-                          )}
+                          {(!p.year || !isYear(p.year)) && <div className="invalid-feedback">Year 1888–2100</div>}
                         </td>
                         <td className="text-end">
                           <button
                             className="btn btn-sm btn-outline-danger btn-anim"
-                            onClick={() =>
-                              setEditParts((arr) =>
-                                arr.filter((_, i) => i !== idx)
-                              )
-                            }
+                            onClick={() => setEditParts((arr) => arr.filter((_, i) => i !== idx))}
                           >
                             Delete
                           </button>
@@ -996,11 +958,7 @@ export default function Manage_Movies() {
           </div>
 
           <div className="modal-footer d-flex justify-content-end gap-2">
-            <button
-              className="btn btn-emerald btn-anim"
-              onClick={saveEdit}
-              disabled={editSubmitting}
-            >
+            <button className="btn btn-emerald btn-anim" onClick={saveEdit} disabled={editSubmitting}>
               {editSubmitting ? "Saving…" : "Save changes"}
             </button>
           </div>
@@ -1016,8 +974,7 @@ export default function Manage_Movies() {
               style={{
                 width: 64,
                 height: 64,
-                background:
-                  "linear-gradient(135deg, rgba(248,113,113,.15), rgba(99,102,241,.12))",
+                background: "linear-gradient(135deg, rgba(248,113,113,.15), rgba(99,102,241,.12))",
               }}
             >
               <span style={{ fontSize: 28, color: "#dc2626" }}>!</span>
@@ -1029,16 +986,10 @@ export default function Manage_Movies() {
               This action cannot be undone.
             </p>
             <div className="d-flex justify-content-center gap-2 flex-wrap">
-              <button
-                className="btn btn-soft btn-anim"
-                onClick={() => setConfirmDel(null)}
-              >
+              <button className="btn btn-soft btn-anim" onClick={() => setConfirmDel(null)}>
                 Cancel
               </button>
-              <button
-                className="btn btn-outline-danger btn-anim"
-                onClick={doDelete}
-              >
+              <button className="btn btn-outline-danger btn-anim" onClick={doDelete}>
                 Delete
               </button>
             </div>
@@ -1069,22 +1020,9 @@ export default function Manage_Movies() {
           background: rgba(15,23,42,.03);
           border: 1px solid rgba(15,23,42,.02);
         }
-        .btn-anim{
-          transition: transform .12s ease, box-shadow .12s ease, filter .12s ease;
-        }
-        .btn-anim:hover{
-          transform: translateY(-1px);
-          box-shadow: 0 .5rem 1.1rem rgba(15,23,42,.12);
-          filter: brightness(1.02);
-        }
-        .mm-card{
-          border:1px solid rgba(15,23,42,.03);
-          transition: transform .12s ease, box-shadow .12s ease;
-        }
-        .mm-card:hover{
-          transform: translateY(-1px);
-          box-shadow:0 .5rem 1.4rem rgba(15,23,42,.1);
-        }
+        .btn-anim{ transition: transform .12s ease, box-shadow .12s ease, filter .12s ease; }
+        .btn-anim:hover{ transform: translateY(-1px); box-shadow: 0 .5rem 1.1rem rgba(15,23,42,.12); filter: brightness(1.02); }
+
         .mm-dropzone{
           border:2px dashed rgba(16,185,129,.35);
           border-radius:1rem;
@@ -1094,37 +1032,14 @@ export default function Manage_Movies() {
           cursor:pointer;
           transition: box-shadow .12s ease, transform .12s ease;
         }
-        .mm-dropzone.glow{
-          box-shadow: 0 0 0 .2rem rgba(16,185,129,.12);
-          transform: scale(1.01);
-        }
-        .mm-switch{
-          position:relative; display:inline-flex; align-items:center; gap:.35rem;
-        }
+        .mm-dropzone.glow{ box-shadow: 0 0 0 .2rem rgba(16,185,129,.12); transform: scale(1.01); }
+        .mm-switch{ position:relative; display:inline-flex; align-items:center; gap:.35rem; }
         .mm-switch input{ display:none; }
-        .mm-slider{
-          width:50px; height:28px; background:#e2e8f0;
-          border-radius:999px;
-          position:relative;
-          transition: background .18s ease;
-        }
-        .mm-slider::after{
-          content:"";
-          position:absolute; top:3px; left:3px;
-          width:22px; height:22px; border-radius:999px;
-          background:#fff;
-          transition: transform .18s ease;
-          box-shadow:0 2px 6px rgba(0,0,0,.15);
-        }
-        .mm-switch input:checked + .mm-slider{
-          background:linear-gradient(135deg,#10b981,#6366f1);
-        }
-        .mm-switch input:checked + .mm-slider::after{
-          transform:translateX(22px);
-        }
-        .mm-switch-label{
-          font-size:.7rem; font-weight:600; color:#0f172a;
-        }
+        .mm-slider{ width:50px; height:28px; background:#e2e8f0; border-radius:999px; position:relative; transition: background .18s ease; }
+        .mm-slider::after{ content:""; position:absolute; top:3px; left:3px; width:22px; height:22px; border-radius:999px; background:#fff; transition: transform .18s ease; box-shadow:0 2px 6px rgba(0,0,0,.15); }
+        .mm-switch input:checked + .mm-slider{ background:linear-gradient(135deg,#10b981,#6366f1); }
+        .mm-switch input:checked + .mm-slider::after{ transform:translateX(22px); }
+        .mm-switch-label{ font-size:.7rem; font-weight:600; color:#0f172a; }
 
         .toastish{
           position:fixed; top:1rem; right:1rem;
@@ -1133,245 +1048,128 @@ export default function Manage_Movies() {
           padding:.5rem .75rem; display:flex; gap:.5rem; align-items:center;
           z-index:9999; min-width:200px;
         }
-        @media (max-width:575.98px){
-          .toastish{ left: .5rem; right: .5rem; }
-        }
+        @media (max-width:575.98px){ .toastish{ left: .5rem; right: .5rem; } }
 
-        /* MOBILE LIST – new styles */
-        .mm-mobile-list{
-          background: radial-gradient(circle at 10% 10%, rgba(99,102,241,.03), #fff 70%);
-        }
+        /* MOBILE LIST */
+        .mm-mobile-list{ background: radial-gradient(circle at 10% 10%, rgba(99,102,241,.03), #fff 70%); max-height: 70vh; overflow: auto; }
         .mm-mobile-card{
           background: #ffffff;
           border: 1px solid rgba(15,23,42,.03);
           border-radius: 1rem;
           padding: .75rem .8rem .6rem;
-          display: flex;
-          flex-direction: column;
-          gap: .55rem;
+          display: flex; flex-direction: column; gap: .55rem;
           box-shadow: 0 8px 30px rgba(15,23,42,.05);
         }
-        .mm-mobile-top{
-          display: flex;
-          gap: .65rem;
-          align-items: flex-start;
-        }
-        .mm-mobile-media img{
-          width: 52px;
-          height: 70px;
-          object-fit: cover;
-          border-radius: .75rem;
-          box-shadow: 0 9px 18px rgba(15,23,42,.25);
-        }
-        .mm-mobile-avatar{
-          width: 52px;
-          height: 52px;
-          border-radius: 1rem;
-          background: linear-gradient(135deg,#6366f1,#10b981);
-          display:flex;
-          align-items:center;
-          justify-content:center;
-          color:#fff;
-          font-weight:700;
-        }
-        .mm-mobile-meta{
-          flex: 1;
-          min-width: 0;
-        }
+        .mm-mobile-top{ display: flex; gap: .65rem; align-items: flex-start; }
+        .mm-mobile-media img{ width: 52px; height: 70px; object-fit: cover; border-radius: .75rem; box-shadow: 0 9px 18px rgba(15,23,42,.25); }
+        .mm-mobile-avatar{ width: 52px; height: 52px; border-radius: 1rem; background: linear-gradient(135deg,#6366f1,#10b981); display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; }
+        .mm-mobile-meta{ flex: 1; min-width: 0; }
         .mm-mobile-title{
-          font-weight: 600;
-          font-size: .92rem;
-          color: #0f172a;
-          line-height: 1.05;
-          margin-bottom: .25rem;
+          font-weight: 600; font-size: .92rem; color: #0f172a; line-height: 1.15; margin-bottom: .25rem;
+          white-space: normal; word-break: normal; overflow-wrap: anywhere;
         }
-        .mm-mobile-tags{
-          display:flex;
-          flex-wrap:wrap;
-          gap:.25rem;
-          margin-bottom:.25rem;
-        }
-        .mm-tag{
-          background: rgba(148,163,184,.12);
-          border-radius: 999px;
-          padding: .08rem .55rem .15rem;
-          font-size: .65rem;
-          line-height: 1.2;
-          color: #0f172a;
-        }
-        .mm-tag-cat{
-          background: linear-gradient(135deg,rgba(99,102,241,.18),rgba(16,185,129,.25));
-        }
-        .mm-tag-ok{
-          background: rgba(16,185,129,.15);
-          color: #065f46;
-          font-weight: 500;
-        }
-        .mm-tag-muted{
-          background: rgba(148,163,184,.12);
-          color: #475569;
-        }
-        .mm-mobile-extra{
-          font-size: .63rem;
-          color: #94a3b8;
-        }
-        .mm-mobile-right{
-          display:flex;
-          align-items:flex-start;
-        }
-        .mm-watch-dot{
-          width: 16px;
-          height: 16px;
-          border-radius: 999px;
-          border: 2px solid #fff;
-          box-shadow: 0 0 0 2px rgba(15,23,42,.12);
-        }
-        .mm-watch-dot.yes{
-          background: linear-gradient(135deg,#10b981,#22c55e);
-        }
-        .mm-watch-dot.no{
-          background: rgba(148,163,184,.35);
-        }
+        .mm-mobile-tags{ display:flex; flex-wrap:wrap; gap:.25rem; margin-bottom:.25rem; }
+        .mm-tag{ background: rgba(148,163,184,.12); border-radius: 999px; padding: .08rem .55rem .15rem; font-size: .65rem; line-height: 1.2; color: #0f172a; white-space: normal; overflow-wrap:anywhere; }
+        .mm-tag-cat{ background: linear-gradient(135deg,rgba(99,102,241,.18),rgba(16,185,129,.25)); }
+        .mm-tag-ok{ background: rgba(16,185,129,.15); color: #065f46; font-weight: 500; }
+        .mm-tag-muted{ background: rgba(148,163,184,.12); color: #475569; }
+        .mm-mobile-extra{ font-size: .63rem; color: #94a3b8; }
+        .mm-mobile-right{ display:flex; align-items:flex-start; }
+        .mm-watch-dot{ width: 16px; height: 16px; border-radius: 999px; border: 2px solid #fff; box-shadow: 0 0 0 2px rgba(15,23,42,.12); }
+        .mm-watch-dot.yes{ background: linear-gradient(135deg,#10b981,#22c55e); }
+        .mm-watch-dot.no{ background: rgba(148,163,184,.35); }
 
-        .mm-mobile-actions{
-          display:flex;
-          gap:.4rem;
-        }
-        .mm-btn{
-          flex:1;
-          border:none;
-          border-radius:.7rem;
-          font-size:.7rem;
-          font-weight:500;
-          padding:.35rem .4rem .45rem;
-          display:flex;
-          align-items:center;
-          justify-content:center;
-          gap:.25rem;
-          transition: transform .12s ease, box-shadow .12s ease;
-        }
-        .mm-btn:active{
-          transform: translateY(1px);
-        }
-        .mm-btn-soft{
-          background: rgba(15,23,42,.015);
-          border:1px solid rgba(148,163,184,.12);
-        }
-        .mm-btn-green{
-          background: linear-gradient(135deg,#10b981,#0f766e);
-          color:#fff;
-        }
-        .mm-btn-danger{
-          background: rgba(248,113,113,.12);
-          color:#b91c1c;
-        }
+        .mm-mobile-actions{ display:flex; gap:.4rem; }
+        .mm-btn{ flex:1; border:none; border-radius:.7rem; font-size:.7rem; font-weight:500; padding:.35rem .4rem .45rem; display:flex; align-items:center; justify-content:center; gap:.25rem; transition: transform .12s ease, box-shadow .12s ease; }
+        .mm-btn:active{ transform: translateY(1px); }
+        .mm-btn-soft{ background: rgba(15,23,42,.015); border:1px solid rgba(148,163,184,.12); }
+        .mm-btn-green{ background: linear-gradient(135deg,#10b981,#0f766e); color:#fff; }
+        .mm-btn-danger{ background: rgba(248,113,113,.12); color:#b91c1c; }
 
-        /* movie view layout */
-        .movie-view-sheet{
-          display:flex;
-          gap:1.25rem;
-        }
-        .movie-view-poster img{
-          width:180px;
-          max-height:250px;
-          height:auto;
-          object-fit:cover;
-          border-radius:1.1rem;
-          box-shadow:0 18px 35px rgba(15,23,42,.3);
-        }
+        /* Movie view */
+        .movie-view-sheet{ display:flex; gap:1.25rem; }
+        .movie-view-poster img{ width:180px; max-height:250px; height:auto; object-fit:cover; border-radius:1.1rem; box-shadow:0 18px 35px rgba(15,23,42,.3); }
         .movie-view-placeholder{
-          width:180px;
-          max-height:250px;
-          aspect-ratio: 9 / 12;
-          border-radius:1.1rem;
+          width:180px; max-height:250px; aspect-ratio: 9 / 12; border-radius:1.1rem;
           background:linear-gradient(140deg, rgba(99,102,241,.6), rgba(16,185,129,.6));
-          display:flex; align-items:center; justify-content:center;
-          color:#fff; font-size:2.5rem; font-weight:800;
-          box-shadow:0 18px 35px rgba(15,23,42,.3);
+          display:flex; align-items:center; justify-content:center; color:#fff; font-size:2.5rem; font-weight:800; box-shadow:0 18px 35px rgba(15,23,42,.3);
         }
-        .movie-view-body{
-          flex:1;
-          min-width:200px;
-        }
-        .mv-title{
-          font-weight:700;
-          margin-bottom:.35rem;
-        }
-        .mv-meta{
-          display:flex; gap:.35rem; flex-wrap:wrap;
-          margin-bottom:.85rem;
-        }
-        .mv-chip{
-          background:rgba(15,23,42,.03);
-          border-radius:999px;
-          padding:.25rem .75rem;
-          font-size:.7rem;
-          font-weight:500;
-          color:#0f172a;
-        }
-        .mv-chip-accent{
-          background:linear-gradient(135deg,#6366f1,#10b981);
-          color:#fff;
-        }
-        .mv-chip-success{
-          background:rgba(16,185,129,.12);
-          color:#065f46;
-        }
-        .mv-chip-muted{
-          background:rgba(148,163,184,.2);
-          color:#0f172a;
-        }
-        .mv-block{
-          margin-bottom:.6rem;
-        }
-        .mv-label{
-          font-size:.68rem;
-          text-transform:uppercase;
-          letter-spacing:.04em;
-          color:#94a3b8;
-          display:block;
-          margin-bottom:.2rem;
-        }
-        .mv-value{
-          font-size:.8rem;
-        }
-        .mv-chips{
-          display:flex;
-          gap:.35rem;
-          flex-wrap:wrap;
-        }
-        .mv-chip-soft{
-          background:rgba(99,102,241,.12);
-          color:#1f2937;
-        }
+        .movie-view-body{ flex:1; min-width:200px; }
+        .mv-title{ font-weight:700; margin-bottom:.35rem; }
+        .mv-meta{ display:flex; gap:.35rem; flex-wrap:wrap; margin-bottom:.85rem; }
+        .mv-chip{ background:rgba(15,23,42,.03); border-radius:999px; padding:.25rem .75rem; font-size:.7rem; font-weight:500; color:#0f172a; }
+        .mv-chip-accent{ background:linear-gradient(135deg,#6366f1,#10b981); color:#fff; }
+        .mv-chip-success{ background:rgba(16,185,129,.12); color:#065f46; }
+        .mv-chip-muted{ background:rgba(148,163,184,.2); color:#0f172a; }
+        .mv-block{ margin-bottom:.6rem; }
+        .mv-label{ font-size:.68rem; text-transform:uppercase; letter-spacing:.04em; color:#94a3b8; display:block; margin-bottom:.2rem; }
+        .mv-value{ font-size:.8rem; }
+        .mv-chips{ display:flex; gap:.35rem; flex-wrap:wrap; }
+        .mv-chip-soft{ background:rgba(99,102,241,.12); color:#1f2937; }
 
-        /* MOBILE view: poster should not zoom / crop */
         @media (max-width:768px){
-          .movie-view-sheet{
-            flex-direction:column;
-          }
-          .movie-view-poster img,
-          .movie-view-placeholder{
-            width:100%;
-            height:auto;
-            max-height:260px;
-            object-fit:contain;
-            border-radius:1rem;
-          }
+          .movie-view-sheet{ flex-direction:column; }
+          .movie-view-poster img, .movie-view-placeholder{ width:100%; height:auto; max-height:260px; object-fit:contain; border-radius:1rem; }
         }
 
-        /* scroll area inside modal so buttons don't hide */
-        .scroll-area{
-          max-height:60vh;
-          overflow-y:auto;
-        }
-        @media (max-width:575.98px){
-          .scroll-area{
-            max-height:58vh;
-          }
-        }
+        .scroll-area{ max-height:60vh; overflow-y:auto; }
+        @media (max-width:575.98px){ .scroll-area{ max-height:58vh; } }
       `}</style>
     </>
+  );
+}
+
+/* SINGLE full-page centered progress for list loads */
+function CenterPageProgress({ percent = 0, label = "Loading…" }) {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(255,255,255,.78)",
+        backdropFilter: "blur(2px)",
+        zIndex: 9997,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "1rem",
+      }}
+    >
+      <div
+        style={{
+          background: "#fff",
+          borderRadius: "1rem",
+          boxShadow: "0 18px 40px rgba(15,23,42,.18)",
+          width: "min(360px, 92vw)",
+          padding: "1rem 1.25rem",
+          textAlign: "center",
+        }}
+      >
+        <div style={{ fontWeight: 700, marginBottom: ".35rem" }}>{label}</div>
+        <div
+          style={{
+            height: 10,
+            borderRadius: 999,
+            background: "#eef2f7",
+            overflow: "hidden",
+            border: "1px solid rgba(148,163,184,.35)",
+          }}
+        >
+          <div
+            style={{
+              height: "100%",
+              width: `${percent}%`,
+              transition: "width .15s ease",
+              background:
+                "linear-gradient(90deg, rgba(20,184,166,1), rgba(99,102,241,1))",
+            }}
+          />
+        </div>
+        <div style={{ fontSize: ".8rem", color: "#64748b", marginTop: ".35rem" }}>
+          {percent}%
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1402,12 +1200,7 @@ function CenterModal({ children, onClose, size = "md" }) {
         style={{
           background: "#fff",
           borderRadius: "1rem",
-          width:
-            size === "sm"
-              ? "min(420px, 100%)"
-              : size === "lg"
-              ? "min(920px, 100%)"
-              : "min(660px, 100%)",
+          width: size === "sm" ? "min(420px, 100%)" : size === "lg" ? "min(920px, 100%)" : "min(660px, 100%)",
           maxHeight: "92vh",
           overflow: "auto",
           boxShadow: "0 20px 50px rgba(15,23,42,.28)",
@@ -1416,30 +1209,16 @@ function CenterModal({ children, onClose, size = "md" }) {
         }}
       >
         <div className="d-flex justify-content-end p-2 pb-0">
-          <button
-            className="btn btn-sm btn-soft btn-anim"
-            onClick={onClose}
-            style={{ borderRadius: 999 }}
-          >
+          <button className="btn btn-sm btn-soft btn-anim" onClick={onClose} style={{ borderRadius: 999 }}>
             ✕
           </button>
         </div>
         <div style={{ padding: "1rem" }}>{children}</div>
 
         <style>{`
-          @keyframes mm-pop{
-            from{transform:scale(.97); opacity:.6}
-            to{transform:scale(1); opacity:1}
-          }
-
-          /* mobile: FULL PAGE view for details */
+          @keyframes mm-pop{ from{transform:scale(.97); opacity:.6} to{transform:scale(1); opacity:1} }
           @media (max-width:575.98px){
-            .mm-modal{
-              width: 100%;
-              height: 100%;
-              max-height: 100vh;
-              border-radius: 0;
-            }
+            .mm-modal{ width: 100%; height: 100%; max-height: 100vh; border-radius: 0; }
           }
         `}</style>
       </div>
@@ -1461,11 +1240,7 @@ function Toastish({ children, kind = "info", onClose }) {
         {kind === "success" ? "✓" : kind === "danger" ? "!" : "i"}
       </div>
       <div style={{ fontSize: ".75rem" }}>{children}</div>
-      <button
-        className="btn btn-sm btn-soft"
-        style={{ borderRadius: 999, padding: "0 .45rem" }}
-        onClick={onClose}
-      >
+      <button className="btn btn-sm btn-soft" style={{ borderRadius: 999, padding: "0 .45rem" }} onClick={onClose}>
         ✕
       </button>
     </div>

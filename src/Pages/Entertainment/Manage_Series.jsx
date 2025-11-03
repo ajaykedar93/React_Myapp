@@ -1,5 +1,5 @@
 // src/pages/Entertainment/Manage_Series.jsx
-// Mobile-first, professional Series manager (list + view + edit + delete)
+// Mobile-first, professional Series manager (text-only list + view + fast edit/delete)
 
 import React, {
   useCallback,
@@ -27,12 +27,14 @@ const EP = {
 };
 
 export default function Manage_Series() {
-  // global busy
+  // global busy (non-list tasks)
   const [busy, setBusy] = useState(0);
 
   // list + filters
   const [series, setSeries] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
+  const [listProgress, setListProgress] = useState(0); // %
+  const fakeProgRef = useRef(null);
   const [q, setQ] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [page, setPage] = useState(0);
@@ -60,6 +62,13 @@ export default function Manage_Series() {
   const [errorMsg, setErrorMsg] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
 
+  // list controllers
+  const listAbortRef = useRef(null);
+
+  // keep/restore scroll within list area
+  const listWrapRef = useRef(null);
+  const lastScrollRef = useRef(0);
+
   const withBusy = useCallback(async (fn) => {
     setBusy((c) => c + 1);
     try {
@@ -68,6 +77,13 @@ export default function Manage_Series() {
       setBusy((c) => Math.max(0, c - 1));
     }
   }, []);
+
+  // ===== helpers =====
+  const onlyDigits = (s) => String(s || "").replace(/\D/g, "");
+  const clamp4 = (s) => onlyDigits(s).slice(0, 4);
+  const isYear = (v) => /^\d{4}$/.test(String(v)) && +v >= 1888 && +v <= 2100;
+  const isDataUrl = (s) =>
+    typeof s === "string" && /^data:image\/(png|jpe?g|webp);base64,/.test(s);
 
   // ====== load meta once ======
   useEffect(() => {
@@ -108,43 +124,98 @@ export default function Manage_Series() {
     return statsByCat.find((c) => c.category_id === id) || null;
   }, [categoryFilter, statsByCat]);
 
+  // ===== progress helpers for list =====
+  const clearFake = () => {
+    if (fakeProgRef.current) {
+      clearInterval(fakeProgRef.current);
+      fakeProgRef.current = null;
+    }
+  };
+  const startFake = () => {
+    clearFake();
+    setListProgress(8);
+    fakeProgRef.current = setInterval(() => {
+      setListProgress((p) => (p < 90 ? p + 2 : p));
+    }, 110);
+  };
+  const finishProgress = () => {
+    clearFake();
+    setListProgress(100);
+    setTimeout(() => setListProgress(0), 220);
+  };
+
   // ====== load list whenever filters change ======
-  const listAbortRef = useRef(null);
-  const loadList = useCallback(async () => {
-    listAbortRef.current?.abort();
-    const ac = new AbortController();
-    listAbortRef.current = ac;
-    setLoadingList(true);
-    try {
-      const u = new URL(EP.SERIES);
-      if (q.trim()) u.searchParams.set("q", q.trim());
-      if (categoryFilter !== "") u.searchParams.set("category_id", categoryFilter);
-      u.searchParams.set("limit", String(limit));
-      u.searchParams.set("offset", String(page * limit));
-      const r = await fetch(u.toString(), { signal: ac.signal });
-      if (!r.ok) throw new Error("List failed");
-      const j = await r.json();
-      setSeries(Array.isArray(j) ? j : []);
-    } catch (e) {
-      if (e.name !== "AbortError") {
+  const loadList = useCallback(
+    async (opts = { restoreScroll: false }) => {
+      // keep scroll position if asked
+      if (opts.restoreScroll && listWrapRef.current) {
+        lastScrollRef.current = listWrapRef.current.scrollTop;
+      }
+
+      listAbortRef.current?.abort();
+      const ac = new AbortController();
+      listAbortRef.current = ac;
+      setLoadingList(true);
+      startFake();
+
+      try {
+        const u = new URL(EP.SERIES);
+        if (q.trim()) u.searchParams.set("q", q.trim());
+        if (categoryFilter !== "") u.searchParams.set("category_id", categoryFilter);
+        u.searchParams.set("limit", String(limit));
+        u.searchParams.set("offset", String(page * limit));
+
+        const res = await fetch(u.toString(), { signal: ac.signal });
+        if (!res.ok) throw new Error("List failed");
+
+        const contentLen = Number(res.headers.get("content-length") || 0);
+        if (res.body && contentLen > 0) {
+          const reader = res.body.getReader();
+          let received = 0;
+          const chunks = [];
+          // progressive
+          // eslint-disable-next-line no-constant-condition
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            received += value.byteLength;
+            chunks.push(value);
+            const pct = Math.min(99, Math.floor((received / contentLen) * 100));
+            setListProgress(pct);
+          }
+          const blob = new Blob(chunks, { type: "application/json" });
+          const text = await blob.text();
+          const json = JSON.parse(text || "[]");
+          setSeries(Array.isArray(json) ? json : []);
+          finishProgress();
+        } else {
+          const j = await res.json();
+          setSeries(Array.isArray(j) ? j : []);
+          finishProgress();
+        }
+      } catch (e) {
+        if (e.name === "AbortError") return;
         setSeries([]);
         setErrorMsg("Could not fetch series.");
+        clearFake();
+        setListProgress(0);
+      } finally {
+        setLoadingList(false);
+        // restore scroll after DOM updates
+        requestAnimationFrame(() => {
+          if (opts.restoreScroll && listWrapRef.current) {
+            listWrapRef.current.scrollTop = lastScrollRef.current || 0;
+          }
+        });
       }
-    } finally {
-      setLoadingList(false);
-    }
-  }, [q, categoryFilter, page]);
+    },
+    [q, categoryFilter, page]
+  );
 
   useEffect(() => {
     loadList();
+    return () => listAbortRef.current?.abort();
   }, [loadList]);
-
-  // ===== helpers =====
-  const onlyDigits = (s) => String(s || "").replace(/\D/g, "");
-  const clamp4 = (s) => onlyDigits(s).slice(0, 4);
-  const isYear = (v) => /^\d{4}$/.test(String(v)) && +v >= 1888 && +v <= 2100;
-  const isDataUrl = (s) =>
-    typeof s === "string" && /^data:image\/(png|jpe?g|webp);base64,/.test(s);
 
   // ===== view modal open =====
   const openView = async (seriesId) => {
@@ -191,7 +262,7 @@ export default function Manage_Series() {
     }
   };
 
-  // drag/drop
+  // drag/drop (poster only in edit)
   const onDragOver = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -227,7 +298,7 @@ export default function Manage_Series() {
     }
   };
 
-  // ===== save edit =====
+  // ===== save edit (optimistic) =====
   const saveEdit = async () => {
     if (!editSeries) return;
 
@@ -264,6 +335,16 @@ export default function Manage_Series() {
 
     setEditSubmitting(true);
     try {
+      // Optimistic: reflect poster/watched instantly in list (even though list is text-only,
+      // keeping state helps when you open view next time without re-fetch)
+      setSeries((arr) =>
+        arr.map((x) =>
+          x.series_id === editSeries.series_id
+            ? { ...x, is_watched: !!editIsWatched }
+            : x
+        )
+      );
+
       // 1) update series (poster + is_watched)
       await withBusy(async () => {
         const r = await fetch(EP.SERIES_ONE(editSeries.series_id), {
@@ -351,7 +432,7 @@ export default function Manage_Series() {
         )
         .map((s) => Number(s.season_id));
 
-      // apply
+      // apply changes
       for (const c of toCreate) {
         // eslint-disable-next-line no-await-in-loop
         await withBusy(async () => {
@@ -390,7 +471,8 @@ export default function Manage_Series() {
       }
 
       setEditSeries(null);
-      await loadList();
+      // reload same page & keep position
+      await loadList({ restoreScroll: true });
       setSuccessMsg("Series updated.");
     } catch (e) {
       setErrorMsg(e.message || "Could not update series.");
@@ -399,28 +481,48 @@ export default function Manage_Series() {
     }
   };
 
-  // ===== delete =====
+  // ===== delete (optimistic) =====
   const doDelete = async () => {
     if (!confirmDel) return;
+    const deletingId = confirmDel.series_id;
+
+    // Optimistic removal
+    setSeries((arr) => arr.filter((x) => x.series_id !== deletingId));
+
     try {
       await withBusy(async () => {
-        const r = await fetch(EP.SERIES_ONE(confirmDel.series_id), {
-          method: "DELETE",
-        });
+        const r = await fetch(EP.SERIES_ONE(deletingId), { method: "DELETE" });
         const jj = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(jj?.error || "Could not delete series.");
       });
       setConfirmDel(null);
-      await loadList();
+
+      // handle empty page after deletion
+      const willBeEmpty = series.length <= 1;
+      if (willBeEmpty && page > 0) {
+        setPage((p) => p - 1);
+        await loadList({ restoreScroll: false });
+      } else {
+        await loadList({ restoreScroll: true });
+      }
+
       setSuccessMsg("Series deleted.");
     } catch (e) {
       setErrorMsg(e.message || "Could not delete series.");
+      // revert by reloading
+      await loadList({ restoreScroll: true });
     }
   };
 
   return (
     <>
+      {/* global non-list spinner (edits, view fetch, etc.) */}
       {busy > 0 && <LoadingSpiner message="Loading…" fullScreen />}
+
+      {/* centered page overlay progress for LIST fetch only */}
+      {loadingList && (
+        <CenterPageProgress percent={listProgress} label="Loading series…" />
+      )}
 
       {/* TOP HERO */}
       <header
@@ -440,7 +542,7 @@ export default function Manage_Series() {
               📺 Manage Series
             </h3>
             <p className="text-muted mb-0" style={{ maxWidth: 520 }}>
-              Search, filter, view, edit and delete series — mobile-first.
+              Text-only list for speed. View shows poster. Edit/Delete are instant.
             </p>
           </div>
           <div className="text-end d-none d-md-block">
@@ -531,7 +633,7 @@ export default function Manage_Series() {
                 </button>
                 <button
                   className="btn btn-emerald"
-                  onClick={loadList}
+                  onClick={() => loadList({ restoreScroll: false })}
                   style={{ color: "#fff" }}
                 >
                   Refresh
@@ -559,63 +661,38 @@ export default function Manage_Series() {
             <span className="text-muted small">Page {page + 1}</span>
           </div>
 
-          {/* MOBILE LIST (attractive, with poster + buttons) */}
-          <div className="d-md-none p-2 mm-series-mobile">
-            {loadingList ? (
-              <div className="text-center py-3 text-muted">
-                <div className="spinner-border spinner-border-sm me-2" />
-                Loading…
-              </div>
-            ) : series.length ? (
+          {/* MOBILE LIST (text-only + buttons) */}
+          <div className="d-md-none p-2 mm-series-mobile" ref={listWrapRef}>
+            {!loadingList && series.length ? (
               <div className="d-flex flex-column gap-2">
                 {series.map((s) => (
                   <div key={s.series_id} className="mm-series-card">
-                    <div className="mm-series-top">
-                      <div className="mm-series-media">
-                        {s.poster_url ? (
-                          <img src={s.poster_url} alt={s.series_name} />
-                        ) : (
-                          <div className="mm-series-avatar">
-                            {(s.series_name || "?").charAt(0).toUpperCase()}
-                          </div>
-                        )}
-                      </div>
-                      <div className="mm-series-meta">
-                        <div className="mm-series-title">{s.series_name}</div>
-                        <div className="mm-series-tags">
-                          {s.category_name ? (
-                            <span className="mm-tag mm-tag-cat">
-                              {s.category_name}
-                            </span>
-                          ) : null}
-                          {s.release_year ? (
-                            <span className="mm-tag">{s.release_year}</span>
-                          ) : null}
-                          <span
-                            className={`mm-tag ${
-                              s.is_watched ? "mm-tag-ok" : "mm-tag-muted"
-                            }`}
-                          >
-                            {s.is_watched ? "Watched" : "Pending"}
+                    <div className="mm-series-meta">
+                      <div className="mm-series-title">{s.series_name}</div>
+                      <div className="mm-series-tags">
+                        {s.category_name ? (
+                          <span className="mm-tag mm-tag-cat">
+                            {s.category_name}
                           </span>
-                        </div>
-                        <div className="mm-series-extra">
-                          Seasons:{" "}
-                          {s.seasons?.length
-                            ? s.seasons
-                                .map(
-                                  (p) => `S${p.season_no}(${p.year || "—"})`
-                                )
-                                .join(", ")
-                            : "—"}
-                        </div>
-                      </div>
-                      <div className="mm-series-right">
-                        <div
-                          className={`mm-watch-dot ${
-                            s.is_watched ? "yes" : "no"
+                        ) : null}
+                        {s.release_year ? (
+                          <span className="mm-tag">{s.release_year}</span>
+                        ) : null}
+                        <span
+                          className={`mm-tag ${
+                            s.is_watched ? "mm-tag-ok" : "mm-tag-muted"
                           }`}
-                        />
+                        >
+                          {s.is_watched ? "Watched" : "Pending"}
+                        </span>
+                      </div>
+                      <div className="mm-series-extra">
+                        Seasons:{" "}
+                        {s.seasons?.length
+                          ? s.seasons
+                              .map((p) => `S${p.season_no}(${p.year || "—"})`)
+                              .join(", ")
+                          : "—"}
                       </div>
                     </div>
                     <div className="mm-series-actions">
@@ -646,22 +723,13 @@ export default function Manage_Series() {
                   </div>
                 ))}
               </div>
-            ) : (
+            ) : !loadingList ? (
               <div className="text-center py-3 text-muted">No series found.</div>
-            )}
+            ) : null}
           </div>
 
-          {/* DESKTOP TABLE */}
-          <div className="table-responsive d-none d-md-block position-relative">
-            {loadingList && (
-              <div
-                className="position-absolute w-100 h-100 d-flex align-items-center justify-content-center"
-                style={{ inset: 0, background: "rgba(255,255,255,.6)", zIndex: 1 }}
-              >
-                <div className="spinner-border" role="status" aria-hidden="true" />
-                <span className="ms-2 text-muted">Loading…</span>
-              </div>
-            )}
+          {/* DESKTOP TABLE (text-only) */}
+          <div className="table-responsive d-none d-md-block position-relative" ref={listWrapRef}>
             <table className="table align-middle mb-0">
               <thead style={{ background: "#f8fafc" }}>
                 <tr>
@@ -679,21 +747,7 @@ export default function Manage_Series() {
                   series.map((s) => (
                     <tr key={s.series_id}>
                       <td className="text-muted">{s.display_no}</td>
-                      <td className="fw-semibold d-flex align-items-center gap-2">
-                        {s.poster_url ? (
-                          <img
-                            src={s.poster_url}
-                            alt={s.series_name}
-                            style={{
-                              width: 38,
-                              height: 50,
-                              objectFit: "cover",
-                              borderRadius: ".4rem",
-                            }}
-                          />
-                        ) : null}
-                        {s.series_name}
-                      </td>
+                      <td className="fw-semibold">{s.series_name}</td>
                       <td>
                         {s.category_name ? (
                           <span
@@ -774,15 +828,21 @@ export default function Manage_Series() {
             <div className="btn-group">
               <button
                 className="btn btn-soft btn-sm"
-                disabled={page === 0}
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0 || loadingList}
+                onClick={async () => {
+                  setPage((p) => Math.max(0, p - 1));
+                  await new Promise((r) => setTimeout(r, 0));
+                }}
               >
                 ← Prev
               </button>
               <button
                 className="btn btn-soft btn-sm"
-                disabled={series.length < limit}
-                onClick={() => setPage((p) => p + 1)}   
+                disabled={series.length < limit || loadingList}
+                onClick={async () => {
+                  setPage((p) => p + 1);
+                  await new Promise((r) => setTimeout(r, 0));
+                }}
               >
                 Next →
               </button>
@@ -791,7 +851,7 @@ export default function Manage_Series() {
         </div>
       </div>
 
-      {/* VIEW MODAL (full-page on mobile, poster not cropped) */}
+      {/* VIEW MODAL (poster shown here) */}
       {viewSeries && (
         <CenterModal onClose={() => setViewSeries(null)} size="lg">
           <div className="series-view-sheet">
@@ -865,7 +925,7 @@ export default function Manage_Series() {
               </div>
 
               <p className="text-muted small mt-2 mb-0">
-                *Quick view — edit if you want to change poster, watched, or seasons.
+                *Poster is visible here. The list stays text-only for speed.
               </p>
             </div>
           </div>
@@ -1100,6 +1160,7 @@ export default function Manage_Series() {
           border: none;
           color: #fff;
         }
+
         .mm-dropzone{
           border:2px dashed rgba(14,165,233,.35);
           border-radius:1rem;
@@ -1143,6 +1204,8 @@ export default function Manage_Series() {
 
         .mm-series-mobile{
           background: radial-gradient(circle at 10% 10%, rgba(14,165,233,.03), #fff 70%);
+          max-height: 70vh;
+          overflow: auto;
         }
         .mm-series-card{
           background: #ffffff;
@@ -1154,46 +1217,16 @@ export default function Manage_Series() {
           gap: .55rem;
           box-shadow: 0 8px 30px rgba(15,23,42,.05);
         }
-        .mm-series-top{
-          display: flex;
-          gap: .65rem;
-          align-items: flex-start;
-        }
-        .mm-series-media img{
-          width: 54px;
-          height: 74px;
-          object-fit: cover;
-          border-radius: .75rem;
-          box-shadow: 0 9px 18px rgba(15,23,42,.25);
-        }
-        .mm-series-avatar{
-          width: 54px;
-          height: 54px;
-          border-radius: 1rem;
-          background: linear-gradient(135deg,#0ea5e9,#6366f1);
-          display:flex;
-          align-items:center;
-          justify-content:center;
-          color:#fff;
-          font-weight:700;
-        }
-        .mm-series-meta{
-          flex: 1;
-          min-width: 0;
-        }
+        .mm-series-meta{ flex:1; min-width:0; }
         .mm-series-title{
           font-weight: 600;
-          font-size: .92rem;
+          font-size: .95rem;
           color: #0f172a;
-          line-height: 1.05;
-          margin-bottom: .25rem;
+          line-height: 1.15;
+          margin-bottom: .3rem;
+          white-space: normal; overflow-wrap:anywhere;
         }
-        .mm-series-tags{
-          display:flex;
-          flex-wrap:wrap;
-          gap:.25rem;
-          margin-bottom:.25rem;
-        }
+        .mm-series-tags{ display:flex; flex-wrap:wrap; gap:.25rem; margin-bottom:.25rem; }
         .mm-tag{
           background: rgba(148,163,184,.12);
           border-radius: 999px;
@@ -1201,6 +1234,7 @@ export default function Manage_Series() {
           font-size: .65rem;
           line-height: 1.2;
           color: #0f172a;
+          white-space: normal; overflow-wrap:anywhere;
         }
         .mm-tag-cat{
           background: linear-gradient(135deg,rgba(14,165,233,.18),rgba(124,58,237,.2));
@@ -1215,164 +1249,60 @@ export default function Manage_Series() {
           background: rgba(148,163,184,.12);
           color: #475569;
         }
-        .mm-series-extra{
-          font-size: .63rem;
-          color: #94a3b8;
-        }
-        .mm-series-right{
-          display:flex;
-          align-items:flex-start;
-        }
-        .mm-watch-dot{
-          width: 16px;
-          height: 16px;
-          border-radius: 999px;
-          border: 2px solid #fff;
-          box-shadow: 0 0 0 2px rgba(15,23,42,.12);
-        }
-        .mm-watch-dot.yes{
-          background: linear-gradient(135deg,#10b981,#22c55e);
-        }
-        .mm-watch-dot.no{
-          background: rgba(148,163,184,.35);
-        }
-        .mm-series-actions{
-          display:flex;
-          gap:.4rem;
-        }
+        .mm-series-extra{ font-size: .63rem; color: #94a3b8; }
+        .mm-series-actions{ display:flex; gap:.4rem; }
         .mm-btn{
           flex:1;
           border:none;
           border-radius:.7rem;
           font-size:.7rem;
           font-weight:500;
-          padding:.35rem .4rem .45rem;
+          padding:.4rem .5rem .5rem;
           display:flex;
           align-items:center;
           justify-content:center;
           gap:.25rem;
           transition: transform .12s ease, box-shadow .12s ease;
+          white-space: nowrap;
         }
-        .mm-btn:active{
-          transform: translateY(1px);
-        }
-        .mm-btn-soft{
-          background: rgba(15,23,42,.01);
-          border:1px solid rgba(148,163,184,.12);
-        }
-        .mm-btn-green{
-          background: linear-gradient(135deg,#10b981,#0f766e);
-          color:#fff;
-        }
-        .mm-btn-danger{
-          background: rgba(248,113,113,.12);
-          color:#b91c1c;
-        }
+        .mm-btn:active{ transform: translateY(1px); }
+        .mm-btn-soft{ background: rgba(15,23,42,.01); border:1px solid rgba(148,163,184,.12); }
+        .mm-btn-green{ background: linear-gradient(135deg,#10b981,#0f766e); color:#fff; }
+        .mm-btn-danger{ background: rgba(248,113,113,.12); color:#b91c1c; }
 
         /* VIEW SHEET */
-        .series-view-sheet{
-          display:flex;
-          gap:1.25rem;
-        }
+        .series-view-sheet{ display:flex; gap:1.25rem; }
         .series-view-poster img{
-          width:210px;
-          max-height:280px;
-          height:auto;
-          object-fit:contain;
-          border-radius:1.1rem;
-          box-shadow:0 18px 35px rgba(15,23,42,.3);
-          background:#fff;
+          width:210px; max-height:280px; height:auto; object-fit:contain;
+          border-radius:1.1rem; box-shadow:0 18px 35px rgba(15,23,42,.3); background:#fff;
         }
         .series-view-placeholder{
-          width:210px;
-          max-height:280px;
-          aspect-ratio: 9 / 12;
-          border-radius:1.1rem;
+          width:210px; max-height:280px; aspect-ratio: 9 / 12; border-radius:1.1rem;
           background:linear-gradient(140deg, rgba(14,165,233,.6), rgba(124,58,237,.6));
-          display:flex; align-items:center; justify-content:center;
-          color:#fff; font-size:2.5rem; font-weight:800;
-          box-shadow:0 18px 35px rgba(15,23,42,.3);
+          display:flex; align-items:center; justify-content:center; color:#fff; font-size:2.5rem; font-weight:800; box-shadow:0 18px 35px rgba(15,23,42,.3);
         }
-        .series-view-body{
-          flex:1;
-          min-width:200px;
-        }
-        .sv-title{
-          font-weight:700;
-          margin-bottom:.35rem;
-        }
-        .sv-meta{
-          display:flex; gap:.35rem; flex-wrap:wrap;
-          margin-bottom:.85rem;
-        }
-        .sv-chip{
-          background:rgba(15,23,42,.03);
-          border-radius:999px;
-          padding:.25rem .75rem;
-          font-size:.7rem;
-          font-weight:500;
-          color:#0f172a;
-        }
-        .sv-chip-accent{
-          background:linear-gradient(135deg,#0ea5e9,#6366f1);
-          color:#fff;
-        }
-        .sv-chip-success{
-          background:rgba(16,185,129,.12);
-          color:#065f46;
-        }
-        .sv-chip-muted{
-          background:rgba(148,163,184,.2);
-          color:#0f172a;
-        }
-        .sv-block{
-          margin-bottom:.6rem;
-        }
-        .sv-label{
-          font-size:.68rem;
-          text-transform:uppercase;
-          letter-spacing:.04em;
-          color:#94a3b8;
-          display:block;
-          margin-bottom:.2rem;
-        }
-        .sv-value{
-          font-size:.8rem;
-        }
-        .sv-chips{
-          display:flex;
-          gap:.35rem;
-          flex-wrap:wrap;
-        }
-        .sv-chip-soft{
-          background:rgba(99,102,241,.12);
-          color:#1f2937;
-        }
+        .series-view-body{ flex:1; min-width:200px; }
+        .sv-title{ font-weight:700; margin-bottom:.35rem; }
+        .sv-meta{ display:flex; gap:.35rem; flex-wrap:wrap; margin-bottom:.85rem; }
+        .sv-chip{ background:rgba(15,23,42,.03); border-radius:999px; padding:.25rem .75rem; font-size:.7rem; font-weight:500; color:#0f172a; }
+        .sv-chip-accent{ background:linear-gradient(135deg,#0ea5e9,#6366f1); color:#fff; }
+        .sv-chip-success{ background:rgba(16,185,129,.12); color:#065f46; }
+        .sv-chip-muted{ background:rgba(148,163,184,.2); color:#0f172a; }
+        .sv-block{ margin-bottom:.6rem; }
+        .sv-label{ font-size:.68rem; text-transform:uppercase; letter-spacing:.04em; color:#94a3b8; display:block; margin-bottom:.2rem; }
+        .sv-value{ font-size:.8rem; }
+        .sv-chips{ display:flex; gap:.35rem; flex-wrap:wrap; }
+        .sv-chip-soft{ background:rgba(99,102,241,.12); color:#1f2937; }
 
-        /* mobile: view fullscreen */
         @media (max-width:768px){
-          .series-view-sheet{
-            flex-direction:column;
-          }
-          .series-view-poster img,
-          .series-view-placeholder{
-            width:100%;
-            height:auto;
-            max-height:280px;
-            object-fit:contain;
-            border-radius:1rem;
+          .series-view-sheet{ flex-direction:column; }
+          .series-view-poster img, .series-view-placeholder{
+            width:100%; height:auto; max-height:280px; object-fit:contain; border-radius:1rem;
           }
         }
 
-        .scroll-area{
-          max-height:60vh;
-          overflow-y:auto;
-        }
-        @media (max-width:575.98px){
-          .scroll-area{
-            max-height:58vh;
-          }
-        }
+        .scroll-area{ max-height:60vh; overflow-y:auto; }
+        @media (max-width:575.98px){ .scroll-area{ max-height:58vh; } }
 
         .toastish{
           position:fixed; top:1rem; right:1rem;
@@ -1381,11 +1311,63 @@ export default function Manage_Series() {
           padding:.5rem .75rem; display:flex; gap:.5rem; align-items:center;
           z-index:9999; min-width:200px;
         }
-        @media (max-width:575.98px){
-          .toastish{ left:.5rem; right:.5rem; }
-        }
+        @media (max-width:575.98px){ .toastish{ left:.5rem; right:.5rem; } }
       `}</style>
     </>
+  );
+}
+
+/* ===== Centered full-page progress (for list loads) ===== */
+function CenterPageProgress({ percent = 0, label = "Loading…" }) {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(255,255,255,.75)",
+        backdropFilter: "blur(2px)",
+        zIndex: 9997,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "1rem",
+      }}
+    >
+      <div
+        style={{
+          background: "#fff",
+          borderRadius: "1rem",
+          boxShadow: "0 18px 40px rgba(15,23,42,.18)",
+          width: "min(360px, 92vw)",
+          padding: "1rem 1.25rem",
+          textAlign: "center",
+        }}
+      >
+        <div style={{ fontWeight: 700, marginBottom: ".35rem" }}>{label}</div>
+        <div
+          style={{
+            height: 10,
+            borderRadius: 999,
+            background: "#eef2f7",
+            overflow: "hidden",
+            border: "1px solid rgba(148,163,184,.35)",
+          }}
+        >
+          <div
+            style={{
+              height: "100%",
+              width: `${percent}%`,
+              transition: "width .15s ease",
+              background:
+                "linear-gradient(90deg, rgba(34,197,94,1), rgba(99,102,241,1))",
+            }}
+          />
+        </div>
+        <div style={{ fontSize: ".8rem", color: "#64748b", marginTop: ".35rem" }}>
+          {percent}%
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -1,5 +1,5 @@
 // src/Pages/Entertainment/Manage.jsx
-// Two-tab wrapper for MoviesManager & SeriesManager (Bootstrap-only, mobile-first)
+// Two-tab wrapper for MoviesManager & SeriesManager (lazy-loaded, mobile-first, colorful)
 
 import React, {
   useState,
@@ -7,9 +7,12 @@ import React, {
   useEffect,
   useRef,
   useLayoutEffect,
+  Suspense,
 } from "react";
-import MoviesManager from "./Manage_Movies";
-import SeriesManager from "./Manage_Series";
+
+// 🌟 Lazy load for fast initial paint
+const MoviesManager = React.lazy(() => import("./Manage_Movies"));
+const SeriesManager = React.lazy(() => import("./Manage_Series"));
 
 export default function Manage() {
   const [tab, setTab] = useState("movies"); // 'movies' | 'series'
@@ -30,7 +33,7 @@ export default function Manage() {
   /* ========== tiny progress bar when switching ========== */
   useEffect(() => {
     setSwitching(true);
-    const t = setTimeout(() => setSwitching(false), 420);
+    const t = setTimeout(() => setSwitching(false), 360);
     return () => clearTimeout(t);
   }, [tab]);
 
@@ -48,20 +51,25 @@ export default function Manage() {
     [tab]
   );
 
-  /* ========== underline positioning (React, no <script>) ========== */
+  /* ========== underline positioning (GPU-friendly) ========== */
   const [underline, setUnderline] = useState({ x: 0, w: 0, visible: false });
   useLayoutEffect(() => {
     const list = tablistRef.current;
     if (!list) return;
     const btn = list.querySelector(`#tab-${tab}`);
     if (!btn) return;
-    const listRect = list.getBoundingClientRect();
-    const btnRect = btn.getBoundingClientRect();
-    setUnderline({
-      x: btnRect.left - listRect.left + list.scrollLeft,
-      w: btnRect.width,
-      visible: true,
-    });
+    const update = () => {
+      const listRect = list.getBoundingClientRect();
+      const btnRect = btn.getBoundingClientRect();
+      setUnderline({
+        x: btnRect.left - listRect.left + list.scrollLeft,
+        w: btnRect.width,
+        visible: true,
+      });
+    };
+    // rAF to avoid layout thrash on mount/resize
+    const raf = requestAnimationFrame(update);
+    return () => cancelAnimationFrame(raf);
   }, [tab]);
 
   // sync underline gradient to active tab colors
@@ -77,7 +85,7 @@ export default function Manage() {
     underlineEl.style.background = `linear-gradient(90deg, ${c1}, ${c2})`;
   }, [tab, underline]);
 
-  /* ========== ripple pointer ========== */
+  /* ========== ripple pointer (cheap visual) ========== */
   useEffect(() => {
     const onPointer = (e) => {
       const pill = e.target.closest(".tab-pill");
@@ -92,12 +100,18 @@ export default function Manage() {
     return () => document.removeEventListener("pointerdown", onPointer);
   }, []);
 
+  /* ========== prefetch the other tab on hover/focus (snappy switch) ========== */
+  const prefetch = (which) => {
+    if (which === "movies") import("./Manage_Movies");
+    if (which === "series") import("./Manage_Series");
+  };
+
   /* ========== when child clicks VIEW ========== */
   const handlePreview = (item = {}, from = tab) => {
     setPreview({
       show: true,
       type: from,
-      title: item.title || item.name || "Untitled",
+      title: item.title || item.movie_name || item.name || "Untitled",
       year: item.release_year || item.year || "",
       poster: item.poster_url || item.poster || "",
       description:
@@ -113,10 +127,10 @@ export default function Manage() {
     <>
       {/* Header */}
       <header
-        className="border-bottom"
+        className="border-bottom fancy-header"
         style={{
           background:
-            "radial-gradient(circle at top, rgba(32,201,151,.08), rgba(111,66,193,.04) 45%, #fff 80%)",
+            "radial-gradient(1200px 300px at 20% -10%, rgba(99,102,241,.18), transparent), radial-gradient(1200px 300px at 80% -10%, rgba(16,185,129,.18), transparent), linear-gradient(180deg, #ffffff, #fbfbff)",
         }}
       >
         <div className="container py-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
@@ -143,9 +157,9 @@ export default function Manage() {
             </h3>
             <p
               className="text-muted mb-0"
-              style={{ fontSize: "clamp(.7rem, 2.4vw, .82rem)" }}
+              style={{ fontSize: "clamp(.7rem, 2.4vw, .86rem)" }}
             >
-              Maintain movies and series — clean, sorted, mobile-first.
+              Maintain movies and series — clean, colorful, mobile-first.
             </p>
           </div>
         </div>
@@ -154,10 +168,10 @@ export default function Manage() {
       {/* Tabs */}
       <main className="container my-3 my-md-4">
         <div
-          className="card border-0 shadow-sm mb-3"
+          className="card border-0 shadow-sm mb-3 glass-card"
           style={{ borderRadius: "1.25rem", overflow: "hidden" }}
         >
-          {/* tiny progress bar */}
+          {/* tiny progress bar on tab switch */}
           {switching && <div className="progress-thin" aria-hidden="true" />}
 
           <div className="card-body pb-0">
@@ -175,11 +189,13 @@ export default function Manage() {
                 aria-controls="tab-panel-movies"
                 id="tab-movies"
                 onClick={() => setTab("movies")}
+                onMouseEnter={() => prefetch("movies")}
+                onFocus={() => prefetch("movies")}
                 className={`btn tab-btn tab-pill ${
                   tab === "movies" ? "tab-active" : "tab-idle"
                 }`}
-                data-c1="#41c7a7"
-                data-c2="#8f55e6"
+                data-c1="#22c55e"
+                data-c2="#6366f1"
               >
                 <span className="pill-ripple" />
                 🎬 Movies
@@ -192,11 +208,13 @@ export default function Manage() {
                 aria-controls="tab-panel-series"
                 id="tab-series"
                 onClick={() => setTab("series")}
+                onMouseEnter={() => prefetch("series")}
+                onFocus={() => prefetch("series")}
                 className={`btn tab-btn tab-pill ${
                   tab === "series" ? "tab-active" : "tab-idle"
                 }`}
-                data-c1="#8f55e6"
-                data-c2="#41c7a7"
+                data-c1="#6366f1"
+                data-c2="#22c55e"
               >
                 <span className="pill-ripple" />
                 📚 Series
@@ -224,8 +242,9 @@ export default function Manage() {
           hidden={tab !== "movies"}
           className={`fade-panel ${tab === "movies" ? "show" : ""}`}
         >
-          {/* pass preview handler » children will call onPreview(item) */}
-          <MoviesManager onPreview={handlePreview} />
+          <Suspense fallback={<CenterSkeleton label="Loading movies…" />}>
+            <MoviesManager onPreview={handlePreview} />
+          </Suspense>
         </section>
 
         <section
@@ -235,7 +254,9 @@ export default function Manage() {
           hidden={tab !== "series"}
           className={`fade-panel ${tab === "series" ? "show" : ""}`}
         >
-          <SeriesManager onPreview={handlePreview} />
+          <Suspense fallback={<CenterSkeleton label="Loading series…" />}>
+            <SeriesManager onPreview={handlePreview} />
+          </Suspense>
         </section>
       </main>
 
@@ -247,10 +268,7 @@ export default function Manage() {
           aria-modal="true"
           onClick={closePreview}
         >
-          <div
-            className="manage-modal"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="manage-modal" onClick={(e) => e.stopPropagation()}>
             <div className="d-flex justify-content-between align-items-start gap-2 mb-2">
               <div>
                 <h5 className="mb-0" style={{ fontWeight: 700 }}>
@@ -292,21 +310,21 @@ export default function Manage() {
               <div style={{ flex: 1, minWidth: 200 }}>
                 <p
                   className="mb-2"
-                  style={{ fontSize: "clamp(.7rem, 2.3vw, .85rem)" }}
+                  style={{ fontSize: "clamp(.7rem, 2.3vw, .9rem)" }}
                 >
                   {preview.description}
                 </p>
                 {preview.meta?.genres?.length ? (
                   <div className="d-flex flex-wrap gap-1 mb-2">
                     {preview.meta.genres.map((g) => (
-                      <span key={g} className="badge bg-light text-dark">
-                        {g}
+                      <span key={g.name || g} className="badge bg-light text-dark">
+                        {g.name || g}
                       </span>
                     ))}
                   </div>
                 ) : null}
                 <p className="text-muted mb-0" style={{ fontSize: "0.7rem" }}>
-                  *Quick view — open item in full page to edit or manage parts.
+                  *Quick view — open item to edit poster, parts, or status.
                 </p>
               </div>
             </div>
@@ -322,11 +340,29 @@ export default function Manage() {
           --ink-500:#64748b;
         }
 
+        /* header glow for colorfulness */
+        .fancy-header::after{
+          content:"";
+          position:absolute; inset:0;
+          pointer-events:none;
+          background:
+            radial-gradient(400px 140px at 12% 10%, rgba(99,102,241,.14), transparent 60%),
+            radial-gradient(420px 150px at 88% 10%, rgba(16,185,129,.14), transparent 60%);
+          mix-blend-mode: screen;
+        }
+
+        /* subtle glass card */
+        .glass-card{
+          background: rgba(255,255,255,.72);
+          backdrop-filter: blur(8px);
+          border: 1px solid rgba(15,23,42,.06);
+        }
+
         /* progress */
         .progress-thin{
           height:3px;
-          background: linear-gradient(90deg, rgba(32,201,151,1), rgba(111,66,193,1));
-          animation: slide 0.42s ease-out forwards;
+          background: linear-gradient(90deg, #22c55e, #6366f1);
+          animation: slide 0.36s ease-out forwards;
           border-top-left-radius:.25rem;border-top-right-radius:.25rem;
         }
         @keyframes slide{from{transform:scaleX(0);transform-origin:left}to{transform:scaleX(1)}}
@@ -344,36 +380,37 @@ export default function Manage() {
           position: relative;
           overflow: hidden;
           isolation: isolate;
-          font-size: clamp(.7rem, 2.3vw, .85rem);
+          font-size: clamp(.72rem, 2.3vw, .9rem);
+          will-change: transform;
         }
         .tab-pill.tab-idle{
-          color:#343a40;
-          border-color: rgba(0,0,0,.10);
-          background: rgba(255,255,255,.7);
-          backdrop-filter: blur(4px);
+          color:#0f172a;
+          border-color: rgba(15,23,42,.10);
+          background: rgba(255,255,255,.8);
+          backdrop-filter: blur(6px);
         }
         .tab-pill.tab-idle:hover{
           transform: translateY(-1px);
           box-shadow: 0 .6rem 1.2rem rgba(0,0,0,.07);
-          border-color: rgba(32,201,151,.35);
-          background: rgba(32,201,151,.04);
+          border-color: rgba(99,102,241,.35);
+          background: linear-gradient(135deg, rgba(99,102,241,.06), rgba(34,197,94,.06));
         }
         .tab-pill.tab-active{
           color:#fff;
           border-color: transparent;
-          background: linear-gradient(135deg, rgba(32,201,151,.92), rgba(111,66,193,.82));
-          box-shadow: 0 10px 26px rgba(111,66,193,.2);
+          background: linear-gradient(135deg, #22c55e, #6366f1);
+          box-shadow: 0 10px 26px rgba(99,102,241,.22);
           transform: translateY(-1px);
         }
         .tab-pill:focus-visible{
           outline: none;
-          box-shadow: 0 0 0 .22rem rgba(111,66,193,.26);
+          box-shadow: 0 0 0 .22rem rgba(99,102,241,.26);
         }
 
         /* ripple */
         .pill-ripple{
           position:absolute; inset:0; pointer-events:none; opacity:0;
-          background: radial-gradient(140px 70px at var(--x,50%) var(--y,50%),
+          background: radial-gradient(200px 120px at var(--x,50%) var(--y,50%),
             rgba(255,255,255,.35), transparent 60%);
           transition: opacity .35s ease;
         }
@@ -382,9 +419,10 @@ export default function Manage() {
         /* underline */
         .tab-underline{
           position:absolute; left:0; bottom:-6px; height:4px; border-radius:999px;
-          background: linear-gradient(90deg, rgba(32,201,151,1), rgba(111,66,193,1));
+          background: linear-gradient(90deg, #22c55e, #6366f1);
           box-shadow: 0 6px 18px rgba(0,0,0,.12);
           transition: transform .28s cubic-bezier(.2,.8,.2,1), width .28s cubic-bezier(.2,.8,.2,1), opacity .15s ease;
+          will-change: transform, width;
         }
 
         /* panels */
@@ -395,8 +433,8 @@ export default function Manage() {
 
         /* modal */
         .manage-modal-backdrop{
-          position:fixed; inset:0; background:rgba(15,23,42,.4);
-          backdrop-filter:blur(3px);
+          position:fixed; inset:0; background:rgba(15,23,42,.45);
+          backdrop-filter:blur(4px);
           display:flex; align-items:center; justify-content:center;
           padding:1rem; z-index:9999;
         }
@@ -408,22 +446,70 @@ export default function Manage() {
           overflow-y:auto;
           box-shadow:0 20px 45px rgba(15,23,42,.22);
           padding:1rem 1.1rem 1.1rem;
+          border:1px solid rgba(15,23,42,.06);
         }
         .poster-placeholder{
           width:120px; height:160px;
           border-radius:14px;
-          background:linear-gradient(140deg, rgba(32,201,151,.5), rgba(111,66,193,.4));
+          background:linear-gradient(140deg, rgba(99,102,241,.5), rgba(34,197,94,.5));
           display:flex; align-items:center; justify-content:center;
           color:#fff;
           font-size:2.2rem; font-weight:800;
         }
 
+        /* skeleton (centered) */
+        .center-skel-wrap{
+          position: relative;
+          display:flex; align-items:center; justify-content:center;
+          min-height: 35vh;
+        }
+        .center-skel{
+          width:min(420px, 92vw);
+          background:#fff;
+          border-radius:1rem;
+          padding:1rem 1.25rem;
+          box-shadow:0 18px 40px rgba(15,23,42,.12);
+          border:1px solid rgba(15,23,42,.06);
+        }
+        .skel-bar{
+          height:12px; border-radius:999px; overflow:hidden; background:#eef2f7; margin:.5rem 0;
+        }
+        .skel-bar > span{
+          display:block; height:100%; width:40%;
+          background: linear-gradient(90deg, #e5e7eb, #f3f4f6, #e5e7eb);
+          animation: shimmer 1.2s infinite;
+          background-size: 200% 100%;
+        }
+        @keyframes shimmer{
+          0%{ transform: translateX(-40%); }
+          100%{ transform: translateX(140%); }
+        }
+
         /* mobile first */
         @media (max-width: 575.98px){
           .tab-btn{ flex:1 1 calc(50% - .45rem); justify-content:center; }
-          .manage-modal{ width:100%; border-radius:.75rem; }
+          .manage-modal{ width:100%; border-radius:.9rem; }
+        }
+
+        /* respect reduced motion */
+        @media (prefers-reduced-motion: reduce){
+          *{ animation: none !important; transition: none !important; }
         }
       `}</style>
     </>
+  );
+}
+
+/* Centered skeleton used while lazy tabs load */
+function CenterSkeleton({ label = "Loading…" }) {
+  return (
+    <div className="center-skel-wrap" role="status" aria-live="polite">
+      <div className="center-skel">
+        <div style={{ fontWeight: 700, marginBottom: ".25rem" }}>{label}</div>
+        <div className="skel-bar"><span /></div>
+        <div className="skel-bar"><span /></div>
+        <div className="skel-bar" style={{ width: "70%" }}><span /></div>
+      </div>
+    </div>
   );
 }

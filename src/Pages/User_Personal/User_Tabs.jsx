@@ -43,35 +43,29 @@ export default function UserTabs() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("investment");
 
-  // Live NAV height (prevents overlap)
+  // Navbar sizing/offset
   const navRef = useRef(null);
   const [navH, setNavH] = useState(72);
-
-  // Small-screen top offset above navbar
-  const [navOffset, setNavOffset] = useState(0); // px
+  const [navOffset, setNavOffset] = useState(0);
 
   useLayoutEffect(() => {
     const applyOffsets = () => {
       const h = navRef.current?.offsetHeight || 72;
       setNavH(h);
-      // 8px gap on XS screens, 0 on others
       setNavOffset(window.innerWidth <= 576 ? 8 : 0);
     };
     applyOffsets();
-
     const ro = new ResizeObserver(applyOffsets);
     if (navRef.current) ro.observe(navRef.current);
-
     const onResize = () => applyOffsets();
     window.addEventListener("resize", onResize);
-
     return () => {
       ro.disconnect();
       window.removeEventListener("resize", onResize);
     };
   }, []);
 
-  // fixed tabs height measurement
+  // Tabs height
   const tabsWrapRef = useRef(null);
   const [tabsH, setTabsH] = useState(56);
 
@@ -87,7 +81,7 @@ export default function UserTabs() {
     };
   }, []);
 
-  // tabs indicator
+  // Ink indicator
   const tabListRef = useRef(null);
   const tabRefs = useRef({});
   const [indicator, setIndicator] = useState({ left: 0, width: 0 });
@@ -118,19 +112,10 @@ export default function UserTabs() {
     };
   }, [activeTab]);
 
-  const gradientText = useMemo(
-    () => ({
-      backgroundImage: `linear-gradient(90deg, ${COLORS.accent}, ${COLORS.accent2})`,
-      WebkitBackgroundClip: "text",
-      color: "transparent",
-    }),
-    []
-  );
-
   return (
     <div
       style={{
-        height: "100dvh", // mobile-safe viewport
+        minHeight: "100dvh",
         width: "100vw",
         overflow: "hidden",
         color: COLORS.text,
@@ -144,21 +129,21 @@ export default function UserTabs() {
         paddingTop: "env(safe-area-inset-top, 0px)",
       }}
     >
-      {/* ===== FIXED NAVBAR (now with top offset on small screens) ===== */}
-      <nav
-        ref={navRef}
-        className="ut-nav"
-        style={{ top: navOffset }} // <— little space above navbar on small screens
-      >
+      {/* ===== FIXED NAVBAR ===== */}
+      <nav ref={navRef} className="ut-nav" style={{ top: navOffset }}>
         <div className="container-fluid d-flex justify-content-between align-items-center px-3">
           <div className="d-flex align-items-center gap-2">
             <div
               className="d-inline-flex align-items-center justify-content-center"
               style={{
-                width: 34, height: 34, borderRadius: 9,
+                width: 34,
+                height: 34,
+                borderRadius: 9,
                 background: "rgba(255,255,255,.18)",
                 border: "1px solid rgba(255,255,255,.35)",
-                fontWeight: 800, fontSize: 13.5, color: "#06212a"
+                fontWeight: 800,
+                fontSize: 13.5,
+                color: "#06212a",
               }}
             >
               UD
@@ -170,30 +155,23 @@ export default function UserTabs() {
             type="button"
             className="btn btn-warning fw-bold rounded-pill px-3 py-2"
             onClick={() => navigate("/dashboard")}
-            style={{ color: "#1f2937", boxShadow: "0 12px 26px rgba(2,6,23,.22)" }}
+            style={{
+              color: "#1f2937",
+              boxShadow: "0 12px 26px rgba(2,6,23,.22)",
+            }}
           >
             Dashboard
           </button>
         </div>
       </nav>
 
-      {/* Spacer equals REAL navbar height + small top offset */}
+      {/* spacer = navbar height + offset */}
       <div style={{ height: navH + navOffset }} />
 
-      {/* ===== FIXED TABS under navbar (account for navOffset) ===== */}
-      <div
-        ref={tabsWrapRef}
-        className="ut-tabs-wrap"
-        style={{ top: navOffset + navH }}
-      >
+      {/* ===== FIXED TABS ===== */}
+      <div ref={tabsWrapRef} className="ut-tabs-wrap" style={{ top: navOffset + navH }}>
         <div className="container" style={{ maxWidth: 1180 }}>
-          <div
-            ref={tabListRef}
-            role="tablist"
-            aria-label="User sections"
-            className="ut-tablist"
-          >
-            {/* Ink indicator */}
+          <div ref={tabListRef} role="tablist" aria-label="User sections" className="ut-tablist">
             <div
               aria-hidden="true"
               className="ut-ink"
@@ -231,7 +209,7 @@ export default function UserTabs() {
         </div>
       </div>
 
-      {/* ===== ONLY content scrolls (also include navOffset) ===== */}
+      {/* ===== CONTENT (only this scrolls) ===== */}
       <div
         style={{
           position: "absolute",
@@ -266,7 +244,7 @@ export default function UserTabs() {
         <div style={{ height: 16 }} />
       </div>
 
-      {/* Footer glow */}
+      {/* ===== FOOTER GLOW ===== */}
       <div
         aria-hidden="true"
         style={{
@@ -282,43 +260,45 @@ export default function UserTabs() {
         }}
       />
 
-      {/* ===== Styles ===== */}
+      {/* ===== STYLES ===== */}
       <style>{`
         .ut-nav {
-          position: fixed; left: 0; right: 0;
-          z-index: 80;
+          position: fixed;
+          left: 0; right: 0;
+          z-index: 1040; /* below Bootstrap modal (1050), above content */
           display: flex; align-items: center;
           min-height: 64px;
           padding: 10px 14px;
           padding-top: calc(env(safe-area-inset-top, 0px) + 6px);
           background: linear-gradient(90deg, #1e3a8a 0%, #2563eb 50%, #38bdf8 100%);
           border-bottom: 1px solid rgba(255,255,255,0.12);
-          box-shadow: 0 10px 30px rgba(2,6,23,0.18), inset 0 -1px 0 rgba(255,255,255,0.06);
+          box-shadow: 0 10px 30px rgba(2,6,23,0.18);
           backdrop-filter: saturate(140%) blur(6px);
-          -webkit-backdrop-filter: saturate(140%) blur(6px);
-          /* 'top' is set inline via style to include navOffset */
         }
+
         .ut-title {
           font-weight: 900;
           font-size: clamp(18px, 2.4vw, 24px);
-          letter-spacing: .2px;
           color: #0b0b0b;
-          text-shadow: none;
           line-height: 1.2;
         }
 
         .ut-tabs-wrap {
-          position: fixed; left: 0; right: 0; z-index: 60;
+          position: fixed;
+          left: 0; right: 0;
+          z-index: 1030; /* under nav, over content */
           background: ${COLORS.surface};
           border-top: 1px solid ${COLORS.border};
           border-bottom: 1px solid ${COLORS.border};
           box-shadow: ${COLORS.softShadow};
           backdrop-filter: blur(10px);
         }
+
         .ut-tablist {
-          position: relative; display: flex; flex-wrap: nowrap;
-          overflow-x: auto; overflow-y: hidden; white-space: nowrap;
-          -webkit-overflow-scrolling: touch;
+          position: relative;
+          display: flex; flex-wrap: nowrap;
+          overflow-x: auto; overflow-y: hidden;
+          white-space: nowrap;
           gap: 10px; padding: 10px;
           scroll-snap-type: x proximity;
           scroll-padding-left: 12px; scroll-padding-right: 12px;
@@ -330,7 +310,7 @@ export default function UserTabs() {
         .ut-ink {
           position: absolute; bottom: 4px; height: 3px; left: 0;
           border-radius: 999px;
-          background: linear-gradient(90deg, rgba(34,211,238,1) 0%, rgba(167,139,250,1) 100%);
+          background: linear-gradient(90deg, rgba(34,211,238,1), rgba(167,139,250,1));
           box-shadow: 0 0 18px rgba(34,211,238,0.35);
           transition: transform .25s ease, width .25s ease;
           pointer-events: none;
@@ -345,8 +325,7 @@ export default function UserTabs() {
           background: rgba(255,255,255,0.75);
           white-space: nowrap;
           scroll-snap-align: center;
-          transition: transform .16s ease, box-shadow .16s ease, background .2s ease;
-          touch-action: manipulation;
+          transition: transform .16s ease, background .2s ease;
         }
         .ut-chip:hover { transform: translateY(-1px); }
         .ut-chip.is-active {
@@ -365,9 +344,8 @@ export default function UserTabs() {
           * { animation: none !important; transition: none !important; }
         }
 
-        /* Small-screen refinements */
         @media (max-width: 576px) {
-          .ut-chip { padding: 0.55rem 0.85rem !important; font-size: .9rem !important; }
+          .ut-chip { padding: 0.55rem 0.85rem; font-size: .9rem; }
           .ut-title { font-size: 18px; }
           .ut-nav .btn { padding: .35rem .7rem; font-size: .875rem; }
         }

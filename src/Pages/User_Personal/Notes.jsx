@@ -31,8 +31,6 @@ function normalizeDMY(str) {
   if (!p) return "";
   return toDMY(p.day, p.monthShort, p.year);
 }
-
-/* ✅ Timezone-safe: always show the same calendar date as DB */
 function toPrettyDate(val) {
   if (!val) return "";
   if (typeof val === "string") {
@@ -62,8 +60,6 @@ function toPrettyDate(val) {
   }
   return String(val);
 }
-
-// Convert pretty DMY ("2 Oct 2025") to a UTC Date for sorting
 function dmyToUTC(dmy) {
   const p = parseDMY(toPrettyDate(dmy));
   if (!p) return new Date(0);
@@ -71,7 +67,7 @@ function dmyToUTC(dmy) {
   return new Date(Date.UTC(p.year, mo - 1, p.day));
 }
 
-/* ===== Badge color helpers (consistent per-date) ===== */
+/* ===== Badge color helpers ===== */
 const BADGE_CLASSES = [
   "text-bg-primary",
   "text-bg-success",
@@ -90,7 +86,6 @@ const BADGE_GLOW = {
   "text-bg-secondary":"rgba(108,117,125,0.22)",
   "text-bg-dark":     "rgba(33,37,41,0.22)",
 };
-
 function hashString(str) {
   let h = 0;
   for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
@@ -160,10 +155,15 @@ export default function Notes() {
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+
+  // Search & Month filter (only)
   const [search, setSearch] = useState("");
-  const [filterEmail, setFilterEmail] = useState("");
-  const [filterDate, setFilterDate] = useState("");
+  const [monthFilter, setMonthFilter] = useState("All"); // "All" or MONTHS.short
+
+  // Edit modal
   const [editItem, setEditItem] = useState(null);
+
+  // Overlay toast
   const [overlayMsg, setOverlayMsg] = useState({ show: false, type: "", text: "" });
   const toastTimerRef = useRef(null);
 
@@ -173,11 +173,6 @@ export default function Notes() {
 
   // Refs
   const addFormRef = useRef(null);
-
-  // 🆕 monthly view state
-  const today = new Date();
-  const [monthViewMonth, setMonthViewMonth] = useState(MONTHS[today.getUTCMonth()].short);
-  const [monthViewYear, setMonthViewYear] = useState(today.getUTCFullYear());
 
   // ===== style once =====
   useEffect(() => {
@@ -203,36 +198,6 @@ export default function Notes() {
         .fab-add { right: 24px; bottom: 24px; width: 60px; height: 60px; }
       }
 
-      /* monthly view */
-      .month-day-card{
-        border:1px solid rgba(15,23,42,.04);
-        border-radius:14px;
-        background:#fff;
-        box-shadow:0 8px 28px rgba(15,23,42,.03);
-      }
-      .month-day-header{
-        display:flex;
-        justify-content:space-between;
-        align-items:center;
-        gap:.5rem;
-      }
-      .month-day-notes{
-        display:flex;
-        flex-direction:column;
-        gap:.4rem;
-      }
-      .month-note-item{
-        background:rgba(248,250,252,.6);
-        border:1px solid rgba(148,163,184,.22);
-        border-radius:10px;
-        padding:.35rem .55rem .4rem;
-      }
-      .month-note-title{ font-weight:600; font-size:.78rem; word-break:break-word; }
-      .month-note-meta{ font-size:.65rem; color:#64748b; }
-      @media (max-width: 575.98px){
-        .month-day-card{ margin-bottom:.75rem; }
-      }
-
       @keyframes fadeIn{from{opacity:0} to{opacity:1}}
       @keyframes scaleIn{from{transform:scale(.96);opacity:0} to{transform:scale(1);opacity:1)}
     `;
@@ -246,34 +211,17 @@ export default function Notes() {
     toastTimerRef.current = setTimeout(() => setOverlayMsg({ show: false, type: "", text: "" }), ms);
   };
 
-  // fetch
+  // fetch (no backend filters now; we filter on client)
   const fetchNotes = async () => {
     setLoading(true);
     try {
-      let url = BASE_URL;
-      const params = [];
-      if (filterEmail) params.push(`user_email=${encodeURIComponent(filterEmail)}`);
-      if (filterDate) params.push(`date=${encodeURIComponent(filterDate)}`);
-      if (params.length) url += `?${params.join("&")}`;
-
-      const res = await fetch(url);
+      const res = await fetch(BASE_URL);
       const json = await res.json();
       if (!res.ok) throw new Error(json.message || "Fetch failed");
 
       let data = Array.isArray(json.data) ? json.data : [];
-
-      if (search.trim()) {
-        const q = search.toLowerCase();
-        data = data.filter((x) =>
-          x.title.toLowerCase().includes(q) ||
-          x.details?.toLowerCase().includes(q) ||
-          x.user_name?.toLowerCase().includes(q)
-        );
-      }
-
-      // Sequence-wise (newest first) by note_date
+      // newest first by date
       data.sort((a,b) => dmyToUTC(b.note_date) - dmyToUTC(a.note_date));
-
       setNotes(data);
     } catch (err) {
       showCenterMsg("error", err.message);
@@ -282,8 +230,7 @@ export default function Notes() {
     }
   };
 
-  useEffect(() => { fetchNotes(); }, [filterEmail, filterDate, search]);
-  useEffect(() => { setPage(1); }, [filterEmail, filterDate, search]);
+  useEffect(() => { fetchNotes(); }, []);
 
   // add
   const addNote = async () => {
@@ -312,7 +259,7 @@ export default function Notes() {
       if (!res.ok) throw new Error(json.message || "Add failed");
       setForm({ title: "", note_date: "", details: "", user_name: "", user_email: "" });
       showCenterMsg("success", "Note added successfully");
-      fetchNotes();
+      await fetchNotes();
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (e) {
       showCenterMsg("error", e.message);
@@ -339,13 +286,13 @@ export default function Notes() {
       const r = await fetch(`${BASE_URL}/${id}`, { method: "DELETE" });
       if (!r.ok) throw new Error("Delete failed");
       showCenterMsg("success", "Note deleted");
-
-      const newTotal = Math.max(0, notes.length - 1);
-      const totalPages = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
-      if (page > totalPages) {
-        setPage(totalPages);
-      }
-      fetchNotes();
+      await fetchNotes();
+      // keep current page in bounds
+      setPage((p) => {
+        const newTotal = Math.max(0, filtered.length - 1);
+        const totalPages = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
+        return Math.min(p, totalPages);
+      });
     } catch (err) {
       showCenterMsg("error", err.message);
     } finally {
@@ -371,7 +318,7 @@ export default function Notes() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.message || "Update failed");
       setEditItem(null);
-      fetchNotes();
+      await fetchNotes();
       showCenterMsg("success", "Updated successfully");
     } catch (e) {
       showCenterMsg("error", e.message);
@@ -380,44 +327,34 @@ export default function Notes() {
     }
   };
 
-  // pagination derived
-  const total = notes.length;
+  /* ---------- Client-side filter: month + title search ----------- */
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return notes.filter((n) => {
+      const datePretty = toPrettyDate(n.note_date);
+      const p = parseDMY(datePretty);
+      const monthOk = monthFilter === "All" ? true : p?.monthShort === monthFilter;
+      const titleOk = q ? n.title?.toLowerCase().includes(q) : true;
+      return monthOk && titleOk;
+    });
+  }, [notes, search, monthFilter]);
+
+  // pagination derived from filtered list
+  const total = filtered.length;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const pageItems = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
-    return notes.slice(start, start + PAGE_SIZE);
-  }, [notes, page]);
+    return filtered.slice(start, start + PAGE_SIZE);
+  }, [filtered, page]);
   const showingFrom = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const showingTo = Math.min(page * PAGE_SIZE, total);
 
-  // 🆕 MONTHLY VIEW DERIVED (only available dates)
-  const monthNotes = useMemo(() => {
-    return notes.filter((n) => {
-      const pretty = toPrettyDate(n.note_date);
-      const p = parseDMY(pretty);
-      if (!p) return false;
-      return p.monthShort === monthViewMonth && p.year === monthViewYear;
-    });
-  }, [notes, monthViewMonth, monthViewYear]);
-
-  // group by date
-  const monthGroupedByDate = useMemo(() => {
-    const map = new Map(); // datePretty -> array
-    monthNotes.forEach((n) => {
-      const d = toPrettyDate(n.note_date);
-      if (!map.has(d)) map.set(d, []);
-      map.get(d).push(n);
-    });
-    // sort dates ascending
-    const sorted = Array.from(map.entries()).sort((a, b) => {
-      return dmyToUTC(a[0]) - dmyToUTC(b[0]);
-    });
-    return sorted; // [ [dateString, notes[]], ... ]
-  }, [monthNotes]);
+  // Reset to page 1 if month/search changes
+  useEffect(() => { setPage(1); }, [search, monthFilter]);
 
   return (
     <div
-      className="container-xxl py-4"
+      className="container-xxl py-3 py-md-4"
       style={{
         minHeight: "100vh",
         background:
@@ -464,11 +401,37 @@ export default function Notes() {
         </div>
       </div>
 
+      {/* 🔎 Search & Month (ABOVE Add section) */}
+      <div className="glass p-3 mb-3 d-flex flex-wrap gap-2 align-items-end">
+        <div className="flex-grow-1" style={{ minWidth: 200 }}>
+          <label className="form-label mb-1">Search by Title</label>
+          <input
+            className="form-control"
+            placeholder="e.g. Buy groceries"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <div style={{ width: 160 }}>
+          <label className="form-label mb-1">Month</label>
+          <select
+            className="form-select"
+            value={monthFilter}
+            onChange={(e) => setMonthFilter(e.target.value)}
+          >
+            <option value="All">All</option>
+            {MONTHS.map((m) => (
+              <option key={m.short} value={m.short}>{m.short}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
       {/* Add Form */}
       <div ref={addFormRef} className="glass p-3 p-md-4 mb-4">
         <h5 className="mb-3">Add Note</h5>
         <div className="row g-3">
-          <div className="col-md-3 col-12">
+          <div className="col-md-4 col-12">
             <label className="form-label">Title</label>
             <input
               className="form-control"
@@ -477,7 +440,7 @@ export default function Notes() {
               placeholder="e.g. Buy groceries"
             />
           </div>
-          <div className="col-md-3 col-12">
+          <div className="col-md-4 col-12">
             <DateSelect
               label="Date (2 Oct 2025)"
               value={form.note_date}
@@ -486,22 +449,13 @@ export default function Notes() {
               required
             />
           </div>
-          <div className="col-md-3 col-12">
+          <div className="col-md-4 col-12">
             <label className="form-label">User Name (optional)</label>
             <input
               className="form-control"
               value={form.user_name}
               onChange={(e) => setForm({ ...form, user_name: e.target.value })}
               placeholder="Your name"
-            />
-          </div>
-          <div className="col-md-3 col-12">
-            <label className="form-label">User Email (optional)</label>
-            <input
-              className="form-control"
-              value={form.user_email}
-              onChange={(e) => setForm({ ...form, user_email: e.target.value })}
-              placeholder="you@example.com"
             />
           </div>
           <div className="col-12">
@@ -523,36 +477,6 @@ export default function Notes() {
           >
             {busy ? "Saving..." : "Add Note"}
           </button>
-        </div>
-      </div>
-
-      {/* Filter Bar */}
-      <div className="glass p-3 mb-3 d-flex flex-wrap gap-2 align-items-end">
-        <div className="d-flex flex-column" style={{ maxWidth: 260 }}>
-          <label className="form-label mb-1">Search</label>
-          <input
-            className="form-control"
-            placeholder="Title / Name / Details"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-        <div className="d-flex flex-column" style={{ maxWidth: 260 }}>
-          <label className="form-label mb-1">Filter by Email</label>
-          <input
-            className="form-control"
-            placeholder="you@example.com"
-            value={filterEmail}
-            onChange={(e) => setFilterEmail(e.target.value)}
-          />
-        </div>
-        <div style={{ maxWidth: 460, flex: 1 }}>
-          <DateSelect
-            label="Filter by Date (optional)"
-            value={filterDate}
-            onChange={(v) => setFilterDate(v)}
-            idPrefix="filter"
-          />
         </div>
       </div>
 
@@ -589,13 +513,6 @@ export default function Notes() {
 
                     <div className="d-flex align-items-center justify-content-between mb-1">
                       <span className="text-muted small">#{rowNumber}</span>
-                      {n.user_email ? (
-                        <span className="badge text-bg-secondary">
-                          {n.user_email}
-                        </span>
-                      ) : (
-                        <span />
-                      )}
                     </div>
 
                     <h6
@@ -605,11 +522,6 @@ export default function Notes() {
                     >
                       {n.title}
                     </h6>
-                    {n.user_name && (
-                      <div className="text-muted mb-2 small">
-                        by <strong>{n.user_name}</strong>
-                      </div>
-                    )}
 
                     <div
                       className="text-secondary small truncate-3"
@@ -671,109 +583,6 @@ export default function Notes() {
             </div>
           </div>
         )}
-      </div>
-
-      {/* 🆕 MONTHLY VIEW (only days that have notes) */}
-      <div className="glass p-3 p-md-4 mt-4">
-        <div className="d-flex flex-wrap justify-content-between gap-2 align-items-center mb-3">
-          <div>
-            <h5 className="mb-0">Month-wise Details</h5>
-            <p className="text-muted small mb-0">
-              Select month & year to see only the days which have notes.
-            </p>
-          </div>
-          <div className="d-flex gap-2 flex-wrap">
-            <select
-              className="form-select"
-              value={monthViewMonth}
-              onChange={(e) => setMonthViewMonth(e.target.value)}
-            >
-              {MONTHS.map((m) => (
-                <option key={m.short} value={m.short}>
-                  {m.short}
-                </option>
-              ))}
-            </select>
-            <select
-              className="form-select"
-              value={monthViewYear}
-              onChange={(e) => setMonthViewYear(Number(e.target.value))}
-            >
-              {Array.from({ length: 8 }, (_, i) => monthViewYear - 4 + i).map(
-                (yy) => (
-                  <option key={yy} value={yy}>
-                    {yy}
-                  </option>
-                )
-              )}
-            </select>
-          </div>
-        </div>
-
-        <div className="row">
-          <div className="col-12">
-            {monthGroupedByDate.length === 0 ? (
-              <div className="text-muted small py-2">
-                No notes found for this month.
-              </div>
-            ) : (
-              monthGroupedByDate.map(([dateStr, dayNotes]) => {
-                const badgeClass = getBadgeClassForDate(dateStr);
-                return (
-                  <div key={dateStr} className="month-day-card p-3 mb-3">
-                    <div className="month-day-header">
-                      <div className="d-flex align-items-center gap-2">
-                        <span className={`badge ${badgeClass}`}>{dateStr}</span>
-                        <span className="text-muted small">
-                          {dayNotes.length} note
-                          {dayNotes.length !== 1 ? "s" : ""}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="mt-2 month-day-notes">
-                      {dayNotes.map((n) => (
-                        <div key={n.id} className="month-note-item">
-                          <div className="month-note-title">{n.title}</div>
-                          <div className="month-note-meta">
-                            {n.user_name ? `by ${n.user_name} • ` : ""}
-                            {n.user_email || ""}
-                          </div>
-                          {n.details ? (
-                            <div
-                              className="small mt-1"
-                              style={{ whiteSpace: "pre-wrap" }}
-                            >
-                              {n.details}
-                            </div>
-                          ) : null}
-                          <div className="mt-2 d-flex gap-2">
-                            <button
-                              className="btn btn-sm btn-outline-primary"
-                              onClick={() =>
-                                setEditItem({
-                                  ...n,
-                                  note_date: dateStr,
-                                })
-                              }
-                            >
-                              Edit
-                            </button>
-                            <button
-                              className="btn btn-sm btn-outline-danger"
-                              onClick={() => deleteNote(n.id)}
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
       </div>
 
       {/* Floating Add button */}

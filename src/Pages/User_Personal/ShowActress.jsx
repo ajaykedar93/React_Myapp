@@ -1,9 +1,4 @@
-import React, {
-  useState,
-  useEffect,
-  useMemo,
-  useCallback,
-} from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import axios from "axios";
 import {
   Container,
@@ -15,12 +10,12 @@ import {
   Form,
   InputGroup,
   Badge,
+  ProgressBar,
 } from "react-bootstrap";
 import { motion } from "framer-motion";
 import Swal from "sweetalert2";
-import LoadingSpinner from "../Entertainment/LoadingSpiner.jsx";
 
-/* ===== API BASE (read/edit/delete only) ===== */
+/* ===== API BASE ===== */
 const endpoint = "https://express-backend-myapp.onrender.com/api/act_favorite";
 
 /* ===== Theme ===== */
@@ -46,8 +41,9 @@ const styles = {
   },
   imageWrap: {
     width: "100%",
-    height: 240,
-    background: "#f8fafc",
+    /* mobile-friendly height: about 52vw capped */
+    height: "min(260px, 52vw)",
+    background: "#0b1221",
     borderBottom: `1px solid ${theme.border}`,
     display: "grid",
     placeItems: "center",
@@ -92,7 +88,7 @@ const styles = {
   metaLabel: {
     color: "#64748b",
     fontWeight: 600,
-    flex: "0 0 170px",
+    flex: "0 0 150px",
     maxWidth: "100%",
   },
   metaValue: {
@@ -192,50 +188,43 @@ const fadeUp = {
   transition: { duration: 0.35 },
 };
 
-const PLACEHOLDER = "https://via.placeholder.com/400x300?text=No+Image";
+const PLACEHOLDER =
+  "https://via.placeholder.com/800x600/000000/FFFFFF?text=No+Image";
 
-/* ===== Local image storage helpers (base64 in localStorage) ===== */
+/* ===== Local image storage helpers ===== */
 const LS_KEY = (id) => `act_images_${id}`;
-
-function getLocalImages(id) {
+const getLocalImages = (id) => {
   try {
-    const raw = localStorage.getItem(LS_KEY(id));
-    if (!raw) return [];
-    const arr = JSON.parse(raw);
-    return Array.isArray(arr) ? arr.filter(Boolean) : [];
+    return JSON.parse(localStorage.getItem(LS_KEY(id)) || "[]").filter(Boolean);
   } catch {
     return [];
   }
-}
-function setLocalImages(id, arr) {
+};
+const setLocalImages = (id, arr) => {
   try {
     localStorage.setItem(LS_KEY(id), JSON.stringify(arr || []));
-  } catch {
-    // ignore
-  }
-}
-function uniqueList(arr) {
-  const seen = new Set();
-  const out = [];
+  } catch {}
+};
+const uniqueList = (arr) => {
+  const seen = new Set(),
+    out = [];
   for (const x of arr) {
     const s = (x || "").trim();
-    if (!s) continue;
-    if (!seen.has(s)) {
+    if (s && !seen.has(s)) {
       seen.add(s);
       out.push(s);
     }
   }
   return out;
-}
-async function fileToDataURL(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("Failed to read file"));
-    reader.onload = () => resolve(reader.result);
-    reader.readAsDataURL(file);
+};
+const fileToDataURL = (file) =>
+  new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onerror = () => rej(new Error("Failed"));
+    r.onload = () => res(r.result);
+    r.readAsDataURL(file);
   });
-}
-function buildImageItems(act) {
+const buildImageItems = (act) => {
   const serverImgs = Array.isArray(act.images)
     ? act.images.filter(Boolean)
     : [];
@@ -245,11 +234,77 @@ function buildImageItems(act) {
     src,
     from: serverImgs.includes(src) ? "server" : "local",
   }));
+};
+
+/* ===== Center progress overlay ===== */
+function useProgress() {
+  const [progress, setProgress] = useState(0);
+  const [show, setShow] = useState(false);
+  const timerRef = useRef(null);
+
+  const start = useCallback(() => {
+    clearInterval(timerRef.current);
+    setShow(true);
+    setProgress(10);
+    timerRef.current = setInterval(() => {
+      setProgress((p) =>
+        p < 90 ? p + Math.max(1, Math.round((100 - p) * 0.06)) : p
+      );
+    }, 120);
+  }, []);
+
+  const end = useCallback(() => {
+    clearInterval(timerRef.current);
+    setProgress(100);
+    // Keep it visible a moment so users see 100%
+    setTimeout(() => setShow(false), 350);
+    setTimeout(() => setProgress(0), 700);
+  }, []);
+
+  useEffect(() => () => clearInterval(timerRef.current), []);
+  return { progress, show, start, end };
 }
 
+function ProgressOverlay({ show, progress }) {
+  if (!show) return null;
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        display: "grid",
+        placeItems: "center",
+        background: "rgba(0,0,0,.45)",
+        zIndex: 3000,
+        backdropFilter: "blur(3px)",
+      }}
+    >
+      <div
+        style={{
+          width: "min(480px,90vw)",
+          background: "#fff",
+          borderRadius: 16,
+          padding: "18px 18px 14px",
+          boxShadow: "0 20px 60px rgba(0,0,0,.25)",
+          border: `1px solid ${theme.border}`,
+        }}
+      >
+        <div className="mb-2" style={{ fontWeight: 700, color: "#0b1221" }}>
+          Loading… {progress}%
+        </div>
+        <ProgressBar
+          now={progress}
+          animated
+          style={{ height: 10, borderRadius: 999 }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/* ====================== MAIN ====================== */
 export default function ShowActress() {
   const [actresses, setActresses] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
   const [query, setQuery] = useState("");
@@ -283,28 +338,47 @@ export default function ShowActress() {
   });
   const [savingEdit, setSavingEdit] = useState(false);
 
+  // add actress
+  const [addOpen, setAddOpen] = useState(false);
+  const [addForm, setAddForm] = useState({
+    country: "",
+    favorite_actress_name: "",
+    favorite_movie_series: "",
+    profile_image: "",
+    age: "",
+    actress_dob: "",
+    notes: "",
+  });
+  const [savingAdd, setSavingAdd] = useState(false);
+
   // add local images
   const [addImgOpen, setAddImgOpen] = useState(false);
   const [addImgId, setAddImgId] = useState(null);
   const [addImgName, setAddImgName] = useState("");
   const [pendingFiles, setPendingFiles] = useState([]);
 
+  // progress overlay
+  const { progress, show, start, end } = useProgress();
+
   /* ===== Load ===== */
-  const fetchActresses = useCallback(async (signal) => {
-    setLoading(true);
-    setLoadError("");
-    try {
-      const res = await axios.get(endpoint, { signal });
-      setActresses(res.data || []);
-    } catch (err) {
-      if (!axios.isCancel(err)) {
-        console.error(err);
-        setLoadError("Unable to load data right now.");
+  const fetchActresses = useCallback(
+    async (signal) => {
+      setLoadError("");
+      try {
+        start(); // show overlay BEFORE request
+        const res = await axios.get(endpoint, { signal });
+        setActresses(res.data || []);
+      } catch (err) {
+        if (!axios.isCancel(err)) {
+          console.error(err);
+          setLoadError("Unable to load data right now.");
+        }
+      } finally {
+        end();
       }
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    },
+    [start, end]
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -336,6 +410,7 @@ export default function ShowActress() {
     if (!result.isConfirmed) return;
 
     try {
+      start();
       await axios.delete(`${endpoint}/${id}`);
       localStorage.removeItem(LS_KEY(id));
       setActresses((prev) => prev.filter((a) => a.id !== id));
@@ -351,6 +426,8 @@ export default function ShowActress() {
         title: "Error",
         text: "Something went wrong while deleting.",
       });
+    } finally {
+      end();
     }
   };
 
@@ -366,11 +443,8 @@ export default function ShowActress() {
   const nextImage = () =>
     setCurrentIndex((prev) => (prev + 1) % slideshowImages.length);
   const prevImage = () =>
-    setCurrentIndex((prev) =>
-      prev === 0 ? slideshowImages.length - 1 : prev - 1
-    );
+    setCurrentIndex((prev) => (prev === 0 ? slideshowImages.length - 1 : prev - 1));
 
-  // keyboard for slideshow
   useEffect(() => {
     if (!slideshowOpen) return;
     const onKey = (e) => {
@@ -383,14 +457,14 @@ export default function ShowActress() {
   }, [slideshowOpen, slideshowImages.length]);
 
   /* ===== Grid ===== */
-  const openGrid = (act, startSelectMode = false) => {
+  const openGrid = (act, startSelect = false) => {
     const items = buildImageItems(act);
     if (!items.length) return;
     setGridItems(items);
     setGridActressName(act.favorite_actress_name || "");
     setGridActressId(act.id);
     setGridOpen(true);
-    setSelectMode(startSelectMode);
+    setSelectMode(startSelect);
     setSelected(new Set());
   };
   const closeGrid = () => {
@@ -401,16 +475,12 @@ export default function ShowActress() {
     setGridActressId(null);
     setGridActressName("");
   };
-
   const toggleSelect = (idx) => {
     const next = new Set(selected);
-    if (next.has(idx)) next.delete(idx);
-    else next.add(idx);
+    next.has(idx) ? next.delete(idx) : next.add(idx);
     setSelected(next);
   };
-  const selectAll = () => {
-    setSelected(new Set(gridItems.map((_, i) => i)));
-  };
+  const selectAll = () => setSelected(new Set(gridItems.map((_, i) => i)));
   const clearSelection = () => setSelected(new Set());
 
   const deleteSelected = async () => {
@@ -422,7 +492,6 @@ export default function ShowActress() {
         showConfirmButton: false,
       });
     }
-
     const confirm = await Swal.fire({
       title: "Delete selected images?",
       text: "This action cannot be undone.",
@@ -441,21 +510,24 @@ export default function ShowActress() {
     const allSelectedUrls = selectedItems.map((it) => it.src);
 
     try {
+      start();
       if (serverUrls.length) {
         await axios.post(`${endpoint}/${gridActressId}/images/delete`, {
           urls: serverUrls,
         });
       }
-
       const currentLocal = getLocalImages(gridActressId);
       const keptLocal = currentLocal.filter(
         (url) => !allSelectedUrls.includes(url)
       );
       setLocalImages(gridActressId, keptLocal);
 
-      await fetchActresses();
-      const actAfter = actresses.find((a) => a.id === gridActressId);
+      // refresh items
+      const res = await axios.get(endpoint);
+      const list = res.data || [];
+      const actAfter = list.find((a) => a.id === gridActressId);
       const rebuilt = actAfter ? buildImageItems(actAfter) : [];
+      setActresses(list);
       setGridItems(rebuilt);
       setSelected(new Set());
       setSelectMode(false);
@@ -473,15 +545,15 @@ export default function ShowActress() {
         title: "Delete failed",
         text: e?.response?.data?.error || "Try again.",
       });
+    } finally {
+      end();
     }
   };
 
   const deleteAllInGrid = async () => {
     if (!gridOpen || !gridActressId) return;
     const confirm = await Swal.fire({
-      title: `Delete ALL images for ${
-        gridActressName || "this actress"
-      }?`,
+      title: `Delete ALL images for ${gridActressName || "this actress"}?`,
       text: "This removes both server and local images.",
       icon: "warning",
       showCancelButton: true,
@@ -492,13 +564,16 @@ export default function ShowActress() {
     if (!confirm.isConfirmed) return;
 
     try {
+      start();
       await axios.post(`${endpoint}/${gridActressId}/images/delete`, {
         all: true,
       });
       localStorage.removeItem(LS_KEY(gridActressId));
 
-      await fetchActresses();
+      const res = await axios.get(endpoint);
+      setActresses(res.data || []);
       closeGrid();
+
       Swal.fire({
         icon: "success",
         title: "All images deleted",
@@ -512,6 +587,8 @@ export default function ShowActress() {
         title: "Delete failed",
         text: e?.response?.data?.error || "Try again.",
       });
+    } finally {
+      end();
     }
   };
 
@@ -521,7 +598,7 @@ export default function ShowActress() {
     if (!q) return actresses;
     return actresses.filter((a) => {
       const name = (a.favorite_actress_name || "").toLowerCase();
-      const country = (a.country_name || "").toLowerCase();
+      const country = (a.country_name || a.country || "").toLowerCase();
       const fav = (a.favorite_movie_series || "").toLowerCase();
       return name.includes(q) || country.includes(q) || fav.includes(q);
     });
@@ -530,15 +607,15 @@ export default function ShowActress() {
   const total = filtered.length;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const pageItems = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return filtered.slice(start, start + PAGE_SIZE);
+    const startIdx = (page - 1) * PAGE_SIZE;
+    return filtered.slice(startIdx, startIdx + PAGE_SIZE);
   }, [filtered, page]);
 
   /* ===== Edit ===== */
   const openEdit = (act) => {
     setEditId(act.id);
     setEditForm({
-      country: act.country_name || act.country_id || "",
+      country: act.country_name || act.country || "",
       favorite_actress_name: act.favorite_actress_name || "",
       favorite_movie_series: act.favorite_movie_series || "",
       profile_image: act.profile_image || "",
@@ -557,11 +634,12 @@ export default function ShowActress() {
       favorite_movie_series: (editForm.favorite_movie_series || "").trim(),
       profile_image: (editForm.profile_image || "").trim(),
       notes: (editForm.notes || "").trim(),
+      age:
+        editForm.age === "" || editForm.age === null
+          ? null
+          : Number(editForm.age),
+      actress_dob: editForm.actress_dob ? editForm.actress_dob : null,
     };
-    if (editForm.age === "" || editForm.age === null) body.age = null;
-    else body.age = Number(editForm.age);
-    body.actress_dob = editForm.actress_dob ? editForm.actress_dob : null;
-
     if (
       !body.favorite_actress_name ||
       !body.favorite_movie_series ||
@@ -573,11 +651,12 @@ export default function ShowActress() {
         text: "Name, Series, and Profile Image are required.",
       });
     }
-
-    setSavingEdit(true);
     try {
+      setSavingEdit(true);
+      start();
       await axios.patch(`${endpoint}/${editId}`, body);
-      await fetchActresses();
+      const res = await axios.get(endpoint);
+      setActresses(res.data || []);
       setEditOpen(false);
       Swal.fire({
         icon: "success",
@@ -594,10 +673,74 @@ export default function ShowActress() {
       });
     } finally {
       setSavingEdit(false);
+      end();
     }
   };
 
-  /* ===== Add Local Images ===== */
+  /* ===== Add Actress (POST) ===== */
+  const openAdd = () => {
+    setAddForm({
+      country: "",
+      favorite_actress_name: "",
+      favorite_movie_series: "",
+      profile_image: "",
+      age: "",
+      actress_dob: "",
+      notes: "",
+    });
+    setAddOpen(true);
+  };
+  const closeAdd = () => setAddOpen(false);
+
+  const saveAdd = async () => {
+    const body = {
+      country: (addForm.country || "").trim(),
+      favorite_actress_name: (addForm.favorite_actress_name || "").trim(),
+      favorite_movie_series: (addForm.favorite_movie_series || "").trim(),
+      profile_image: (addForm.profile_image || "").trim(),
+      notes: (addForm.notes || "").trim(),
+      age:
+        addForm.age === "" || addForm.age === null ? null : Number(addForm.age),
+      actress_dob: addForm.actress_dob ? addForm.actress_dob : null,
+    };
+    if (
+      !body.favorite_actress_name ||
+      !body.favorite_movie_series ||
+      !body.profile_image
+    ) {
+      return Swal.fire({
+        icon: "warning",
+        title: "Required",
+        text: "Name, Series, and Profile Image are required.",
+      });
+    }
+    try {
+      setSavingAdd(true);
+      start();
+      await axios.post(endpoint, body);
+      const res = await axios.get(endpoint);
+      setActresses(res.data || []);
+      setAddOpen(false);
+      Swal.fire({
+        icon: "success",
+        title: "Added",
+        timer: 1200,
+        showConfirmButton: false,
+      });
+    } catch (e) {
+      console.error(e);
+      Swal.fire({
+        icon: "error",
+        title: "Add failed",
+        text: e?.response?.data?.error || "Try again.",
+      });
+    } finally {
+      setSavingAdd(false);
+      end();
+    }
+  };
+
+  /* ===== Add Local Images (images only) ===== */
   const openAddImages = (act) => {
     setAddImgId(act.id);
     setAddImgName(act.favorite_actress_name || "Selected Actress");
@@ -610,7 +753,14 @@ export default function ShowActress() {
     const files = Array.from(fileList || []).filter((f) =>
       f.type.startsWith("image/")
     );
-    if (!files.length) return;
+    if (!files.length) {
+      Swal.fire({
+        icon: "info",
+        title: "Images only",
+        text: "Please drop image files (JPG/PNG/WebP/etc.)",
+      });
+      return;
+    }
     const previews = await Promise.all(
       files.map(async (f) => ({
         name: f.name,
@@ -621,7 +771,7 @@ export default function ShowActress() {
     setPendingFiles((prev) => [...prev, ...previews]);
   };
 
-  // paste to add image
+  // allow paste to add image
   useEffect(() => {
     if (!addImgOpen) return;
     const onPaste = async (e) => {
@@ -656,7 +806,6 @@ export default function ShowActress() {
       const act = actresses.find((a) => a.id === addImgId);
       if (act) setGridItems(buildImageItems(act));
     }
-
     Swal.fire({
       icon: "success",
       title: "Images added locally",
@@ -665,36 +814,20 @@ export default function ShowActress() {
     });
   };
 
-  /* ===== BODY SCROLL LOCK when any modal open ===== */
-  const anyModalOpen =
-    slideshowOpen || gridOpen || editOpen || addImgOpen;
-
-  useEffect(() => {
-    const original = document.body.style.overflow;
-    if (anyModalOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = original || "";
-    }
-    return () => {
-      document.body.style.overflow = original || "";
-    };
-  }, [anyModalOpen]);
-
   /* ===== Render ===== */
-  if (loading) return <LoadingSpinner />;
-
   return (
     <Container
       fluid
-      className="py-3"
+      className="p-0"
       style={{
-        minHeight: "100vh",
+        minHeight: "100dvh", // full mobile viewport height (safe)
         background: theme.bg,
         display: "flex",
         flexDirection: "column",
       }}
     >
+      <ProgressOverlay show={show} progress={progress} />
+
       {/* sticky bar */}
       <motion.div
         className="px-3 py-3 mb-3"
@@ -710,10 +843,7 @@ export default function ShowActress() {
         animate={{ opacity: 1, y: 0 }}
       >
         <div className="d-flex flex-column flex-md-row align-items-stretch align-items-md-center gap-2">
-          <h2
-            className="m-0 me-md-3"
-            style={{ fontWeight: 800, lineHeight: 1.1 }}
-          >
+          <h2 className="m-0 me-md-3" style={{ fontWeight: 800, lineHeight: 1.1 }}>
             <span
               style={{
                 background: `linear-gradient(90deg,${theme.primary},${theme.secondary})`,
@@ -725,7 +855,7 @@ export default function ShowActress() {
             </span>
           </h2>
 
-          <div className="ms-md-auto w-100" style={{ maxWidth: 480 }}>
+          <div className="ms-md-auto w-100" style={{ maxWidth: 520 }}>
             <InputGroup>
               <InputGroup.Text className="bg-white">🔎</InputGroup.Text>
               <Form.Control
@@ -734,13 +864,17 @@ export default function ShowActress() {
                 onChange={(e) => setQuery(e.target.value)}
               />
               {query && (
-                <Button
-                  variant="outline-secondary"
-                  onClick={() => setQuery("")}
-                >
+                <Button variant="outline-secondary" onClick={() => setQuery("")}>
                   Clear
                 </Button>
               )}
+              <Button
+                variant="success"
+                onClick={openAdd}
+                style={{ marginLeft: 8, fontWeight: 700 }}
+              >
+                ➕ Add Actress
+              </Button>
             </InputGroup>
           </div>
         </div>
@@ -760,8 +894,7 @@ export default function ShowActress() {
         }}
       >
         <p className="text-muted mb-0">
-          Search above. Each card lets you <b>add images</b>, <b>view</b>, and{" "}
-          <b>manage & delete</b> images.
+          Add a new actress, then attach <b>images only</b> (drag & drop or paste) to view and manage.
         </p>
       </div>
 
@@ -786,12 +919,12 @@ export default function ShowActress() {
 
       {/* list */}
       <div style={{ width: "100%" }}>
-        {total === 0 ? (
+        {filtered.length === 0 ? (
           <div
             className="text-center text-muted py-5"
             style={{ fontSize: "1.05rem" }}
           >
-            {query ? "No matches found." : "No actress profiles added yet."}
+            {query ? "No matches found." : "No actress profiles yet. Click “Add Actress” to create one."}
           </div>
         ) : (
           <>
@@ -829,8 +962,7 @@ export default function ShowActress() {
 
                         {/* name */}
                         <div style={styles.nameBanner}>
-                          {index + 1}.{" "}
-                          {act.favorite_actress_name || "Unknown"}
+                          {index + 1}. {act.favorite_actress_name || "Unknown"}
                         </div>
 
                         {/* buttons */}
@@ -839,7 +971,7 @@ export default function ShowActress() {
                             variant="outline-primary"
                             onClick={() => openAddImages(act)}
                           >
-                            ➕ Add Images (Drag & Drop)
+                            ➕ Add Images (Drag/Paste)
                           </Button>
                           <Button
                             variant="outline-secondary"
@@ -862,7 +994,7 @@ export default function ShowActress() {
                           <div style={styles.metaItem}>
                             <span style={styles.metaLabel}>Country:</span>
                             <span style={styles.metaValue}>
-                              {act.country_name || "-"}
+                              {act.country_name || act.country || "-"}
                             </span>
                           </div>
                           <div style={styles.metaItem}>
@@ -903,10 +1035,7 @@ export default function ShowActress() {
                               style={styles.btnDanger}
                               className="w-100"
                               onClick={() =>
-                                handleDelete(
-                                  act.id,
-                                  act.favorite_actress_name
-                                )
+                                handleDelete(act.id, act.favorite_actress_name)
                               }
                             >
                               🗑 Delete Actress
@@ -916,29 +1045,24 @@ export default function ShowActress() {
                           <div className="mt-auto">
                             {act.age && (
                               <div
-                                style={{
-                                  fontSize: ".9rem",
-                                  color: theme.muted,
-                                }}
+                                style={{ fontSize: ".9rem", color: theme.muted }}
                               >
                                 <strong>Age:</strong> {act.age}
                               </div>
                             )}
                             {act.actress_dob && (
                               <div
-                                style={{
-                                  fontSize: ".9rem",
-                                  color: theme.muted,
-                                }}
+                                style={{ fontSize: ".9rem", color: theme.muted }}
                               >
                                 <strong>DOB:</strong>{" "}
-                                {new Date(
-                                  act.actress_dob
-                                ).toLocaleDateString(undefined, {
-                                  day: "2-digit",
-                                  month: "short",
-                                  year: "numeric",
-                                })}
+                                {new Date(act.actress_dob).toLocaleDateString(
+                                  undefined,
+                                  {
+                                    day: "2-digit",
+                                    month: "short",
+                                    year: "numeric",
+                                  }
+                                )}
                               </div>
                             )}
                             {act.notes && (
@@ -998,7 +1122,7 @@ export default function ShowActress() {
         )}
       </div>
 
-      {/* ===== Slideshow Modal ===== */}
+      {/* ===== Slideshow Modal (center, scroll, full-size) ===== */}
       <Modal
         show={slideshowOpen}
         onHide={closeSlideshow}
@@ -1007,6 +1131,7 @@ export default function ShowActress() {
         backdrop="static"
         contentClassName="bg-transparent border-0"
         fullscreen="md-down"
+        scrollable
       >
         <Modal.Body
           style={{
@@ -1018,7 +1143,6 @@ export default function ShowActress() {
             overflowY: "auto",
           }}
         >
-          {/* close */}
           <Button
             variant="light"
             style={{
@@ -1036,7 +1160,6 @@ export default function ShowActress() {
             ×
           </Button>
 
-          {/* SCROLL WRAP for mobile */}
           <div
             style={{
               minHeight: "60vh",
@@ -1058,7 +1181,6 @@ export default function ShowActress() {
             )}
           </div>
 
-          {/* arrows */}
           {slideshowImages.length > 1 && (
             <>
               <button
@@ -1093,14 +1215,8 @@ export default function ShowActress() {
       >
         <Modal.Header closeButton>
           <Modal.Title className="d-flex align-items-center gap-2">
-            {gridActressName
-              ? `${gridActressName} — All Images`
-              : "All Images"}
-            {selectMode && (
-              <Badge bg="warning" text="dark">
-                Select mode
-              </Badge>
-            )}
+            {gridActressName ? `${gridActressName} — All Images` : "All Images"}
+            {selectMode && <Badge bg="warning" text="dark">Select mode</Badge>}
           </Modal.Title>
           <div className="ms-auto d-flex gap-2">
             {!selectMode ? (
@@ -1133,8 +1249,7 @@ export default function ShowActress() {
                   onClick={deleteSelected}
                   disabled={selected.size === 0}
                 >
-                  Delete Selected{" "}
-                  {selected.size ? `(${selected.size})` : ""}
+                  Delete Selected {selected.size ? `(${selected.size})` : ""}
                 </Button>
                 <Button
                   variant="outline-danger"
@@ -1164,9 +1279,7 @@ export default function ShowActress() {
           }}
         >
           {gridItems.length === 0 ? (
-            <div className="text-center text-muted py-4">
-              No images.
-            </div>
+            <div className="text-center text-muted py-4">No images.</div>
           ) : (
             <Row className="g-3">
               {gridItems.map((it, idx) => {
@@ -1177,11 +1290,7 @@ export default function ShowActress() {
                       style={styles.thumbWrap}
                       onClick={() => {
                         if (selectMode) toggleSelect(idx);
-                        else
-                          openSlideshow(
-                            gridItems.map((g) => g.src),
-                            idx
-                          );
+                        else openSlideshow(gridItems.map((g) => g.src), idx);
                       }}
                       role="button"
                     >
@@ -1273,23 +1382,19 @@ export default function ShowActress() {
         </Modal.Footer>
       </Modal>
 
-      {/* ===== Edit Modal ===== */}
+      {/* ===== Edit Actress Modal ===== */}
       <Modal
         show={editOpen}
         onHide={closeEdit}
         centered
         size="lg"
         backdrop="static"
+        scrollable
       >
         <Modal.Header closeButton>
           <Modal.Title>Edit Actress Details</Modal.Title>
         </Modal.Header>
-        <Modal.Body
-          style={{
-            maxHeight: "70vh",
-            overflowY: "auto",
-          }}
-        >
+        <Modal.Body style={{ maxHeight: "70vh", overflowY: "auto" }}>
           <Form>
             <Row className="g-3">
               <Col md={6}>
@@ -1408,23 +1513,150 @@ export default function ShowActress() {
         </Modal.Footer>
       </Modal>
 
-      {/* ===== Add Images (local) ===== */}
+      {/* ===== Add Actress Modal (POST) ===== */}
+      <Modal
+        show={addOpen}
+        onHide={closeAdd}
+        centered
+        size="lg"
+        backdrop="static"
+        scrollable
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>➕ Add Actress</Modal.Title>
+        </Modal.Header>
+        <Modal.Body style={{ maxHeight: "70vh", overflowY: "auto" }}>
+          <Form>
+            <Row className="g-3">
+              <Col md={6}>
+                <Form.Group>
+                  <Form.Label>Country (id or exact name)</Form.Label>
+                  <Form.Control
+                    value={addForm.country}
+                    onChange={(e) =>
+                      setAddForm({ ...addForm, country: e.target.value })
+                    }
+                    placeholder="India or 101"
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={6}>
+                <Form.Group>
+                  <Form.Label>Favorite Actress Name *</Form.Label>
+                  <Form.Control
+                    value={addForm.favorite_actress_name}
+                    onChange={(e) =>
+                      setAddForm({
+                        ...addForm,
+                        favorite_actress_name: e.target.value,
+                      })
+                    }
+                    placeholder="Name"
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={6}>
+                <Form.Group>
+                  <Form.Label>Favorite Movie / Series *</Form.Label>
+                  <Form.Control
+                    value={addForm.favorite_movie_series}
+                    onChange={(e) =>
+                      setAddForm({
+                        ...addForm,
+                        favorite_movie_series: e.target.value,
+                      })
+                    }
+                    placeholder="Movie or Series"
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={6}>
+                <Form.Group>
+                  <Form.Label>Profile Image URL *</Form.Label>
+                  <Form.Control
+                    value={addForm.profile_image}
+                    onChange={(e) =>
+                      setAddForm({
+                        ...addForm,
+                        profile_image: e.target.value,
+                      })
+                    }
+                    placeholder="https://..."
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={4}>
+                <Form.Group>
+                  <Form.Label>Age</Form.Label>
+                  <Form.Control
+                    type="number"
+                    min="1"
+                    value={addForm.age}
+                    onChange={(e) =>
+                      setAddForm({ ...addForm, age: e.target.value })
+                    }
+                    placeholder="e.g. 27"
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={4}>
+                <Form.Group>
+                  <Form.Label>DOB</Form.Label>
+                  <Form.Control
+                    type="date"
+                    value={addForm.actress_dob || ""}
+                    onChange={(e) =>
+                      setAddForm({
+                        ...addForm,
+                        actress_dob: e.target.value,
+                      })
+                    }
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={12}>
+                <Form.Group>
+                  <Form.Label>Notes</Form.Label>
+                  <Form.Control
+                    as="textarea"
+                    rows={3}
+                    value={addForm.notes}
+                    onChange={(e) =>
+                      setAddForm({ ...addForm, notes: e.target.value })
+                    }
+                    placeholder="Any notes..."
+                  />
+                </Form.Group>
+              </Col>
+            </Row>
+          </Form>
+          <div className="small text-muted mt-3">
+            * Required fields. Creating will call <code>POST {endpoint}</code>
+          </div>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={closeAdd} disabled={savingAdd}>
+            Cancel
+          </Button>
+          <Button variant="success" onClick={saveAdd} disabled={savingAdd}>
+            {savingAdd ? "Saving..." : "Add Actress"}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ===== Add Images (local only) ===== */}
       <Modal
         show={addImgOpen}
         onHide={closeAddImages}
         centered
         size="lg"
         backdrop="static"
+        scrollable
       >
         <Modal.Header closeButton>
           <Modal.Title>➕ Add Images — {addImgName}</Modal.Title>
         </Modal.Header>
-        <Modal.Body
-          style={{
-            maxHeight: "70vh",
-            overflowY: "auto",
-          }}
-        >
+        <Modal.Body style={{ maxHeight: "70vh", overflowY: "auto" }}>
           <div
             style={styles.dropzone}
             onDragOver={(e) => {
@@ -1485,7 +1717,7 @@ export default function ShowActress() {
 
           <div className="small text-muted mt-3">
             These images are stored <b>locally in your browser</b> (no upload).
-            They will appear together with server images, de-duplicated.
+            Only image files are allowed.
           </div>
         </Modal.Body>
         <Modal.Footer>

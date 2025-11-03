@@ -1,7 +1,6 @@
 // src/pages/AllList.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
-import LoadingSpiner from "./LoadingSpiner"; // adjust path if needed
 
 const API_BASE = "https://express-backend-myapp.onrender.com/api/library";
 const PAGE_SIZE = 20;
@@ -11,6 +10,7 @@ export default function AllList() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [payload, setPayload] = useState({
     ok: true,
     type: "movies",
@@ -21,25 +21,65 @@ export default function AllList() {
     items: [],
   });
   const [error, setError] = useState("");
-  const [selectedItem, setSelectedItem] = useState(null); // ✅ popup
+  const [selectedItem, setSelectedItem] = useState(null);
 
-  // one fetch for both tabs
+  const abortRef = useRef(null);
+  const fakeRef = useRef(null);
+
+  const clearProgressTimers = () => {
+    if (fakeRef.current) {
+      clearInterval(fakeRef.current);
+      fakeRef.current = null;
+    }
+  };
+
+  const startFakeProgress = () => {
+    clearProgressTimers();
+    setProgress(10);
+    fakeRef.current = setInterval(() => {
+      setProgress((p) => (p < 90 ? p + 2 : p));
+    }, 120);
+  };
+
+  const stopProgress = () => {
+    clearProgressTimers();
+    setProgress(100);
+    setTimeout(() => setProgress(0), 300);
+  };
+
   const fetchList = useMemo(
     () => async (tab, pg, q) => {
+      if (abortRef.current) abortRef.current.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
       try {
         setError("");
         setLoading(true);
+        setProgress(0);
+        startFakeProgress();
+
         const { data } = await axios.get(`${API_BASE}/list`, {
-          params: {
-            type: tab,
-            page: pg,
-            search: q || "",
+          params: { type: tab, page: pg, search: q || "" },
+          signal: controller.signal,
+          onDownloadProgress: (evt) => {
+            if (evt.total) {
+              const pct = Math.min(99, Math.floor((evt.loaded / evt.total) * 100));
+              setProgress(pct);
+            }
           },
         });
+
         setPayload(data);
+        stopProgress();
       } catch (e) {
+        if (axios.isCancel?.(e) || e.name === "CanceledError" || e.code === "ERR_CANCELED") {
+          return;
+        }
         console.error(e);
         setError("Failed to load items.");
+        clearProgressTimers();
+        setProgress(0);
       } finally {
         setLoading(false);
       }
@@ -66,22 +106,17 @@ export default function AllList() {
     if (page > 1) setPage((p) => p - 1);
   };
 
-  /* ---------- parts / seasons (no extra year) ---------- */
   const renderSubtags = (item, type) => {
     const arr = type === "movies" ? item.parts : item.seasons;
     if (!arr || !arr.length) return null;
 
     return (
       <div className="mt-2">
-        <p className="subt-title mb-1">
-          {type === "movies" ? "Parts" : "Seasons"}
-        </p>
+        <p className="subt-title mb-1">{type === "movies" ? "Parts" : "Seasons"}</p>
         <div className="d-flex flex-wrap gap-1">
           {arr.map((p, idx) => {
             const text =
-              typeof p === "string"
-                ? p.trim()
-                : `${type === "movies" ? "Part" : "Season"} ${p}`;
+              typeof p === "string" ? p.trim() : `${type === "movies" ? "Part" : "Season"} ${p}`;
             return (
               <span key={idx} className="badge subt-badge">
                 {text}
@@ -93,7 +128,6 @@ export default function AllList() {
     );
   };
 
-  /* ---------- cards ---------- */
   const Cards = ({ items, type }) => (
     <div className="row g-3 g-md-4 mt-3">
       {items.map((it) => {
@@ -125,7 +159,7 @@ export default function AllList() {
 
               {/* text */}
               <div className="lib-body">
-                <div className="d-flex align-items-start gap-2">
+                <div className="lib-header d-flex align-items-start gap-2 flex-wrap">
                   <h6 className="lib-title mb-0" title={it.title}>
                     {it.title}
                   </h6>
@@ -145,10 +179,8 @@ export default function AllList() {
                   </span>
                 </div>
 
-                {/* parts / seasons */}
                 {renderSubtags(it, type)}
 
-                {/* category / subcategory */}
                 <div className="mt-2 d-flex flex-wrap gap-2">
                   {it.category?.name && (
                     <span
@@ -166,7 +198,6 @@ export default function AllList() {
                   )}
                 </div>
 
-                {/* genres */}
                 {!!it.genres?.length && (
                   <div className="mt-2 d-flex flex-wrap gap-1">
                     {it.genres.map((g, i) => (
@@ -184,7 +215,6 @@ export default function AllList() {
     </div>
   );
 
-  /* ---------- popup ---------- */
   const DetailModal = ({ item, onClose }) => {
     if (!item) return null;
     const type = item._type || (activeTab === "movies" ? "movies" : "series");
@@ -193,43 +223,27 @@ export default function AllList() {
     return (
       <div className="details-overlay" onClick={onClose}>
         <div className="details-card" onClick={(e) => e.stopPropagation()}>
-          <button className="details-close" onClick={onClose}>
-            ×
-          </button>
+          <button className="details-close" onClick={onClose}>×</button>
           <div className="d-flex gap-3 flex-wrap">
-            {/* poster */}
             <div className="details-poster">
-              {hasPoster ? (
-                <img src={item.poster_url} alt={item.title} />
-              ) : (
-                <div className="details-ph">NO POSTER</div>
-              )}
+              {hasPoster ? <img src={item.poster_url} alt={item.title} /> : <div className="details-ph">NO POSTER</div>}
             </div>
 
-            {/* content */}
             <div className="flex-grow-1">
               <h5 className="mb-1 d-flex gap-2 flex-wrap align-items-center">
                 {item.title}
-                <span
-                  className={`status-pill ${item.is_watched ? "watched" : "not-watched"}`}
-                >
+                <span className={`status-pill ${item.is_watched ? "watched" : "not-watched"}`}>
                   {item.is_watched ? "Watched" : "Not watched"}
                 </span>
               </h5>
               <p className="mb-2 text-muted small d-flex flex-wrap gap-2">
-                <span>
-                  {item.release_year
-                    ? `Released: ${item.release_year}`
-                    : "Release year: —"}
-                </span>
+                <span>{item.release_year ? `Released: ${item.release_year}` : "Release year: —"}</span>
                 <span>• {type === "movies" ? "Movie" : "Series"}</span>
                 <span>• #{item.seq}</span>
               </p>
 
-              {/* parts / seasons */}
               {renderSubtags(item, type)}
 
-              {/* category / subcategory BIG */}
               <div className="mt-3 d-flex flex-wrap gap-2">
                 {item.category?.name && (
                   <span className="badge cat-badge-big" title={item.category.name}>
@@ -243,7 +257,6 @@ export default function AllList() {
                 )}
               </div>
 
-              {/* genres */}
               {!!item.genres?.length && (
                 <div className="mt-3 d-flex flex-wrap gap-1">
                   {item.genres.map((g, idx) => (
@@ -263,13 +276,37 @@ export default function AllList() {
   return (
     <div className="container py-3 all-list-page">
       <style>{`
-        .all-list-page{
-          max-width: 1150px;
+        .all-list-page{ max-width: 1150px; }
+        :root{ --tab-active: linear-gradient(120deg, #14b8a6, #6366f1); --poster-h: 145px; }
+        html { font-size: 100%; }
+        body { line-height: 1.4; }
+
+        /* title stays readable, wraps by words */
+        .lib-header { row-gap: .25rem; }
+        .lib-title{
+          font-weight: 800;
+          font-size: clamp(1rem, 2.8vw, 1.15rem);
+          line-height: 1.25;
+          max-width: 100%;
+          white-space: normal;
+          word-break: normal;
+          overflow-wrap: anywhere;
+          hyphens: auto;
+          letter-spacing: normal;
+          flex: 1 1 180px;
+          min-width: 0;
         }
-        :root{
-          --tab-active: linear-gradient(120deg, #14b8a6, #6366f1);
-          --poster-h: 145px;
+
+        /* make sure ALL badge-like chips never hide text */
+        .badge{
+          white-space: normal;         /* allow wrapping to next line */
+          line-height: 1.15;
+          word-break: normal;
+          overflow-wrap: anywhere;
         }
+
+        .lib-body, .details-card { font-size: clamp(0.9rem, 2.6vw, 0.98rem); }
+        .badge, .status-pill { font-size: clamp(0.6rem, 2.1vw, 0.72rem); }
 
         .top-tabs{
           background: rgba(255,255,255,.01);
@@ -281,254 +318,104 @@ export default function AllList() {
           border: 1px solid rgba(148,163,184,.2);
           box-shadow: 0 6px 30px rgba(15,23,42,.08);
         }
-
         .tab-btn{
-          border: none;
-          background: transparent;
-          color: #94a3b8;
-          font-weight: 600;
-          padding: .5rem 1.1rem;
-          border-radius: .75rem;
-          display: inline-flex;
-          align-items: center;
-          gap: .4rem;
-          transition: all .16s ease;
-          cursor: pointer;
+          border: none; background: transparent; color: #94a3b8; font-weight: 700;
+          padding: .55rem 1.1rem; border-radius: .75rem; display: inline-flex; align-items: center;
+          gap: .4rem; transition: all .16s ease; cursor: pointer; font-size: clamp(0.9rem, 2.6vw, 1rem);
         }
-        .tab-btn:hover{
-          background: rgba(148,163,184,.09);
-          color: #e2e8f0;
-        }
-        .tab-btn.active{
-          background: var(--tab-active);
-          color: #fff;
-          box-shadow: 0 12px 24px rgba(99,102,241,.25);
-        }
+        .tab-btn:hover{ background: rgba(148,163,184,.09); color: #0f172a; }
+        .tab-btn.active{ background: var(--tab-active); color: #fff; box-shadow: 0 12px 24px rgba(99,102,241,.25); }
 
-        .search-wrap{
-          margin-top: 1.4rem;
-        }
+        .search-wrap{ margin-top: 1.4rem; }
         .search-wrap .form-control{
-          border-radius: .9rem;
-          border: 1px solid rgba(148,163,184,.35);
-          background: #fff;
+          border-radius: .9rem; border: 1px solid rgba(148,163,184,.35); background: #fff;
         }
-        .search-wrap .form-control:focus{
-          box-shadow: 0 0 0 .18rem rgba(20,184,166,.25);
-        }
+        .search-wrap .form-control:focus{ box-shadow: 0 0 0 .18rem rgba(20,184,166,.25); }
 
-        /* cards */
         .lib-card{
-          background: #fff;
-          border-radius: 1rem;
-          display: flex;
-          gap: .9rem;
-          padding: .9rem;
-          min-height: 150px;
-          box-shadow: 0 6px 18px rgba(15,23,42,.03);
-          transition: transform .12s ease, box-shadow .12s ease, border .12s ease;
-          cursor: pointer;
-          /* ✅ small red border so cards are clearly separated */
+          background: #fff; border-radius: 1rem; display: flex; gap: .9rem; align-items: flex-start;
+          padding: .9rem; min-height: 150px; box-shadow: 0 6px 18px rgba(15,23,42,.03);
+          transition: transform .12s ease, box-shadow .12s ease, border .12s ease; cursor: pointer;
           border: 1.5px solid rgba(248,113,113,.16);
         }
-        .lib-card.is-movie{
-          border-left: 4px solid rgba(248,113,113,.8);   /* red for movies */
-        }
-        .lib-card.is-series{
-          border-left: 4px solid rgba(248,113,113,.45);  /* little lighter for series */
-        }
-        .lib-card:hover,
-        .lib-card:focus-within{
-          transform: translateY(-2px);
-          box-shadow: 0 12px 24px rgba(15,23,42,.08);
+        .lib-card.is-movie{ border-left: 4px solid rgba(248,113,113,.8); }
+        .lib-card.is-series{ border-left: 4px solid rgba(248,113,113,.45); }
+        .lib-card:hover, .lib-card:focus-within{
+          transform: translateY(-2px); box-shadow: 0 12px 24px rgba(15,23,42,.08);
           border-color: rgba(248,113,113,.4);
         }
 
         .lib-poster{
-          width: 110px;
-          height: var(--poster-h);
-          background: #f8fafc;
-          border: 1px solid rgba(148,163,184,.3);
-          border-radius: .75rem;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          overflow: hidden;
-          flex-shrink: 0;
+          width: 110px; height: var(--poster-h); background: #f8fafc; border: 1px solid rgba(148,163,184,.3);
+          border-radius: .75rem; display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0;
         }
-        .lib-poster img{
-          width: 100%;
-          height: 100%;
-          object-fit: contain;
-          object-position: center;
-          background: #fff;
-          display: block;
-        }
-        .lib-poster-ph{
-          font-size: .6rem;
-          font-weight: 700;
-          color: #94a3b8;
-          text-align: center;
-          padding: .4rem;
-        }
-
-        .lib-body{
-          flex: 1 1 auto;
-          min-width: 0;
-        }
-        /* ✅ mobile friendly title - no cut */
-        .lib-title{
-          font-weight: 700;
-          font-size: .92rem;
-          max-width: 100%;
-          white-space: normal;
-          word-break: break-word;
-        }
+        .lib-poster img{ width: 100%; height: 100%; object-fit: contain; object-position: center; background: #fff; display: block; }
+        .lib-poster-ph{ font-size: .6rem; font-weight: 700; color: #94a3b8; text-align: center; padding: .4rem; }
 
         .status-pill{
-          margin-left: auto;
-          padding: .25rem .55rem;
-          font-size: .66rem;
-          border-radius: 9999px;
-          border: 1px solid transparent;
-          white-space: nowrap;
+          margin-left: auto; padding: .28rem .6rem; border-radius: 9999px; border: 1px solid transparent; white-space: nowrap;
         }
-        .status-pill.watched{
-          background: rgba(22,163,74,.08);
-          border-color: rgba(22,163,74,.35);
-          color: #166534;
-        }
-        .status-pill.not-watched{
-          background: rgba(248,113,113,.12);
-          border-color: rgba(248,113,113,.3);
-          color: #b91c1c;
-        }
+        .status-pill.watched{ background: rgba(22,163,74,.08); border-color: rgba(22,163,74,.35); color: #166534; }
+        .status-pill.not-watched{ background: rgba(248,113,113,.12); border-color: rgba(248,113,113,.3); color: #b91c1c; }
 
-        .seq-badge{
-          background: rgba(15,118,110,.05);
-          color: #0f766e;
-        }
-        .type-badge{
-          background: rgba(99,102,241,.07);
-          color: #4338ca;
-        }
+        .seq-badge{ background: rgba(15,118,110,.05); color: #0f766e; }
+        .type-badge{ background: rgba(99,102,241,.07); color: #4338ca; }
 
-        .cat-badge{
-          border: 1px solid;
-          background: rgba(20,184,166,.04);
-          font-size: .65rem;
-        }
-        /* ✅ bigger in popup */
-        .cat-badge-big{
-          background: rgba(14,165,233,.09);
-          border: 1px solid rgba(14,165,233,.45);
-          font-size: .72rem;
-          font-weight: 600;
-          color: #0f172a;
-          padding: .35rem .7rem;
-        }
+        .cat-badge{ border: 1px solid; background: rgba(20,184,166,.04); }
+
+        /* 👇 SUBCATEGORY — black text, high contrast, never hidden */
         .subcat-badge{
-          background: rgba(248,250,252,1);
+          background: #f8fafc;
           border: 1px solid rgba(148,163,184,.25);
-          font-size: .65rem;
-          color: #0f172a;
+          color: #0f172a !important;    /* force black-ish text */
         }
-        .genre-badge{
-          background: rgba(15,23,42,.04);
-          color: #0f172a;
-          font-size: .62rem;
+
+        .cat-badge-big{
+          background: rgba(14,165,233,.09); border: 1px solid rgba(14,165,233,.45); font-weight: 600;
+          color: #0f172a; padding: .35rem .7rem;
         }
-        .subt-badge{
-          background: rgba(236,252,203,.9);
-          color: #365314;
-          font-size: .62rem;
-        }
-        .subt-title{
-          font-size: .65rem;
-          font-weight: 600;
-          color: #0f172a;
-        }
+
+        .genre-badge{ background: rgba(15,23,42,.04); color: #0f172a; }
+        .subt-badge{ background: rgba(236,252,203,.9); color: #365314; }
+        .subt-title{ font-weight: 700; color: #0f172a; font-size: clamp(0.68rem, 2vw, 0.75rem); }
+
+        /* progress */
+        .load-wrap{ display:flex; align-items:center; gap:.75rem; }
+        .progress{ height: 10px; width: 220px; background: #eef2f7; border-radius: 999px; overflow: hidden; border: 1px solid rgba(148,163,184,.35); }
+        .progress > .bar{ height: 100%; width: 0%; background: linear-gradient(90deg, #14b8a6, #6366f1); transition: width .15s ease; }
 
         /* popup */
         .details-overlay{
-          position: fixed;
-          inset: 0;
-          background: rgba(15,23,42,.42);
-          backdrop-filter: blur(4px);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 9999;
-          padding: 1rem;
+          position: fixed; inset: 0; background: rgba(15,23,42,.42); backdrop-filter: blur(4px);
+          display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 1rem;
         }
         .details-card{
-          background: #fff;
-          border-radius: 1rem;
-          max-width: 680px;
-          width: 100%;
-          min-height: 260px;
-          box-shadow: 0 18px 46px rgba(15,23,42,.25);
-          position: relative;
-          padding: 1.2rem 1.3rem;
+          background: #fff; border-radius: 1rem; max-width: 680px; width: 100%; min-height: 260px;
+          box-shadow: 0 18px 46px rgba(15,23,42,.25); position: relative; padding: 1.2rem 1.3rem;
         }
         .details-close{
-          position: absolute;
-          top: .5rem;
-          right: .5rem;
-          border: none;
-          background: rgba(15,23,42,.04);
-          width: 32px;
-          height: 32px;
-          border-radius: 9999px;
-          font-size: 1.1rem;
-          line-height: 1;
-          display: grid;
-          place-items: center;
-          cursor: pointer;
+          position: absolute; top: .5rem; right: .5rem; border: none; background: rgba(15,23,42,.04);
+          width: 32px; height: 32px; border-radius: 9999px; font-size: 1.1rem; line-height: 1; display: grid; place-items: center; cursor: pointer;
         }
         .details-poster{
-          width: 150px;
-          height: 200px;
-          background: #f8fafc;
-          border: 1px solid rgba(148,163,184,.3);
-          border-radius: .75rem;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          overflow: hidden;
+          width: 150px; height: 200px; background: #f8fafc; border: 1px solid rgba(148,163,184,.3);
+          border-radius: .75rem; display: flex; align-items: center; justify-content: center; overflow: hidden;
         }
-        .details-poster img{
-          width: 100%;
-          height: 100%;
-          object-fit: contain;
-        }
-        .details-ph{
-          color: #94a3b8;
-          font-size: .7rem;
-          font-weight: 600;
-        }
+        .details-poster img{ width: 100%; height: 100%; object-fit: contain; }
+        .details-ph{ color: #94a3b8; font-size: .7rem; font-weight: 600; }
 
         /* mobile */
         @media (max-width: 575.98px){
-          .lib-card{
-            flex-direction: row;
-          }
-          .lib-poster{
-            width: 90px;
-            height: 130px;
-          }
-          .top-tabs{
-            width: 100%;
-            justify-content: center;
-          }
-          .details-card{
-            max-height: 90vh;
-            overflow-y: auto;
-          }
-          .details-poster{
-            width: 120px;
-            height: 170px;
-          }
+          .lib-card{ display: grid; grid-template-columns: 92px 1fr; column-gap: .9rem; min-height: auto; }
+          .lib-poster{ width: 92px; height: 128px; }
+          .top-tabs{ width: 100%; justify-content: center; }
+          .details-card{ max-height: 90vh; overflow-y: auto; }
+          .details-poster{ width: 120px; height: 170px; }
+          .row > [class*="col-"] { width: 100%; }
+        }
+
+        @media (max-width: 360px){
+          .status-pill{ margin-left: 0; }
         }
       `}</style>
 
@@ -582,15 +469,9 @@ export default function AllList() {
 
       {/* chips */}
       <div className="mt-2 d-flex gap-2 flex-wrap">
-        <span className="badge text-bg-light">
-          Showing: {payload.items?.length || 0}
-        </span>
-        <span className="badge text-bg-secondary">
-          Total: {payload.total || 0}
-        </span>
-        <span className="badge text-bg-dark">
-          Page {page} / {payload.total_pages || 1}
-        </span>
+        <span className="badge text-bg-light">Showing: {payload.items?.length || 0}</span>
+        <span className="badge text-bg-secondary">Total: {payload.total || 0}</span>
+        <span className="badge text-bg-dark">Page {page} / {payload.total_pages || 1}</span>
       </div>
 
       {/* content */}
@@ -600,8 +481,14 @@ export default function AllList() {
             <span className="me-2">⚠</span> {error}
           </div>
         ) : loading ? (
-          <div className="card p-3 d-flex flex-row align-items-center gap-3">
-            <LoadingSpiner /> <span>Loading {activeTab}…</span>
+          <div className="card p-3 d-flex flex-row align-items-center justify-content-between">
+            <div className="load-wrap">
+              <div className="progress" aria-label="Loading progress">
+                <div className="bar" style={{ width: `${progress}%` }} />
+              </div>
+              <span className="small text-muted fw-semibold">{progress}%</span>
+            </div>
+            <span className="small text-muted">Loading {activeTab}…</span>
           </div>
         ) : (
           <>
