@@ -23,6 +23,9 @@ export default function AllList() {
   const [error, setError] = useState("");
   const [selectedItem, setSelectedItem] = useState(null);
 
+  // UI-only filter
+  const [viewFilter, setViewFilter] = useState("all"); // "all" | "watched" | "not-watched"
+
   const abortRef = useRef(null);
   const fakeRef = useRef(null);
 
@@ -273,6 +276,23 @@ export default function AllList() {
     );
   };
 
+  // Derived filtered items (client-side only)
+  const filteredItems = useMemo(() => {
+    const items = payload.items || [];
+    if (viewFilter === "watched") return items.filter((i) => i.is_watched);
+    if (viewFilter === "not-watched") return items.filter((i) => !i.is_watched);
+    return items;
+  }, [payload.items, viewFilter]);
+
+  const watchedCount = useMemo(
+    () => (payload.items || []).filter((i) => i.is_watched).length,
+    [payload.items]
+  );
+  const notWatchedCount = useMemo(
+    () => (payload.items || []).filter((i) => !i.is_watched).length,
+    [payload.items]
+  );
+
   return (
     <div className="container py-3 all-list-page">
       <style>{`
@@ -299,7 +319,7 @@ export default function AllList() {
 
         /* make sure ALL badge-like chips never hide text */
         .badge{
-          white-space: normal;         /* allow wrapping to next line */
+          white-space: normal;
           line-height: 1.15;
           word-break: normal;
           overflow-wrap: anywhere;
@@ -332,6 +352,47 @@ export default function AllList() {
         }
         .search-wrap .form-control:focus{ box-shadow: 0 0 0 .18rem rgba(20,184,166,.25); }
 
+        /* Filter toggle group */
+        .filter-toggle{
+          display: inline-flex;
+          align-items: center;
+          gap: .4rem;
+          padding: .35rem;
+          border-radius: .9rem;
+          border: 1px solid rgba(148,163,184,.35);
+          background: #ffffff;
+          box-shadow: 0 6px 18px rgba(15,23,42,.04);
+          flex-wrap: nowrap;
+        }
+        .filter-btn{
+          border: none;
+          padding: .45rem .8rem;
+          border-radius: .7rem;
+          font-weight: 700;
+          font-size: clamp(0.8rem, 2.3vw, 0.92rem);
+          color: #475569;
+          background: transparent;
+          cursor: pointer;
+          transition: transform .12s ease, box-shadow .12s ease, background .12s ease, color .12s ease;
+          display: inline-flex;
+          align-items: center;
+          gap: .4rem;
+          white-space: nowrap;
+          min-width: 0;
+        }
+        .filter-btn:hover{ background: rgba(148,163,184,.12); color: #0f172a; }
+        .filter-btn.active{
+          color: #fff;
+          background: linear-gradient(120deg, #0ea5e9, #6366f1);
+          box-shadow: 0 10px 22px rgba(99,102,241,.25);
+          transform: translateY(-1px);
+        }
+        .filter-btn .dot{
+          width: .55rem; height: .55rem; border-radius: 999px; background: #cbd5e1;
+          flex-shrink: 0;
+        }
+        .filter-btn.active .dot{ background: #fff; }
+
         .lib-card{
           background: #fff; border-radius: 1rem; display: flex; gap: .9rem; align-items: flex-start;
           padding: .9rem; min-height: 150px; box-shadow: 0 6px 18px rgba(15,23,42,.03);
@@ -363,11 +424,11 @@ export default function AllList() {
 
         .cat-badge{ border: 1px solid; background: rgba(20,184,166,.04); }
 
-        /* 👇 SUBCATEGORY — black text, high contrast, never hidden */
+        /* Subcategory — black text */
         .subcat-badge{
           background: #f8fafc;
           border: 1px solid rgba(148,163,184,.25);
-          color: #0f172a !important;    /* force black-ish text */
+          color: #0f172a !important;
         }
 
         .cat-badge-big{
@@ -404,7 +465,43 @@ export default function AllList() {
         .details-poster img{ width: 100%; height: 100%; object-fit: contain; }
         .details-ph{ color: #94a3b8; font-size: .7rem; font-weight: 600; }
 
-        /* mobile */
+        /* search + filter layout */
+        .actions-row{
+          display: grid;
+          grid-template-columns: 1fr auto;
+          gap: .75rem;
+          align-items: center;
+        }
+        @media (max-width: 575.98px){
+          .actions-row{
+            grid-template-columns: 1fr;
+          }
+        }
+
+        /* Mobile tweaks so third button never hides */
+        @media (max-width: 575.98px){
+          .filter-toggle{
+            width: 100%;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: .4rem;
+            padding: .25rem;
+          }
+          .filter-btn{
+            width: 100%;
+            justify-content: center;
+            /* allow wrapping if ultra-narrow; otherwise keep compact */
+            white-space: normal;
+            padding: .5rem .4rem;
+            font-size: clamp(0.72rem, 3.6vw, 0.9rem);
+          }
+          .filter-btn .dot{ display: none; } /* save space on small screens */
+        }
+        @media (max-width: 360px){
+          .status-pill{ margin-left: 0; }
+        }
+
+        /* mobile cards */
         @media (max-width: 575.98px){
           .lib-card{ display: grid; grid-template-columns: 92px 1fr; column-gap: .9rem; min-height: auto; }
           .lib-poster{ width: 92px; height: 128px; }
@@ -412,10 +509,6 @@ export default function AllList() {
           .details-card{ max-height: 90vh; overflow-y: auto; }
           .details-poster{ width: 120px; height: 170px; }
           .row > [class*="col-"] { width: 100%; }
-        }
-
-        @media (max-width: 360px){
-          .status-pill{ margin-left: 0; }
         }
       `}</style>
 
@@ -450,27 +543,73 @@ export default function AllList() {
         </a>
       </div>
 
-      {/* search */}
+      {/* search + filter */}
       <div className="search-wrap">
-        <div className="input-group">
-          <span className="input-group-text bg-white border-end-0">🔎</span>
-          <input
-            type="search"
-            className="form-control border-start-0"
-            placeholder={`Search ${activeTab}...`}
-            value={search}
-            onChange={(e) => {
-              setPage(1);
-              setSearch(e.target.value);
-            }}
-          />
+        <div className="actions-row">
+          {/* Search input */}
+          <div className="input-group">
+            <span className="input-group-text bg-white border-end-0">🔎</span>
+            <input
+              type="search"
+              className="form-control border-start-0"
+              placeholder={`Search ${activeTab}...`}
+              value={search}
+              onChange={(e) => {
+                setPage(1);
+                setSearch(e.target.value);
+              }}
+            />
+          </div>
+
+          {/* Filter Toggle */}
+          <div
+            className="filter-toggle"
+            role="tablist"
+            aria-label="Filter by watched status"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={viewFilter === "all"}
+              className={`filter-btn ${viewFilter === "all" ? "active" : ""}`}
+              onClick={() => setViewFilter("all")}
+              title="Show all"
+            >
+              <span className="dot" />
+              ALL
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={viewFilter === "watched"}
+              className={`filter-btn ${viewFilter === "watched" ? "active" : ""}`}
+              onClick={() => setViewFilter("watched")}
+              title="Show only watched"
+            >
+              <span className="dot" />
+              Watched
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={viewFilter === "not-watched"}
+              className={`filter-btn ${viewFilter === "not-watched" ? "active" : ""}`}
+              onClick={() => setViewFilter("not-watched")}
+              title="Show only not watched"
+            >
+              <span className="dot" />
+              Not Watched
+            </button>
+          </div>
         </div>
       </div>
 
       {/* chips */}
       <div className="mt-2 d-flex gap-2 flex-wrap">
-        <span className="badge text-bg-light">Showing: {payload.items?.length || 0}</span>
-        <span className="badge text-bg-secondary">Total: {payload.total || 0}</span>
+        <span className="badge text-bg-light">Showing: {filteredItems.length}</span>
+        <span className="badge text-bg-secondary">Total (page): {payload.items?.length || 0}</span>
+        <span className="badge text-bg-success">Watched: {watchedCount}</span>
+        <span className="badge text-bg-danger">Not watched: {notWatchedCount}</span>
         <span className="badge text-bg-dark">Page {page} / {payload.total_pages || 1}</span>
       </div>
 
@@ -492,7 +631,8 @@ export default function AllList() {
           </div>
         ) : (
           <>
-            <Cards items={payload.items || []} type={activeTab} />
+            {/* pass filtered items to Cards */}
+            <Cards items={filteredItems} type={activeTab} />
 
             <div className="d-flex justify-content-between align-items-center mt-4">
               <button

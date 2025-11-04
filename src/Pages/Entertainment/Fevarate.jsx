@@ -27,6 +27,8 @@ const FAVORITE_CATEGORIES = [
 const DEMO_USER_ID = 6;
 const debounce = (fn, ms=400)=>{ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; };
 
+const PAGE_SIZE = 10;
+
 /* ================= COMPONENT ================= */
 const Favorite = () => {
   const { user } = useAuth();
@@ -39,6 +41,7 @@ const Favorite = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState({ movies: [], series: [], count: 0, raw: [] });
   const [searchLoading, setSearchLoading] = useState(false);
+  const [discoverType, setDiscoverType] = useState("all"); // all | movie | series
 
   const [categoryInput, setCategoryInput] = useState("");
   const [categoryData, setCategoryData] = useState({ category: null, counts: null, movies: [], series: [] });
@@ -58,7 +61,7 @@ const Favorite = () => {
   const [favBucket, setFavBucket] = useState("");
   const [favCache, setFavCache] = useState({});
   const [favLoading, setFavLoading] = useState(false);
-  const PAGE_SIZE = 10;
+  const [favType, setFavType] = useState("all"); // all | movie | series
   const [favPageMovies, setFavPageMovies] = useState(0);
   const [favPageSeries, setFavPageSeries] = useState(0);
 
@@ -71,23 +74,53 @@ const Favorite = () => {
   // Toast
   const [toast, setToast] = useState({ open:false, title:"", message:"", tone:"info" });
 
-  /* =============== STYLES (responsive & app-like) =============== */
+  /* =================== FLUID, MOBILE-FIRST STYLES =================== */
   const styles = `
     :root{
+      /* Fluid scales */
+      --fs-10: clamp(10px, 1.8vw, 12px);
+      --fs-11: clamp(11px, 1.9vw, 13px);
+      --fs-12: clamp(12px, 2vw, 14px);
+      --fs-14: clamp(13.5px, 2.2vw, 16px);
+      --fs-16: clamp(14px, 2.4vw, 18px);
+      --fs-18: clamp(15px, 2.8vw, 20px);
+      --fs-20: clamp(16px, 3.2vw, 22px);
+      --fs-24: clamp(18px, 3.8vw, 26px);
+
+      --pad-6: clamp(4px, 1.2vw, 6px);
+      --pad-8: clamp(6px, 1.4vw, 8px);
+      --pad-10: clamp(8px, 1.8vw, 10px);
+      --pad-12: clamp(10px, 2vw, 12px);
+      --pad-14: clamp(12px, 2.2vw, 14px);
+      --pad-16: clamp(12px, 2.4vw, 16px);
+      --gap-6: clamp(4px, 1.2vw, 6px);
+      --gap-8: clamp(6px, 1.4vw, 8px);
+      --gap-10: clamp(8px, 1.8vw, 10px);
+      --gap-12: clamp(10px, 2vw, 12px);
+      --gap-14: clamp(12px, 2.2vw, 14px);
+      --gap-16: clamp(12px, 2.4vw, 16px);
+
+      --tap: 44px;
+
+      /* Colors */
       --bg:#f8fafc; --card:#fff; --text:#0f172a; --muted:#475569; --border:#e2e8f0; --border-strong:#d0d7e2;
       --accent:#2563eb; --accent2:#7c3aed; --green:#10b981; --amber:#f59e0b; --danger:#ef4444;
-      --shadow:0 10px 24px rgba(15,23,42,.08); --shadow-hover:0 14px 32px rgba(15,23,42,.12);
-      --pill-bg:#eef2ff; --pill-text:#4338ca; --chip-bg:#f0f9ff; --chip-text:#0369a1;
-      --item-hover:#f8fafc; --sticky-bg:rgba(255,255,255,.92);
+      --chip-bg:#eef2ff; --chip-text:#4338ca; --light:#fff; --soft:#f1f5f9;
+
+      --shadow:0 8px 20px rgba(2,6,23,.08);
+      --shadow-2:0 10px 28px rgba(2,6,23,.12);
+
       --container-w: 1200px;
+      --poster-w: clamp(52px, 13vw, 96px);
+      --poster-h: clamp(74px, 20vw, 138px);
     }
 
     .fav-container{
       background:var(--bg);
       min-height:100vh; min-height:100dvh;
       color:var(--text);
-      padding: clamp(14px, 2.4vw, 24px);
-      padding-bottom: calc(env(safe-area-inset-bottom, 0px) + clamp(14px, 2.4vw, 24px));
+      padding: var(--pad-14);
+      padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--pad-16));
       font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
       box-sizing: border-box;
     }
@@ -95,137 +128,185 @@ const Favorite = () => {
 
     /* Tabs */
     .tabs{
-      display:flex; gap:8px; border-bottom:2px solid var(--border);
-      margin: 0 auto clamp(12px, 1.8vw, 16px);
-      width:min(100%, var(--container-w));
+      display:flex; gap:var(--gap-8); border-bottom:1px solid var(--border);
+      margin: 0 auto var(--pad-12);
+      width:100%;
       overflow-x:auto; -webkit-overflow-scrolling:touch;
+      padding-bottom: var(--pad-6);
     }
     .tab-btn{
       border:0; background:transparent; color:var(--muted);
-      padding:10px clamp(12px, 1.4vw, 16px);
+      padding: var(--pad-10) var(--pad-12);
       border-radius:10px 10px 0 0; font-weight:800; transition:.2s; white-space:nowrap;
+      font-size: var(--fs-14);
+      min-height: var(--tap);
     }
     .tab-btn:hover{ background:#e0f2fe; color:var(--text); transform:translateY(-1px); }
     .tab-btn.active{ background:#bae6fd; color:var(--text); box-shadow: inset 0 -2px 0 var(--accent); }
 
-    /* Card */
-    .cardish{ background:var(--card); border:1px solid var(--border); border-radius:16px; box-shadow:var(--shadow); overflow:hidden; }
-    .cardish:hover{ box-shadow:var(--shadow-hover); }
-    .cardish .header{
-      padding: clamp(12px, 1.6vw, 16px) clamp(14px, 1.8vw, 20px);
-      border-bottom:1px solid var(--border);
-      display:flex; align-items:center; gap:12px;
-      background:linear-gradient(180deg,#ffffff 0%, #fbfdff 100%);
+    /* Segmented toggle */
+    .seg{
+      display:inline-flex; background:#f1f5f9; border:1px solid var(--border); border-radius:9999px; padding:4px; gap:4px;
     }
-    .cardish .body{ padding: clamp(12px, 1.8vw, 20px) clamp(14px, 1.8vw, 20px); }
+    .seg button{
+      border:0; background:transparent; padding:6px 10px; border-radius:9999px; font-weight:800; font-size:var(--fs-12); color:#334155; min-height:34px;
+    }
+    .seg button.active{ background:#fff; color:#111827; box-shadow:0 1px 0 rgba(0,0,0,.04); border:1px solid var(--border-strong); }
 
-    .title{ font-weight:900; font-size: clamp(14px, 1.6vw, 16px); }
-    .subtitle{ color:var(--muted); }
+    /* Cards */
+    .cardish{ background:var(--card); border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow); overflow:hidden; }
+    .cardish:hover{ box-shadow:var(--shadow-2); }
+    .cardish .header{
+      padding: var(--pad-12) var(--pad-14);
+      border-bottom:1px solid var(--border);
+      display:flex; align-items:center; gap:var(--gap-10);
+      background:linear-gradient(180deg,#ffffff 0%, #fbfdff 100%);
+      flex-wrap:wrap;
+    }
+    .cardish .body{ padding: var(--pad-12) var(--pad-14); }
 
-    .tag{ background:var(--chip-bg); border:1px solid #c6e6ff; color:var(--chip-text); border-radius:9999px; padding:6px 10px; font-size:12px; font-weight:800; }
-    .pill{ background:var(--pill-bg); color:var(--pill-text); border:1px solid #c7d2fe; border-radius:9999px; padding:4px 10px; font-size:12px; font-weight:800; }
+    .title{ font-weight:900; font-size: var(--fs-16); }
+    .subtitle{ color:var(--muted); font-size: var(--fs-12); }
+
+    .tag{ background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; border-radius:9999px; padding: var(--pad-6) var(--pad-10); font-size:var(--fs-10); font-weight:800; }
+    .pill{ background:var(--chip-bg); color:var(--chip-text); border:1px solid #c7d2fe; border-radius:9999px; padding: var(--pad-6) var(--pad-10); font-size:var(--fs-10); font-weight:800; }
 
     input[type="email"], input[type="text"], select{
-      background:#fff; border:1px solid var(--border-strong); color:var(--text); border-radius:10px; padding:10px 12px; outline:none; transition:.2s; width:100%;
+      background:#fff; border:1px solid var(--border-strong); color:var(--text); border-radius:10px; padding: var(--pad-10) var(--pad-12); outline:none; transition:.2s; width:100%;
+      font-size: var(--fs-14);
+      min-height: var(--tap);
     }
     input[type="email"]:focus, input[type="text"]:focus, select:focus{ border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,.2); }
-    input[type="checkbox"]{ width:18px; height:18px; }
-    input[type="checkbox"]:checked{ accent-color:var(--danger); }
 
-    /* Lists */
-    .list-grid{ display:grid; grid-template-columns:repeat(1,1fr); gap:12px; }
+    /* Search input with icons */
+    .input-adorned{ position:relative; }
+    .input-icon-left{ position:absolute; left:10px; top:50%; transform:translateY(-50%); display:inline-flex; align-items:center; pointer-events:none; color:#64748b; }
+    .input-adorned .form-control{ padding-left:38px; transition:border .15s ease, box-shadow .15s ease, transform .05s ease; }
+    .input-adorned .form-control:focus{ transform:translateY(-1px); }
+    .input-clear{ position:absolute; right:10px; top:50%; transform:translateY(-50%); border:0; background:var(--soft); color:#334155; border:1px solid var(--border); border-radius:9999px; padding:4px 8px; font-weight:800; font-size:var(--fs-10); min-height:32px; }
+    .input-clear:hover{ background:#e2e8f0; }
+
+    /* Item with poster (mobile clear) */
+    .list-grid{ display:grid; grid-template-columns:repeat(1,1fr); gap:var(--gap-10); }
     @media (min-width:700px){ .list-grid{ grid-template-columns:repeat(2,1fr); } }
     @media (min-width:1100px){ .list-grid{ grid-template-columns:repeat(3,1fr); } }
 
-    .item{ display:flex; align-items:flex-start; gap:12px; background:#fff; border:1px solid var(--border); border-radius:12px; padding:12px; transition:.15s; }
-    .item:hover{ transform:translateY(-2px); box-shadow:var(--shadow-hover); background:var(--item-hover); border-color:#cbd5e1; }
-    .item h6{ margin:0; font-size:15px; font-weight:900; color:var(--text); }
-    .item small.muted{ color:var(--muted); display:block; }
-    .item .right{ margin-left:auto; text-align:right; display:flex; gap:6px; }
+    .item{
+      display:grid; grid-template-columns: var(--poster-w) 1fr auto; align-items:stretch;
+      gap:var(--gap-10);
+      background:#fff; border:1px solid var(--border); border-radius:12px; padding:var(--pad-10);
+      transition:.15s;
+    }
+    .item:hover{ transform:translateY(-2px); box-shadow:var(--shadow-2); background:#fcfcfd; border-color:#cbd5e1; }
+    .poster{
+      width: var(--poster-w); height: var(--poster-h);
+      border:1px solid var(--border); border-radius:10px; overflow:hidden; background:#fff;
+      display:flex; align-items:center; justify-content:center;
+    }
+    .poster img{ width:100%; height:100%; object-fit:cover; object-position:center; display:block; }
+    .poster .ph{ font-size: var(--fs-10); color:#94a3b8; font-weight:800; text-align:center; padding:4px; }
 
-    .btn{ border:0; border-radius:10px; padding:10px 14px; font-weight:900; transition:.2s; color:#fff; white-space:nowrap; }
+    /* Checkbox pro */
+    .checkwrap{ display:inline-flex; align-items:center; gap:8px; }
+    .checkwrap input[type="checkbox"]{
+      appearance:none; width:20px; height:20px; border-radius:6px; border:1.5px solid #cbd5e1; display:grid; place-items:center; background:#fff; transition:.15s;
+    }
+    .checkwrap input[type="checkbox"]::after{
+      content:""; width:12px; height:12px; transform:scale(0); transition:.12s;
+      clip-path:polygon(14% 44%, 0 59%, 46% 100%, 100% 20%, 84% 7%, 43% 71%);
+      background:transparent;
+    }
+    .checkwrap input[type="checkbox"]:checked{
+      border-color:#22c55e; background:#dcfce7;
+    }
+    .checkwrap input[type="checkbox"]:checked::after{
+      background:#16a34a; transform:scale(1);
+    }
+    .selected-chip{ background:#dcfce7; color:#166534; border:1px solid #86efac; padding:4px 8px; border-radius:9999px; font-weight:800; font-size:var(--fs-10); }
+
+    .item h6{ margin:0; font-size: var(--fs-16); font-weight:900; color:var(--text); line-height:1.25; }
+    .item small.muted{ color:var(--muted); display:block; font-size: var(--fs-12); }
+    .item .right{ margin-left:auto; display:flex; gap:var(--gap-8); align-items:center; }
+
+    /* Buttons */
+    .btn{ border:0; border-radius:10px; padding: var(--pad-10) var(--pad-14); font-weight:900; transition:.2s; color:#fff; white-space:nowrap; font-size: var(--fs-14); min-height: var(--tap); }
     .btn:disabled{ opacity:.65; cursor:not-allowed; }
     .btn:hover{ transform:translateY(-1px); filter:brightness(1.05); }
     .btn-blue{ background:linear-gradient(90deg,#2563eb,#3b82f6); box-shadow:0 6px 16px rgba(37,99,235,.25); }
     .btn-violet{ background:linear-gradient(90deg,#7c3aed,#8b5cf6); box-shadow:0 6px 16px rgba(124,58,237,.25); }
     .btn-green{ background:linear-gradient(90deg,#10b981,#22c55e); box-shadow:0 6px 16px rgba(16,185,129,.25); }
     .btn-amber{ background:linear-gradient(90deg,#f59e0b,#fbbf24); box-shadow:0 6px 16px rgba(245,158,11,.25); }
-    .btn-gray{ background:#fff; color:var(--text); border:1px solid var(--border-strong); }
+    .btn-gray{ background:#fff; color:var(--text); border:1px solid var(--border); }
     .btn-gray:hover{ background:#f8fafc; }
     .btn-danger{ background:linear-gradient(90deg,#ef4444,#f87171); box-shadow:0 6px 16px rgba(239,68,68,.25); }
 
-    .section-title{ font-size: clamp(14px, 1.6vw, 16px); font-weight:900; margin-bottom:8px; color:var(--text); }
-    .divider{ height:1px; background:var(--border); margin:12px 0; }
-    .big-title{ font-weight:900; font-size: clamp(18px, 2.2vw, 28px); color:#111827; background:#fff; padding:10px 12px; border-radius:12px; border:1px solid var(--border); box-shadow:var(--shadow); min-width: 240px; }
+    .big-title{ font-weight:900; font-size: var(--fs-20); color:#111827; background:#fff; padding:var(--pad-10) var(--pad-12); border-radius:12px; border:1px solid var(--border); box-shadow:var(--shadow); min-width: 240px; max-width: 100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
-    /* Sticky actions tuned for phones */
+    .section-title{ font-size: var(--fs-16); font-weight:900; margin-bottom: var(--pad-8); color:var(--text); }
+    .divider{ height:1px; background:var(--border); margin: var(--pad-12) 0; }
+
+    /* Sticky actions */
     .sticky-actions{
       position:sticky; bottom:0;
-      background:var(--sticky-bg); backdrop-filter:blur(6px);
+      background:rgba(255,255,255,.92); backdrop-filter:blur(6px);
       border-top:1px solid var(--border);
-      padding: clamp(8px, 1.6vw, 10px);
+      padding: var(--pad-10);
       border-bottom-left-radius:14px; border-bottom-right-radius:14px;
-      display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap;
+      display:flex; gap:var(--gap-10); align-items:center; justify-content:space-between; flex-wrap:wrap;
     }
 
-    /* Centered sheet (NO overlay) */
-    .sheet-wrap{ position:fixed; inset:0; z-index:60; pointer-events:none; padding: clamp(8px, 2vw, 20px); }
+    /* Favorites grid cards */
+    .grid-modern{display:grid;gap:var(--gap-12);grid-template-columns:repeat(1,1fr)}
+    @media (min-width:700px){.grid-modern{grid-template-columns:repeat(2,1fr)}}
+    @media (min-width:1100px){.grid-modern{grid-template-columns:repeat(3,1fr)}}
+    .media-card{
+      position:relative;background:#fff;border:2px solid #fecaca;border-radius:14px;padding:var(--pad-12);
+      box-shadow:0 6px 18px rgba(15,23,42,.06);transition:.2s; display:grid; grid-template-columns: var(--poster-w) 1fr auto; gap: var(--gap-10); align-items: stretch;
+    }
+    .media-card:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(15,23,42,.10);border-color:#ef4444}
+    .media-poster{ grid-column: 1/2; }
+    .media-title{font-weight:900;font-size: var(--fs-16);color:#111827;margin:0 0 4px; line-height:1.25;}
+    .media-sub{color:#64748b;font-size: var(--fs-12)}
+    .media-meta{display:flex;gap:var(--gap-8);align-items:center;margin-top:var(--pad-8);flex-wrap:wrap}
+    .badge{ background:#fee2e2;color:#7f1d1d;border:1px solid #fecaca;padding:4px 10px;border-radius:9999px;font-weight:800;font-size: var(--fs-10) }
+    .badge-gray{background:#f1f5f9;color:#334155;border:1px solid #e2e8f0}
+    .badge-type{background:#fff7ed;color:#9a3412;border:1px solid #fed7aa}
+    .card-actions{display:flex;gap:var(--gap-8);align-items:center;margin-left:auto}
+
+    /* Pagination */
+    .pager{ display:flex; gap:8px; align-items:center; justify-content:center; margin-top:var(--pad-12); flex-wrap:wrap; }
+    .pager .count{ font-size:var(--fs-12); color:var(--muted); }
+
+    /* Sheet (no overlay) */
+    .sheet-wrap{ position:fixed; inset:0; z-index:60; pointer-events:none; padding: var(--pad-12); }
     .sheet{ pointer-events:auto; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
             width:min(100%, 560px); background:#fff; border:1px solid var(--border);
-            border-radius:14px; box-shadow:var(--shadow-hover); padding: clamp(14px, 2vw, 18px); }
-    .sheet-header{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
-    .sheet-title{ font-weight:900; font-size: clamp(16px, 1.8vw, 18px); color:var(--text); }
-    .sheet-actions{ display:flex; gap:8px; justify-content:flex-end; margin-top:12px; flex-wrap:wrap; }
+            border-radius:14px; box-shadow:var(--shadow-2); padding: var(--pad-14); }
+    .sheet-header{ display:flex; align-items:center; justify-content:space-between; gap:var(--gap-10); margin-bottom:var(--pad-10); flex-wrap: wrap; }
+    .sheet-title{ font-weight:900; font-size: var(--fs-18); color:var(--text); }
+    .sheet-actions{ display:flex; gap:var(--gap-10); justify-content:flex-end; margin-top:var(--pad-12); flex-wrap:wrap; }
 
     /* Toast */
-    .toast-wrap{ position:fixed; inset:0; pointer-events:none; z-index:70; padding: clamp(8px, 2vw, 20px); }
+    .toast-wrap{ position:fixed; inset:0; pointer-events:none; z-index:70; padding: var(--pad-12); }
     .toast{ pointer-events:auto; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
-            background:#fff; border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow-hover);
-            padding:16px 18px; min-width:260px; max-width:520px; text-align:center; }
-    .toast-title{ font-weight:900; margin-bottom:6px; }
-    .toast-msg{ color:var(--muted); }
+            background:#fff; border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow-2);
+            padding: var(--pad-14); min-width:260px; max-width:520px; text-align:center; }
+    .toast-title{ font-weight:900; margin-bottom:6px; font-size: var(--fs-16); }
+    .toast-msg{ color:var(--muted); font-size: var(--fs-12); }
     .toast.ok .toast-title{ color:#065f46; }
     .toast.warn .toast-title{ color:#92400e; }
     .toast.err .toast-title{ color:#7f1d1d; }
 
-    /* Form polish */
-    .input-adorned{ position:relative; }
-    .input-icon-left{ position:absolute; left:10px; top:50%; transform:translateY(-50%); display:inline-flex; align-items:center; pointer-events:none; color:#64748b; }
-    .input-adorned .form-control{ padding-left:38px; transition:border .15s ease, box-shadow .15s ease, transform .05s ease; }
-    .input-adorned .form-control:focus{ transform:translateY(-1px); }
-    .input-clear{ position:absolute; right:10px; top:50%; transform:translateY(-50%); border:0; background:#f1f5f9; color:#334155; border:1px solid #e2e8f0; border-radius:9999px; padding:4px 8px; font-weight:800; font-size:11px; }
-    .input-clear:hover{ background:#e2e8f0; }
-
-    /* Modern red-card grid */
-    .grid-modern{display:grid;gap:14px;grid-template-columns:repeat(1,1fr)}
-    @media (min-width:700px){.grid-modern{grid-template-columns:repeat(2,1fr)}}
-    @media (min-width:1100px){.grid-modern{grid-template-columns:repeat(3,1fr)}}
-    .media-card{
-      position:relative;background:#fff;border:2px solid #fecaca;border-radius:14px;padding:14px;
-      box-shadow:0 6px 18px rgba(15,23,42,.06);transition:.2s
-    }
-    .media-card:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(15,23,42,.10);border-color:#ef4444}
-    .media-title{font-weight:900;font-size:16px;color:#111827;margin:0 0 4px}
-    .media-sub{color:#64748b;font-size:12px}
-    .media-meta{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap}
-    .badge{ background:#fee2e2;color:#7f1d1d;border:1px solid #fecaca;padding:4px 10px;border-radius:9999px;font-weight:800;font-size:11px }
-    .badge-gray{background:#f1f5f9;color:#334155;border:1px solid #e2e8f0}
-    .badge-type{background:#fff7ed;color:#9a3412;border:1px solid #fed7aa}
-    .card-actions{display:flex;gap:8px;align-items:center;margin-left:auto}
-
-    /* Utility tweaks */
+    /* Utils */
     .w-100{ width:100%; }
     .text-center{ text-align:center; }
-    .mt-2{ margin-top:8px; } .mt-3{ margin-top:12px; }
+    .mt-2{ margin-top:var(--pad-8); } .mt-3{ margin-top:var(--pad-12); }
     .ms-auto{ margin-inline-start:auto; }
-    .gap-2{ gap:8px; }
-    .g-2{ gap:8px; }
-    .g-4{ gap:14px; }
-    .row{ display:flex; flex-direction:column; }
-    @media (min-width:768px){ .row{ display:grid; grid-template-columns: 1fr; } }
+    .g-2{ gap:var(--gap-8); }
+    .g-4{ gap:var(--gap-14); }
+    .row{ display:flex; flex-direction:column; gap: var(--gap-14); }
     .col-12{ width:100%; }
 
-    /* Reduce motion for accessibility */
     @media (prefers-reduced-motion: reduce){
       *{ animation-duration:0.001ms !important; animation-iteration-count:1 !important; transition-duration:0.001ms !important; }
     }
@@ -254,12 +335,19 @@ const Favorite = () => {
     });
   };
 
+  const clamp = (n,min,max)=> Math.max(min, Math.min(max, n));
+
+  const normalizePages = (itemsLen, page, setPage)=>{
+    const maxPage = Math.max(0, Math.ceil(itemsLen / PAGE_SIZE) - 1);
+    if (page > maxPage) setPage(maxPage);
+  };
+
   /* =============== API • Discover =============== */
   const doSearch = useMemo(()=> debounce(async(q)=>{
     if (!q?.trim()){ setSearchResults({ movies:[], series:[], count:0, raw:[] }); return; }
     try{
       setSearchLoading(true);
-      const { data } = await axios.get(SEARCH_URL, { params:{ q, limit:30, offset:0 }});
+      const { data } = await axios.get(SEARCH_URL, { params:{ q, limit:60, offset:0 }});
       setSearchResults(splitSearchResults(data.results || []));
     }finally{ setSearchLoading(false); }
   }, 450), []);
@@ -269,7 +357,7 @@ const Favorite = () => {
     if (!categoryInput?.trim()) return;
     try{
       setCategoryLoading(true);
-      const { data } = await axios.get(CAT_URL, { params:{ category: categoryInput, limitMovies:12, limitSeries:12 }});
+      const { data } = await axios.get(CAT_URL, { params:{ category: categoryInput, limitMovies:30, limitSeries:30 }});
       setCategoryData(data || { category:null, counts:null, movies:[], series:[] });
     }catch(e){
       showToast("Category Error","Failed to load category.","err");
@@ -279,7 +367,7 @@ const Favorite = () => {
   const fetchWatch = useMemo(()=> debounce(async(watched)=>{
     try{
       setWatchLoading(true);
-      const { data } = await axios.get(WATCH_URL, { params:{ watched, limit:18, offset:0 }});
+      const { data } = await axios.get(WATCH_URL, { params:{ watched, limit:36, offset:0 }});
       setWatchData(data || { counts:null, movies:[], series:[] });
     }catch(e){
       showToast("Filter Error","Failed to load watch filter.","err");
@@ -338,22 +426,39 @@ const Favorite = () => {
       setFavLoading(true);
       const { data } = await axios.get(BUCKET_URL, { params:{ user_id: AUTH_USER_ID, favorite_category: bucketName }});
       setFavCache(p => ({...p, [bucketName]: data || { movies:[], series:[], counts:{ movies:0, series:0, total:0 }}}));
+      // normalize pages after fetch
+      const d = data || { movies:[], series:[] };
+      normalizePages((d.movies||[]).length, favPageMovies, setFavPageMovies);
+      normalizePages((d.series||[]).length, favPageSeries, setFavPageSeries);
     }catch(e){
       showToast("Load Failed","Could not load this bucket.","err");
     }finally{ setFavLoading(false); }
   };
 
-  /* =============== API • Remove favorite (optimistic) =============== */
+  /* =============== API • Remove favorite (optimistic + normalize) =============== */
   const removeFavorite = async (favorite_id)=>{
     if (!favorite_id) return;
+    let newMoviesLen = null;
+    let newSeriesLen = null;
+
     setFavCache(cache=>{
       if (!favBucket || !cache[favBucket]) return cache;
       const curr = cache[favBucket];
       const movies = curr.movies.filter(x=>x.favorite_id !== favorite_id);
       const series = curr.series.filter(x=>x.favorite_id !== favorite_id);
       const counts = { movies: movies.length, series: series.length, total: movies.length + series.length };
+      newMoviesLen = movies.length;
+      newSeriesLen = series.length;
       return { ...cache, [favBucket]: { ...curr, movies, series, counts } };
     });
+
+    // after optimistic update, normalize current page indexes so pages backfill
+    setTimeout(()=>{
+      const dataNow = favCache[favBucket] || { movies:[], series:[] };
+      normalizePages(newMoviesLen ?? (dataNow.movies||[]).length, favPageMovies, setFavPageMovies);
+      normalizePages(newSeriesLen ?? (dataNow.series||[]).length, favPageSeries, setFavPageSeries);
+    }, 0);
+
     try{
       await axios.post(REMOVE_URL, { user_id: AUTH_USER_ID, favorite_id });
       showToast("Removed","Item deleted from bucket.","ok");
@@ -373,36 +478,61 @@ const Favorite = () => {
   const SubLine = ({ item, label })=>{
     const line1 = `${item.release_year ? `Year: ${item.release_year} • ` : ""}${item.category_name||""}${item.subcategory_name?` • ${item.subcategory_name}`:""}`;
     const extra = label==="movie" ? item.parts : item.seasons;
+    const extraText = Array.isArray(extra) ? extra.join(", ") : extra;
     return (
       <>
         <small className="muted">{line1}</small>
-        {extra?.length ? <small className="muted"><br/>{label==="movie"?"Parts: ":"Seasons: "}{extra.join(", ")}</small> : null}
+        {extraText?.length ? <small className="muted"><br/>{label==="movie"?"Parts: ":"Seasons: "}{extraText}</small> : null}
         {item.genres?.length ? <GenreChips list={item.genres}/> : null}
       </>
     );
   };
 
+  const SelectBox = ({ checked, onChange })=>(
+    <label className="checkwrap" aria-label={checked ? "Unselect" : "Select"}>
+      <input type="checkbox" checked={checked} onChange={e=>onChange(e.target.checked)} />
+    </label>
+  );
+
   const ResultList = ({ items, label })=>(
     <div className="list-grid">
       {items.map(r=>{
         const checked = selectedItems.some(p=>p.type===label && p.id===r.id);
+        const hasPoster = !!r.poster_url;
         return (
           <div className="item" key={`${label}-${r.id}`}>
-            <input
-              type="checkbox"
-              checked={checked}
-              disabled={adding}
-              onChange={e=> addOrRemoveSelected(e.target.checked, {
-                type:label, id:r.id, title:r.title, year:r.release_year,
-                category_id:r.category_id, subcategory_id:r.subcategory_id,
-                poster_url:r.poster_url, is_watched:r.is_watched
-              })}
-            />
-            <div>
-              <h6>{r.title}</h6>
+            {/* poster */}
+            <div className="poster">
+              {hasPoster ? (
+                <img
+                  src={r.poster_url}
+                  alt={`${r.title} poster`}
+                  onError={(e)=>{ e.currentTarget.style.display="none"; e.currentTarget.parentElement.innerHTML='<div class="ph">NO POSTER</div>'; }}
+                />
+              ) : <div className="ph">NO POSTER</div>}
+            </div>
+
+            {/* text */}
+            <div style={{minWidth:0}}>
+              <div style={{display:"flex", alignItems:"center", gap:8, flexWrap:"wrap"}}>
+                <SelectBox
+                  checked={checked}
+                  onChange={(state)=> addOrRemoveSelected(state, {
+                    type:label, id:r.id, title:r.title, year:r.release_year,
+                    category_id:r.category_id, subcategory_id:r.subcategory_id,
+                    poster_url:r.poster_url, is_watched:r.is_watched
+                  })}
+                />
+                <h6 title={r.title} style={{overflow:"hidden", textOverflow:"ellipsis"}}>{r.title}</h6>
+                {checked && <span className="selected-chip">✓ Selected</span>}
+              </div>
               <SubLine item={r} label={label}/>
             </div>
-            <div className="right"><span className="pill">{label==="movie"?"Movie":"Series"}</span></div>
+
+            {/* actions */}
+            <div className="right">
+              <span className="pill">{label==="movie"?"Movie":"Series"}</span>
+            </div>
           </div>
         );
       })}
@@ -410,9 +540,25 @@ const Favorite = () => {
   );
 
   const bucketData = (favBucket && favCache[favBucket]) || { movies:[], series:[], counts:{ movies:0, series:0, total:0 } };
+
+  // page slices (always contiguous; deletion backfills naturally)
   const moviesPageSlice = bucketData.movies.slice(favPageMovies*PAGE_SIZE, favPageMovies*PAGE_SIZE+PAGE_SIZE);
   const seriesPageSlice = bucketData.series.slice(favPageSeries*PAGE_SIZE, favPageSeries*PAGE_SIZE+PAGE_SIZE);
+
   const selectionCount = selectedItems.length;
+
+  const Pager = ({ total, page, setPage })=>{
+    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    const canPrev = page > 0;
+    const canNext = page+1 < totalPages;
+    return (
+      <div className="pager">
+        <button className="btn btn-gray" disabled={!canPrev} onClick={()=> setPage(p=>clamp(p-1,0,totalPages-1))}>Prev</button>
+        <span className="count">Page {page+1} / {totalPages}</span>
+        <button className="btn btn-gray" disabled={!canNext} onClick={()=> setPage(p=>clamp(p+1,0,totalPages-1))}>Next</button>
+      </div>
+    );
+  };
 
   /* =============== JSX =============== */
   return (
@@ -431,12 +577,22 @@ const Favorite = () => {
           {/* Search */}
           <div className="col-12">
             <div className="cardish">
-              <div className="search-header header">
-                <div className="lhs">
+              <div className="search-header header" style={{gap:12}}>
+                <div className="lhs" style={{display:"flex", alignItems:"center", gap:"8px"}}>
                   <span className="title">Search</span>
                   <span className="tag">Live</span>
                 </div>
-                <div className="rhs" style={{display:"flex", alignItems:"center", gap:10}}>
+
+                {/* Type toggle */}
+                <div className="seg" role="tablist" aria-label="Discover content type">
+                  {["all","movie","series"].map(t=>(
+                    <button key={t} className={discoverType===t?"active":""} onClick={()=>setDiscoverType(t)} role="tab" aria-selected={discoverType===t}>
+                      {t==="all"?"All":t==="movie"?"Movies":"Series"}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="rhs" style={{display:"flex", alignItems:"center", gap:"10px", flexWrap:"wrap", marginLeft:"auto"}}>
                   <span className="pill">Results: {searchResults.count}</span>
                   {searchLoading && (
                     <span aria-live="polite" aria-label="Loading results"><LoadingSpiner/></span>
@@ -445,8 +601,8 @@ const Favorite = () => {
               </div>
 
               <div className="body">
-                <div className="row g-2" style={{display:"grid", gridTemplateColumns:"1fr", alignItems:"center"}}>
-                  <div className="col-12">
+                <div className="g-2" style={{display:"grid", gridTemplateColumns:"1fr", alignItems:"center"}}>
+                  <div>
                     <div className="input-adorned">
                       <span className="input-icon-left" aria-hidden="true">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -467,20 +623,30 @@ const Favorite = () => {
                       )}
                     </div>
                   </div>
-                  <div className="col-12" style={{textAlign:"right"}}>
-                    <span className="muted">Try: “Action 2019”, “Sci-Fi”, “Korean”</span>
+                  <div style={{textAlign:"right"}}>
+                    <span className="subtitle">Try: “Action 2019”, “Sci-Fi”, “Korean”</span>
                   </div>
                 </div>
 
                 <div className="divider"/>
-                {!!searchResults.movies.length && (<><div className="section-title">Movies</div><ResultList items={searchResults.movies} label="movie"/></>)}
-                {!!searchResults.series.length && (<><div className="section-title mt-3">Series</div><ResultList items={searchResults.series} label="series"/></>)}
-                {!searchLoading && searchResults.count===0 && (<div className="muted">Start typing above to search…</div>)}
+                {(discoverType==="all" || discoverType==="movie") && !!searchResults.movies.length && (
+                  <>
+                    <div className="section-title">Movies</div>
+                    <ResultList items={searchResults.movies} label="movie"/>
+                  </>
+                )}
+                {(discoverType==="all" || discoverType==="series") && !!searchResults.series.length && (
+                  <>
+                    <div className="section-title mt-3">Series</div>
+                    <ResultList items={searchResults.series} label="series"/>
+                  </>
+                )}
+                {!searchLoading && searchResults.count===0 && (<div className="subtitle">Start typing above to search…</div>)}
               </div>
 
               <div className="sticky-actions">
-                <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-                  <span className="muted">Add to bucket:</span>
+                <div style={{display:"flex",gap:"8px",alignItems:"center",flexWrap:"wrap"}}>
+                  <span className="subtitle">Add to bucket:</span>
                   <div style={{minWidth:240, maxWidth: 360, width:"min(90vw, 360px)"}}>
                     <select className="form-select" value={selectedBucket} onChange={e=>setSelectedBucket(e.target.value)}>
                       {FAVORITE_CATEGORIES.map(c=> <option key={c} value={c}>{c}</option>)}
@@ -498,16 +664,24 @@ const Favorite = () => {
           {/* Category Filter */}
           <div className="col-12">
             <div className="cardish">
-              <div className="header">
+              <div className="header" style={{gap:12}}>
                 <span className="title">Filter by Category</span>
+                {/* Type toggle */}
+                <div className="seg" role="tablist" aria-label="Category type">
+                  {["all","movie","series"].map(t=>(
+                    <button key={t} className={discoverType===t?"active":""} onClick={()=>setDiscoverType(t)} role="tab" aria-selected={discoverType===t}>
+                      {t==="all"?"All":t==="movie"?"Movies":"Series"}
+                    </button>
+                  ))}
+                </div>
                 <span className="subtitle ms-auto">{categoryLoading ? <LoadingSpiner/> : ""}</span>
               </div>
               <div className="body">
-                <div className="row g-2" style={{display:"grid", gridTemplateColumns:"1fr", gap:8}}>
-                  <div className="col-12">
+                <div className="g-2" style={{display:"grid", gridTemplateColumns:"1fr", gap:"8px"}}>
+                  <div>
                     <input className="form-control" placeholder="Type Category Name or ID (e.g., Action Movies or 17)" value={categoryInput} onChange={e=>setCategoryInput(e.target.value)}/>
                   </div>
-                  <div className="col-12">
+                  <div>
                     <button className="btn btn-gray w-100" onClick={fetchCategory} disabled={categoryLoading}>
                       {categoryLoading ? <LoadingSpiner/> : "Apply"}
                     </button>
@@ -517,15 +691,28 @@ const Favorite = () => {
                 {!!categoryData?.category && (
                   <>
                     <div className="divider"/>
-                    <div className="d-flex flex-wrap align-items-center" style={{gap:8, display:"flex", flexWrap:"wrap"}}>
+                    <div style={{display:"flex", flexWrap:"wrap", gap:"8px"}}>
                       <span className="pill">Category: {categoryData.category.name}</span>
                       <span className="pill">Movies: {categoryData.counts?.movies ?? 0}</span>
                       <span className="pill">Series: {categoryData.counts?.series ?? 0}</span>
                       <span className="pill">Total: {categoryData.counts?.overall ?? 0}</span>
                     </div>
-                    {!!categoryData.movies?.length && (<><div className="section-title mt-3">Movies</div><ResultList items={categoryData.movies} label="movie"/></>)}
-                    {!!categoryData.series?.length && (<><div className="section-title mt-3">Series</div><ResultList items={categoryData.series} label="series"/></>)}
-                    {!categoryLoading && !categoryData.movies?.length && !categoryData.series?.length && (<div className="muted mt-2">No items in this category.</div>)}
+
+                    {(discoverType==="all" || discoverType==="movie") && !!categoryData.movies?.length && (
+                      <>
+                        <div className="section-title mt-3">Movies</div>
+                        <ResultList items={categoryData.movies} label="movie"/>
+                      </>
+                    )}
+
+                    {(discoverType==="all" || discoverType==="series") && !!categoryData.series?.length && (
+                      <>
+                        <div className="section-title mt-3">Series</div>
+                        <ResultList items={categoryData.series} label="series"/>
+                      </>
+                    )}
+
+                    {!categoryLoading && !categoryData.movies?.length && !categoryData.series?.length && (<div className="subtitle mt-2">No items in this category.</div>)}
                   </>
                 )}
               </div>
@@ -535,19 +722,27 @@ const Favorite = () => {
           {/* Watch Filter */}
           <div className="col-12">
             <div className="cardish">
-              <div className="header">
+              <div className="header" style={{gap:12}}>
                 <span className="title">Watch Filter</span>
+                {/* Type toggle */}
+                <div className="seg" role="tablist" aria-label="Watch type">
+                  {["all","movie","series"].map(t=>(
+                    <button key={t} className={discoverType===t?"active":""} onClick={()=>setDiscoverType(t)} role="tab" aria-selected={discoverType===t}>
+                      {t==="all"?"All":t==="movie"?"Movies":"Series"}
+                    </button>
+                  ))}
+                </div>
                 <span className="subtitle ms-auto">{watchLoading ? <LoadingSpiner/> : ""}</span>
               </div>
               <div className="body">
-                <div style={{display:"flex",flexWrap:"wrap",gap:8,alignItems:"center"}}>
+                <div style={{display:"flex",flexWrap:"wrap",gap:"8px",alignItems:"center"}}>
                   <div style={{minWidth:160, maxWidth:220, width:"min(60vw, 220px)"}}>
                     <select className="form-select" value={watchFilter} onChange={e=>setWatchFilter(e.target.value)} disabled={watchLoading}>
                       <option value="all">All</option><option value="yes">Watched</option><option value="no">Not Watched</option>
                     </select>
                   </div>
                   {watchData?.counts && (
-                    <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:"8px"}}>
                       <span className="pill">Movies: {watchData.counts.movies.total} (✓ {watchData.counts.movies.watched} / ✗ {watchData.counts.movies.not_watched})</span>
                       <span className="pill">Series: {watchData.counts.series.total} (✓ {watchData.counts.series.watched} / ✗ {watchData.counts.series.not_watched})</span>
                     </div>
@@ -555,14 +750,26 @@ const Favorite = () => {
                 </div>
 
                 <div className="divider"/>
-                {!!watchData.movies?.length && (<><div className="section-title mt-2">Movies</div><ResultList items={watchData.movies} label="movie"/></>)}
-                {!!watchData.series?.length && (<><div className="section-title mt-3">Series</div><ResultList items={watchData.series} label="series"/></>)}
-                {!watchLoading && !watchData.movies?.length && !watchData.series?.length && (<div className="muted">No items for this filter.</div>)}
+                {(discoverType==="all" || discoverType==="movie") && !!watchData.movies?.length && (
+                  <>
+                    <div className="section-title mt-2">Movies</div>
+                    <ResultList items={watchData.movies} label="movie"/>
+                  </>
+                )}
+
+                {(discoverType==="all" || discoverType==="series") && !!watchData.series?.length && (
+                  <>
+                    <div className="section-title mt-3">Series</div>
+                    <ResultList items={watchData.series} label="series"/>
+                  </>
+                )}
+
+                {!watchLoading && !watchData.movies?.length && !watchData.series?.length && (<div className="subtitle">No items for this filter.</div>)}
               </div>
 
               <div className="sticky-actions">
-                <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-                  <span className="muted">Add to bucket:</span>
+                <div style={{display:"flex",gap:"8px",alignItems:"center",flexWrap:"wrap"}}>
+                  <span className="subtitle">Add to bucket:</span>
                   <div style={{minWidth:240, maxWidth: 360, width:"min(90vw, 360px)"}}>
                     <select className="form-select" value={selectedBucket} onChange={e=>setSelectedBucket(e.target.value)} disabled={adding}>
                       {FAVORITE_CATEGORIES.map(c=> <option key={c} value={c}>{c}</option>)}
@@ -584,11 +791,21 @@ const Favorite = () => {
         <div className="row g-4">
           <div className="col-12">
             <div className="cardish">
-              <div className="header" style={{flexWrap:"wrap"}}>
-                <div className="big-title" style={{flexGrow:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+              <div className="header" style={{flexWrap:"wrap", gap:"10px"}}>
+                <div className="big-title" title={favBucket || "Pick a Favorite Bucket"}>
                   {favBucket ? favBucket : "Pick a Favorite Bucket"}
                 </div>
-                <div style={{display:"flex", gap:8, alignItems:"center", flexWrap:"wrap"}}>
+
+                {/* Type toggle */}
+                <div className="seg" role="tablist" aria-label="Favorites type">
+                  {["all","movie","series"].map(t=>(
+                    <button key={t} className={favType===t?"active":""} onClick={()=>{ setFavType(t); }} role="tab" aria-selected={favType===t}>
+                      {t==="all"?"All":t==="movie"?"Movies":"Series"}
+                    </button>
+                  ))}
+                </div>
+
+                <div style={{display:"flex", gap:"8px", alignItems:"center", flexWrap:"wrap", marginLeft:"auto"}}>
                   <div style={{minWidth:240, width:"min(90vw, 340px)"}}>
                     <select
                       className="form-select"
@@ -612,90 +829,120 @@ const Favorite = () => {
               </div>
 
               {!favBucket ? (
-                <div className="body"><div className="muted">Choose a favorite category to see items.</div></div>
+                <div className="body"><div className="subtitle">Choose a favorite category to see items.</div></div>
               ) : (
                 <div className="body">
                   {favLoading ? (
-                    <div style={{display:"flex",alignItems:"center",gap:8}}><LoadingSpiner/> <span className="muted">Loading {favBucket}…</span></div>
+                    <div style={{display:"flex",alignItems:"center",gap:"8px"}}><LoadingSpiner/> <span className="subtitle">Loading {favBucket}…</span></div>
                   ) : (
                     <>
-                      <div style={{display:"flex",flexWrap:"wrap",gap:8, marginBottom:8}}>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:"8px", marginBottom:"8px"}}>
                         <span className="pill">Movies: {bucketData.counts?.movies ?? 0}</span>
                         <span className="pill">Series: {bucketData.counts?.series ?? 0}</span>
                         <span className="pill">Total: {bucketData.counts?.total ?? 0}</span>
                       </div>
 
                       {/* Movies */}
-                      <div className="section-title">Movies</div>
-                      {moviesPageSlice.length ? (
+                      {(favType==="all" || favType==="movie") && (
                         <>
-                          <div className="grid-modern">
-                            {moviesPageSlice.map(m=>(
-                              <div className="media-card" key={`fav-m-${m.favorite_id}`}>
-                                <div style={{display:"flex",gap:8}}>
-                                  <div style={{flexGrow:1, minWidth:0}}>
-                                    <h6 className="media-title" title={m.title}>{m.title}</h6>
-                                    <div className="media-sub">
-                                      {(m.release_year ? `Year: ${m.release_year} • ` : "")}
-                                      {m.category_name || ""}{m.subcategory_name ? ` • ${m.subcategory_name}` : ""}
+                          <div className="section-title">Movies</div>
+                          {bucketData.movies.length ? (
+                            <>
+                              <div className="grid-modern">
+                                {moviesPageSlice.map(m=>{
+                                  const hasPoster = !!m.poster_url;
+                                  return (
+                                    <div className="media-card" key={`fav-m-${m.favorite_id}`}>
+                                      <div className="media-poster poster">
+                                        {hasPoster ? (
+                                          <img
+                                            src={m.poster_url}
+                                            alt={`${m.title} poster`}
+                                            onError={(e)=>{ e.currentTarget.style.display="none"; e.currentTarget.parentElement.innerHTML='<div class="ph">NO POSTER</div>'; }}
+                                          />
+                                        ) : <div className="ph">NO POSTER</div>}
+                                      </div>
+                                      <div style={{flexGrow:1, minWidth:0}}>
+                                        <h6 className="media-title" title={m.title} style={{overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{m.title}</h6>
+                                        <div className="media-sub">
+                                          {(m.release_year ? `Year: ${m.release_year} • ` : "")}
+                                          {m.category_name || ""}{m.subcategory_name ? ` • ${m.subcategory_name}` : ""}
+                                        </div>
+                                        <div className="media-meta">
+                                          {m.category_name ? <span className="badge">{m.category_name}</span> : null}
+                                          {m.subcategory_name ? <span className="badge-gray">{m.subcategory_name}</span> : null}
+                                          <span className="badge-type">Movie</span>
+                                        </div>
+                                      </div>
+                                      <div className="card-actions">
+                                        <button className="btn btn-danger" onClick={()=>removeFavorite(m.favorite_id)}>Delete</button>
+                                      </div>
                                     </div>
-                                    <div className="media-meta">
-                                      {m.category_name ? <span className="badge">{m.category_name}</span> : null}
-                                      {m.subcategory_name ? <span className="badge-gray">{m.subcategory_name}</span> : null}
-                                      <span className="badge-type">Movie</span>
-                                    </div>
-                                  </div>
-                                  <div className="card-actions">
-                                    <button className="btn btn-danger" onClick={()=>removeFavorite(m.favorite_id)}>Delete</button>
-                                  </div>
-                                </div>
+                                  );
+                                })}
                               </div>
-                            ))}
-                          </div>
-                          {(favPageMovies+1)*PAGE_SIZE < (bucketData.movies?.length||0) && (
-                            <div className="text-center mt-3">
-                              <button className="btn btn-gray" onClick={()=>setFavPageMovies(p=>p+1)}>Next</button>
-                            </div>
-                          )}
-                        </>
-                      ) : (<div className="muted">No movies in this bucket (yet).</div>)}
 
-                      <div className="divider"/>
+                              <Pager
+                                total={bucketData.movies.length}
+                                page={favPageMovies}
+                                setPage={setFavPageMovies}
+                              />
+                            </>
+                          ) : (<div className="subtitle">No movies in this bucket (yet).</div>)}
+                        </>
+                      )}
+
+                      {(favType==="all") && <div className="divider"/>}
 
                       {/* Series */}
-                      <div className="section-title">Series</div>
-                      {seriesPageSlice.length ? (
+                      {(favType==="all" || favType==="series") && (
                         <>
-                          <div className="grid-modern">
-                            {seriesPageSlice.map(s=>(
-                              <div className="media-card" key={`fav-s-${s.favorite_id}`}>
-                                <div style={{display:"flex",gap:8}}>
-                                  <div style={{flexGrow:1, minWidth:0}}>
-                                    <h6 className="media-title" title={s.title}>{s.title}</h6>
-                                    <div className="media-sub">
-                                      {(s.release_year ? `Year: ${s.release_year} • ` : "")}
-                                      {s.category_name || ""}{s.subcategory_name ? ` • ${s.subcategory_name}` : ""}
+                          <div className="section-title">Series</div>
+                          {bucketData.series.length ? (
+                            <>
+                              <div className="grid-modern">
+                                {seriesPageSlice.map(s=>{
+                                  const hasPoster = !!s.poster_url;
+                                  return (
+                                    <div className="media-card" key={`fav-s-${s.favorite_id}`}>
+                                      <div className="media-poster poster">
+                                        {hasPoster ? (
+                                          <img
+                                            src={s.poster_url}
+                                            alt={`${s.title} poster`}
+                                            onError={(e)=>{ e.currentTarget.style.display="none"; e.currentTarget.parentElement.innerHTML='<div class="ph">NO POSTER</div>'; }}
+                                          />
+                                        ) : <div className="ph">NO POSTER</div>}
+                                      </div>
+                                      <div style={{flexGrow:1, minWidth:0}}>
+                                        <h6 className="media-title" title={s.title} style={{overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{s.title}</h6>
+                                        <div className="media-sub">
+                                          {(s.release_year ? `Year: ${s.release_year} • ` : "")}
+                                          {s.category_name || ""}{s.subcategory_name ? ` • ${s.subcategory_name}` : ""}
+                                        </div>
+                                        <div className="media-meta">
+                                          {s.category_name ? <span className="badge">{s.category_name}</span> : null}
+                                          {s.subcategory_name ? <span className="badge-gray">{s.subcategory_name}</span> : null}
+                                          <span className="badge-type">Series</span>
+                                        </div>
+                                      </div>
+                                      <div className="card-actions">
+                                        <button className="btn btn-danger" onClick={()=>removeFavorite(s.favorite_id)}>Delete</button>
+                                      </div>
                                     </div>
-                                    <div className="media-meta">
-                                      {s.category_name ? <span className="badge">{s.category_name}</span> : null}
-                                      {s.subcategory_name ? <span className="badge-gray">{s.subcategory_name}</span> : null}
-                                      <span className="badge-type">Series</span>
-                                    </div>
-                                  </div>
-                                  <div className="card-actions">
-                                    <button className="btn btn-danger" onClick={()=>removeFavorite(s.favorite_id)}>Delete</button>
-                                  </div>
-                                </div>
+                                  );
+                                })}
                               </div>
-                            ))}
-                          </div>
-                          {(favPageSeries+1)*PAGE_SIZE < (bucketData.series?.length||0) && (
-                            <div className="text-center mt-3">
-                              <button className="btn btn-gray" onClick={()=>setFavPageSeries(p=>p+1)}>Next</button>
-                            </div>
-                          )}
+
+                              <Pager
+                                total={bucketData.series.length}
+                                page={favPageSeries}
+                                setPage={setFavPageSeries}
+                              />
+                            </>
+                          ) : (<div className="subtitle">No series in this bucket (yet).</div>)}
                         </>
-                      ) : (<div className="muted">No series in this bucket (yet).</div>)}
+                      )}
                     </>
                   )}
                 </div>
@@ -705,8 +952,8 @@ const Favorite = () => {
 
           {!favBucket && (
             <div className="col-12">
-              <div className="cardish" style={{padding:16}}>
-                <div className="body">Choose a bucket above to view and share your favorites.</div>
+              <div className="cardish" style={{padding:"16px"}}>
+                <div className="body subtitle">Choose a bucket above to view and share your favorites.</div>
               </div>
             </div>
           )}
@@ -725,7 +972,7 @@ const Favorite = () => {
           >
             {/* Header */}
             <div className="sheet-header">
-              <div style={{display:"flex", alignItems:"center", gap:10}}>
+              <div style={{display:"flex", alignItems:"center", gap:"10px"}}>
                 <span aria-hidden="true">
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
                     <path d="M4 6h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" stroke="currentColor" strokeWidth="1.5" />
@@ -750,7 +997,7 @@ const Favorite = () => {
               <p className="subtitle" style={{margin:"0 0 10px"}}>Send a nicely formatted PDF of your <strong>{favBucket || "—"}</strong> list to an email address.</p>
 
               <div>
-                <label htmlFor="share-email" className="form-label" style={{fontWeight:800, display:"block", marginBottom:6}}>Recipient email</label>
+                <label htmlFor="share-email" className="form-label" style={{fontWeight:800, display:"block", marginBottom:"6px"}}>Recipient email</label>
                 <div style={{position:"relative"}}>
                   <input
                     id="share-email"
@@ -790,9 +1037,9 @@ const Favorite = () => {
                   )}
                 </div>
                 {shareEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(shareEmail) && (
-                  <div style={{fontSize:12, color:"#b91c1c", marginTop:6}}>Please enter a valid email address.</div>
+                  <div style={{fontSize:"12px", color:"#b91c1c", marginTop:"6px"}}>Please enter a valid email address.</div>
                 )}
-                <div style={{fontSize:12, color:"var(--muted)", marginTop:6}}>Press <kbd>Enter</kbd> to send, or <kbd>Esc</kbd> to close.</div>
+                <div className="subtitle" style={{marginTop:"6px"}}>Press <kbd>Enter</kbd> to send, or <kbd>Esc</kbd> to close.</div>
               </div>
             </div>
 

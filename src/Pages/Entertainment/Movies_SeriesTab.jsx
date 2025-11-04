@@ -50,18 +50,74 @@ function TabButton({ id, active, onClick, onKeyDown, children, c1, c2 }) {
         role="tab"
         aria-selected={active}
         aria-controls={`panel-${id}`}
-        className={`nav-link pill px-3 py-2 rounded-pill fw-medium ${active ? "active" : ""}`}
+        className={`nav-link pill rounded-pill fw-medium ${active ? "active" : ""}`}
         onClick={onClick}
         onKeyDown={onKeyDown}
-        style={{ whiteSpace: "nowrap", ["--c1"]: c1, ["--c2"]: c2 }}
+        style={{ ["--c1"]: c1, ["--c2"]: c2 }}
       >
         <span className="pill-ripple" aria-hidden="true" />
-        <span className="d-flex align-items-center justify-content-center w-100 gap-2">
+        <span className="d-flex align-items-center justify-content-center w-100 gap-2 tab-content-wrap">
           <span className="me-1" aria-hidden="true">{children && children[0]}</span>
           <span className="tab-label text-truncate">{children && children[1] ? children[1] : children}</span>
         </span>
       </button>
     </li>
+  );
+}
+
+/** Underline INSIDE the UL: positions by offsetLeft/offsetTop for perfect multi-row support */
+function ActiveUnderlineInsideUL({ activeKey, c1, c2 }) {
+  const ulRef = useRef(null);
+  const [pos, setPos] = useState({ left: 0, top: 0, width: 0, visible: false });
+
+  useEffect(() => {
+    const ul = ulRef.current?.parentElement;
+    if (!ul) return;
+
+    const compute = () => {
+      const btn = ul.querySelector(`#tab-${activeKey}`);
+      if (!btn) return;
+      const left = btn.offsetLeft;
+      const top = btn.offsetTop + btn.offsetHeight - 4; // underline height
+      const width = btn.offsetWidth;
+      setPos({ left, top, width, visible: true });
+
+      // Keep the active button visible
+      btn.scrollIntoView({ inline: "center", behavior: "smooth", block: "nearest" });
+    };
+
+    compute();
+
+    const ro = new ResizeObserver(compute);
+    ro.observe(ul);
+    ul.addEventListener("scroll", compute);
+    window.addEventListener("resize", compute);
+    window.addEventListener("__tab_resize", compute);
+    const raf = requestAnimationFrame(compute);
+
+    return () => {
+      ro.disconnect();
+      ul.removeEventListener("scroll", compute);
+      window.removeEventListener("resize", compute);
+      window.removeEventListener("__tab_resize", compute);
+      cancelAnimationFrame(raf);
+    };
+  }, [activeKey]);
+
+  return (
+    <div
+      ref={ulRef}
+      className="tab-underline"
+      aria-hidden="true"
+      style={{
+        left: pos.left,
+        top: pos.top,
+        width: pos.width,
+        opacity: pos.visible ? 1 : 0,
+        ["--u1"]: c1,
+        ["--u2"]: c2,
+      }}
+    />
   );
 }
 
@@ -126,6 +182,19 @@ export default function Movies_SeriesTab() {
     btn?.scrollIntoView({ inline: "center", behavior: "smooth", block: "nearest" });
   }, [active.key]);
 
+  // enable wheel horizontal scroll for the tab strip (desktop convenience)
+  useEffect(() => {
+    const el = tablistRef.current;
+    if (!el) return;
+    const onWheel = (e) => {
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+        el.scrollLeft += e.deltaY;
+      }
+    };
+    el.addEventListener("wheel", onWheel, { passive: true });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
   return (
     <>
       <Navbar />
@@ -172,13 +241,22 @@ export default function Movies_SeriesTab() {
       {/* Body */}
       <div className="container my-4">
         {/* Sticky tab bar below any fixed navbar */}
-        <div className="position-sticky bg-white pt-2" style={{ zIndex: 1020, top: "var(--fixed-top, 0px)" }}>
+        <div
+          className="position-sticky bg-white pt-2 tabbar-sticky"
+          style={{ zIndex: 1020, top: "var(--fixed-top, 0px)", boxShadow: "0 8px 18px rgba(2,6,23,.06)" }}
+        >
           <div className="position-relative">
             <ul
               ref={tablistRef}
-              className="nav nav-pills"
+              className="nav nav-pills eh-tabs"
               role="tablist"
-              style={{ gap: ".45rem", overflowX: "auto", WebkitOverflowScrolling: "touch", position: "relative" }}
+              style={{
+                gap: ".5rem",
+                overflowX: "auto",
+                WebkitOverflowScrolling: "touch",
+                position: "relative",
+                scrollbarWidth: "thin",
+              }}
             >
               {tabs.map((t, i) => (
                 <TabButton
@@ -194,14 +272,14 @@ export default function Movies_SeriesTab() {
                 </TabButton>
               ))}
 
-              {/* Underline is rendered INSIDE the UL and positioned by top/left/width */}
+              {/* Underline inside UL */}
               <ActiveUnderlineInsideUL activeKey={activeTab} c1={active.c1} c2={active.c2} />
             </ul>
           </div>
         </div>
 
-        {/* Active tab content */}
-        <div className="tab-content mt-3">
+        {/* Active tab content (SCOPED to avoid Fevarate changing base sizes) */}
+        <div className="tab-content mt-3 ent-scope">
           <div
             id={`panel-${active.key}`}
             role="tabpanel"
@@ -220,68 +298,138 @@ export default function Movies_SeriesTab() {
 
       {/* Styles */}
       <style>{`
-        ul[role='tablist'] { --tab-count: 6; }
+        :root{
+          --tab-min: 110px;
+          --tab-max: 340px;
+          --tap: 44px;
+        }
 
-        .nav-pills { display: flex; gap: .45rem; align-items: stretch; padding: .5rem; }
-        .nav-pills .nav-item { flex: 1 1 0; min-width: 110px; max-width: 320px; }
-        .nav-pills .nav-link.pill { display: block; width: 100%; text-align: center; padding-left: .75rem; padding-right: .75rem; box-sizing: border-box; }
+        /* --------- TAB STRIP (responsive) ---------- */
+        .eh-tabs{
+          display:flex; align-items:stretch; gap:.5rem; padding:.5rem;
+          scroll-snap-type: x mandatory;
+          overscroll-behavior-x: contain;
+          -webkit-overflow-scrolling: touch;
+          mask-image: linear-gradient(to right, transparent 0, black 14px, black calc(100% - 14px), transparent 100%);
+        }
+        .eh-tabs .nav-item{
+          flex: 0 0 auto;
+          min-width: var(--tab-min); max-width: var(--tab-max);
+          scroll-snap-align: center;
+        }
+        @media (min-width: 768px){
+          .eh-tabs .nav-item{ flex: 1 1 0; min-width: 128px; }
+        }
 
-        .tab-label { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
+        /* Tab button content sizing (auto-small on phones, bigger on desktop) */
         .nav-pills .nav-link.pill {
           position: relative;
-          --bg1: color-mix(in srgb, var(--c1) 12%, #fff);
-          --bg2: color-mix(in srgb, var(--c2) 12%, #fff);
+          --bg1: color-mix(in oklab, var(--c1) 12%, #fff);
+          --bg2: color-mix(in oklab, var(--c2) 12%, #fff);
           background: linear-gradient(135deg, var(--bg1), var(--bg2));
-          border: 1px solid transparent;
+          border: 1px solid #e8edf2;
           color: #2b2f32;
-          transition: transform .12s ease, box-shadow .18s ease, background .18s ease, color .18s ease, border-color .18s ease;
+          transition:
+            transform .12s ease,
+            box-shadow .18s ease,
+            background .18s ease,
+            color .18s ease,
+            border-color .18s ease,
+            filter .18s ease;
           overflow: hidden;
           isolation: isolate;
+          min-height: var(--tap);
+
+          /* responsive font + padding */
+          font-size: clamp(12px, 2.8vw, 15px);
+          padding: clamp(6px, 1.8vw, 10px) clamp(10px, 3vw, 16px);
+          line-height: 1.2;
         }
+        @media (min-width: 992px){
+          .nav-pills .nav-link.pill {
+            font-size: clamp(14px, 1.1vw, 16px);
+            padding: 10px 16px;
+          }
+        }
+
+        .tab-label { display:inline-block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
         .nav-pills .nav-link.pill:hover {
           transform: translateY(-1px);
-          box-shadow: 0 8px 20px color-mix(in srgb, var(--c2) 24%, transparent);
+          box-shadow: 0 10px 22px color-mix(in oklab, var(--c2) 22%, transparent);
           color: #111;
-          background: linear-gradient(135deg, color-mix(in srgb, var(--c1) 28%, #000 6%), color-mix(in srgb, var(--c2) 28%, #000 6%));
+          background: linear-gradient(135deg,
+            color-mix(in oklab, var(--c1) 26%, #fff 0%),
+            color-mix(in oklab, var(--c2) 26%, #fff 0%)
+          );
+          border-color: color-mix(in oklab, var(--c2) 32%, #e8edf2);
         }
         .nav-pills .nav-link.pill:focus-visible {
           outline: none;
-          box-shadow: 0 0 0 .22rem color-mix(in srgb, var(--c1) 35%, var(--c2) 35%, #0000 30%);
+          box-shadow: 0 0 0 .22rem color-mix(in oklab, var(--c1) 35%, var(--c2) 35%, #0000 30%);
         }
         .nav-pills .nav-link.pill.active {
           color: #fff;
           background: linear-gradient(135deg, var(--c1), var(--c2));
           border-color: transparent;
-          box-shadow: 0 10px 26px color-mix(in srgb, var(--c2) 32%, transparent);
+          box-shadow:
+            0 10px 26px color-mix(in oklab, var(--c2) 28%, transparent),
+            0 0 0 1px color-mix(in oklab, #fff 20%, #0000 80%) inset;
           transform: translateY(-1px);
+          filter: saturate(1.02);
         }
 
+        /* Press ripple */
         .pill .pill-ripple {
           position: absolute; inset: 0; pointer-events: none; opacity: 0;
-          background: radial-gradient(120px 60px at var(--x,50%) var(--y,50%), color-mix(in srgb, var(--c1) 30%, transparent), transparent 60%);
+          background:
+            radial-gradient(140px 60px at var(--x,50%) var(--y,50%),
+              color-mix(in oklab, var(--c1) 32%, transparent),
+              transparent 60%);
           transition: opacity .35s ease;
         }
         .pill:active .pill-ripple { opacity: .55; transition: opacity .2s ease; }
 
-        /* Underline element (now uses top/left/width so it sits under the active pill only) */
+        /* Magnetic underline */
         .tab-underline {
           position: absolute;
-          height: 4px;
-          border-radius: 8px;
+          height: 4px; border-radius: 8px;
           background: linear-gradient(90deg, var(--u1), var(--u2));
           box-shadow: 0 6px 18px rgba(0,0,0,.12);
           pointer-events: none;
-          transition: transform .28s cubic-bezier(.2,.8,.2,1), width .28s cubic-bezier(.2,.8,.2,1),
-                      opacity .15s ease, background .2s ease, top .28s cubic-bezier(.2,.8,.2,1), left .28s cubic-bezier(.2,.8,.2,1);
+          transition:
+            transform .28s cubic-bezier(.2,.8,.2,1),
+            width .28s cubic-bezier(.2,.8,.2,1),
+            opacity .15s ease,
+            background .2s ease,
+            top .28s cubic-bezier(.2,.8,.2,1),
+            left .28s cubic-bezier(.2,.8,.2,1);
         }
 
-        @media (max-width: 720px) {
-          .nav-pills { padding: .35rem; }
-          .nav-pills .nav-item { flex: 0 0 auto; min-width: 120px; }
+        /* Sticky bar soft divider */
+        .tabbar-sticky { border-bottom: 1px solid #eef2f6; }
+
+        /* ----------------- TYPOGRAPHY SANDBOX -----------------
+           This prevents Fevarate tab (or any subpage) from changing global sizes */
+        .ent-scope {
+          font-size: 1rem;
+          line-height: 1.5;
         }
-        @media (min-width: 1200px) {
-          .nav-pills .nav-item { max-width: 260px; }
+        .ent-scope :where(p, li, span, small, strong, em) { font-size: 1rem; }
+        .ent-scope h1 { font-size: 1.75rem; line-height: 1.25; }
+        .ent-scope h2 { font-size: 1.25rem; line-height: 1.35; }
+        .ent-scope h3 { font-size: 1.125rem; line-height: 1.35; }
+        .ent-scope h4 { font-size: 1rem; line-height: 1.35; }
+        .ent-scope h5, .ent-scope h6 { font-size: .95rem; line-height: 1.35; }
+        @media (min-width: 992px){
+          .ent-scope h1 { font-size: 2rem; }
+          .ent-scope h2 { font-size: 1.35rem; }
+          .ent-scope h3 { font-size: 1.2rem; }
+        }
+
+        /* Improve small-screen feel a bit more */
+        @media (max-width: 720px) {
+          .eh-tabs { padding: .35rem .4rem; gap: .4rem; }
         }
       `}</style>
 
@@ -303,63 +451,5 @@ export default function Movies_SeriesTab() {
         }}
       />
     </>
-  );
-}
-
-/** Underline INSIDE the UL: positions by offsetLeft/offsetTop for perfect multi-row support */
-function ActiveUnderlineInsideUL({ activeKey, c1, c2 }) {
-  const ulRef = useRef(null);
-  const [pos, setPos] = useState({ left: 0, top: 0, width: 0, visible: false });
-
-  useEffect(() => {
-    // UL is the parent of this component (rendered inside the UL)
-    const ul = ulRef.current?.parentElement;
-    if (!ul) return;
-
-    const compute = () => {
-      const btn = ul.querySelector(`#tab-${activeKey}`);
-      if (!btn) return;
-      // Use offsets so wrapping rows are handled
-      const left = btn.offsetLeft;
-      const top = btn.offsetTop + btn.offsetHeight - 4; // 4px underline height
-      const width = btn.offsetWidth;
-      setPos({ left, top, width, visible: true });
-
-      // keep the active button visible
-      btn.scrollIntoView({ inline: "center", behavior: "smooth", block: "nearest" });
-    };
-
-    compute();
-
-    const ro = new ResizeObserver(compute);
-    ro.observe(ul);
-    ul.addEventListener("scroll", compute);
-    window.addEventListener("resize", compute);
-    window.addEventListener("__tab_resize", compute);
-    const raf = requestAnimationFrame(compute);
-
-    return () => {
-      ro.disconnect();
-      ul.removeEventListener("scroll", compute);
-      window.removeEventListener("resize", compute);
-      window.removeEventListener("__tab_resize", compute);
-      cancelAnimationFrame(raf);
-    };
-  }, [activeKey]);
-
-  return (
-    <div
-      ref={ulRef}
-      className="tab-underline"
-      aria-hidden="true"
-      style={{
-        left: pos.left,
-        top: pos.top,
-        width: pos.width,
-        opacity: pos.visible ? 1 : 0,
-        ["--u1"]: c1,
-        ["--u2"]: c2,
-      }}
-    />
   );
 }

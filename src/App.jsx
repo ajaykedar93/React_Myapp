@@ -18,9 +18,7 @@ import Download from "./Pages/Entertainment/Download";
 import Fevarate from "./Pages/Entertainment/Fevarate";
 import LoadingSpiner from "./Pages/Entertainment/LoadingSpiner";
 import Manage from "./Pages/Entertainment/Manage";
-import MoviesManager from "./Pages/Entertainment/MoviesManager";
 import Movies_SeriesTab from "./Pages/Entertainment/Movies_SeriesTab";
-import SeriesManager from "./Pages/Entertainment/SeriesManager";
 import AllList from "./Pages/Entertainment/AllList";
 
 // Transaction pages
@@ -161,22 +159,7 @@ function AppRoutes() {
           </PrivateRoute>
         }
       />
-      <Route
-        path="/movies-manager"
-        element={
-          <PrivateRoute>
-            <MoviesManager />
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/series-manager"
-        element={
-          <PrivateRoute>
-            <SeriesManager />
-          </PrivateRoute>
-        }
-      />
+      
       <Route
         path="/all-list"
         element={

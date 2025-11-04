@@ -9,9 +9,12 @@ function Navbar() {
 
   return (
     <>
+      {/* Mobile-only tiny safe top space (prevents notch/status overlap & gives air) */}
+      <div className="eh-mobile-topspace" aria-hidden="true" />
+
       {/* Fixed, full-width navbar */}
       <nav className="navbar navbar-expand-lg navbar-dark eh-nav eh-fixed">
-        <div className="container">
+        <div className="container eh-container">
           {/* Brand */}
           <Link
             className="navbar-brand d-flex align-items-center gap-2 eh-brand"
@@ -23,7 +26,7 @@ function Navbar() {
           </Link>
 
           {/* Right-side single Dashboard button */}
-          <div className="d-flex align-items-center">
+          <div className="d-flex align-items-center ms-auto">
             <Link
               className={`btn btn-sm eh-chip ${isManage ? "is-active" : ""}`}
               to="/dashboard"
@@ -40,21 +43,47 @@ function Navbar() {
       <div className="eh-nav-spacer" aria-hidden="true" />
 
       <style>{`
-        /* === Fixed layout: navbar stays fixed; content below scrolls === */
+        /* ===== Layout scales & safe areas ===== */
+        :root{
+          --eh-nav-h: 72px;                 /* desktop height */
+          --eh-gap: clamp(6px, 1.4vw, 10px);
+          --eh-text: clamp(14px, 2.2vw, 16px);
+          --eh-brand: clamp(16px, 3vw, 20px);
+          --eh-safe-top: env(safe-area-inset-top, 0px);
+        }
+        @media (max-width: 575.98px){
+          :root{ --eh-nav-h: 64px; }
+        }
+
+        /* Small space ABOVE nav ONLY on mobile (plus safe area) */
+        .eh-mobile-topspace{
+          display: none;
+          height: calc(6px + var(--eh-safe-top));
+          background: transparent;
+        }
+        @media (max-width: 575.98px){
+          .eh-mobile-topspace{ display:block; }
+        }
+
+        /* Fixed layout: navbar stays fixed; content below scrolls */
         .eh-fixed {
           position: fixed !important;
           top: 0; left: 0; right: 0;
           width: 100%;
           z-index: 1100;
         }
-        /* Spacer matches the navbar height (desktop 72 / mobile 64) */
-        .eh-nav-spacer { height: var(--eh-nav-h, 72px); }
+        /* Spacer equals navbar height */
+        .eh-nav-spacer { height: var(--eh-nav-h); }
 
-        /* ===== Blue Guardian Theme (same size as other pages) ===== */
+        /* Container spacing tuned for small screens too */
+        .eh-container{
+          display:flex; align-items:center; gap: var(--eh-gap);
+          min-height: var(--eh-nav-h);
+        }
+
+        /* ===== Blue Guardian Theme ===== */
         .eh-nav {
-          --eh-nav-h: 72px;
-
-          /* palette (slightly different shades than last time) */
+          /* palette */
           --c1: #1d4ed8;  /* blue-700 */
           --c2: #38bdf8;  /* sky-400 */
           --c3: #60a5fa;  /* blue-400 (accent blend) */
@@ -76,11 +105,9 @@ function Navbar() {
           -webkit-backdrop-filter: saturate(140%) blur(7px);
           box-shadow: var(--shadow);
           border-bottom: 1px solid var(--light);
-          position: relative;
           display: flex;
           align-items: center;
         }
-        @media (max-width: 575.98px) { .eh-nav { --eh-nav-h: 64px; } }
 
         /* Slim bottom glow line */
         .eh-nav::after{
@@ -93,7 +120,9 @@ function Navbar() {
         /* Brand icon bubble */
         .eh-brand-icon {
           display: inline-grid; place-items: center;
-          width: 36px; height: 36px; border-radius: 10px;
+          width: clamp(30px, 5vw, 36px);
+          height: clamp(30px, 5vw, 36px);
+          border-radius: 10px;
           background:
             radial-gradient(120px 120px at 30% 30%,
               color-mix(in oklab, var(--c1) 52%, transparent),
@@ -102,17 +131,21 @@ function Navbar() {
             inset 0 0 0 1px var(--light),
             0 10px 22px color-mix(in oklab, var(--c2) 32%, transparent);
           transform: translateZ(0);
+          font-size: clamp(14px, 3.2vw, 18px);
         }
 
-        /* Animated gradient brand text (subtle) */
+        /* Animated gradient brand text (kept visible on mobile) */
         .eh-brand-text {
           font-weight: 800; letter-spacing: .2px;
-          background: linear-gradient(90deg, #bfdbfe, #7dd3fc, #bfdbfe); /* blue-200 → sky-300 */
+          font-size: var(--eh-brand);
+          background: linear-gradient(90deg, #bfdbfe, #7dd3fc, #bfdbfe);
           background-size: 200% 100%;
           -webkit-background-clip: text; background-clip: text;
           color: transparent;
           animation: ehShift 7s ease-in-out infinite;
           text-shadow: 0 0 .01px rgba(0,0,0,0.01);
+          white-space: nowrap;
+          max-width: 100%;
         }
         @keyframes ehShift {
           0% { background-position: 0% 50%; }
@@ -128,13 +161,15 @@ function Navbar() {
           filter: drop-shadow(0 12px 30px color-mix(in oklab, var(--c1) 26%, transparent));
         }
 
-        /* Dashboard pill button (chip) — same size as other pages */
+        /* Dashboard pill button (chip) */
         .eh-chip {
           --bg: linear-gradient(135deg, var(--c1), var(--c2));
           --bg2: linear-gradient(135deg, var(--c2), var(--c1));
           border-radius: 999px;
-          padding-inline: 1.1rem;
+          padding-inline: clamp(.8rem, 2.6vw, 1.1rem);
+          padding-block: .35rem;
           font-weight: 600;
+          font-size: var(--eh-text);
           color: #fff !important;
           border: none;
           background: var(--bg);
@@ -142,6 +177,7 @@ function Navbar() {
           transition: transform .15s ease, box-shadow .22s ease, filter .22s ease, background .22s ease;
           position: relative;
           overflow: hidden; isolation: isolate;
+          display:inline-flex; align-items:center;
         }
         .eh-chip .dot {
           width: 8px; height: 8px; border-radius: 50%;
@@ -163,6 +199,14 @@ function Navbar() {
         .eh-chip.is-active {
           filter: brightness(1.02);
           box-shadow: 0 10px 26px color-mix(in oklab, var(--c1) 36%, transparent);
+        }
+
+        /* Keep everything visible on small screens (no collapse/hide) */
+        @media (max-width: 575.98px){
+          .navbar { padding-top: .25rem; padding-bottom: .25rem; }
+          .eh-brand-text { letter-spacing: .1px; }
+          .eh-container { gap: 10px; }
+          .eh-chip .dot { margin-right: .4rem; }
         }
       `}</style>
     </>
