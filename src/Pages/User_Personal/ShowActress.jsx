@@ -19,7 +19,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
  *  - onDeleted (function)       -> optional callback after actress deletion
  */
 export default function ShowActress({ actressId, onDeleted }) {
-  const BASE = "http://localhost:5000";
+  const BASE = "https://express-backend-myapp.onrender.com";
 
   const PAGE_LIMIT = 24; // thumbnails + gallery page size
 
