@@ -6,7 +6,7 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import UserInvestment from "./UserInvestments";
 import PasswordManager from "./PasswordManager";
 import Act_Favorite from "./AddfevActress";
-import ShowActress from "./ShowActress";
+import ShowActress from "./ActressesPage";
 import GetPassword from "./GetPassword";
 import Notes from "./Notes";
 import WebsitesUrl from "./WebsitesUrl";
