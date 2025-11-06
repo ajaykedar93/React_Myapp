@@ -1,18 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import Portal from "../../components/Portal";
 
-/**
- * ActressesPage.jsx — Full page (List + Detail) with % progress overlay
- *
- * Endpoints used (FULL URLs):
- *   LIST  GET    https://express-backend-myapp.onrender.com/api/act_favorite
- *   ONE   GET    https://express-backend-myapp.onrender.com/api/act_favorite/:id?images=page&offset=0&limit=30
- *   IMGS  GET    https://express-backend-myapp.onrender.com/api/act_favorite/:id/images?offset=&limit=
- *   ADD   POST   https://express-backend-myapp.onrender.com/api/act_favorite/:id/images/append   (JSON: {images:[...]} )
- *   DELI  POST   https://express-backend-myapp.onrender.com/api/act_favorite/:id/images/delete   (JSON: {urls:[...]} or {indexes:[...]} )
- *   DELR  DELETE https://express-backend-myapp.onrender.com/api/act_favorite/:id
- */
-
+/** Minimal detail view: ONLY profile image + 4 buttons */
 const BASE = "https://express-backend-myapp.onrender.com";
 const API = {
   list: (q, country, name, series) => {
@@ -33,51 +23,7 @@ const API = {
 const PAGE_LIMIT_IMAGES = 30;
 const PAGE_SIZE_LIST = 5;
 
-/* ---------------- % Progress overlay helpers ---------------- */
-function useProgress() {
-  const [state, setState] = useState({ visible: false, percent: 0, label: "" });
-  const timerRef = useRef(null);
-
-  const start = (label = "Loading…", initial = 10) => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    setState({ visible: true, percent: initial, label });
-    timerRef.current = setInterval(() => {
-      setState((s) => {
-        const next = Math.min(90, s.percent + Math.ceil((100 - s.percent) * 0.08));
-        return { ...s, percent: next };
-      });
-    }, 180);
-  };
-
-  const bump = (n = 8) =>
-    setState((s) => ({ ...s, percent: Math.min(90, s.percent + n) }));
-
-  const done = () => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    setState((s) => ({ ...s, percent: 100 }));
-    setTimeout(() => setState({ visible: false, percent: 0, label: "" }), 350);
-  };
-
-  useEffect(() => () => timerRef.current && clearInterval(timerRef.current), []);
-  return { state, start, bump, done };
-}
-
-function LoadingOverlay({ visible, percent, label }) {
-  if (!visible) return null;
-  return (
-    <div style={S.overlayBackdrop} aria-busy="true" aria-live="polite">
-      <div style={S.overlayCard}>
-        <div style={S.overlayLabel}>{label}</div>
-        <div style={S.progressBarWrap}>
-          <div style={{ ...S.progressBarFill, width: `${Math.max(1, Math.min(100, Math.round(percent)))}%` }} />
-        </div>
-        <div style={S.progressPct}>{Math.round(percent)}%</div>
-      </div>
-    </div>
-  );
-}
-
-/* --------------- utils --------------- */
+/* ---------- utils ---------- */
 async function safeFetchJSON(url, options) {
   let resp;
   try { resp = await fetch(url, options); }
@@ -87,53 +33,132 @@ async function safeFetchJSON(url, options) {
     try { const j = await resp.json(); msg = j?.error || msg; } catch {}
     throw new Error(msg);
   }
+  if (resp.status === 204) return {};
   try { return await resp.json(); } catch { return {}; }
 }
 const isFiniteNum = (n) => Number.isFinite(Number(n));
 
-/* ---------------- Centered popup ---------------- */
-function CenterPopup({ open, type = "info", message = "", onClose }) {
-  if (!open) return null;
+const normalizeUrl = (u) => {
+  try { const x = new URL(String(u)); return `${x.origin}${x.pathname}`.trim(); }
+  catch { return String(u || "").split("#")[0].split("?")[0].trim(); }
+};
+const uniqueImages = (arr) => {
+  const seen = new Set(); const out = [];
+  for (const u of arr || []) { const key = normalizeUrl(u); if (key && !seen.has(key)) { seen.add(key); out.push(u); } }
+  return out;
+};
+
+/* ---------- % Progress overlay (centered via Portal) ---------- */
+function useProgress() {
+  const [state, setState] = useState({ visible: false, percent: 0, label: "" });
+  const timerRef = useRef(null);
+
+  const start = (label = "Loading…", initial = 10) => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    setState({ visible: true, percent: initial, label });
+    timerRef.current = setInterval(() => {
+      setState((s) => ({ ...s, percent: Math.min(90, s.percent + Math.ceil((100 - s.percent) * 0.08)) }));
+    }, 180);
+  };
+  const bump = (n = 8) => setState((s) => ({ ...s, percent: Math.min(90, s.percent + n) }));
+  const done = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    setState((s) => ({ ...s, percent: 100 }));
+    setTimeout(() => setState({ visible: false, percent: 0, label: "" }), 350);
+  };
+  useEffect(() => () => timerRef.current && clearInterval(timerRef.current), []);
+  return { state, start, bump, done, set: setState };
+}
+function LoadingOverlay({ visible, percent, label }) {
+  if (!visible) return null;
   return (
-    <div style={U.popupBackdrop} onClick={onClose}>
+    <Portal>
       <div
-        role="alertdialog"
-        aria-modal="true"
-        style={{ ...U.popupCard, ...(type === "error" ? U.popError : type === "success" ? U.popSuccess : {}) }}
-        onClick={(e) => e.stopPropagation()}
+        className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+        style={{
+          inset: 0,
+          background: "rgba(0,0,0,0.45)",
+          zIndex: 30000,
+          padding: 12,
+          paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)"
+        }}
+        aria-busy="true"
+        aria-live="polite"
       >
-        <div style={U.popupMsg}>{message}</div>
-        <button style={U.popupBtn} onClick={onClose}>OK</button>
+        <div className="bg-white rounded-3 shadow p-3" style={{ width: "min(440px, 90vw)" }}>
+          <div className="fw-bold mb-2 text-center">{label}</div>
+          <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)}>
+            <div className="progress-bar" style={{ width: `${Math.max(1, Math.min(100, Math.round(percent)))}%` }} />
+          </div>
+          <div className="mt-2 fw-bold text-center">{Math.round(percent)}%</div>
+        </div>
       </div>
-    </div>
+    </Portal>
   );
 }
 
-/* ---------------- Lightbox ---------------- */
+/* ---------- Professional center popups (Portal) ---------- */
+function CenterPopup({ open, title = "Info", message = "", tone = "secondary", onClose }) {
+  if (!open) return null;
+  const border = tone === "danger" ? "border-danger" : tone === "success" ? "border-success" : "border-secondary";
+  const titleClass = tone === "danger" ? "text-danger" : tone === "success" ? "text-success" : "";
+  return (
+    <Portal>
+      <div
+        className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+        style={{
+          inset: 0,
+          background: "rgba(0,0,0,0.35)",
+          zIndex: 30000,
+          padding: 12,
+          paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)"
+        }}
+        onClick={onClose}
+      >
+        <div className={`bg-white rounded-3 shadow p-3 ${border}`} style={{ width: "min(440px, 92vw)" }} onClick={(e) => e.stopPropagation()}>
+          <div className={`h5 mb-2 text-center ${titleClass}`}>{title}</div>
+          <div className="fw-semibold text-center">{message}</div>
+          <button className="btn btn-dark w-100 mt-3" onClick={onClose}>OK</button>
+        </div>
+      </div>
+    </Portal>
+  );
+}
+function ConfirmCenter({ open, title = "Confirm", message = "", tone = "danger", onOk, onCancel }) {
+  if (!open) return null;
+  const titleClass = tone === "danger" ? "text-danger" : "";
+  return (
+    <Portal>
+      <div
+        className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+        style={{
+          inset: 0,
+          background: "rgba(0,0,0,0.40)",
+          zIndex: 30000,
+          padding: 12,
+          paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)"
+        }}
+        onClick={onCancel}
+      >
+        <div className="bg-white rounded-3 shadow p-3 border border-danger" style={{ width: "min(440px, 92vw)" }} onClick={(e) => e.stopPropagation()}>
+          <div className={`h5 mb-2 text-center ${titleClass}`}>{title}</div>
+          <div className="fw-semibold text-center">{message}</div>
+          <div className="d-grid gap-2 mt-3">
+            <button className="btn btn-danger" onClick={onOk}>OK</button>
+            <button className="btn btn-light" onClick={onCancel}>Cancel</button>
+          </div>
+        </div>
+      </div>
+    </Portal>
+  );
+}
+
+/* ---------- Lightbox (buttons-only zoom; Portal, mobile-safe) ---------- */
 function Lightbox({ src, onClose }) {
+  const [scale, setScale] = useState(1);
+
   useEffect(() => {
     if (!src) return;
-    const onKey = (e) => e.key === "Escape" && onClose();
-    document.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
-    };
-  }, [src, onClose]);
-
-  if (!src) return null;
-  return (
-    <div style={S.lightbox} onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <img src={src} alt="full" style={S.lightboxImg} />
-      <button style={S.lightboxCloseBelow} onClick={onClose}>Close</button>
-    </div>
-  );
-}
-
-/* ---------------- Modal shell (scrollable) ---------------- */
-function Modal({ children, onClose }) {
-  useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose();
     document.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;
@@ -142,89 +167,167 @@ function Modal({ children, onClose }) {
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;
     };
+  }, [src, onClose]);
+
+  if (!src) return null;
+
+  const blockTouch = (e) => { e.preventDefault(); e.stopPropagation(); };
+
+  return (
+    <Portal>
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="position-fixed top-0 start-0 w-100 h-100 d-flex flex-column"
+        style={{
+          inset: 0,
+          background: "rgba(0,0,0,0.92)",
+          zIndex: 30000,
+          padding: 12,
+          paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)",
+          WebkitOverflowScrolling: "touch",
+        }}
+        onClick={(e) => e.target === e.currentTarget && onClose()}
+      >
+        {/* Image viewport */}
+        <div
+          className="flex-grow-1 d-flex align-items-center justify-content-center w-100"
+          style={{ overflow: "hidden" }}
+          onWheel={blockTouch}
+          onTouchStart={blockTouch}
+          onTouchMove={blockTouch}
+          onTouchEnd={blockTouch}
+        >
+          <img
+            src={src}
+            alt="preview"
+            style={{
+              maxWidth: "96vw",
+              maxHeight: "70vh",
+              transform: `scale(${scale})`,
+              transformOrigin: "center center",
+              userSelect: "none",
+              pointerEvents: "none",
+              WebkitUserSelect: "none",
+              WebkitTouchCallout: "none",
+            }}
+            draggable={false}
+          />
+        </div>
+
+        {/* Controls */}
+        <div
+          className="d-flex align-items-center justify-content-center gap-2"
+          style={{ position: "sticky", bottom: 0, padding: "10px 0", pointerEvents: "auto" }}
+          onClick={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+        >
+          <button className="btn btn-light btn-lg" onClick={() => setScale((s) => Math.max(1, Number((s * 0.9).toFixed(3))))}>−</button>
+          <button className="btn btn-light btn-lg" onClick={() => setScale((s) => Math.min(6, Number((s * 1.1).toFixed(3))))}>+</button>
+          <button className="btn btn-danger btn-lg" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </Portal>
+  );
+}
+
+/* ---------- Modal shell (Portal) ---------- */
+function Modal({ title, children, onClose }) {
+  useEffect(() => {
+    const onKey = (e) => e.key === "Escape" && onClose();
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = prev; };
   }, [onClose]);
 
   return (
-    <div style={S.modalBackdrop} onClick={onClose}>
-      <div style={S.modalBody} onClick={(e) => e.stopPropagation()}>
-        <div style={S.modalContent}>{children}</div>
+    <Portal>
+      <div
+        className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+        style={{
+          inset: 0,
+          background: "rgba(0,0,0,0.5)",
+          zIndex: 30000,
+          padding: 12,
+          paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)"
+        }}
+        onClick={onClose}
+      >
+        <div
+          className="bg-white rounded-3 shadow p-3"
+          style={{ width: "min(560px, 96vw)", maxHeight: "calc(100dvh - 180px)", overflowY: "auto" }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="d-flex align-items-center justify-content-between mb-2">
+            <div className="h5 mb-0">{title}</div>
+            <button className="btn btn-dark btn-sm" onClick={onClose}>×</button>
+          </div>
+          {children}
+        </div>
       </div>
-      <button style={S.modalCloseFloating} onClick={onClose}>×</button>
-    </div>
+    </Portal>
   );
 }
 
-/* ---------------- Shimmer (optional) ---------------- */
-function Shimmer() {
-  return (
-    <div style={S.shimmerBox}>
-      <div style={S.shimmerAnim} />
-    </div>
-  );
-}
-
-/* ===========================================================
-   Main Page: List (default) ➜ Detail when ?id= present
-   =========================================================== */
+/* ==================== Main Page ==================== */
 export default function ActressesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedId = useMemo(() => {
     const idQ = searchParams.get("id");
     return isFiniteNum(idQ) ? Number(idQ) : null;
   }, [searchParams]);
-
   const progress = useProgress();
 
+  // 🔁 Shared list control so child components can update the list without full reload
+  const listApiRef = useRef({ updateItem: () => {}, removeItem: () => {}, reload: () => {} });
+
   return (
-    <div style={S.page}>
+    <div className="container" style={{ paddingTop: 12, paddingBottom: 24 }}>
       {!selectedId ? (
         <ListView
+          registerListApi={(api) => (listApiRef.current = api)}
           onOpen={(id) => {
             const next = new URL(window.location.href);
             next.searchParams.set("id", String(id));
             window.history.pushState({}, "", next.toString());
-            setSearchParams((prev) => {
-              const p = new URLSearchParams(prev);
-              p.set("id", String(id));
-              return p;
-            });
-            // optional: start overlay immediately for snappy feel
+            setSearchParams((prev) => { const p = new URLSearchParams(prev); p.set("id", String(id)); return p; });
             progress.start("Opening details…", 12);
           }}
           progress={progress}
         />
       ) : (
         <DetailView
+          key={selectedId}
           id={selectedId}
           onClose={() => {
             const next = new URL(window.location.href);
             next.searchParams.delete("id");
             window.history.pushState({}, "", next.toString());
-            setSearchParams((prev) => {
-              const p = new URLSearchParams(prev);
-              p.delete("id");
-              return p;
-            });
+            setSearchParams((prev) => { const p = new URLSearchParams(prev); p.delete("id"); return p; });
           }}
           progress={progress}
+          // Callbacks to keep list in sync without page change
+          onImagesDelta={(delta) => listApiRef.current.updateItem?.(selectedId, (prev) => ({
+            images_count: Math.max(0, (prev?.images_count ?? 0) + delta)
+          }))}
+          onDeleteActress={() => {
+            listApiRef.current.removeItem?.(selectedId);
+          }}
         />
       )}
-
       <LoadingOverlay visible={progress.state.visible} percent={progress.state.percent} label={progress.state.label} />
     </div>
   );
 }
 
-/* ========================= LIST VIEW ========================= */
-function ListView({ onOpen, progress }) {
-  const [all, setAll] = useState([]);      // slim list
+/* ==================== List View ==================== */
+function ListView({ onOpen, progress, registerListApi }) {
+  const [all, setAll] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(0);
-
-  const [popup, setPopup] = useState({ open: false, type: "info", message: "" });
-  const show = (type, message) => setPopup({ open: true, type, message });
 
   async function load() {
     try {
@@ -240,25 +343,39 @@ function ListView({ onOpen, progress }) {
     } catch (e) {
       setErr(e.message || "Failed to load");
       progress.done();
+      alert(e.message || "Failed to load");
     } finally {
       setLoading(false);
     }
   }
-
   useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
 
-  // prevent outside-page drag opening files
+  // expose simple list API to parent (update one, remove one, reload)
+  useEffect(() => {
+    registerListApi?.({
+      updateItem: (id, patchOrFn) => {
+        setAll((prev) => prev.map((r) => {
+          if (r.id !== id) return r;
+          const patch = typeof patchOrFn === 'function' ? patchOrFn(r) : patchOrFn;
+          return { ...r, ...patch };
+        }));
+      },
+      removeItem: (id) => {
+        setAll((prev) => prev.filter((r) => r.id !== id));
+      },
+      reload: () => load(),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     const prevent = (e) => { e.preventDefault(); e.stopPropagation(); };
     window.addEventListener("dragover", prevent);
     window.addEventListener("drop", prevent);
-    return () => {
-      window.removeEventListener("dragover", prevent);
-      window.removeEventListener("drop", prevent);
-    };
+    return () => { window.removeEventListener("dragover", prevent); window.removeEventListener("drop", prevent); };
   }, []);
 
-  const filtered = useMemo(() => {
+  const filtered = React.useMemo(() => {
     const s = String(q || "").trim().toLowerCase();
     if (!s) return all;
     return all.filter((r) =>
@@ -276,131 +393,83 @@ function ListView({ onOpen, progress }) {
   const canNext = start + PAGE_SIZE_LIST < total;
 
   return (
-    <div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, marginBottom: 10 }}>
-        <input
-          placeholder="Search name / series / country..."
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          style={{ padding: 10, borderRadius: 12, border: "1px solid #ddd" }}
-        />
-        <button style={S.btnPrimary} onClick={load}>Search</button>
+    <>
+      <div className="row g-2 align-items-center mb-2">
+        <div className="col">
+          <input className="form-control" placeholder="Search name / series / country..." value={q} onChange={(e) => setQ(e.target.value)} />
+        </div>
+        <div className="col-auto">
+          <button className="btn btn-primary" onClick={load}>Search</button>
+        </div>
       </div>
 
-      {loading && <div style={S.centerMsg}>Loading…</div>}
+      {loading && <div className="text-center text-secondary my-3">Loading…</div>}
       {err && (
-        <div style={{ ...S.centerMsg, color: "#b00020" }}>
+        <div className="text-center text-danger my-3">
           Error: {err}
-          <div style={{ marginTop: 8 }}>
-            <button style={S.btnNeutral} onClick={load}>Retry</button>
-          </div>
+          <div className="mt-2"><button className="btn btn-light" onClick={load}>Retry</button></div>
         </div>
       )}
 
-      {!loading && !err && total === 0 && (
-        <div style={S.centerMsg}>No actresses found.</div>
-      )}
+      {!loading && !err && total === 0 && <div className="text-center text-secondary my-3">No actresses found.</div>}
 
       {!loading && !err && total > 0 && (
         <>
-          <div style={S.cards}>
+          <div className="row g-2">
             {slice.map((r) => (
-              <button
-                key={r.id}
-                style={S.cardBtn}
-                onClick={() => onOpen(r.id)}
-              >
-                <div style={S.cardGrid}>
-                  <div style={S.cardImgWrap}>
-                    {r.profile_image ? (
-                      <img src={r.profile_image} alt={r.favorite_actress_name} style={S.cardImg} loading="lazy" />
-                    ) : (
-                      <div style={S.cardImgPlaceholder}>No Image</div>
-                    )}
+              <div className="col-12" key={r.id}>
+                <button className="w-100 btn btn-light text-start p-2 border rounded-3 shadow-sm" onClick={() => onOpen(r.id)}>
+                  <div className="d-grid" style={{ gridTemplateColumns: "84px 1fr", gap: 10, alignItems: "center" }}>
+                    <div className="rounded-3 bg-light overflow-hidden" style={{ width: 84, height: 84 }}>
+                      {r.profile_image ? (
+                        <img src={r.profile_image} alt={r.favorite_actress_name} className="w-100 h-100" style={{ objectFit: "cover" }} loading="lazy" />
+                      ) : (
+                        <div className="d-flex align-items-center justify-content-center text-muted" style={{ width: "100%", height: "100%", fontSize: 12 }}>No Image</div>
+                      )}
+                    </div>
+                    <div>
+                      <div className="fw-bold">{r.favorite_actress_name}</div>
+                      <div className="small"><b>Series:</b> {r.favorite_movie_series || "—"}</div>
+                      <div className="small"><b>Country:</b> {r.country_name || r.country_id || "—"}</div>
+                      <div className="small"><b>Images:</b> {r.images_count ?? 0}</div>
+                    </div>
                   </div>
-                  <div>
-                    <div style={S.cardTitle}>{r.favorite_actress_name}</div>
-                    <div style={S.cardMeta}><b>Series:</b> {r.favorite_movie_series || "—"}</div>
-                    <div style={S.cardMeta}><b>Country:</b> {r.country_name || r.country_id || "—"}</div>
-                    <div style={S.cardMeta}><b>Images:</b> {r.images_count ?? 0}</div>
-                  </div>
-                </div>
-              </button>
+                </button>
+              </div>
             ))}
           </div>
 
-          <div style={S.pagerRow}>
-            <button style={S.btnNeutral} disabled={!canPrev} onClick={() => setPage((p) => Math.max(0, p - 1))}>
-              ◀ Prev
-            </button>
-            <div style={{ fontWeight: 800 }}>
-              Page {page + 1} / {Math.max(1, Math.ceil(total / PAGE_SIZE_LIST))}
-            </div>
-            <button style={S.btnNeutral} disabled={!canNext} onClick={() => setPage((p) => p + 1)}>
-              Next ▶
-            </button>
+          <div className="d-flex align-items-center justify-content-center gap-2 mt-2">
+            <button className="btn btn-light" disabled={!canPrev} onClick={() => setPage((p) => Math.max(0, p - 1))}>◀ Prev</button>
+            <div className="fw-bold">Page {page + 1} / {Math.max(1, Math.ceil(total / PAGE_SIZE_LIST))}</div>
+            <button className="btn btn-light" disabled={!canNext} onClick={() => setPage((p) => p + 1)}>Next ▶</button>
           </div>
         </>
       )}
-
-      <CenterPopup
-        open={popup.open}
-        type={popup.type}
-        message={popup.message}
-        onClose={() => setPopup((p) => ({ ...p, open: false }))}
-      />
-    </div>
+    </>
   );
 }
 
-/* ========================= DETAIL VIEW ========================= */
-function DetailView({ id, onClose, progress }) {
+/* ==================== Detail View (minimal) ==================== */
+function DetailView({ id, onClose, progress, onImagesDelta, onDeleteActress }) {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [actress, setActress] = useState(null);
-
-  const [firstPage, setFirstPage] = useState({
-    total: 0, offset: 0, limit: PAGE_LIMIT_IMAGES, images: [],
-  });
-
   const [lightboxSrc, setLightboxSrc] = useState("");
-  const [popup, setPopup] = useState({ open: false, type: "info", message: "" });
-  const show = (type, message) => setPopup({ open: true, type, message });
+  const [confirmDeleteActress, setConfirmDeleteActress] = useState(false);
+  const [errorPopup, setErrorPopup] = useState({ open: false, message: "" });
 
-  const [addOpen, setAddOpen] = useState(false);
-  const [delOpen, setDelOpen] = useState(false);
-  const [viewOpen, setViewOpen] = useState(false);
+  useEffect(() => { setLightboxSrc(""); }, [id]);
 
   const load = async () => {
     if (!isFiniteNum(id) || Number(id) <= 0) {
-      setErr("Invalid record id");
-      setLoading(false);
-      progress.done();
-      return;
+      setErr("Invalid record id"); setLoading(false); progress.done(); return;
     }
     try {
       setLoading(true); setErr("");
       progress.start("Fetching profile…", 14);
       const data = await safeFetchJSON(API.onePaged(id, PAGE_LIMIT_IMAGES));
-      progress.bump(20);
-      setActress({
-        id: data.id,
-        favorite_actress_name: data.favorite_actress_name,
-        favorite_movie_series: data.favorite_movie_series,
-        profile_image: data.profile_image,
-        country_name: data.country_name ?? null,
-        country_id: data.country_id,
-        age: data.age,
-        actress_dob: data.actress_dob,
-        notes: data.notes,
-      });
-      const pg = data.images_page || { total: 0, offset: 0, limit: PAGE_LIMIT_IMAGES, images: [] };
-      setFirstPage({
-        total: Number(pg.total || 0),
-        offset: Number(pg.offset || 0) + (Array.isArray(pg.images) ? pg.images.length : 0),
-        limit: Number(pg.limit || PAGE_LIMIT_IMAGES),
-        images: Array.isArray(pg.images) ? pg.images : [],
-      });
+      setActress({ id: data.id, favorite_actress_name: data.favorite_actress_name, profile_image: data.profile_image });
       progress.done();
     } catch (e) {
       setErr(e.message || "Failed to load");
@@ -409,186 +478,159 @@ function DetailView({ id, onClose, progress }) {
       setLoading(false);
     }
   };
-
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [id]);
 
-  const refreshFirstPage = async (label = "Refreshing…") => {
-    try {
-      progress.start(label, 10);
-      const l = Math.max(PAGE_LIMIT_IMAGES, firstPage.images.length);
-      const d = await safeFetchJSON(API.imagesPage(id, 0, l));
-      const arr = Array.isArray(d.images) ? d.images : [];
-      setFirstPage({
-        total: Number(d.total || arr.length),
-        offset: arr.length,
-        limit: PAGE_LIMIT_IMAGES,
-        images: arr,
-      });
-      progress.done();
-    } catch {
-      progress.done();
-    }
-  };
-
-  const handleDeleteActress = async () => {
-    if (!window.confirm("Delete actress and all details?")) return;
+  const doDeleteActress = async () => {
     try {
       progress.start("Deleting…", 10);
-      await fetch(API.delActress(id), { method: "DELETE" }).then(async (r) => {
-        if (r.status !== 204) {
-          let msg = `Delete failed: ${r.status}`;
-          try { const j = await r.json(); msg = j?.error || msg; } catch {}
-          throw new Error(msg);
-        }
-      });
+      const r = await fetch(API.delActress(id), { method: "DELETE" });
+      if (r.status !== 204) {
+        let msg = `Delete failed: ${r.status}`;
+        try { const j = await r.json(); msg = j?.error || msg; } catch {}
+        throw new Error(msg);
+      }
       progress.done();
-      show("success", "Actress deleted.");
+      onDeleteActress?.();
       onClose && onClose();
+      // ❌ removed window.location.reload(); keep page state intact
     } catch (e) {
       progress.done();
-      show("error", e.message || "Failed to delete");
+      setErrorPopup({ open: true, message: e.message || "Failed to delete actress" });
     }
   };
 
-  if (loading) return <div style={S.centerMsg}>Loading…</div>;
+  if (loading) return <div className="text-center text-secondary my-3">Loading…</div>;
   if (err) {
     return (
-      <div style={{ ...S.centerMsg, color: "#b00020" }}>
-        Error: {err}
-        <div style={{ marginTop: 8 }}>
-          <button style={S.btnNeutral} onClick={load}>Retry</button>
-          <button style={{ ...S.btnDanger, marginLeft: 8 }} onClick={onClose}>Close</button>
+      <div className="text-center my-3">
+        <div className="text-danger">Error: {err}</div>
+        <div className="mt-2 d-flex justify-content-center gap-2">
+          <button className="btn btn-light" onClick={load}>Retry</button>
+          <button className="btn btn-danger" onClick={onClose}>Close</button>
         </div>
       </div>
     );
   }
-  if (!actress) return <div style={S.centerMsg}>No data</div>;
+  if (!actress) return <div className="text-center text-secondary my-3">No data</div>;
 
   return (
-    <div>
-      <button style={{ ...S.btnNeutral, marginBottom: 10 }} onClick={onClose}>← Back to list</button>
+    <>
+      <button className="btn btn-light mb-2" onClick={onClose}>← Back to list</button>
 
-      {/* Profile */}
-      <div style={S.profileImgWrap}>
-        {!actress.profile_image && <div style={S.centerMsg}>No profile image</div>}
-        {!!actress.profile_image && (
+      {/* ONLY the profile image */}
+      <div className="mx-auto rounded-3 bg-light overflow-hidden" style={{ width: "min(520px, 100%)", aspectRatio: "1/1" }}>
+        {!actress.profile_image ? (
+          <div className="d-flex align-items-center justify-content-center text-secondary w-100 h-100">No profile image</div>
+        ) : (
           <img
             src={actress.profile_image}
             alt={actress.favorite_actress_name}
-            style={S.profileImg}
+            className="w-100 h-100"
+            style={{ objectFit: "cover", cursor: "zoom-in" }}
             onClick={() => setLightboxSrc(actress.profile_image)}
             loading="eager"
           />
         )}
       </div>
 
-      {/* Details */}
-      <div style={S.details}>
-        <div style={S.title}>{actress.favorite_actress_name}</div>
-        <div style={S.meta}><b>Series:</b> {actress.favorite_movie_series}</div>
-        <div style={S.meta}><b>Country:</b> {actress.country_name || actress.country_id}</div>
-        <div style={S.meta}><b>Age:</b> {actress.age ?? "—"}</div>
-        <div style={S.meta}><b>DOB:</b> {actress.actress_dob ?? "—"}</div>
-        <div style={S.meta}><b>Notes:</b> {actress.notes || "—"}</div>
+      {/* EXACT four buttons */}
+      <div className="d-grid gap-2 mt-3">
+        <ViewAllImagesButton actressId={actress.id} onOpenImage={(src) => setLightboxSrc(src)} progress={progress} />
+        <DeleteImagesButton  actressId={actress.id} progress={progress} onImagesDeleted={(n) => onImagesDelta?.(-n)} />
+        <AddImagesButton     actressId={actress.id} progress={progress} onImagesAdded={(n) => onImagesDelta?.(n)} />
+        <button className="btn btn-danger" onClick={() => setConfirmDeleteActress(true)}>Delete Actress</button>
       </div>
 
-      {/* Buttons */}
-      <div style={S.btnGrid4}>
-        <button style={S.btnPrimary} onClick={() => setAddOpen(true)}>Add Extra Image</button>
-        <button style={S.btnWarn}    onClick={() => setDelOpen(true)}>Delete Images</button>
-        <button style={S.btnNeutral} onClick={() => setViewOpen(true)}>View All Images</button>
-        <button style={S.btnDanger}  onClick={handleDeleteActress}>Delete Actress</button>
-      </div>
-
-      {/* Lightbox */}
       <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc("")} />
 
-      {/* Modals */}
-      {addOpen && (
-        <Modal onClose={() => setAddOpen(false)}>
-          <AddImages
-            actressId={actress.id}
-            onClose={() => setAddOpen(false)}
-            onUploaded={async (added = 0) => {
-              if (added > 0) await refreshFirstPage("Saving images…");
-            }}
-            show={show}
-            progress={progress}
-          />
-        </Modal>
-      )}
-
-      {delOpen && (
-        <Modal onClose={() => setDelOpen(false)}>
-          <DeleteImages
-            actressId={actress.id}
-            onClose={() => setDelOpen(false)}
-            onDeleted={async (cnt = 0) => {
-              if (cnt > 0) await refreshFirstPage("Deleting images…");
-            }}
-            show={show}
-            progress={progress}
-          />
-        </Modal>
-      )}
-
-      {viewOpen && (
-        <Modal onClose={() => setViewOpen(false)}>
-          <ViewAllImages
-            actressId={actress.id}
-            onClose={() => setViewOpen(false)}
-            onOpenImage={(src) => setLightboxSrc(src)}
-            progress={progress}
-          />
-        </Modal>
-      )}
-
-      <CenterPopup
-        open={popup.open}
-        type={popup.type}
-        message={popup.message}
-        onClose={() => setPopup((p) => ({ ...p, open: false }))}
+      <ConfirmCenter
+        open={confirmDeleteActress}
+        title="Delete Actress"
+        message="This will permanently delete this actress and all images."
+        onOk={doDeleteActress}
+        onCancel={() => setConfirmDeleteActress(false)}
       />
-    </div>
+      <CenterPopup
+        open={errorPopup.open}
+        title="Error"
+        tone="danger"
+        message={errorPopup.message}
+        onClose={() => setErrorPopup({ open: false, message: "" })}
+      />
+    </>
   );
 }
 
-/* ========================= Add Images ========================= */
-function AddImages({ actressId, onClose, onUploaded, show, progress }) {
-  const dropRef = useRef(null);
-  const [dragOver, setDragOver] = useState(false);
+/* ---------- Buttons (open modals / popups) ---------- */
+function AddImagesButton({ actressId, progress, onImagesAdded }) {
+  const [open, setOpen] = useState(false);
+  const [successOpen, setSuccessOpen] = useState(false);
+  const [addedCount, setAddedCount] = useState(0);
+  return (
+    <>
+      <button className="btn btn-primary" onClick={() => setOpen(true)}>Add Extra Image</button>
+      {open && (
+        <Modal title="Add Extra Image" onClose={() => setOpen(false)}>
+          <AddImages
+            actressId={actressId}
+            onClose={() => setOpen(false)}
+            onUploaded={(n) => { setOpen(false); setAddedCount(n); setSuccessOpen(true); onImagesAdded?.(n); }}
+            progress={progress}
+          />
+        </Modal>
+      )}
+      <CenterPopup
+        open={successOpen}
+        title="Success"
+        tone="success"
+        message={`Images added successfully${addedCount ? ` ( +${addedCount} )` : ''}.`}
+        onClose={() => { setSuccessOpen(false); }}
+      />
+    </>
+  );
+}
+function DeleteImagesButton({ actressId, progress, onImagesDeleted }) {
+  const [open, setOpen] = useState(false);
+  const [deletedCount, setDeletedCount] = useState(0);
+  return (
+    <>
+      <button className="btn btn-warning" onClick={() => setOpen(true)}>Delete Images</button>
+      {open && (
+        <Modal title="Delete Images" onClose={() => setOpen(false)}>
+          <DeleteImages actressId={actressId} onClose={() => setOpen(false)} progress={progress} onDeleted={(n) => { setDeletedCount(n); onImagesDeleted?.(n); }} />
+        </Modal>
+      )}
+      {deletedCount > 0 && (
+        <div className="small text-success text-center">Deleted {deletedCount} image(s).</div>
+      )}
+    </>
+  );
+}
+function ViewAllImagesButton({ actressId, onOpenImage, progress }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button className="btn btn-light" onClick={() => setOpen(true)}>View All Images</button>
+      {open && (
+        <Modal title="All Images" onClose={() => setOpen(false)}>
+          <ViewAllImages actressId={actressId} onClose={() => setOpen(false)} onOpenImage={onOpenImage} progress={progress} />
+        </Modal>
+      )}
+    </>
+  );
+}
+
+/* ==================== Add Images ==================== */
+function AddImages({ actressId, onClose, onUploaded, progress }) {
+  const inputRef = useRef(null);
   const [busy, setBusy] = useState(false);
+  const [errorPopup, setErrorPopup] = useState({ open: false, message: "" });
 
-  useEffect(() => {
-    const el = dropRef.current;
-    if (!el) return;
-    const prevent = (e) => { e.preventDefault(); e.stopPropagation(); };
-    const onDragEnter = (e) => { prevent(e); setDragOver(true); };
-    const onDragOver  = (e) => { prevent(e); setDragOver(true); };
-    const onDragLeave = (e) => { prevent(e); setDragOver(false); };
-    const onDrop      = (e) => {
-      prevent(e); setDragOver(false);
-      const files = e.dataTransfer?.files;
-      if (files && files.length > 0) uploadFiles(files);
-    };
-    el.addEventListener("dragenter", onDragEnter);
-    el.addEventListener("dragover", onDragOver);
-    el.addEventListener("dragleave", onDragLeave);
-    el.addEventListener("drop", onDrop);
-    return () => {
-      el.removeEventListener("dragenter", onDragEnter);
-      el.removeEventListener("dragover", onDragOver);
-      el.removeEventListener("dragleave", onDragLeave);
-      el.removeEventListener("drop", onDrop);
-    };
-  }, []);
-
-  async function uploadFiles(filesList) {
+  const uploadFiles = async (filesList) => {
     try {
       setBusy(true);
       progress.start("Uploading…", 12);
-      // NOTE: demo sends blob URLs; replace with your uploader if needed.
-      const urls = Array.from(filesList).map((f) => URL.createObjectURL(f));
+      const urls = uniqueImages(Array.from(filesList).map((f) => URL.createObjectURL(f))); // demo
       await safeFetchJSON(API.append(actressId), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -596,388 +638,212 @@ function AddImages({ actressId, onClose, onUploaded, show, progress }) {
       });
       progress.done();
       onUploaded && onUploaded(urls.length);
-      onClose();
     } catch (e) {
       progress.done();
-      show("error", e.message || "Failed to upload");
+      setErrorPopup({ open: true, message: e.message || "Failed to upload" });
     } finally {
       setBusy(false);
     }
-  }
+  };
 
   return (
-    <div>
-      <div style={S.modalTitle}>Add Extra Image</div>
-      <div
-        ref={dropRef}
-        style={{ ...S.dropZone, ...(dragOver ? S.dropZoneActive : {}) }}
-        onClick={() => document.getElementById("filepick-hidden")?.click()}
-      >
-        <div style={S.dropIcon}>⇪</div>
-        <div style={S.dropText}>Drag & drop images here</div>
-        <div style={S.dropSub}>or click to choose</div>
-        <input
-          id="filepick-hidden"
-          type="file"
-          accept="image/*"
-          multiple
-          style={{ display: "none" }}
-          onChange={(e) => e.target.files && uploadFiles(e.target.files)}
-        />
+    <>
+      <div className="border rounded-3 p-3 text-center bg-light">
+        <div className="fw-bold">Choose images to add</div>
+        <div className="small text-secondary mb-2">JPG/PNG/WebP</div>
+        <input ref={inputRef} type="file" accept="image/*" multiple className="form-control"
+               onChange={(e) => e.target.files && uploadFiles(e.target.files)} />
+        <div className="d-grid mt-3">
+          <button className="btn btn-primary" onClick={() => inputRef.current?.click()} disabled={busy}>Pick files</button>
+        </div>
       </div>
-      <button style={S.modalPrimary} onClick={onClose} disabled={busy}>Done</button>
-    </div>
+      <div className="d-grid mt-3">
+        <button className="btn btn-secondary" onClick={onClose} disabled={busy}>Done</button>
+      </div>
+
+      <CenterPopup
+        open={errorPopup.open}
+        title="Error"
+        tone="danger"
+        message={errorPopup.message}
+        onClose={() => setErrorPopup({ open: false, message: "" })}
+      />
+    </>
   );
 }
 
-/* ========================= Delete Images ========================= */
-function DeleteImages({ actressId, onClose, onDeleted, show, progress }) {
+/* ==================== Delete Images ==================== */
+function DeleteImages({ actressId, onClose, progress, onDeleted }) {
   const [list, setList] = useState([]);
-  the
-  const [total, setTotal] = useState(0);
-  const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [selected, setSelected] = useState(new Set());
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [errorPopup, setErrorPopup] = useState({ open: false, message: "" });
 
-  const loadPage = async (o, l, withProgress = false) => {
-    if (withProgress) { progress.start("Loading images…", 10); }
-    const d = await safeFetchJSON(API.imagesPage(actressId, o, l));
-    if (withProgress) progress.done();
-    return d;
-  };
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        setLoading(true);
-        const d = await loadPage(0, PAGE_LIMIT_IMAGES, true);
-        if (!mounted) return;
-        const arr = Array.isArray(d.images) ? d.images : [];
-        setList(arr);
-        setTotal(Number(d.total || arr.length));
-        setOffset(arr.length);
-      } catch (e) {
-        if (!mounted) return;
-        show("error", e.message || "Failed to load images");
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => { mounted = false; };
-  }, [actressId]);
-
-  const canLoadMore = offset < total;
-
-  const loadMore = async () => {
-    if (!canLoadMore || loadingMore) return;
+  // Load ALL images (no "load more")
+  const loadAll = async () => {
+    progress.start("Loading images…", 10);
     try {
-      setLoadingMore(true);
-      progress.start("Loading more…", 10);
-      const d = await loadPage(offset, PAGE_LIMIT_IMAGES);
-      const arr = Array.isArray(d.images) ? d.images : [];
-      setList((prev) => [...prev, ...arr]);
-      setOffset((o) => o + arr.length);
-      setTotal(Number(d.total || total));
-      progress.done();
+      let all = [];
+      let offset = 0;
+      while (true) {
+        const d = await safeFetchJSON(API.imagesPage(actressId, offset, PAGE_LIMIT_IMAGES));
+        const imgs = uniqueImages(d.images || []);
+        all = uniqueImages([...all, ...imgs]);
+        offset += imgs.length;
+        const total = Number(d.total || all.length);
+        if (offset >= total || imgs.length === 0) break;
+      }
+      setList(all);
     } catch (e) {
-      progress.done();
-      show("error", e.message || "Failed to load more");
+      setErrorPopup({ open: true, message: e.message || "Failed to load images" });
     } finally {
-      setLoadingMore(false);
+      setLoading(false);
+      progress.done();
     }
   };
+  useEffect(() => { loadAll(); /* eslint-disable-next-line */ }, [actressId]);
 
   const toggle = (url) => {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(url)) next.delete(url);
-      else next.add(url);
+      next.has(url) ? next.delete(url) : next.add(url);
       return next;
     });
   };
 
   const doDelete = async () => {
-    if (selected.size === 0) {
-      show("info", "No images selected.");
-      return;
-    }
-    if (!window.confirm(`Delete ${selected.size} image(s)?`)) return;
     try {
       progress.start("Deleting images…", 12);
-      await safeFetchJSON(API.delImages(actressId), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ urls: Array.from(selected) }),
-      });
+      const count = selected.size;
+      if (count > 0) {
+        await safeFetchJSON(API.delImages(actressId), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ urls: Array.from(selected) }),
+        });
+        setList((prev) => prev.filter((u) => !selected.has(u)));
+        setSelected(new Set());
+      }
       progress.done();
-      onDeleted && onDeleted(selected.size);
-      onClose();
+      onDeleted?.(count);
+      onClose?.(); // close modal; page does NOT reload
     } catch (e) {
       progress.done();
-      show("error", e.message || "Failed to delete images");
+      setErrorPopup({ open: true, message: e.message || "Failed to delete images" });
     }
   };
 
   return (
-    <div>
-      <div style={S.modalTitle}>Delete Images</div>
-
-      {loading && <div style={S.centerMsg}>Loading…</div>}
-
+    <>
+      {loading && <div className="text-center text-secondary my-2">Loading…</div>}
       {!loading && (
         <>
-          <div style={S.galleryManageGrid}>
+          <div className="row g-2">
             {list.map((url, i) => (
-              <div key={url + i} style={S.manageItem}>
-                <label style={S.checkboxWrap}>
+              <div className="col-3 col-sm-2 col-md-2" key={normalizeUrl(url) + "-" + i}>
+                <div className="position-relative">
                   <input
                     type="checkbox"
+                    className="form-check-input position-absolute"
+                    style={{ top: 6, left: 6, zIndex: 2 }}
                     checked={selected.has(url)}
                     onChange={() => toggle(url)}
-                    style={S.checkbox}
                   />
-                </label>
-                <img src={url} alt={`img-${i}`} style={S.galleryThumb} loading="lazy" />
+                  <img src={url} alt={`img-${i}`} className="w-100 rounded-2" style={{ aspectRatio: "1/1", objectFit: "cover" }} loading="lazy" />
+                </div>
               </div>
             ))}
           </div>
 
-          {canLoadMore && (
-            <button style={S.modalNeutral} disabled={loadingMore} onClick={loadMore}>
-              {loadingMore ? "Loading…" : `Load more (${total - offset} left)`}
-            </button>
-          )}
-
-          <div style={S.modalActionsRow}>
-            <button style={S.modalDanger} onClick={doDelete}>Delete Selected ({selected.size})</button>
-            <button style={S.modalPrimary} onClick={onClose}>Close</button>
+          <div className="d-grid gap-2 mt-3">
+            <button className="btn btn-warning" onClick={() => setConfirmOpen(true)}>Delete Selected ({selected.size})</button>
+            <button className="btn btn-secondary" onClick={onClose}>Close</button>
           </div>
+
+          <ConfirmCenter
+            open={confirmOpen}
+            title="Delete Images"
+            message={selected.size > 0 ? `Delete ${selected.size} image(s) now?` : "No images selected. OK to continue?"}
+            onOk={doDelete}
+            onCancel={() => setConfirmOpen(false)}
+          />
         </>
       )}
-    </div>
+
+      <CenterPopup
+        open={errorPopup.open}
+        title="Error"
+        tone="danger"
+        message={errorPopup.message}
+        onClose={() => setErrorPopup({ open: false, message: "" })}
+      />
+    </>
   );
 }
 
-/* ========================= View All Images ========================= */
+/* ==================== View All Images ==================== */
 function ViewAllImages({ actressId, onClose, onOpenImage, progress }) {
   const [list, setList] = useState([]);
-  const [total, setTotal] = useState(0);
-  const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const [errorPopup, setErrorPopup] = useState({ open: false, message: "" });
 
-  const loadPage = async (o, l, withProgress = false) => {
-    if (withProgress) progress.start("Loading images…", 10);
-    const d = await safeFetchJSON(API.imagesPage(actressId, o, l));
-    if (withProgress) progress.done();
-    return d;
-  };
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        setLoading(true);
-        const d = await loadPage(0, PAGE_LIMIT_IMAGES, true);
-        if (!mounted) return;
-        const arr = Array.isArray(d.images) ? d.images : [];
-        setList(arr);
-        setTotal(Number(d.total || arr.length));
-        setOffset(arr.length);
-      } catch {
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => { mounted = false; };
-  }, [actressId]);
-
-  const canLoadMore = offset < total;
-
-  const loadMore = async () => {
-    if (!canLoadMore || loadingMore) return;
+  const loadAll = async () => {
+    progress.start("Loading images…", 10);
     try {
-      setLoadingMore(true);
-      progress.start("Loading more…", 10);
-      const d = await loadPage(offset, PAGE_LIMIT_IMAGES);
-      const arr = Array.isArray(d.images) ? d.images : [];
-      setList((prev) => [...prev, ...arr]);
-      setOffset((o) => o + arr.length);
-      setTotal(Number(d.total || total));
-      progress.done();
-    } catch {
-      progress.done();
+      let all = [];
+      let offset = 0;
+      while (true) {
+        const d = await safeFetchJSON(API.imagesPage(actressId, offset, PAGE_LIMIT_IMAGES));
+        const imgs = uniqueImages(d.images || []);
+        all = uniqueImages([...all, ...imgs]);
+        offset += imgs.length;
+        const total = Number(d.total || all.length);
+        if (offset >= total || imgs.length === 0) break;
+      }
+      setList(all);
+    } catch (e) {
+      setErrorPopup({ open: true, message: e.message || "Failed to load images" });
     } finally {
-      setLoadingMore(false);
+      setLoading(false);
+      progress.done();
     }
   };
+  useEffect(() => { loadAll(); /* eslint-disable-next-line */ }, [actressId]);
 
   return (
-    <div>
-      <div style={S.modalTitle}>All Images ({total})</div>
-
-      {loading && <div style={S.centerMsg}>Loading…</div>}
+    <>
+      {loading && <div className="text-center text-secondary my-2">Loading…</div>}
       {!loading && (
         <>
-          <div style={S.galleryViewGrid}>
+          <div className="row g-2">
             {list.map((url, i) => (
-              <button
-                key={url + i}
-                style={S.thumbBtn}
-                onClick={() => onOpenImage(url)}
-              >
-                <img src={url} alt={`img-${i}`} style={S.galleryThumb} loading="lazy" />
-              </button>
+              <div className="col-3 col-sm-2 col-md-2" key={normalizeUrl(url) + "-" + i}>
+                <button className="btn p-0 w-100 border-0" onClick={() => onOpenImage(url)} aria-label="Open image">
+                  <img src={url} alt={`img-${i}`} className="w-100 rounded-2" style={{ aspectRatio: "1/1", objectFit: "cover" }} loading="lazy" />
+                </button>
+              </div>
             ))}
           </div>
 
-          {canLoadMore && (
-            <button style={S.modalNeutral} disabled={loadingMore} onClick={loadMore}>
-              {loadingMore ? "Loading…" : `Load more (${total - offset} left)`}
-            </button>
-          )}
-
-          <button style={S.modalPrimary} onClick={onClose}>Close</button>
+          <div className="d-grid mt-3">
+            <button className="btn btn-secondary" onClick={onClose}>Close</button>
+          </div>
         </>
       )}
-    </div>
+
+      <CenterPopup
+        open={errorPopup.open}
+        title="Error"
+        tone="danger"
+        message={errorPopup.message}
+        onClose={() => setErrorPopup({ open: false, message: "" })}
+      />
+    </>
   );
 }
 
-/* ========================= Styles ========================= */
-const S = {
-  page: { minHeight: "100vh", background: "#f7f7fb", padding: 12, maxWidth: 620, margin: "0 auto" },
-  centerMsg: { textAlign: "center", margin: "24px 0", color: "#555" },
-
-  // Global overlay
-  overlayBackdrop: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1600, padding: 16 },
-  overlayCard: { width: "min(440px,90vw)", background: "#fff", borderRadius: 16, padding: 18, boxShadow: "0 16px 36px rgba(0,0,0,0.25)", textAlign: "center" },
-  overlayLabel: { fontWeight: 900, marginBottom: 10 },
-  progressBarWrap: { height: 10, background: "#eee", borderRadius: 999, overflow: "hidden" },
-  progressBarFill: { height: "100%", background: "#1976d2" },
-  progressPct: { marginTop: 8, fontWeight: 800, color: "#333" },
-
-  // Cards list
-  cards: { display: "grid", gridTemplateColumns: "1fr", gap: 10 },
-  cardBtn: { border: "none", background: "#fff", borderRadius: 14, padding: 10, textAlign: "left", boxShadow: "0 4px 20px rgba(0,0,0,0.06)", cursor: "pointer" },
-  cardGrid: { display: "grid", gridTemplateColumns: "84px 1fr", gap: 10, alignItems: "center" },
-  cardImgWrap: { width: 84, height: 84, borderRadius: 12, overflow: "hidden", background: "#eee" },
-  cardImg: { width: "100%", height: "100%", objectFit: "cover" },
-  cardImgPlaceholder: { width: "100%", height: "100%", display: "grid", placeItems: "center", color: "#777", fontSize: 12 },
-  cardTitle: { fontSize: 16, fontWeight: 900, lineHeight: 1.15 },
-  cardMeta: { fontSize: 13, color: "#444", marginTop: 3 },
-
-  pagerRow: { marginTop: 12, display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 8, alignItems: "center" },
-
-  // Profile
-  profileImgWrap: { position: "relative", width: "100%", maxWidth: 360, aspectRatio: "1/1", borderRadius: 14, overflow: "hidden", background: "#eee", margin: "0 auto" },
-  profileImg: { width: "100%", height: "100%", objectFit: "cover", display: "block", cursor: "pointer" },
-
-  // Details
-  details: { marginTop: 10 },
-  title: { fontSize: 20, fontWeight: 900, lineHeight: 1.2 },
-  meta: { fontSize: 14, color: "#444", marginTop: 4 },
-
-  // 4 Buttons grid
-  btnGrid4: { display: "grid", gridTemplateColumns: "1fr", gap: 8, marginTop: 12 },
-  btnPrimary: { border: "none", background: "#1976d2", color: "#fff", padding: "12px 14px", borderRadius: 12, fontWeight: 900, cursor: "pointer", width: "100%" },
-  btnWarn:    { border: "2px solid #f57c00", background: "#fff", color: "#f57c00", padding: "10px 14px", borderRadius: 12, fontWeight: 900, cursor: "pointer", width: "100%" },
-  btnNeutral: { border: "none", background: "#efefef", color: "#222", padding: "12px 14px", borderRadius: 12, fontWeight: 900, cursor: "pointer", width: "100%" },
-  btnDanger:  { border: "none", background: "#d32f2f", color: "#fff", padding: "12px 14px", borderRadius: 12, fontWeight: 900, cursor: "pointer", width: "100%" },
-
-  // Modal shell (scrollable, centered, with safe top space)
-  modalBackdrop: {
-    position: "fixed",
-    inset: 0,
-    background: "rgba(0,0,0,0.5)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "calc(env(safe-area-inset-top, 0px) + 72px) 12px 24px",
-    overflowY: "auto",
-    zIndex: 1500
-  },
-  modalBody: {
-    width: "100%",
-    maxWidth: 520,
-    background: "#fff",
-    borderRadius: 16,
-    padding: 10,
-    position: "relative",
-    maxHeight: "calc(100vh - 200px)",
-    overflowY: "auto"
-  },
-  modalContent: { width: "100%" },
-  modalCloseFloating: { position: "fixed", top: 16, right: 16, background: "#222", color: "#fff", border: "none", borderRadius: 999, width: 44, height: 44, fontSize: 22, lineHeight: "44px", textAlign: "center", fontWeight: 900, cursor: "pointer", zIndex: 1550 },
-
-  // Modal common
-  modalTitle: { fontSize: 18, fontWeight: 900, marginBottom: 8, position: "sticky", top: 0, background: "#fff", paddingTop: 4, paddingBottom: 6, zIndex: 1 },
-  modalPrimary: { border: "none", background: "#1976d2", color: "#fff", padding: "10px 12px", borderRadius: 12, fontWeight: 900, cursor: "pointer", width: "100%", marginTop: 8 },
-  modalDanger:  { border: "none", background: "#d32f2f", color: "#fff", padding: "10px 12px", borderRadius: 12, fontWeight: 900, cursor: "pointer", width: "100%" },
-  modalNeutral: { border: "none", background: "#efefef", color: "#222", padding: "10px 12px", borderRadius: 12, fontWeight: 900, cursor: "pointer", width: "100%", marginTop: 8 },
-  modalActionsRow: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8, position: "sticky", bottom: 0, background: "#fff", paddingTop: 8 },
-
-  // Dropzone (Add)
-  dropZone: { marginBottom: 10, border: "2px dashed #ccc", borderRadius: 12, padding: 14, textAlign: "center", background: "#fafafa", transition: "border-color 150ms ease, background 150ms ease", cursor: "pointer" },
-  dropZoneActive: { borderColor: "#1976d2", background: "#eef5ff" },
-  dropIcon: { fontSize: 26, marginBottom: 6, fontWeight: 900 },
-  dropText: { fontWeight: 900 },
-  dropSub: { fontSize: 12, color: "#666", marginTop: 4 },
-
-  // Delete/View grids
-  galleryManageGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(84px, 1fr))", gap: 6 },
-  manageItem: { position: "relative" },
-  checkboxWrap: { position: "absolute", top: 6, left: 6, zIndex: 2, background: "rgba(255,255,255,0.9)", borderRadius: 6, padding: "2px 4px" },
-  checkbox: { width: 16, height: 16 },
-  galleryThumb: { width: "100%", aspectRatio: "1/1", objectFit: "cover", borderRadius: 10 },
-
-  galleryViewGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(96px, 1fr))", gap: 8 },
-  thumbBtn: { border: "none", padding: 0, background: "transparent", cursor: "pointer", width: "100%", aspectRatio: "1/1", borderRadius: 10, overflow: "hidden" },
-
-  // Lightbox
-  lightbox: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 1600, padding: 12 },
-  lightboxImg: { maxWidth: "100%", maxHeight: "75vh", objectFit: "contain" },
-  lightboxCloseBelow: { marginTop: 12, background: "#ffffff", border: "none", borderRadius: 24, padding: "10px 18px", fontWeight: 900, cursor: "pointer" },
-
-  // Shimmer
-  shimmerBox: { position: "absolute", inset: 0, background: "#eee", overflow: "hidden" },
-  shimmerAnim: { position: "absolute", inset: 0, background: "linear-gradient(90deg, rgba(238,238,238,0) 0%, rgba(255,255,255,0.7) 50%, rgba(238,238,238,0) 100%)", transform: "translateX(-100%)", animation: "shimmer 1.2s infinite" },
-};
-
-/* ---------------- Popup styles ---------------- */
-const U = {
-  popupBackdrop: {
-    position: "fixed",
-    inset: 0,
-    background: "rgba(0,0,0,0.35)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "calc(env(safe-area-inset-top, 0px) + 72px) 16px 24px",
-    overflowY: "auto",
-    zIndex: 1700
-  },
-  popupCard: {
-    width: "100%",
-    maxWidth: 360,
-    background: "#fff",
-    borderRadius: 14,
-    padding: 16,
-    boxShadow: "0 12px 28px rgba(0,0,0,0.18)",
-    textAlign: "center",
-    maxHeight: "calc(100vh - 160px)",
-    overflowY: "auto",
-    margin: "0 auto"
-  },
-  popSuccess: { border: "2px solid #43a047" },
-  popError: { border: "2px solid #d32f2f" },
-  popupMsg: { fontWeight: 800, color: "#222", marginBottom: 12 },
-  popupBtn: { background: "#222", color: "#fff", border: "none", borderRadius: 10, padding: "10px 14px", fontWeight: 800, cursor: "pointer", width: "100%" },
-};
-
-// Inject keyframes once
+/* one-time keyframes placeholder */
 if (typeof document !== "undefined" && !document.getElementById("actressespage-kf")) {
   const st = document.createElement("style");
   st.id = "actressespage-kf";

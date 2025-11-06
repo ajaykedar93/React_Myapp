@@ -53,9 +53,9 @@ function Navbar() {
           /* small accent line height at bottom of navbar (::after) */
           --eh-bottom-line: 3px;
         }
-        @media (max-width: 575.98px) {
-          :root { --eh-nav-h: 64px; --eh-top-gap: 10px; }
-        }
+      @media (max-width: 575.98px) {
+  :root { --eh-nav-h: 56px; --eh-top-gap: 0px; }
+}
 
         /* ===== Fixed Navbar Layout ===== */
         .eh-fixed {

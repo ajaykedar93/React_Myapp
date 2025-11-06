@@ -1,5 +1,5 @@
 // src/pages/UserTabs.jsx
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
 
@@ -114,6 +114,7 @@ export default function UserTabs() {
 
   return (
     <div
+      className="ut-root"
       style={{
         minHeight: "100dvh",
         width: "100vw",
@@ -211,6 +212,7 @@ export default function UserTabs() {
 
       {/* ===== CONTENT (only this scrolls) ===== */}
       <div
+        className="ut-content"
         style={{
           position: "absolute",
           top: navOffset + navH + tabsH,
@@ -265,7 +267,7 @@ export default function UserTabs() {
         .ut-nav {
           position: fixed;
           left: 0; right: 0;
-          z-index: 1040; /* below Bootstrap modal (1050), above content */
+          z-index: 1040; /* below Bootstrap modal (1050), below our child overlays (20000) */
           display: flex; align-items: center;
           min-height: 64px;
           padding: 10px 14px;
@@ -286,7 +288,7 @@ export default function UserTabs() {
         .ut-tabs-wrap {
           position: fixed;
           left: 0; right: 0;
-          z-index: 1030; /* under nav, over content */
+          z-index: 1030; /* under nav; both under child overlays */
           background: ${COLORS.surface};
           border-top: 1px solid ${COLORS.border};
           border-bottom: 1px solid ${COLORS.border};
@@ -334,6 +336,14 @@ export default function UserTabs() {
           background: linear-gradient(180deg, ${COLORS.accent}, ${COLORS.accent2});
           box-shadow: 0 14px 28px -14px ${COLORS.glow};
           transform: translateY(-1px);
+        }
+
+        /* --- CRITICAL FIX: popups from child pages must appear above nav/tabs --- */
+        .ut-content :where(.position-fixed, .modal, .modal.show, .toast, .offcanvas, [role="dialog"], [data-overlay]) {
+          z-index: 20000 !important;   /* Always above .ut-nav (1040) and .ut-tabs-wrap (1030) */
+        }
+        .ut-content :where(.modal, .offcanvas, .toast, .position-fixed) {
+          max-height: 100dvh;           /* prevent clipping on very small screens */
         }
 
         @keyframes contentFade {

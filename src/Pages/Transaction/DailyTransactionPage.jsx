@@ -3,6 +3,12 @@ import axios from "axios";
 
 const API = "https://express-backend-myapp.onrender.com/api";
 
+// Optional: centralize axios config (timeout helps during cold starts)
+const http = axios.create({
+  baseURL: API,
+  timeout: 12000,
+});
+
 export default function DailyTransactionPage() {
   const [categories, setCategories] = useState([]);
   const [subcategories, setSubcategories] = useState([]);
@@ -30,7 +36,7 @@ export default function DailyTransactionPage() {
   const perPage = 20;
   const tableEndRef = useRef(null);
 
-  // ---- lazy-first-load flags/aborters ----
+  // ---- lifecycle/abort flags ----
   const hasLoadedRef = useRef(false);
   const abortersRef = useRef({}); // {key: AbortController}
 
@@ -89,10 +95,12 @@ export default function DailyTransactionPage() {
   // ---- API calls (idempotent) ----
   const fetchTransactions = async () => {
     try {
-      const res = await axios.get(`${API}/dailyTransaction`, { signal: newAborter("tx") });
-      setTransactions(res.data || []);
+      const res = await retry(
+        () => http.get(`/dailyTransaction`, { signal: newAborter("tx") }),
+        { tries: 3, delay: 400 }
+      );
+      setTransactions(Array.isArray(res.data) ? res.data : []);
       setPage(1);
-      fetchSummary(); // independent
     } catch (e) {
       if (axios.isCancel(e)) return;
       showPopup("Error fetching transactions", "error");
@@ -101,7 +109,10 @@ export default function DailyTransactionPage() {
 
   const fetchSummary = async () => {
     try {
-      const res = await axios.get(`${API}/dailyTransaction/daily-summary`, { signal: newAborter("sum") });
+      const res = await retry(
+        () => http.get(`/dailyTransaction/daily-summary`, { signal: newAborter("sum") }),
+        { tries: 3, delay: 400 }
+      );
       setSummary(res.data || { total_debit: 0, total_credit: 0, total_transactions: 0 });
     } catch (e) {
       if (axios.isCancel(e)) return;
@@ -111,10 +122,9 @@ export default function DailyTransactionPage() {
 
   const fetchLookups = async () => {
     try {
-      // fetch both in parallel with retry (good for cold starts)
       const [cats, subs] = await Promise.all([
-        retry(() => axios.get(`${API}/category`, { signal: newAborter("cats") }), { tries: 3, delay: 400 }),
-        retry(() => axios.get(`${API}/subcategory`, { signal: newAborter("subs") }), { tries: 3, delay: 400 }),
+        retry(() => http.get(`/category`, { signal: newAborter("cats") }), { tries: 3, delay: 400 }),
+        retry(() => http.get(`/subcategory`, { signal: newAborter("subs") }), { tries: 3, delay: 400 }),
       ]);
       setCategories(Array.isArray(cats.data) ? cats.data : []);
       setSubcategories(Array.isArray(subs.data) ? subs.data : []);
@@ -124,38 +134,38 @@ export default function DailyTransactionPage() {
     }
   };
 
-  const firstLoad = async () => {
-    if (hasLoadedRef.current) return;
-    // If offline, wait until we are online to attempt the first fetch
-    if (typeof navigator !== "undefined" && navigator && navigator.onLine === false) {
-      const onBackOnline = () => {
-        window.removeEventListener("online", onBackOnline);
-        firstLoad();
-      };
-      window.addEventListener("online", onBackOnline);
-      return;
-    }
-    hasLoadedRef.current = true;
-    await fetchLookups();
-    await fetchTransactions();
+  // Fetch EVERYTHING in parallel — immediately on mount
+  const fetchAll = async () => {
+    await Promise.all([fetchLookups(), fetchTransactions(), fetchSummary()]);
   };
 
-  // ---- Lazy auto-load ONLY when page/tab visible (and on focus) ----
-  useEffect(() => {
-    const maybeLoad = () => {
-      if (document.visibilityState === "visible") {
-        firstLoad();
-      }
-    };
-    // attempt immediately if already visible
-    maybeLoad();
+  const firstLoad = async () => {
+    if (hasLoadedRef.current) return;
+    hasLoadedRef.current = true;
 
-    document.addEventListener("visibilitychange", maybeLoad);
-    window.addEventListener("focus", maybeLoad);
+    // Try immediately (don't wait for focus/visibility)
+    await fetchAll();
+
+    // If we got nothing due to a cold start, do a quick follow-up retry pass
+    if (transactions.length === 0 || categories.length === 0 || subcategories.length === 0) {
+      try {
+        await sleep(600);
+        await fetchAll();
+      } catch {}
+    }
+  };
+
+  // ---- Mount: load immediately; also refresh when back online ----
+  useEffect(() => {
+    firstLoad();
+
+    const onBackOnline = () => {
+      fetchAll(); // auto-refresh as soon as connection returns
+    };
+    window.addEventListener("online", onBackOnline);
 
     return () => {
-      document.removeEventListener("visibilitychange", maybeLoad);
-      window.removeEventListener("focus", maybeLoad);
+      window.removeEventListener("online", onBackOnline);
       cleanupAborters();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -191,18 +201,21 @@ export default function DailyTransactionPage() {
     try {
       let id = null;
       if (editingId) {
-        await axios.put(`${API}/dailyTransaction/${editingId}`, form, { signal: newAborter("save") });
+        await http.put(`/dailyTransaction/${editingId}`, form, { signal: newAborter("save") });
         id = editingId;
         showPopup("Transaction updated", "success");
         setEditingId(null);
       } else {
-        const res = await axios.post(`${API}/dailyTransaction`, form, { signal: newAborter("save") });
-        if (res.data && res.data.length > 0) {
+        const res = await http.post(`/dailyTransaction`, form, { signal: newAborter("save") });
+        if (Array.isArray(res.data) && res.data.length > 0) {
           id = res.data[res.data.length - 1].daily_transaction_id;
         }
         showPopup("Transaction added", "success");
       }
-      await fetchTransactions();
+
+      // Refresh fast (parallel)
+      await Promise.all([fetchTransactions(), fetchSummary()]);
+
       setHighlightId(id);
       scrollToBottom();
       setForm({
@@ -226,10 +239,12 @@ export default function DailyTransactionPage() {
     if (!confirmDeleteId) return;
     try {
       setDeleting(true);
-      await axios.delete(`${API}/dailyTransaction/${confirmDeleteId}`, { signal: newAborter("del") });
+      await http.delete(`/dailyTransaction/${confirmDeleteId}`, { signal: newAborter("del") });
       showPopup("Transaction deleted", "success");
       setConfirmDeleteId(null);
-      await fetchTransactions();
+
+      // Refresh fast (parallel)
+      await Promise.all([fetchTransactions(), fetchSummary()]);
     } catch (e) {
       if (!axios.isCancel(e)) showPopup("Failed to delete transaction", "error");
     } finally {

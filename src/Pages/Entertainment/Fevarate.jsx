@@ -310,6 +310,72 @@ const Favorite = () => {
     @media (prefers-reduced-motion: reduce){
       *{ animation-duration:0.001ms !important; animation-iteration-count:1 !important; transition-duration:0.001ms !important; }
     }
+
+    /* ===== MOBILE FULL-VIEW OVERRIDES (nothing hidden on phones) ===== */
+
+    /* Prevent sticky from covering content */
+    .cardish .body { padding-bottom: calc(var(--tap) + var(--pad-16)); }
+
+    /* Allow wrapping everywhere */
+    *, *::before, *::after { overflow-wrap: anywhere; }
+
+    /* Titles never truncate on mobile */
+    @media (max-width: 480px){
+      h6, .media-title, .big-title {
+        white-space: normal !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+      }
+    }
+
+    /* Chips can wrap */
+    .pill, .badge, .badge-gray, .badge-type { white-space: normal; }
+
+    /* Force single-column cards and stack content vertically */
+    @media (max-width: 480px) {
+      .list-grid { grid-template-columns: 1fr !important; }
+      .item {
+        grid-template-columns: 1fr !important;
+        grid-template-rows: auto auto auto;
+      }
+      .item .poster {
+        width: 100% !important;
+        height: auto !important;
+        aspect-ratio: 2 / 3;
+        border-radius: 12px;
+      }
+      .item .poster img { width: 100%; height: 100%; object-fit: cover; }
+      .item > div[style*="minWidth:0"] { min-width: 0 !important; }
+      .item .right {
+        width: 100%;
+        justify-content: flex-start;
+        margin-top: var(--pad-8);
+      }
+
+      /* Sticky actions: make controls full width */
+      .sticky-actions { gap: var(--gap-10); }
+      .sticky-actions select,
+      .sticky-actions .form-select { width: 100% !important; max-width: 100% !important; }
+      .sticky-actions .btn { width: 100%; }
+    }
+
+    /* Favorites grid: full detail, stacked on phones */
+    @media (max-width: 480px) {
+      .grid-modern { grid-template-columns: 1fr !important; }
+      .media-card { grid-template-columns: 1fr !important; }
+      .media-card .media-poster.poster {
+        width: 100% !important;
+        height: auto !important;
+        aspect-ratio: 2 / 3;
+      }
+      .media-card .card-actions {
+        width: 100%;
+        justify-content: flex-start;
+      }
+    }
+
+    /* Input: keep space for clear button */
+    .input-adorned .form-control { padding-right: 64px; }
   `;
 
   /* =============== Helpers =============== */
@@ -541,7 +607,7 @@ const Favorite = () => {
 
   const bucketData = (favBucket && favCache[favBucket]) || { movies:[], series:[], counts:{ movies:0, series:0, total:0 } };
 
-  // page slices (always contiguous; deletion backfills naturally)
+  // page slices
   const moviesPageSlice = bucketData.movies.slice(favPageMovies*PAGE_SIZE, favPageMovies*PAGE_SIZE+PAGE_SIZE);
   const seriesPageSlice = bucketData.series.slice(favPageSeries*PAGE_SIZE, favPageSeries*PAGE_SIZE+PAGE_SIZE);
 
