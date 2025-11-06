@@ -30,6 +30,10 @@ export default function DailyTransactionPage() {
   const perPage = 20;
   const tableEndRef = useRef(null);
 
+  // ---- lazy-first-load flags/aborters ----
+  const hasLoadedRef = useRef(false);
+  const abortersRef = useRef({}); // {key: AbortController}
+
   const startIdx = (page - 1) * perPage;
   const pagedTransactions = useMemo(
     () => transactions.slice(startIdx, startIdx + perPage),
@@ -47,6 +51,7 @@ export default function DailyTransactionPage() {
     []
   );
 
+  // keep today's date fresh once a minute
   useEffect(() => {
     const timer = setInterval(() => {
       setForm((prev) => ({ ...prev, transaction_date: getLocalDate() }));
@@ -54,33 +59,109 @@ export default function DailyTransactionPage() {
     return () => clearInterval(timer);
   }, []);
 
+  // -------- helpers: abort + retry ----------
+  const newAborter = (key) => {
+    abortersRef.current[key]?.abort?.();
+    const ctrl = new AbortController();
+    abortersRef.current[key] = ctrl;
+    return ctrl.signal;
+  };
+
+  const cleanupAborters = () => {
+    Object.values(abortersRef.current).forEach((c) => c?.abort?.());
+    abortersRef.current = {};
+  };
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  async function retry(fn, { tries = 3, delay = 500 }) {
+    let lastErr;
+    for (let i = 0; i < tries; i++) {
+      try {
+        return await fn();
+      } catch (e) {
+        lastErr = e;
+        if (i < tries - 1) await sleep(delay * (i + 1));
+      }
+    }
+    throw lastErr;
+  }
+
+  // ---- API calls (idempotent) ----
   const fetchTransactions = async () => {
     try {
-      const res = await axios.get(`${API}/dailyTransaction`);
-      setTransactions(res.data);
+      const res = await axios.get(`${API}/dailyTransaction`, { signal: newAborter("tx") });
+      setTransactions(res.data || []);
       setPage(1);
-      fetchSummary();
-    } catch {
+      fetchSummary(); // independent
+    } catch (e) {
+      if (axios.isCancel(e)) return;
       showPopup("Error fetching transactions", "error");
     }
   };
 
   const fetchSummary = async () => {
     try {
-      const res = await axios.get(`${API}/dailyTransaction/daily-summary`);
-      setSummary(res.data);
-    } catch {
+      const res = await axios.get(`${API}/dailyTransaction/daily-summary`, { signal: newAborter("sum") });
+      setSummary(res.data || { total_debit: 0, total_credit: 0, total_transactions: 0 });
+    } catch (e) {
+      if (axios.isCancel(e)) return;
       showPopup("Error fetching summary", "error");
     }
   };
 
+  const fetchLookups = async () => {
+    try {
+      // fetch both in parallel with retry (good for cold starts)
+      const [cats, subs] = await Promise.all([
+        retry(() => axios.get(`${API}/category`, { signal: newAborter("cats") }), { tries: 3, delay: 400 }),
+        retry(() => axios.get(`${API}/subcategory`, { signal: newAborter("subs") }), { tries: 3, delay: 400 }),
+      ]);
+      setCategories(Array.isArray(cats.data) ? cats.data : []);
+      setSubcategories(Array.isArray(subs.data) ? subs.data : []);
+    } catch (e) {
+      if (axios.isCancel(e)) return;
+      showPopup("Error fetching categories/subcategories", "error");
+    }
+  };
+
+  const firstLoad = async () => {
+    if (hasLoadedRef.current) return;
+    // If offline, wait until we are online to attempt the first fetch
+    if (typeof navigator !== "undefined" && navigator && navigator.onLine === false) {
+      const onBackOnline = () => {
+        window.removeEventListener("online", onBackOnline);
+        firstLoad();
+      };
+      window.addEventListener("online", onBackOnline);
+      return;
+    }
+    hasLoadedRef.current = true;
+    await fetchLookups();
+    await fetchTransactions();
+  };
+
+  // ---- Lazy auto-load ONLY when page/tab visible (and on focus) ----
   useEffect(() => {
-    axios.get(`${API}/category`).then((res) => setCategories(res.data));
-    axios.get(`${API}/subcategory`).then((res) => setSubcategories(res.data));
-    fetchTransactions();
-    // eslint-disable-next-line
+    const maybeLoad = () => {
+      if (document.visibilityState === "visible") {
+        firstLoad();
+      }
+    };
+    // attempt immediately if already visible
+    maybeLoad();
+
+    document.addEventListener("visibilitychange", maybeLoad);
+    window.addEventListener("focus", maybeLoad);
+
+    return () => {
+      document.removeEventListener("visibilitychange", maybeLoad);
+      window.removeEventListener("focus", maybeLoad);
+      cleanupAborters();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // dependent subcategory filter
   useEffect(() => {
     if (form.category_id) {
       setFilteredSubs(subcategories.filter((s) => s.category_id === parseInt(form.category_id)));
@@ -110,12 +191,12 @@ export default function DailyTransactionPage() {
     try {
       let id = null;
       if (editingId) {
-        await axios.put(`${API}/dailyTransaction/${editingId}`, form);
+        await axios.put(`${API}/dailyTransaction/${editingId}`, form, { signal: newAborter("save") });
         id = editingId;
         showPopup("Transaction updated", "success");
         setEditingId(null);
       } else {
-        const res = await axios.post(`${API}/dailyTransaction`, form);
+        const res = await axios.post(`${API}/dailyTransaction`, form, { signal: newAborter("save") });
         if (res.data && res.data.length > 0) {
           id = res.data[res.data.length - 1].daily_transaction_id;
         }
@@ -133,7 +214,8 @@ export default function DailyTransactionPage() {
         purpose: "",
         transaction_date: getLocalDate(),
       });
-    } catch {
+    } catch (e) {
+      if (axios.isCancel(e)) return;
       showPopup("Failed to save transaction", "error");
     }
   };
@@ -144,12 +226,12 @@ export default function DailyTransactionPage() {
     if (!confirmDeleteId) return;
     try {
       setDeleting(true);
-      await axios.delete(`${API}/dailyTransaction/${confirmDeleteId}`);
+      await axios.delete(`${API}/dailyTransaction/${confirmDeleteId}`, { signal: newAborter("del") });
       showPopup("Transaction deleted", "success");
       setConfirmDeleteId(null);
       await fetchTransactions();
-    } catch {
-      showPopup("Failed to delete transaction", "error");
+    } catch (e) {
+      if (!axios.isCancel(e)) showPopup("Failed to delete transaction", "error");
     } finally {
       setDeleting(false);
     }
@@ -193,8 +275,8 @@ export default function DailyTransactionPage() {
           --brand-grad: linear-gradient(90deg,#5f4bb6 0%, #1f5f78 100%);
           --accent:#2b7a8b; --success:#0f8a5f; --danger:#b33a3a;
           --rad:14px;
-          --px: clamp(12px, 4vw, 20px);           /* side padding scales with width */
-          --fs: clamp(14px, 3.6vw, 16px);         /* base font size */
+          --px: clamp(12px, 4vw, 20px);
+          --fs: clamp(14px, 3.6vw, 16px);
           --fs-sm: clamp(12px, 3.2vw, 14px);
           --fs-lg: clamp(16px, 4.2vw, 18px);
         }
@@ -205,9 +287,7 @@ export default function DailyTransactionPage() {
           -webkit-background-clip: text; -webkit-text-fill-color: transparent;
           font-weight: 800; letter-spacing:.35px; text-align:center;
         }
-        .kpi-grid{
-          display:grid; gap:12px; grid-template-columns: 1fr; margin-bottom: 10px;
-        }
+        .kpi-grid{ display:grid; gap:12px; grid-template-columns: 1fr; margin-bottom: 10px; }
         @media (min-width:576px){ .kpi-grid{ grid-template-columns: repeat(3,1fr); } }
         .card-ui{
           background: var(--surface);
@@ -231,38 +311,27 @@ export default function DailyTransactionPage() {
           border-radius:12px; padding:.6rem 1rem; font-weight:700; font-size: var(--fs);
         }
 
-        /* Table wrapper for ≥ md, card list for < md */
         .tbl-wrap{ border:1px solid var(--border); border-radius: var(--rad); background:#fff; box-shadow: 0 8px 24px rgba(0,0,0,.06); padding: 8px; }
         .table thead th{ position: sticky; top: 0; background:#0f172a; color:#fff; z-index: 1; }
         .table-striped>tbody>tr:nth-of-type(odd)>*{ background-color: #fafcff; }
         .table-success{ transition: background .4s ease; }
 
         .mobile-list{ display: grid; gap: 10px; }
-        .tx-card{
-          background: #fff; border:1px solid var(--border); border-radius: var(--rad);
-          padding: 10px 12px; box-shadow: 0 6px 16px rgba(0,0,0,.05);
-        }
+        .tx-card{ background: #fff; border:1px solid var(--border); border-radius: var(--rad); padding: 10px 12px; box-shadow: 0 6px 16px rgba(0,0,0,.05); }
         .tx-top{ display:flex; align-items:flex-start; justify-content:space-between; gap: 8px; }
         .tx-title{ font-weight: 700; font-size: var(--fs); color: var(--ink-900);}
         .tx-sub{ color: var(--ink-600); font-size: var(--fs-sm); }
-        .badge{
-          padding: 3px 8px; border-radius: 999px; font-size: var(--fs-sm); font-weight: 800;
-        }
+        .badge{ padding: 3px 8px; border-radius: 999px; font-size: var(--fs-sm); font-weight: 800; }
         .badge-debit{ background:#fee2e2; color:#b33a3a; }
         .badge-credit{ background:#dcfce7; color:#0f8a5f; }
         .tx-row{ display:flex; justify-content:space-between; align-items:center; margin-top: 6px; }
         .tx-amt{ font-weight: 800; font-size: var(--fs-lg); }
         .tx-meta{ color: var(--ink-600); font-size: var(--fs-sm); }
 
-        /* visibility */
         @media (max-width: 767.98px){ .table-view{ display:none; } }
         @media (min-width: 768px){ .mobile-view{ display:none; } }
 
-        /* Toast & modal */
-        .toast-pro{
-          background: #0f172a; color:#fff; border-radius: 10px; padding: 12px 16px;
-          box-shadow: 0 10px 24px rgba(0,0,0,.25);
-        }
+        .toast-pro{ background: #0f172a; color:#fff; border-radius: 10px; padding: 12px 16px; box-shadow: 0 10px 24px rgba(0,0,0,.25); }
         .toast-success{ background: #0f8a5f; }
         .toast-error{ background: #b33a3a; }
         .modal-backdrop{ position: fixed; inset:0; background: rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; z-index: 1100; padding: 16px; }

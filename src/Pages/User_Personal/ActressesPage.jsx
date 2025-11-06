@@ -5,15 +5,15 @@ import { useSearchParams } from "react-router-dom";
  * ActressesPage.jsx — Full page (List + Detail) with % progress overlay
  *
  * Endpoints used (FULL URLs):
- *   LIST  GET    http://localhost:5000/api/act_favorite
- *   ONE   GET    http://localhost:5000/api/act_favorite/:id?images=page&offset=0&limit=30
- *   IMGS  GET    http://localhost:5000/api/act_favorite/:id/images?offset=&limit=
- *   ADD   POST   http://localhost:5000/api/act_favorite/:id/images/append   (JSON: {images:[...]} )
- *   DELI  POST   http://localhost:5000/api/act_favorite/:id/images/delete   (JSON: {urls:[...]} or {indexes:[...]} )
- *   DELR  DELETE http://localhost:5000/api/act_favorite/:id
+ *   LIST  GET    https://express-backend-myapp.onrender.com/api/act_favorite
+ *   ONE   GET    https://express-backend-myapp.onrender.com/api/act_favorite/:id?images=page&offset=0&limit=30
+ *   IMGS  GET    https://express-backend-myapp.onrender.com/api/act_favorite/:id/images?offset=&limit=
+ *   ADD   POST   https://express-backend-myapp.onrender.com/api/act_favorite/:id/images/append   (JSON: {images:[...]} )
+ *   DELI  POST   https://express-backend-myapp.onrender.com/api/act_favorite/:id/images/delete   (JSON: {urls:[...]} or {indexes:[...]} )
+ *   DELR  DELETE https://express-backend-myapp.onrender.com/api/act_favorite/:id
  */
 
-const BASE = "http://localhost:5000";
+const BASE = "https://express-backend-myapp.onrender.com";
 const API = {
   list: (q, country, name, series) => {
     const u = new URL(`${BASE}/api/act_favorite`);
@@ -188,6 +188,8 @@ export default function ActressesPage() {
               p.set("id", String(id));
               return p;
             });
+            // optional: start overlay immediately for snappy feel
+            progress.start("Opening details…", 12);
           }}
           progress={progress}
         />
@@ -306,11 +308,7 @@ function ListView({ onOpen, progress }) {
               <button
                 key={r.id}
                 style={S.cardBtn}
-                onClick={async () => {
-                  // immediate visual progress for detail transition
-                  progress.start("Opening details…", 12);
-                  onOpen(r.id);
-                }}
+                onClick={() => onOpen(r.id)}
               >
                 <div style={S.cardGrid}>
                   <div style={S.cardImgWrap}>
@@ -359,7 +357,6 @@ function ListView({ onOpen, progress }) {
 function DetailView({ id, onClose, progress }) {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
-  the
   const [actress, setActress] = useState(null);
 
   const [firstPage, setFirstPage] = useState({
@@ -590,8 +587,7 @@ function AddImages({ actressId, onClose, onUploaded, show, progress }) {
     try {
       setBusy(true);
       progress.start("Uploading…", 12);
-      // NOTE: This demo sends temporary blob URLs (no local paths).
-      // Replace with your uploader (S3/server) and send hosted URLs.
+      // NOTE: demo sends blob URLs; replace with your uploader if needed.
       const urls = Array.from(filesList).map((f) => URL.createObjectURL(f));
       await safeFetchJSON(API.append(actressId), {
         method: "POST",
@@ -637,6 +633,7 @@ function AddImages({ actressId, onClose, onUploaded, show, progress }) {
 /* ========================= Delete Images ========================= */
 function DeleteImages({ actressId, onClose, onDeleted, show, progress }) {
   const [list, setList] = useState([]);
+  the
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -896,9 +893,9 @@ const S = {
     inset: 0,
     background: "rgba(0,0,0,0.5)",
     display: "flex",
-    alignItems: "center",                       // center vertically
+    alignItems: "center",
     justifyContent: "center",
-    padding: "calc(env(safe-area-inset-top, 0px) + 72px) 12px 24px", // headroom for navbar
+    padding: "calc(env(safe-area-inset-top, 0px) + 72px) 12px 24px",
     overflowY: "auto",
     zIndex: 1500
   },
@@ -909,7 +906,7 @@ const S = {
     borderRadius: 16,
     padding: 10,
     position: "relative",
-    maxHeight: "calc(100vh - 200px)",           // fits inside padded viewport
+    maxHeight: "calc(100vh - 200px)",
     overflowY: "auto"
   },
   modalContent: { width: "100%" },
@@ -949,16 +946,16 @@ const S = {
   shimmerAnim: { position: "absolute", inset: 0, background: "linear-gradient(90deg, rgba(238,238,238,0) 0%, rgba(255,255,255,0.7) 50%, rgba(238,238,238,0) 100%)", transform: "translateX(-100%)", animation: "shimmer 1.2s infinite" },
 };
 
-/* ---------------- Popup styles (centered with safe-top + scroll) ---------------- */
+/* ---------------- Popup styles ---------------- */
 const U = {
   popupBackdrop: {
     position: "fixed",
     inset: 0,
     background: "rgba(0,0,0,0.35)",
     display: "flex",
-    alignItems: "center",                                 // center vertically
+    alignItems: "center",
     justifyContent: "center",
-    padding: "calc(env(safe-area-inset-top, 0px) + 72px) 16px 24px", // headroom for navbar
+    padding: "calc(env(safe-area-inset-top, 0px) + 72px) 16px 24px",
     overflowY: "auto",
     zIndex: 1700
   },
@@ -970,7 +967,7 @@ const U = {
     padding: 16,
     boxShadow: "0 12px 28px rgba(0,0,0,0.18)",
     textAlign: "center",
-    maxHeight: "calc(100vh - 160px)",                    // fits inside padded viewport
+    maxHeight: "calc(100vh - 160px)",
     overflowY: "auto",
     margin: "0 auto"
   },

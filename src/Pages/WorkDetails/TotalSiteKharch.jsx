@@ -4,18 +4,8 @@ import React, { useEffect, useState } from "react";
 const BASE_URL = "https://express-backend-myapp.onrender.com/api/sitekharch";
 
 const MONTH_NAMES = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
+  "January","February","March","April","May","June",
+  "July","August","September","October","November","December",
 ];
 
 // make YYYY-MM from year + monthIndex (0..11)
@@ -28,10 +18,9 @@ export default function TotalSiteKharch() {
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
 
-  // array of 12 items: [{month:'2025-01', totalKharch, totalReceived, balance, hasData}]
+  // array of 12 items: [{monthStr,label,totalKharch,totalReceived,balance,hasData,khCount,recCount}]
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
-
   const [error, setError] = useState("");
 
   const loadYearData = async (y) => {
@@ -43,13 +32,9 @@ export default function TotalSiteKharch() {
       for (let i = 0; i < 12; i++) {
         const monthStr = ym(y, i);
         // kharch
-        const khP = fetch(`${BASE_URL}/kharch?month=${monthStr}`).then((r) =>
-          r.json()
-        );
+        const khP = fetch(`${BASE_URL}/kharch?month=${monthStr}`).then((r) => r.json());
         // received
-        const recP = fetch(`${BASE_URL}/received?month=${monthStr}`).then((r) =>
-          r.json()
-        );
+        const recP = fetch(`${BASE_URL}/received?month=${monthStr}`).then((r) => r.json());
         promises.push(Promise.all([khP, recP]));
       }
 
@@ -61,18 +46,13 @@ export default function TotalSiteKharch() {
         let totalKharch = 0;
         if (khJson.ok && Array.isArray(khJson.data)) {
           totalKharch = khJson.data.reduce((sum, r) => {
-            // same logic as you used (amount + extra_amount + extra_items)
             let t = 0;
             t += Number(r.amount || 0);
             t += Number(r.extra_amount || 0);
 
             let extras = [];
             if (typeof r.extra_items === "string") {
-              try {
-                extras = JSON.parse(r.extra_items);
-              } catch {
-                extras = [];
-              }
+              try { extras = JSON.parse(r.extra_items); } catch { extras = []; }
             } else if (Array.isArray(r.extra_items)) {
               extras = r.extra_items;
             }
@@ -107,9 +87,7 @@ export default function TotalSiteKharch() {
           balance,
           hasData,
           recCount: recData.length,
-          khCount: khJson.ok && Array.isArray(khJson.data)
-            ? khJson.data.length
-            : 0,
+          khCount: khJson.ok && Array.isArray(khJson.data) ? khJson.data.length : 0,
         };
       });
 
@@ -125,6 +103,9 @@ export default function TotalSiteKharch() {
   useEffect(() => {
     loadYearData(year);
   }, [year]);
+
+  // ✅ Only months that actually have data
+  const rowsWithData = rows.filter((m) => m.hasData);
 
   return (
     <>
@@ -144,23 +125,17 @@ export default function TotalSiteKharch() {
           color: #fff;
           box-shadow: 0 18px 35px rgba(0,0,0,0.18);
         }
-        .year-input {
-          max-width: 130px;
-        }
+        .year-input { max-width: 130px; }
         .months-grid {
           display: grid;
           grid-template-columns: 1fr;
           gap: 1rem;
         }
         @media (min-width: 768px) {
-          .months-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
+          .months-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
         @media (min-width: 1100px) {
-          .months-grid {
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-          }
+          .months-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
         }
         .month-card {
           background: #fff;
@@ -195,27 +170,10 @@ export default function TotalSiteKharch() {
           align-items: center;
           font-size: .8rem;
         }
-        .metric-label {
-          color: #475569;
-        }
-        .metric-value {
-          font-weight: 600;
-        }
-        .metric-value.positive {
-          color: #15803d;
-        }
-        .metric-value.negative {
-          color: #b91c1c;
-        }
-        .empty-box {
-          background: #f8fafc;
-          border: 1px dashed rgba(148,163,184,.75);
-          border-radius: .7rem;
-          padding: .4rem .5rem;
-          font-size: .7rem;
-          color: #94a3b8;
-          text-align: center;
-        }
+        .metric-label { color: #475569; }
+        .metric-value { font-weight: 600; }
+        .metric-value.positive { color: #15803d; }
+        .metric-value.negative { color: #b91c1c; }
         .small-footer {
           font-size: .67rem;
           color: #94a3b8;
@@ -237,9 +195,16 @@ export default function TotalSiteKharch() {
           animation: pulse 1.3s ease-in-out infinite;
         }
         @keyframes pulse {
-          0% { opacity: .4; }
-          50% { opacity: 1; }
-          100% { opacity: .4; }
+          0% { opacity: .4; } 50% { opacity: 1; } 100% { opacity: .4; }
+        }
+        .empty-year {
+          background: rgba(255,255,255,.8);
+          border: 1px dashed rgba(148,163,184,.7);
+          color: #334155;
+          border-radius: 12px;
+          padding: 14px;
+          text-align: center;
+          font-weight: 600;
         }
       `}</style>
 
@@ -248,15 +213,12 @@ export default function TotalSiteKharch() {
           {/* HEADER */}
           <div className="header-card p-3 p-sm-4 mb-4 d-flex flex-column gap-3 gap-sm-0 flex-sm-row justify-content-between align-items-sm-center">
             <div>
-              <p
-                className="text-uppercase mb-1"
-                style={{ letterSpacing: "0.12em", fontSize: "0.65rem" }}
-              >
+              <p className="text-uppercase mb-1" style={{ letterSpacing: "0.12em", fontSize: "0.65rem" }}>
                 Site Kharch – Yearly View
               </p>
               <h5 className="mb-1">Month-wise totals for {year}</h5>
               <p className="mb-0 small opacity-75">
-                Each block = 1 month. Shows Total Kharch, Total Received and Balance.
+                Each block shows Total Kharch, Total Received and Balance. (Only months with data are listed.)
               </p>
             </div>
             <div className="d-flex gap-2 flex-wrap align-items-center">
@@ -268,88 +230,71 @@ export default function TotalSiteKharch() {
                 min="2000"
                 max="2100"
               />
-              <button
-                className="btn btn-outline-light"
-                type="button"
-                onClick={() => loadYearData(year)}
-              >
+              <button className="btn btn-outline-light" type="button" onClick={() => loadYearData(year)}>
                 Reload
               </button>
             </div>
           </div>
 
           {/* ERROR */}
-          {error ? (
-            <div className="alert alert-danger py-2">{error}</div>
-          ) : null}
+          {error ? <div className="alert alert-danger py-2">{error}</div> : null}
 
           {/* MONTHS GRID */}
           <div className="months-grid">
-            {loading && rows.length === 0
-              ? // skeleton for 12 cards
-                Array.from({ length: 12 }).map((_, idx) => (
-                  <div key={idx} className="month-card">
-                    <div className="loading-block" style={{ width: "60%" }}></div>
-                    <div className="loading-block" style={{ width: "40%" }}></div>
-                    <div className="loading-block" style={{ width: "75%" }}></div>
-                    <div className="loading-block" style={{ width: "50%" }}></div>
+            {loading && rows.length === 0 ? (
+              // skeleton for a few cards while first load
+              Array.from({ length: 6 }).map((_, idx) => (
+                <div key={idx} className="month-card">
+                  <div className="loading-block" style={{ width: "60%" }} />
+                  <div className="loading-block" style={{ width: "40%" }} />
+                  <div className="loading-block" style={{ width: "75%" }} />
+                  <div className="loading-block" style={{ width: "50%" }} />
+                </div>
+              ))
+            ) : rowsWithData.length === 0 ? (
+              <div className="empty-year">No months with data for {year}.</div>
+            ) : (
+              rowsWithData.map((mRow, idx) => (
+                <div key={mRow.monthStr} className="month-card">
+                  <div className="month-title">
+                    <span>{mRow.label}</span>
+                    {/* Show order number based on how many visible months */}
+                    <span className="pill-month">{idx + 1} / {rowsWithData.length}</span>
                   </div>
-                ))
-              : rows.map((mRow, idx) => (
-                  <div key={mRow.monthStr} className="month-card">
-                    <div className="month-title">
-                      <span>{mRow.label}</span>
-                      <span className="pill-month">{idx + 1} / 12</span>
-                    </div>
 
-                    <div className="metric-line">
-                      <span className="metric-label">Total Kharch</span>
-                      <span className="metric-value">
-                        ₹{mRow.totalKharch.toFixed(2)}
-                      </span>
-                    </div>
-                    <div className="metric-line">
-                      <span className="metric-label">Total Received</span>
-                      <span className="metric-value">
-                        ₹{mRow.totalReceived.toFixed(2)}
-                      </span>
-                    </div>
-                    <div className="metric-line">
-                      <span className="metric-label">Balance</span>
-                      <span
-                        className={`metric-value ${
-                          mRow.balance >= 0 ? "positive" : "negative"
-                        }`}
-                      >
-                        ₹{mRow.balance.toFixed(2)}
-                      </span>
-                    </div>
-
-                    {!mRow.hasData ? (
-                      <div className="empty-box mt-1">
-                        No history found for this month
-                      </div>
-                    ) : (
-                      <div className="small-footer">
-                        <span>
-                          Kharch: {mRow.khCount} • Rec: {mRow.recCount}
-                        </span>
-                        <span
-                          className={`balance-pill ${
-                            mRow.balance >= 0
-                              ? "bg-success-subtle text-success-emphasis"
-                              : "bg-danger-subtle text-danger-emphasis"
-                          }`}
-                        >
-                          {mRow.balance >= 0 ? "OK" : "Need ₹"}
-                        </span>
-                      </div>
-                    )}
+                  <div className="metric-line">
+                    <span className="metric-label">Total Kharch</span>
+                    <span className="metric-value">₹{mRow.totalKharch.toFixed(2)}</span>
                   </div>
-                ))}
+                  <div className="metric-line">
+                    <span className="metric-label">Total Received</span>
+                    <span className="metric-value">₹{mRow.totalReceived.toFixed(2)}</span>
+                  </div>
+                  <div className="metric-line">
+                    <span className="metric-label">Balance</span>
+                    <span className={`metric-value ${mRow.balance >= 0 ? "positive" : "negative"}`}>
+                      ₹{mRow.balance.toFixed(2)}
+                    </span>
+                  </div>
+
+                  <div className="small-footer">
+                    <span>Kharch: {mRow.khCount} • Rec: {mRow.recCount}</span>
+                    <span
+                      className={`balance-pill ${
+                        mRow.balance >= 0
+                          ? "bg-success-subtle text-success-emphasis"
+                          : "bg-danger-subtle text-danger-emphasis"
+                      }`}
+                    >
+                      {mRow.balance >= 0 ? "OK" : "Need ₹"}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
 
-          <div style={{ height: "50px" }}></div>
+          <div style={{ height: "50px" }} />
         </div>
       </div>
     </>

@@ -36,19 +36,25 @@ function Navbar() {
         </div>
       </nav>
 
-      {/* Spacer to offset fixed navbar height */}
+      {/* Spacer to offset fixed navbar height (now includes top gap + bottom line) */}
       <div className="eh-nav-spacer" aria-hidden="true" />
 
       <style>{`
         :root {
-          --eh-nav-h: 72px;
+          --eh-nav-h: 72px;                         /* visual navbar height */
           --eh-gap: clamp(6px, 1.4vw, 10px);
           --eh-text: clamp(14px, 2.2vw, 16px);
           --eh-brand: clamp(16px, 3vw, 20px);
           --eh-safe-top: env(safe-area-inset-top, 0px);
+
+          /* NEW: top gap above the navbar (mobile gets 10px) */
+          --eh-top-gap: 0px;
+
+          /* small accent line height at bottom of navbar (::after) */
+          --eh-bottom-line: 3px;
         }
         @media (max-width: 575.98px) {
-          :root { --eh-nav-h: 64px; }
+          :root { --eh-nav-h: 64px; --eh-top-gap: 10px; }
         }
 
         /* ===== Fixed Navbar Layout ===== */
@@ -58,16 +64,15 @@ function Navbar() {
           right: 0;
           width: 100%;
           z-index: 1100;
+
+          /* Respect safe area + configurable top gap */
+          top: calc(var(--eh-safe-top) + var(--eh-top-gap));
         }
 
-        /* ✅ Add top gap ONLY on mobile view */
-        @media (max-width: 575.98px) {
-          .eh-fixed {
-            top: 10px; /* <-- this creates visible space above navbar */
-          }
+        /* Spacer equals nav height + top gap + the small bottom line */
+        .eh-nav-spacer {
+          height: calc(var(--eh-nav-h) + var(--eh-top-gap) + var(--eh-bottom-line));
         }
-
-        .eh-nav-spacer { height: var(--eh-nav-h); }
 
         .eh-container {
           display: flex;
@@ -86,6 +91,7 @@ function Navbar() {
           --ring: rgba(56,189,248,.38);
           --shadow: 0 10px 28px rgba(2,6,23,.45);
 
+          position: relative; /* keep ::after anchored to navbar */
           background:
             linear-gradient(180deg, var(--glass), rgba(10,14,24,.72)),
             radial-gradient(1000px 260px at 10% -40%, color-mix(in oklab, var(--c1) 44%, transparent), transparent 70%),
@@ -104,7 +110,7 @@ function Navbar() {
           left: 0;
           right: 0;
           bottom: -1px;
-          height: 3px;
+          height: var(--eh-bottom-line);
           background: linear-gradient(90deg, var(--c1), var(--c2));
           opacity: 0.5;
           filter: blur(0.6px);
