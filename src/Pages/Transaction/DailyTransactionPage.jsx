@@ -3,13 +3,50 @@ import axios from "axios";
 
 const API = "https://express-backend-myapp.onrender.com/api";
 
-// Optional: centralize axios config (timeout helps during cold starts)
+// ---------- HTTP (short timeout for cold starts) ----------
 const http = axios.create({
   baseURL: API,
-  timeout: 12000,
+  timeout: 10000,
 });
 
+// ---------- Cache helpers (instant paint) ----------
+const CACHE_KEY = "dtp_v1";
+const loadCache = () => {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
+const saveCache = (data) => {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ ...data, _ts: Date.now() }));
+  } catch {}
+};
+
+// ---------- Utils ----------
+function getLocalDate() {
+  const now = new Date();
+  return now.toLocaleDateString("en-CA"); // YYYY-MM-DD
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function retry(fn, { tries = 3, delay = 400 }) {
+  let lastErr;
+  for (let i = 0; i < tries; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      if (i < tries - 1) await sleep(delay * (i + 1));
+    }
+  }
+  throw lastErr;
+}
+
 export default function DailyTransactionPage() {
+  // ---------- State ----------
   const [categories, setCategories] = useState([]);
   const [subcategories, setSubcategories] = useState([]);
   const [filteredSubs, setFilteredSubs] = useState([]);
@@ -33,31 +70,23 @@ export default function DailyTransactionPage() {
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
+  // ---------- Pagination ----------
   const perPage = 20;
-  const tableEndRef = useRef(null);
-
-  // ---- lifecycle/abort flags ----
-  const hasLoadedRef = useRef(false);
-  const abortersRef = useRef({}); // {key: AbortController}
-
   const startIdx = (page - 1) * perPage;
-  const pagedTransactions = useMemo(
-    () => transactions.slice(startIdx, startIdx + perPage),
-    [transactions, startIdx]
-  );
+  const pagedTransactions = useMemo(() => transactions.slice(startIdx, startIdx + perPage), [transactions, startIdx]);
   const totalPages = Math.ceil(transactions.length / perPage) || 1;
 
-  function getLocalDate() {
-    const now = new Date();
-    return now.toLocaleDateString("en-CA"); // YYYY-MM-DD
-  }
+  // ---------- Refs ----------
+  const tableEndRef = useRef(null);
+  const abortersRef = useRef({}); // {key: AbortController}
 
+  // ---------- Formatters ----------
   const INR = useMemo(
     () => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }),
     []
   );
 
-  // keep today's date fresh once a minute
+  // Keep today's date fresh once a minute
   useEffect(() => {
     const timer = setInterval(() => {
       setForm((prev) => ({ ...prev, transaction_date: getLocalDate() }));
@@ -65,102 +94,121 @@ export default function DailyTransactionPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // -------- helpers: abort + retry ----------
+  // ---------- Abort helpers ----------
   const newAborter = (key) => {
     abortersRef.current[key]?.abort?.();
     const ctrl = new AbortController();
     abortersRef.current[key] = ctrl;
     return ctrl.signal;
   };
-
   const cleanupAborters = () => {
     Object.values(abortersRef.current).forEach((c) => c?.abort?.());
     abortersRef.current = {};
   };
 
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  async function retry(fn, { tries = 3, delay = 500 }) {
-    let lastErr;
-    for (let i = 0; i < tries; i++) {
-      try {
-        return await fn();
-      } catch (e) {
-        lastErr = e;
-        if (i < tries - 1) await sleep(delay * (i + 1));
-      }
-    }
-    throw lastErr;
-  }
+  // ---------- Popup ----------
+  const showPopup = (message, type) => {
+    setPopup({ show: true, message, type });
+    setTimeout(() => setPopup({ show: false, message: "", type: "" }), 1400);
+  };
 
-  // ---- API calls (idempotent) ----
+  // ---------- Scroll ----------
+  const scrollToBottom = () => {
+    setTimeout(() => {
+      tableEndRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 120);
+  };
+
+  // ---------- API ----------
   const fetchTransactions = async () => {
-    try {
-      const res = await retry(
-        () => http.get(`/dailyTransaction`, { signal: newAborter("tx") }),
-        { tries: 3, delay: 400 }
-      );
-      setTransactions(Array.isArray(res.data) ? res.data : []);
-      setPage(1);
-    } catch (e) {
-      if (axios.isCancel(e)) return;
-      showPopup("Error fetching transactions", "error");
-    }
+    const res = await retry(
+      () => http.get(`/dailyTransaction`, { signal: newAborter("tx"), params: { t: Date.now() } }),
+      { tries: 3, delay: 300 }
+    );
+    return Array.isArray(res.data) ? res.data : [];
   };
 
   const fetchSummary = async () => {
-    try {
-      const res = await retry(
-        () => http.get(`/dailyTransaction/daily-summary`, { signal: newAborter("sum") }),
-        { tries: 3, delay: 400 }
-      );
-      setSummary(res.data || { total_debit: 0, total_credit: 0, total_transactions: 0 });
-    } catch (e) {
-      if (axios.isCancel(e)) return;
-      showPopup("Error fetching summary", "error");
-    }
+    const res = await retry(
+      () => http.get(`/dailyTransaction/daily-summary`, { signal: newAborter("sum"), params: { t: Date.now() } }),
+      { tries: 3, delay: 300 }
+    );
+    return res.data || { total_debit: 0, total_credit: 0, total_transactions: 0 };
   };
 
   const fetchLookups = async () => {
-    try {
-      const [cats, subs] = await Promise.all([
-        retry(() => http.get(`/category`, { signal: newAborter("cats") }), { tries: 3, delay: 400 }),
-        retry(() => http.get(`/subcategory`, { signal: newAborter("subs") }), { tries: 3, delay: 400 }),
-      ]);
-      setCategories(Array.isArray(cats.data) ? cats.data : []);
-      setSubcategories(Array.isArray(subs.data) ? subs.data : []);
-    } catch (e) {
-      if (axios.isCancel(e)) return;
-      showPopup("Error fetching categories/subcategories", "error");
-    }
+    const [cats, subs] = await Promise.all([
+      retry(() => http.get(`/category`, { signal: newAborter("cats"), params: { t: Date.now() } }), {
+        tries: 3,
+        delay: 300,
+      }),
+      retry(() => http.get(`/subcategory`, { signal: newAborter("subs"), params: { t: Date.now() } }), {
+        tries: 3,
+        delay: 300,
+      }),
+    ]);
+    return {
+      categories: Array.isArray(cats.data) ? cats.data : [],
+      subcategories: Array.isArray(subs.data) ? subs.data : [],
+    };
   };
 
-  // Fetch EVERYTHING in parallel — immediately on mount
-  const fetchAll = async () => {
-    await Promise.all([fetchLookups(), fetchTransactions(), fetchSummary()]);
-  };
-
-  const firstLoad = async () => {
-    if (hasLoadedRef.current) return;
-    hasLoadedRef.current = true;
-
-    // Try immediately (don't wait for focus/visibility)
-    await fetchAll();
-
-    // If we got nothing due to a cold start, do a quick follow-up retry pass
-    if (transactions.length === 0 || categories.length === 0 || subcategories.length === 0) {
-      try {
-        await sleep(600);
-        await fetchAll();
-      } catch {}
-    }
-  };
-
-  // ---- Mount: load immediately; also refresh when back online ----
+  // ---------- INSTANT LOAD: hydrate from cache synchronously ----------
   useEffect(() => {
-    firstLoad();
+    const cached = loadCache();
+    if (cached) {
+      // Paint immediately
+      setCategories(cached.categories || []);
+      setSubcategories(cached.subcategories || []);
+      setTransactions(cached.transactions || []);
+      setSummary(
+        cached.summary || {
+          total_debit: 0,
+          total_credit: 0,
+          total_transactions: 0,
+        }
+      );
+    }
 
+    // Kick off parallel network refresh (do NOT await -> instant mount)
+    (async () => {
+      try {
+        const [lookups, tx, sum] = await Promise.all([fetchLookups(), fetchTransactions(), fetchSummary()]);
+        setCategories(lookups.categories);
+        setSubcategories(lookups.subcategories);
+        setTransactions(tx);
+        setSummary(sum);
+        setPage(1);
+
+        // Persist fresh snapshot for next instant open
+        saveCache({
+          categories: lookups.categories,
+          subcategories: lookups.subcategories,
+          transactions: tx,
+          summary: sum,
+        });
+      } catch (e) {
+        if (!axios.isCancel(e)) showPopup("Network error — showing cached data", "error");
+      }
+    })();
+
+    // Auto-refresh when back online
     const onBackOnline = () => {
-      fetchAll(); // auto-refresh as soon as connection returns
+      (async () => {
+        try {
+          const [lookups, tx, sum] = await Promise.all([fetchLookups(), fetchTransactions(), fetchSummary()]);
+          setCategories(lookups.categories);
+          setSubcategories(lookups.subcategories);
+          setTransactions(tx);
+          setSummary(sum);
+          saveCache({
+            categories: lookups.categories,
+            subcategories: lookups.subcategories,
+            transactions: tx,
+            summary: sum,
+          });
+        } catch {}
+      })();
     };
     window.addEventListener("online", onBackOnline);
 
@@ -168,13 +216,12 @@ export default function DailyTransactionPage() {
       window.removeEventListener("online", onBackOnline);
       cleanupAborters();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // dependent subcategory filter
+  // ---------- Dependent subcategory filter ----------
   useEffect(() => {
     if (form.category_id) {
-      setFilteredSubs(subcategories.filter((s) => s.category_id === parseInt(form.category_id)));
+      setFilteredSubs(subcategories.filter((s) => String(s.category_id) === String(form.category_id)));
     } else {
       setFilteredSubs([]);
     }
@@ -183,23 +230,14 @@ export default function DailyTransactionPage() {
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
-  const showPopup = (message, type) => {
-    setPopup({ show: true, message, type });
-    setTimeout(() => setPopup({ show: false, message: "", type: "" }), 1600);
-  };
-
-  const scrollToBottom = () => {
-    setTimeout(() => {
-      tableEndRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 200);
-  };
-
+  // ---------- Mutations ----------
   const addOrUpdateTransaction = async () => {
     if (!form.amount || !form.category_id) {
       return showPopup("Please fill required fields (Amount, Category)", "error");
     }
     try {
       let id = null;
+
       if (editingId) {
         await http.put(`/dailyTransaction/${editingId}`, form, { signal: newAborter("save") });
         id = editingId;
@@ -213,8 +251,16 @@ export default function DailyTransactionPage() {
         showPopup("Transaction added", "success");
       }
 
-      // Refresh fast (parallel)
-      await Promise.all([fetchTransactions(), fetchSummary()]);
+      // Refresh fast (parallel) + cache
+      const [tx, sum] = await Promise.all([fetchTransactions(), fetchSummary()]);
+      setTransactions(tx);
+      setSummary(sum);
+      saveCache({
+        categories,
+        subcategories,
+        transactions: tx,
+        summary: sum,
+      });
 
       setHighlightId(id);
       scrollToBottom();
@@ -227,6 +273,7 @@ export default function DailyTransactionPage() {
         purpose: "",
         transaction_date: getLocalDate(),
       });
+      setPage(1);
     } catch (e) {
       if (axios.isCancel(e)) return;
       showPopup("Failed to save transaction", "error");
@@ -243,8 +290,16 @@ export default function DailyTransactionPage() {
       showPopup("Transaction deleted", "success");
       setConfirmDeleteId(null);
 
-      // Refresh fast (parallel)
-      await Promise.all([fetchTransactions(), fetchSummary()]);
+      const [tx, sum] = await Promise.all([fetchTransactions(), fetchSummary()]);
+      setTransactions(tx);
+      setSummary(sum);
+      saveCache({
+        categories,
+        subcategories,
+        transactions: tx,
+        summary: sum,
+      });
+      setPage(1);
     } catch (e) {
       if (!axios.isCancel(e)) showPopup("Failed to delete transaction", "error");
     } finally {
@@ -258,9 +313,9 @@ export default function DailyTransactionPage() {
       amount: t.amount,
       quantity: t.quantity ?? "",
       type: t.type,
-      category_id: t.category_id,
-      subcategory_id: t.subcategory_id,
-      purpose: t.purpose,
+      category_id: String(t.category_id ?? ""),
+      subcategory_id: String(t.subcategory_id ?? ""),
+      purpose: t.purpose ?? "",
       transaction_date: t.transaction_date,
     });
     setHighlightId(t.daily_transaction_id);
@@ -488,9 +543,11 @@ export default function DailyTransactionPage() {
             {pagedTransactions.length === 0 ? (
               <div className="text-center text-muted">No transactions found</div>
             ) : (
-              pagedTransactions.map((t, i) => {
-                const cat = categories.find((c) => c.category_id === t.category_id)?.category_name || "-";
-                const sub = subcategories.find((s) => s.subcategory_id === t.subcategory_id)?.subcategory_name || "-";
+              pagedTransactions.map((t) => {
+                const cat = categories.find((c) => String(c.category_id) === String(t.category_id))?.category_name || "-";
+                const sub =
+                  subcategories.find((s) => String(s.subcategory_id) === String(t.subcategory_id))?.subcategory_name ||
+                  "-";
                 return (
                   <div
                     key={t.daily_transaction_id}
@@ -501,7 +558,12 @@ export default function DailyTransactionPage() {
                       <div>
                         <div className="tx-title">{cat}</div>
                         <div className="tx-sub">
-                          {sub} • {new Date(t.transaction_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                          {sub} •{" "}
+                          {new Date(t.transaction_date).toLocaleDateString("en-GB", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                          })}
                         </div>
                       </div>
                       <span className={`badge ${t.type === "debit" ? "badge-debit" : "badge-credit"}`}>{t.type}</span>
@@ -595,8 +657,11 @@ export default function DailyTransactionPage() {
                       </td>
                       <td>{INR.format(Number(t.amount || 0))}</td>
                       <td className={t.type === "debit" ? "text-danger" : "text-success"}>{t.type}</td>
-                      <td>{categories.find((c) => c.category_id === t.category_id)?.category_name || "-"}</td>
-                      <td>{subcategories.find((s) => s.subcategory_id === t.subcategory_id)?.subcategory_name || "-"}</td>
+                      <td>{categories.find((c) => String(c.category_id) === String(t.category_id))?.category_name || "-"}</td>
+                      <td>
+                        {subcategories.find((s) => String(s.subcategory_id) === String(t.subcategory_id))
+                          ?.subcategory_name || "-"}
+                      </td>
                       <td>{t.quantity ?? 0}</td>
                       <td>{t.purpose || "-"}</td>
                       <td>
@@ -604,7 +669,10 @@ export default function DailyTransactionPage() {
                           <button className="btn btn-outline-primary btn-sm" onClick={() => editTransaction(t)}>
                             Update
                           </button>
-                          <button className="btn btn-outline-danger btn-sm" onClick={() => askDelete(t.daily_transaction_id)}>
+                          <button
+                            className="btn btn-outline-danger btn-sm"
+                            onClick={() => askDelete(t.daily_transaction_id)}
+                          >
                             Delete
                           </button>
                         </div>
