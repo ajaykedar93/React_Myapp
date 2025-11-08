@@ -160,8 +160,10 @@ export default function Manage_Movies() {
       if (opts.restoreScroll && listWrapRef.current) {
         lastScrollRef.current = listWrapRef.current.scrollTop;
       }
+
+      // ❗ FIX: make a normal AbortController (the old code threw a runtime error)
       listAbortRef.current?.abort();
-      const ac = new AbortSignal.abort ? new AbortController() : new AbortController();
+      const ac = new AbortController(); // <-- FIXED
       listAbortRef.current = ac;
 
       setLoadingList(true);
@@ -179,11 +181,11 @@ export default function Manage_Movies() {
         if (!res.ok) throw new Error("List fetch failed");
 
         const contentLen = Number(res.headers.get("content-length") || 0);
+
         if (res.body && contentLen > 0) {
           const reader = res.body.getReader();
           let received = 0;
           const chunks = [];
-          // eslint-disable-next-line no-constant-condition
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
@@ -952,7 +954,7 @@ export default function Manage_Movies() {
               )}
             </div>
 
-            {/* Desktop: compact table (still large enough to see full year) */}
+            {/* Desktop: compact table */}
             <div className="d-none d-md-block">
               {editParts?.length ? (
                 <div className="table-responsive mb-2">
@@ -1191,7 +1193,7 @@ export default function Manage_Movies() {
           box-shadow: 0 6px 18px rgba(15,23,42,.06);
         }
         .mm-input{
-          font-size:1rem; /* bigger text so digits don't look clipped */
+          font-size:1rem;
           padding:.55rem .65rem;
           border-radius:.75rem;
         }

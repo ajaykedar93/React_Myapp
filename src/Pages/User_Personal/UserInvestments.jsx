@@ -22,7 +22,7 @@ const fmtMoney = (n) => {
 export default function UserInvestments() {
   /* ---------- Page style (once) ---------- */
   useEffect(() => {
-    const id = "user-investments-style";
+    const id = "user-investments-style-v2";
     if (document.getElementById(id)) return;
     const s = document.createElement("style");
     s.id = id;
@@ -40,7 +40,7 @@ export default function UserInvestments() {
       }
       .glass {
         backdrop-filter: blur(8px);
-        background: rgba(255,255,255,0.9);
+        background: rgba(255,255,255,0.92);
         border:1px solid rgba(15,23,42,0.12);
         border-radius:16px;
         box-shadow:0 10px 28px rgba(0,0,0,.06)
@@ -56,8 +56,10 @@ export default function UserInvestments() {
         backdrop-filter: blur(6px)
       }
       .table thead th{position:sticky; top:0; z-index:1; background:#f8fafc}
-      .card-hover{transition:transform .2s ease, box-shadow .2s ease}
+      .card-hover{transition:transform .2s ease, box-shadow .2s ease; border:1px solid rgba(15,23,42,.08); border-radius:14px}
       .card-hover:hover{transform:translateY(-1px); box-shadow:0 12px 26px rgba(0,0,0,.08)}
+      .card .card-body{padding:14px 14px}
+      .badge-light-soft{background:#f8fafc; border:1px solid #e5e7eb; border-radius:999px; padding:.15rem .5rem; font-weight:700}
       /* Responsive visibility */
       @media (max-width: 991.98px){ .desktop-table{display:none !important} }
       @media (min-width: 992px){ .mobile-cards{display:none !important} }
@@ -65,6 +67,41 @@ export default function UserInvestments() {
       @media (max-width: 576px){
         .form-label{font-size:.9rem}
         .form-select, .form-control{font-size:.95rem; padding:.55rem .75rem}
+      }
+
+      /* ===== Full-screen EDIT sheet (mobile), centered dialog (md+) ===== */
+      .ui-scrim{
+        position:fixed; inset:0; background:rgba(0,0,0,.55);
+        display:flex; align-items:flex-end; justify-content:center;
+        z-index:20000; /* above UserTabs */
+      }
+      .ui-sheet{
+        width:100%; max-width:100%; height:100dvh;
+        background:#fff; box-shadow:0 -10px 28px rgba(0,0,0,.25);
+        display:flex; flex-direction:column;
+      }
+      .ui-head{
+        position:sticky; top:0; z-index:2;
+        background:#fff; border-bottom:1px solid #e5e7eb;
+        padding:.9rem .95rem;
+        display:flex; align-items:center; justify-content:space-between; gap:.5rem;
+      }
+      .ui-title{ margin:0; font-weight:800; }
+      .ui-body{
+        flex:1 1 auto; overflow:auto; -webkit-overflow-scrolling:touch;
+        padding: .9rem .95rem 1.1rem;
+      }
+      .ui-foot{
+        position:sticky; bottom:0; z-index:2;
+        background:#fff; border-top:1px solid #e5e7eb;
+        padding:.75rem .95rem; display:flex; justify-content:flex-end; gap:.5rem;
+      }
+      @media (min-width: 768px){
+        .ui-scrim{ align-items:center; }
+        .ui-sheet{
+          height:auto; max-height:90vh; width:96%; max-width:640px; border-radius:16px; overflow:hidden;
+        }
+        .ui-head, .ui-foot{ position:static; }
       }
     `;
     document.head.appendChild(s);
@@ -89,16 +126,13 @@ export default function UserInvestments() {
 
   // filters + paging
   const [qYear, setQYear] = useState("");
-  const [qMonth, setQMonth] = useState(""); // either number or name string
+  const [qMonth, setQMonth] = useState(""); // number or name
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 10;
   const [total, setTotal] = useState(0);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  // scroll to top on page change (within content scroller)
-  useEffect(() => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [page]);
+  useEffect(() => { window.scrollTo({ top: 0, behavior: "smooth" }); }, [page]);
 
   /* ---------- Fetch list ---------- */
   const fetchList = async (opts = { resetPage: false }) => {
@@ -113,11 +147,9 @@ export default function UserInvestments() {
         if (/^\d+$/.test(qMonth)) params.set("month", qMonth);
         else params.set("month_name", qMonth);
       }
-
       const res = await fetch(`${API}?${params.toString()}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed to load");
-
       setList(Array.isArray(json.data) ? json.data : []);
       setTotal(json.total || 0);
     } catch (e) {
@@ -141,9 +173,7 @@ export default function UserInvestments() {
       return copy;
     });
   };
-  const removeRow = (id) => {
-    setList((prev) => prev.filter((r) => r.id !== id));
-  };
+  const removeRowLocal = (id) => setList((prev) => prev.filter((r) => r.id !== id));
 
   /* ---------- Add ---------- */
   const addRecord = async () => {
@@ -183,23 +213,9 @@ export default function UserInvestments() {
       if (page === 1) upsertRow(json);
       setTotal((t) => t + 1);
 
-      Swal.fire({
-        icon: "success",
-        title: "Saved",
-        text: `${json.month_label} saved successfully.`,
-        timer: 1400,
-        showConfirmButton: false,
-      });
+      Swal.fire({ icon: "success", title: "Saved", text: `${json.month_label} saved successfully.`, timer: 1400, showConfirmButton: false });
 
-      setForm((f) => ({
-        ...f,
-        job_income: "",
-        extra_income: "",
-        month_kharch: "",
-        total_emi: "",
-        other_kharch: "",
-      }));
-
+      setForm((f) => ({ ...f, job_income: "", extra_income: "", month_kharch: "", total_emi: "", other_kharch: "" }));
       await fetchList({ resetPage: true });
     } catch (e) {
       Swal.fire("Error", e.message || "Add failed", "error");
@@ -223,7 +239,7 @@ export default function UserInvestments() {
 
     const prevList = list;
     const prevTotal = total;
-    removeRow(id);
+    removeRowLocal(id);
     setTotal((t) => Math.max(0, t - 1));
 
     try {
@@ -232,16 +248,12 @@ export default function UserInvestments() {
         const json = await res.json().catch(() => ({}));
         throw new Error(json.error || "Delete failed");
       }
-
       Swal.fire({ icon: "success", title: "Deleted", timer: 1100, showConfirmButton: false });
 
       const newCount = prevTotal - 1;
       const maxPage = Math.max(1, Math.ceil(newCount / PAGE_SIZE));
-      if (page > maxPage) {
-        setPage(maxPage);
-      } else {
-        fetchList();
-      }
+      if (page > maxPage) setPage(maxPage);
+      else fetchList();
     } catch (e) {
       setList(prevList);
       setTotal(prevTotal);
@@ -254,12 +266,10 @@ export default function UserInvestments() {
   const saveEdit = async () => {
     if (!edit) return;
     const payload = {};
-
     if (edit.month_name && edit.year_value) {
       payload.month_name = edit.month_name;
       payload.year_value = Number(edit.year_value);
     }
-
     const nums = ["job_income","extra_income","month_kharch","total_emi","other_kharch"];
     for (const k of nums) {
       if (edit[k] !== "" && edit[k] !== null && edit[k] !== undefined) {
@@ -270,7 +280,6 @@ export default function UserInvestments() {
         payload[k] = v;
       }
     }
-
     setBusy(true);
     try {
       const res = await fetch(`${API}/${edit.id}`, {
@@ -280,9 +289,7 @@ export default function UserInvestments() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Update failed");
-
       upsertRow(json);
-
       Swal.fire({ icon: "success", title: "Updated", timer: 1100, showConfirmButton: false });
       setEdit(null);
       fetchList();
@@ -504,7 +511,7 @@ export default function UserInvestments() {
       <div className="glass p-2 p-sm-3">
         <div className="d-flex justify-content-between align-items-center px-1 py-2">
           <h6 className="m-0">Monthly Records</h6>
-          <div className="text-muted small">Total: <b>{total}</b></div>
+          <span className="badge-light-soft">Total: <b>{total}</b></span>
         </div>
 
         {/* Desktop Table */}
@@ -619,7 +626,7 @@ export default function UserInvestments() {
           ) : list.length === 0 ? (
             <div className="text-center py-4 text-muted">No records found.</div>
           ) : (
-            list.map((r) => (
+            list.map((r, idx) => (
               <div key={r.id} className="card card-hover mb-3">
                 <div className="card-body">
                   <div className="d-flex justify-content-between align-items-start">
@@ -714,93 +721,100 @@ export default function UserInvestments() {
         </div>
       </div>
 
-      {/* Edit Modal */}
+      {/* ===== EDIT SHEET (mobile full-screen, desktop centered) ===== */}
       {edit && (
         <div
-          className="position-fixed top-0 start-0 w-100 h-100"
-          style={{ background: "rgba(0,0,0,.25)", zIndex: 1050 }}
-          onClick={(e) => e.target === e.currentTarget && setEdit(null)}
+          className="ui-scrim"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Edit investment"
+          onClick={(e) => e.currentTarget === e.target && setEdit(null)}
         >
-          <div className="glass mx-auto my-4 p-3 p-sm-4" style={{ maxWidth: 560 }}>
-            <div className="d-flex justify-content-between align-items-start">
-              <h5 className="m-0">Edit {edit.month_label}</h5>
-              <button className="btn btn-light btn-sm" onClick={() => setEdit(null)}>✕</button>
+          <div className="ui-sheet">
+            {/* sticky header */}
+            <div className="ui-head">
+              <h5 className="ui-title">Edit {edit.month_label}</h5>
+              <button className="btn btn-light btn-sm" onClick={() => setEdit(null)}>Close</button>
             </div>
 
-            {/* Month change */}
-            <div className="d-flex gap-2 mt-3 flex-wrap">
-              <select
-                className="form-select"
-                style={{ minWidth: 160 }}
-                value={edit.month_name}
-                onChange={(e) => setEdit({ ...edit, month_name: e.target.value })}
-              >
-                {MONTHS.map((m) => <option key={m} value={m}>{m}</option>)}
-              </select>
-              <select
-                className="form-select"
-                style={{ minWidth: 130 }}
-                value={edit.year_value}
-                onChange={(e) => setEdit({ ...edit, year_value: e.target.value })}
-              >
-                {[...new Set([edit.year_value, ...yearsOptions])].sort().map(y => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
+            {/* scrollable body */}
+            <div className="ui-body">
+              {/* Month change */}
+              <div className="d-flex gap-2 flex-wrap">
+                <select
+                  className="form-select"
+                  style={{ minWidth: 160 }}
+                  value={edit.month_name}
+                  onChange={(e) => setEdit({ ...edit, month_name: e.target.value })}
+                >
+                  {MONTHS.map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+                <select
+                  className="form-select"
+                  style={{ minWidth: 130 }}
+                  value={edit.year_value}
+                  onChange={(e) => setEdit({ ...edit, year_value: e.target.value })}
+                >
+                  {[...new Set([edit.year_value, ...yearsOptions])].sort().map(y => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Numbers */}
+              <div className="row g-2 g-sm-3 mt-2">
+                <div className="col-12 col-sm-6">
+                  <label className="form-label">Job Income</label>
+                  <input
+                    className="form-control"
+                    type="number" step="0.01" inputMode="decimal"
+                    value={edit.job_income}
+                    onChange={(e) => setEdit({ ...edit, job_income: e.target.value })}
+                  />
+                </div>
+                <div className="col-12 col-sm-6">
+                  <label className="form-label">Extra Income</label>
+                  <input
+                    className="form-control"
+                    type="number" step="0.01" inputMode="decimal"
+                    value={edit.extra_income}
+                    onChange={(e) => setEdit({ ...edit, extra_income: e.target.value })}
+                  />
+                </div>
+                <div className="col-12 col-sm-6">
+                  <label className="form-label">Month Kharch</label>
+                  <input
+                    className="form-control"
+                    type="number" step="0.01" inputMode="decimal"
+                    value={edit.month_kharch}
+                    onChange={(e) => setEdit({ ...edit, month_kharch: e.target.value })}
+                  />
+                </div>
+                <div className="col-12 col-sm-6">
+                  <label className="form-label">Total EMI</label>
+                  <input
+                    className="form-control"
+                    type="number" step="0.01" inputMode="decimal"
+                    value={edit.total_emi}
+                    onChange={(e) => setEdit({ ...edit, total_emi: e.target.value })}
+                  />
+                </div>
+                <div className="col-12 col-sm-6">
+                  <label className="form-label">Other Kharch</label>
+                  <input
+                    className="form-control"
+                    type="number" step="0.01" inputMode="decimal"
+                    value={edit.other_kharch}
+                    onChange={(e) => setEdit({ ...edit, other_kharch: e.target.value })}
+                  />
+                </div>
+              </div>
             </div>
 
-            {/* Numbers */}
-            <div className="row g-2 g-sm-3 mt-2">
-              <div className="col-12 col-sm-6">
-                <label className="form-label">Job Income</label>
-                <input
-                  className="form-control"
-                  type="number" step="0.01" inputMode="decimal"
-                  value={edit.job_income}
-                  onChange={(e) => setEdit({ ...edit, job_income: e.target.value })}
-                />
-              </div>
-              <div className="col-12 col-sm-6">
-                <label className="form-label">Extra Income</label>
-                <input
-                  className="form-control"
-                  type="number" step="0.01" inputMode="decimal"
-                  value={edit.extra_income}
-                  onChange={(e) => setEdit({ ...edit, extra_income: e.target.value })}
-                />
-              </div>
-              <div className="col-12 col-sm-6">
-                <label className="form-label">Month Kharch</label>
-                <input
-                  className="form-control"
-                  type="number" step="0.01" inputMode="decimal"
-                  value={edit.month_kharch}
-                  onChange={(e) => setEdit({ ...edit, month_kharch: e.target.value })}
-                />
-              </div>
-              <div className="col-12 col-sm-6">
-                <label className="form-label">Total EMI</label>
-                <input
-                  className="form-control"
-                  type="number" step="0.01" inputMode="decimal"
-                  value={edit.total_emi}
-                  onChange={(e) => setEdit({ ...edit, total_emi: e.target.value })}
-                />
-              </div>
-              <div className="col-12 col-sm-6">
-                <label className="form-label">Other Kharch</label>
-                <input
-                  className="form-control"
-                  type="number" step="0.01" inputMode="decimal"
-                  value={edit.other_kharch}
-                  onChange={(e) => setEdit({ ...edit, other_kharch: e.target.value })}
-                />
-              </div>
-            </div>
-
-            <div className="d-flex justify-content-end gap-2 mt-3">
-              <button className="btn btn-light" onClick={() => setEdit(null)}>Cancel</button>
-              <button className="btn btn-success" onClick={saveEdit} disabled={busy}>
+            {/* sticky footer */}
+            <div className="ui-foot">
+              <button className="btn btn-light btn-sm" onClick={() => setEdit(null)}>Cancel</button>
+              <button className="btn btn-success btn-sm" onClick={saveEdit} disabled={busy}>
                 {busy ? "Saving…" : "Update"}
               </button>
             </div>
@@ -810,7 +824,7 @@ export default function UserInvestments() {
 
       {/* Busy overlay */}
       {busy && (
-        <div className="position-fixed top-0 start-0 w-100 h-100 d-grid" style={{ placeItems:"center", background:"rgba(255,255,255,.65)", zIndex: 1100 }}>
+        <div className="position-fixed top-0 start-0 w-100 h-100 d-grid" style={{ placeItems:"center", background:"rgba(255,255,255,.65)", zIndex: 20050 }}>
           <div className="glass p-3 d-flex align-items-center gap-3">
             <LoadingSpiner />
             <div>Working…</div>

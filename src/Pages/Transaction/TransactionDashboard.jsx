@@ -1,3 +1,4 @@
+// src/Pages/Transactions/TransactionDashboard.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
@@ -9,6 +10,8 @@ import CalculateTotal from "./CalculateTotal.jsx";
 import TransactionCategory from "./TransactionCategory.jsx";
 import TransactionCategorywise from "./TransactionCategorywise.jsx";
 import LoadingSpiner from "../Entertainment/LoadingSpiner.jsx";
+import Loan from "./Loan.jsx";
+import GetLoan from "./GetLoan.jsx";
 import {
   FaCalendarAlt,
   FaRegFileAlt,
@@ -16,6 +19,8 @@ import {
   FaCalculator,
   FaTags,
   FaLayerGroup,
+  FaMoneyBillWave,
+  FaClipboardList,
 } from "react-icons/fa";
 
 export default function TransactionDashboard() {
@@ -30,11 +35,9 @@ export default function TransactionDashboard() {
       { key: "monthly", label: "Monthly Report", icon: <FaChartBar /> },
       { key: "total", label: "Calculate Total", icon: <FaCalculator /> },
       { key: "category", label: "Transaction Category", icon: <FaTags /> },
-      {
-        key: "categorywise",
-        label: "Transaction Categorywise",
-        icon: <FaLayerGroup />,
-      },
+      { key: "categorywise", label: "Transaction Categorywise", icon: <FaLayerGroup /> },
+      { key: "loan", label: "Loan", icon: <FaMoneyBillWave /> },          // Add-only
+      { key: "getloan", label: "Get Loan", icon: <FaClipboardList /> },   // NEW last tab
     ],
     []
   );
@@ -46,6 +49,8 @@ export default function TransactionDashboard() {
     total: "#0f8a5f",
     category: "#ecda1c",
     categorywise: "#e4650b",
+    loan: "#e85a19",
+    getloan: "#16a34a",
   };
 
   const listRef = useRef(null);
@@ -56,9 +61,7 @@ export default function TransactionDashboard() {
     if (!el) return;
     const handler = (e) => {
       const items = Array.from(el.querySelectorAll('[role="tab"]'));
-      const idx = items.findIndex(
-        (n) => n.getAttribute("data-key") === activeTab
-      );
+      const idx = items.findIndex((n) => n.getAttribute("data-key") === activeTab);
       if (idx < 0) return;
       let nextIdx = idx;
       if (e.key === "ArrowRight") nextIdx = (idx + 1) % items.length;
@@ -118,10 +121,7 @@ export default function TransactionDashboard() {
           --accent-grad: linear-gradient(90deg, #b91c1c 0%, #dc2626 50%, #ef4444 100%);
           --overlay: rgba(255,255,255,.75);
         }
-
         .td-app { height: 100dvh; overflow: hidden; background: var(--bg); }
-
-        /* NAVBAR */
         .td-nav {
           position: fixed; top: 0; left: 0; right: 0;
           height: var(--nav-h); z-index: 80;
@@ -133,174 +133,43 @@ export default function TransactionDashboard() {
           display:flex; align-items:center;
           padding-top: calc(10px + env(safe-area-inset-top, 0px));
         }
-        .td-title {
-          margin:0;
-          color:#0b0b0b;
-          font-weight:900;
-          letter-spacing:.2px;
-          font-size: clamp(1.05rem, 2.3vw, 1.5rem);
-          text-shadow:none;
-        }
-        .td-nav-btn {
-          font-weight:700;
-          border-radius:999px;
-          font-size: clamp(.68rem, 1.8vw, .8rem);
-          padding: .35rem .9rem;
-        }
-        @media (max-width: 480px) {
-          .td-nav {
-            gap: .5rem;
-          }
-          .td-title {
-            max-width: 60%;
-            line-height: 1.05;
-          }
-        }
-
+        .td-title { margin:0; color:#0b0b0b; font-weight:900; letter-spacing:.2px; font-size: clamp(1.05rem, 2.3vw, 1.5rem); text-shadow:none; }
+        .td-nav-btn { font-weight:700; border-radius:999px; font-size: clamp(.68rem, 1.8vw, .8rem); padding: .35rem .9rem; }
+        @media (max-width: 480px) { .td-nav { gap: .5rem; } .td-title { max-width: 60%; line-height: 1.05; } }
         .td-nav-spacer { height: calc(var(--nav-h) + env(safe-area-inset-top, 0px)); }
-
-        /* MAIN SCROLL AREA */
-        .td-main {
-          height: calc(100dvh - var(--nav-h) - env(safe-area-inset-top, 0px));
-          overflow-y: auto;
-          -webkit-overflow-scrolling: touch;
-          padding-top: 6px;
-          padding-bottom: env(safe-area-inset-bottom, 0px);
-        }
-
-        /* Tabs wrapper */
-        .td-tabs {
-          background: var(--surface);
-          border-radius: 14px;
-          box-shadow: 0 8px 30px rgba(2,6,23,.06);
-          border: 1px solid var(--border);
-          padding: 8px;
-          margin: 6px 0;
-          max-width: 100%;
-        }
-
-        /* horizontal tab list */
-        .td-tablist {
-          position: relative;
-          display:flex; flex-wrap:nowrap; gap:10px;
-          overflow-x:auto; overflow-y:hidden; white-space:nowrap;
-          scrollbar-width:thin; -webkit-overflow-scrolling:touch;
-          padding: 6px 6px;
-          scroll-snap-type: x proximity;
-          scroll-padding-left: 8px;
-          scroll-padding-right: 8px;
-          z-index: 0;
-        }
+        .td-main { height: calc(100dvh - var(--nav-h) - env(safe-area-inset-top, 0px)); overflow-y: auto; -webkit-overflow-scrolling: touch; padding-top: 6px; padding-bottom: env(safe-area-inset-bottom, 0px); }
+        .td-tabs { background: var(--surface); border-radius: 14px; box-shadow: 0 8px 30px rgba(2,6,23,.06); border: 1px solid var(--border); padding: 8px; margin: 6px 0; max-width: 100%; }
+        .td-tablist { position: relative; display:flex; flex-wrap:nowrap; gap:10px; overflow-x:auto; overflow-y:hidden; white-space:nowrap; scrollbar-width:thin; -webkit-overflow-scrolling:touch; padding: 6px 6px; scroll-snap-type: x proximity; scroll-padding-left: 8px; scroll-padding-right: 8px; z-index: 0; }
         .td-tablist::-webkit-scrollbar { height: 6px; }
         .td-tablist::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 999px; }
-
-        /* background bar */
-        .td-inkbar {
-          position:absolute; height:38px; border-radius:12px;
-          top: 50%; transform: translateY(-50%); left:0;
-          transition: transform .25s ease, width .25s ease, background .25s ease;
-          z-index: 0;
-          pointer-events: none;
-        }
-
-        /* TAB */
-        .td-tab {
-          position: relative;
-          display:inline-flex; align-items:center; justify-content:center;
-          min-width: 140px; padding: 10px 14px;
-          font-size: clamp(.78rem, 1.9vw, .95rem);
-          border-radius:12px; font-weight:700;
-          background:#fff; color: var(--ink-700);
-          border: 1px solid var(--border);
-          transition: background .18s ease, color .18s ease, transform .15s ease, box-shadow .15s ease, border-color .18s ease;
-          scroll-snap-align:center;
-          z-index: 1;
-          pointer-events: auto;
-          touch-action: manipulation;
-          white-space: nowrap;
-        }
+        .td-inkbar { position:absolute; height:38px; border-radius:12px; top: 50%; transform: translateY(-50%); left:0; transition: transform .25s ease, width .25s ease, background .25s ease; z-index: 0; pointer-events: none; }
+        .td-tab { position: relative; display:inline-flex; align-items:center; justify-content:center; min-width: 140px; padding: 10px 14px; font-size: clamp(.78rem, 1.9vw, .95rem); border-radius:12px; font-weight:700; background:#fff; color: var(--ink-700); border: 1px solid var(--border); transition: background .18s ease, color .18s ease, transform .15s ease, box-shadow .15s ease, border-color .18s ease; scroll-snap-align:center; z-index: 1; pointer-events: auto; touch-action: manipulation; white-space: nowrap; }
         .td-tab:hover { transform: translateY(-1px); box-shadow: 0 10px 20px rgba(2,6,23,.06); }
-
-        .td-tab[aria-selected="true"] {
-          color:#fff;
-          background: var(--chip-active);
-          border-color: transparent;
-        }
-
-        /* Content card */
-        .td-card {
-          max-width: 1100px;
-          margin: 8px auto 16px;
-          background: var(--surface);
-          border:1px solid var(--border);
-          border-radius:16px;
-          box-shadow:0 10px 36px rgba(2,6,23,.07);
-          position:relative;
-          min-height:460px;
-          padding:16px;
-        }
-
-        /* MOBILE TWEAKS */
-        @media (max-width: 576px){
-          .td-tabs { margin: 4px 0; padding: 5px; }
-          .td-tablist { padding: 4px; gap: 6px; }
-          .td-tab {
-            min-width: 118px;
-            padding: 8px 10px;
-            font-size: .72rem;         /* smaller text but visible */
-            gap: 4px;
-          }
-          .td-tab span.text-truncate {
-            max-width: 140px;
-            white-space: normal;        /* allow wrap on 2 lines */
-            line-height: 1.05;
-          }
-          .td-inkbar { height: 34px; }
-          .td-card { margin: 6px auto 12px; padding: 12px; border-radius: 14px; }
-        }
-
-        .td-overlay {
-          position:absolute; inset:0; background: var(--overlay);
-          display:flex; align-items:center; justify-content:center;
-          z-index:10; border-radius:16px;
-        }
+        .td-tab[aria-selected="true"] { color:#fff; background: var(--chip-active); border-color: transparent; }
+        .td-card { max-width: 1100px; margin: 8px auto 16px; background: var(--surface); border:1px solid var(--border); border-radius:16px; box-shadow:0 10px 36px rgba(2,6,23,.07); position:relative; min-height:460px; padding:16px; }
+        @media (max-width: 576px){ .td-tabs { margin: 4px 0; padding: 5px; } .td-tablist { padding: 4px; gap: 6px; } .td-tab { min-width: 118px; padding: 8px 10px; font-size: .72rem; gap: 4px; } .td-tab span.text-truncate { max-width: 140px; white-space: normal; line-height: 1.05; } .td-inkbar { height: 34px; } .td-card { margin: 6px auto 12px; padding: 12px; border-radius: 14px; } }
+        .td-overlay { position:absolute; inset:0; background: var(--overlay); display:flex; align-items:center; justify-content:center; z-index:10; border-radius:16px; }
       `}</style>
 
       <div className="td-app">
-        {/* NAVBAR */}
         <nav className="td-nav">
           <div className="container-fluid d-flex justify-content-between align-items-center px-0">
             <h1 className="td-title">Transaction Dashboard</h1>
-            <button
-              className="btn btn-warning td-nav-btn"
-              onClick={() => navigate("/dashboard")}
-            >
+            <button className="btn btn-warning td-nav-btn" onClick={() => navigate("/dashboard")}>
               Dashboard
             </button>
           </div>
         </nav>
 
-        {/* spacer below navbar */}
         <div className="td-nav-spacer" />
 
-        {/* MAIN */}
         <main className="td-main">
           <div className="container-fluid px-2 px-sm-3">
-            {/* Tabs */}
             <div className="td-tabs">
-              <div
-                ref={listRef}
-                role="tablist"
-                aria-label="Transaction tabs"
-                className="td-tablist"
-              >
-                {/* moving ink bar */}
+              <div ref={listRef} role="tablist" aria-label="Transaction tabs" className="td-tablist">
                 <div
                   className="td-inkbar"
-                  style={{
-                    ...underlineStyle,
-                    background: tabColors[activeTab] || "#444",
-                  }}
+                  style={{ ...underlineStyle, background: tabColors[activeTab] || "#444" }}
                 />
                 {tabs.map((tab) => {
                   const selected = activeTab === tab.key;
@@ -314,34 +183,19 @@ export default function TransactionDashboard() {
                       aria-selected={selected}
                       aria-controls={`panel-${tab.key}`}
                       className="td-tab"
-                      style={{
-                        ["--chip-active"]: color,
-                      }}
+                      style={{ ["--chip-active"]: color }}
                       onClick={() => setActiveTab(tab.key)}
                     >
-                      <span
-                        aria-hidden
-                        style={{
-                          marginRight: 6,
-                          display: "inline-flex",
-                          fontSize: "1rem",
-                        }}
-                      >
+                      <span aria-hidden style={{ marginRight: 6, display: "inline-flex", fontSize: "1rem" }}>
                         {tab.icon}
                       </span>
-                      <span
-                        className="text-truncate"
-                        style={{ maxWidth: 260 }}
-                      >
-                        {tab.label}
-                      </span>
+                      <span className="text-truncate" style={{ maxWidth: 260 }}>{tab.label}</span>
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            {/* CONTENT */}
             <div className="td-card bg-white rounded">
               {loading && (
                 <div className="td-overlay">
@@ -349,29 +203,15 @@ export default function TransactionDashboard() {
                 </div>
               )}
 
-              <div
-                role="tabpanel"
-                id={`panel-${activeTab}`}
-                aria-labelledby={`tab-${activeTab}`}
-              >
-                {activeTab === "daily" && (
-                  <DailyTransactionPage setLoading={setLoading} />
-                )}
-                {activeTab === "main" && (
-                  <MainTransactionPage setLoading={setLoading} />
-                )}
-                {activeTab === "monthly" && (
-                  <MonthlySummary setLoading={setLoading} />
-                )}
-                {activeTab === "total" && (
-                  <CalculateTotal setLoading={setLoading} />
-                )}
-                {activeTab === "category" && (
-                  <TransactionCategory setLoading={setLoading} />
-                )}
-                {activeTab === "categorywise" && (
-                  <TransactionCategorywise setLoading={setLoading} />
-                )}
+              <div role="tabpanel" id={`panel-${activeTab}`} aria-labelledby={`tab-${activeTab}`}>
+                {activeTab === "daily" && <DailyTransactionPage setLoading={setLoading} />}
+                {activeTab === "main" && <MainTransactionPage setLoading={setLoading} />}
+                {activeTab === "monthly" && <MonthlySummary setLoading={setLoading} />}
+                {activeTab === "total" && <CalculateTotal setLoading={setLoading} />}
+                {activeTab === "category" && <TransactionCategory setLoading={setLoading} />}
+                {activeTab === "categorywise" && <TransactionCategorywise setLoading={setLoading} />}
+                {activeTab === "loan" && <Loan />}         {/* Add-only page */}
+                {activeTab === "getloan" && <GetLoan />}   {/* NEW: Get Loan listing */}
               </div>
             </div>
           </div>

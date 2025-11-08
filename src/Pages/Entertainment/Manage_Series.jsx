@@ -335,8 +335,7 @@ export default function Manage_Series() {
 
     setEditSubmitting(true);
     try {
-      // Optimistic: reflect poster/watched instantly in list (even though list is text-only,
-      // keeping state helps when you open view next time without re-fetch)
+      // Optimistic: reflect watched instantly in list
       setSeries((arr) =>
         arr.map((x) =>
           x.series_id === editSeries.series_id
@@ -950,15 +949,15 @@ export default function Manage_Series() {
               onClick={onPickPoster}
             >
               <div className="fw-semibold mb-1">
-                Drop image here {editPoster ? " (selected)" : ""}
+                {editPoster ? "Poster selected" : "Drop image here or click to browse"}
               </div>
-              <div className="text-muted small">JPG/PNG/WebP. Click to browse.</div>
+              <div className="text-muted small">JPG/PNG/WebP</div>
               {editPoster ? (
                 <img
                   src={editPoster}
                   alt="Poster preview"
                   className="img-thumbnail mt-2"
-                  style={{ maxHeight: 150, objectFit: "cover" }}
+                  style={{ maxHeight: 180, objectFit: "cover", borderRadius: "1rem" }}
                 />
               ) : null}
               <input
@@ -970,6 +969,7 @@ export default function Manage_Series() {
               />
             </div>
 
+            {/* Watched toggle */}
             <label className="form-label">Watched?</label>
             <div className="d-flex align-items-center justify-content-between border rounded p-2 mb-3">
               <span className="text-muted small">
@@ -988,6 +988,7 @@ export default function Manage_Series() {
               </label>
             </div>
 
+            {/* Seasons editor */}
             <div className="d-flex justify-content-between align-items-center mb-2">
               <label className="form-label mb-0">Seasons</label>
               <button
@@ -1010,24 +1011,31 @@ export default function Manage_Series() {
               </button>
             </div>
 
-            {editSeasons?.length ? (
-              <div className="table-responsive mb-2">
-                <table className="table table-sm align-middle mb-0">
-                  <thead>
-                    <tr className="table-light">
-                      <th>No</th>
-                      <th>Year</th>
-                      <th />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {editSeasons.map((s, idx) => (
-                      <tr key={idx}>
-                        <td>
+            {/* Mobile / small screens: BIG card inputs (full 4-digit year visible) */}
+            <div className="d-md-none">
+              {editSeasons?.length ? (
+                <div className="d-flex flex-column gap-2">
+                  {editSeasons.map((s, idx) => (
+                    <div key={idx} className="mm-season-card">
+                      <div className="d-flex align-items-center justify-content-between">
+                        <div className="fw-semibold">Season #{s.season_no || "?"}</div>
+                        <button
+                          className="btn btn-sm btn-outline-danger"
+                          onClick={() =>
+                            setEditSeasons((arr) => arr.filter((_, i) => i !== idx))
+                          }
+                        >
+                          Delete
+                        </button>
+                      </div>
+
+                      <div className="row g-2 mt-1">
+                        <div className="col-6">
+                          <label className="form-label small">Season #</label>
                           <input
-                            className={`form-control form-control-sm ${
-                              Number(s.season_no) >= 1 ? "" : "is-invalid"
-                            }`}
+                            className="form-control mm-input"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
                             value={s.season_no}
                             onChange={(e) => {
                               const v = onlyDigits(e.target.value);
@@ -1040,16 +1048,19 @@ export default function Manage_Series() {
                                 return copy;
                               });
                             }}
+                            placeholder="2"
                           />
-                          <small className="text-muted">
-                            New seasons must be ≥ 2
-                          </small>
-                        </td>
-                        <td>
+                          <small className="text-muted">New seasons must be ≥ 2</small>
+                        </div>
+                        <div className="col-6">
+                          <label className="form-label small">Year</label>
                           <input
-                            className={`form-control form-control-sm ${
+                            className={`form-control mm-input ${
                               s.year && isYear(s.year) ? "" : "is-invalid"
                             }`}
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            maxLength={4}
                             value={s.year}
                             onChange={(e) => {
                               const v = clamp4(e.target.value);
@@ -1062,31 +1073,96 @@ export default function Manage_Series() {
                             placeholder="2025"
                           />
                           {(!s.year || !isYear(s.year)) && (
-                            <div className="invalid-feedback">
-                              Year 1888–2100
-                            </div>
+                            <div className="invalid-feedback">Enter full year (1888–2100)</div>
                           )}
-                        </td>
-                        <td className="text-end">
-                          <button
-                            className="btn btn-sm btn-outline-danger"
-                            onClick={() =>
-                              setEditSeasons((arr) =>
-                                arr.filter((_, i) => i !== idx)
-                              )
-                            }
-                          >
-                            Delete
-                          </button>
-                        </td>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-muted small">No seasons yet.</p>
+              )}
+            </div>
+
+            {/* Desktop / md+: compact table (still big enough to see all digits) */}
+            <div className="d-none d-md-block">
+              {editSeasons?.length ? (
+                <div className="table-responsive mb-2">
+                  <table className="table align-middle mb-0">
+                    <thead>
+                      <tr className="table-light">
+                        <th style={{ width: 180 }}>Season #</th>
+                        <th style={{ width: 220 }}>Year</th>
+                        <th />
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <p className="text-muted small">No seasons yet.</p>
-            )}
+                    </thead>
+                    <tbody>
+                      {editSeasons.map((s, idx) => (
+                        <tr key={idx}>
+                          <td>
+                            <input
+                              className="form-control mm-input"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              value={s.season_no}
+                              onChange={(e) => {
+                                const v = onlyDigits(e.target.value);
+                                setEditSeasons((arr) => {
+                                  const copy = [...arr];
+                                  copy[idx] = {
+                                    ...copy[idx],
+                                    season_no: v ? Number(v) : "",
+                                  };
+                                  return copy;
+                                });
+                              }}
+                              placeholder="2"
+                            />
+                            <small className="text-muted">New seasons must be ≥ 2</small>
+                          </td>
+                          <td>
+                            <input
+                              className={`form-control mm-input ${
+                                s.year && isYear(s.year) ? "" : "is-invalid"
+                              }`}
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              maxLength={4}
+                              value={s.year}
+                              onChange={(e) => {
+                                const v = clamp4(e.target.value);
+                                setEditSeasons((arr) => {
+                                  const copy = [...arr];
+                                  copy[idx] = { ...copy[idx], year: v };
+                                  return copy;
+                                });
+                              }}
+                              placeholder="2025"
+                            />
+                            {(!s.year || !isYear(s.year)) && (
+                              <div className="invalid-feedback">Enter full year (1888–2100)</div>
+                            )}
+                          </td>
+                          <td className="text-end">
+                            <button
+                              className="btn btn-sm btn-outline-danger"
+                              onClick={() =>
+                                setEditSeasons((arr) => arr.filter((_, i) => i !== idx))
+                              }
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-muted small">No seasons yet.</p>
+              )}
+            </div>
           </div>
 
           <div className="modal-footer d-flex justify-content-end gap-2">
@@ -1199,7 +1275,7 @@ export default function Manage_Series() {
           transform:translateX(22px);
         }
         .mm-switch-label{
-          font-size:.7rem; font-weight:600; color:#0f172a;
+          font-size:.8rem; font-weight:700; color:#0f172a;
         }
 
         .mm-series-mobile{
@@ -1303,6 +1379,26 @@ export default function Manage_Series() {
 
         .scroll-area{ max-height:60vh; overflow-y:auto; }
         @media (max-width:575.98px){ .scroll-area{ max-height:58vh; } }
+
+        /* ===== Seasons editor: mobile-first cards + bigger inputs ===== */
+        .mm-season-card{
+          border:1px solid rgba(15,23,42,.06);
+          border-radius:1rem;
+          padding:.75rem;
+          background:#fff;
+          box-shadow: 0 6px 18px rgba(15,23,42,.06);
+        }
+        .mm-input{
+          font-size:1rem;            /* big readable digits */
+          padding:.55rem .65rem;     /* comfy touch target */
+          border-radius:.75rem;
+        }
+
+        /* responsive font-size tweaks for very small screens */
+        @media (max-width:370px){
+          .mm-input{ font-size:.95rem; }
+          .mm-switch-label{ font-size:.75rem; }
+        }
 
         .toastish{
           position:fixed; top:1rem; right:1rem;

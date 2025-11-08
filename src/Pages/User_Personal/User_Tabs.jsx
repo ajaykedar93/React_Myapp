@@ -15,9 +15,9 @@ import WebsitesUrl from "./WebsitesUrl";
 const COLORS = {
   text: "#0f172a",
   textMuted: "#475569",
-  surface: "rgba(255, 255, 255, 0.86)",
+  surface: "rgba(255, 255, 255, 0.90)",
   border: "rgba(2, 6, 23, 0.10)",
-  softShadow: "0 12px 38px rgba(2, 6, 23, 0.10)",
+  softShadow: "0 12px 38px rgba(2, 6, 23, 0.12)",
   accent: "#22d3ee",
   accent2: "#a78bfa",
   glow: "rgba(34, 211, 238, 0.35)",
@@ -27,7 +27,7 @@ const COLORS = {
   bgBaseBottom: "#f6fff9",
 };
 
-const FOOTER_H = 64;
+const FOOTER_H = 60;
 
 const TABS = [
   { id: "investment", label: "Investment" },
@@ -43,7 +43,22 @@ export default function UserTabs() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("investment");
 
-  // Navbar sizing/offset
+  // ===== Viewport height fix (mobile address bar changes)
+  useEffect(() => {
+    const setVh = () => {
+      const vh = (window.visualViewport?.height ?? window.innerHeight) * 0.01;
+      document.documentElement.style.setProperty("--vh", `${vh}px`);
+    };
+    setVh();
+    window.addEventListener("resize", setVh);
+    window.visualViewport?.addEventListener("resize", setVh);
+    return () => {
+      window.removeEventListener("resize", setVh);
+      window.visualViewport?.removeEventListener("resize", setVh);
+    };
+  }, []);
+
+  // ===== Navbar sizing/offset
   const navRef = useRef(null);
   const [navH, setNavH] = useState(72);
   const [navOffset, setNavOffset] = useState(0);
@@ -52,6 +67,7 @@ export default function UserTabs() {
     const applyOffsets = () => {
       const h = navRef.current?.offsetHeight || 72;
       setNavH(h);
+      // tiny lift on xs to let the gradient breathe
       setNavOffset(window.innerWidth <= 576 ? 8 : 0);
     };
     applyOffsets();
@@ -65,7 +81,7 @@ export default function UserTabs() {
     };
   }, []);
 
-  // Tabs height
+  // ===== Tabs height
   const tabsWrapRef = useRef(null);
   const [tabsH, setTabsH] = useState(56);
 
@@ -81,7 +97,7 @@ export default function UserTabs() {
     };
   }, []);
 
-  // Ink indicator
+  // ===== Ink indicator
   const tabListRef = useRef(null);
   const tabRefs = useRef({});
   const [indicator, setIndicator] = useState({ left: 0, width: 0 });
@@ -112,11 +128,13 @@ export default function UserTabs() {
     };
   }, [activeTab]);
 
+  // ===== Render
   return (
     <div
       className="ut-root"
       style={{
-        minHeight: "100dvh",
+        // perfect-fit height with safe-area + mobile UI changes
+        minHeight: "calc(var(--vh, 1vh) * 100)",
         width: "100vw",
         overflow: "hidden",
         color: COLORS.text,
@@ -124,8 +142,7 @@ export default function UserTabs() {
           `radial-gradient(1400px 700px at 0% -10%, ${COLORS.bgGradA}, transparent 60%), ` +
           `radial-gradient(1200px 600px at 100% -10%, ${COLORS.bgGradB}, transparent 60%), ` +
           `linear-gradient(180deg, ${COLORS.bgBaseTop} 0%, ${COLORS.bgBaseBottom} 100%)`,
-        fontFamily:
-          "Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+        fontFamily: "Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
         position: "relative",
         paddingTop: "env(safe-area-inset-top, 0px)",
       }}
@@ -137,9 +154,9 @@ export default function UserTabs() {
             <div
               className="d-inline-flex align-items-center justify-content-center"
               style={{
-                width: 34,
-                height: 34,
-                borderRadius: 9,
+                width: 36,
+                height: 36,
+                borderRadius: 10,
                 background: "rgba(255,255,255,.18)",
                 border: "1px solid rgba(255,255,255,.35)",
                 fontWeight: 800,
@@ -156,10 +173,7 @@ export default function UserTabs() {
             type="button"
             className="btn btn-warning fw-bold rounded-pill px-3 py-2"
             onClick={() => navigate("/dashboard")}
-            style={{
-              color: "#1f2937",
-              boxShadow: "0 12px 26px rgba(2,6,23,.22)",
-            }}
+            style={{ color: "#1f2937", boxShadow: "0 12px 26px rgba(2,6,23,.22)" }}
           >
             Dashboard
           </button>
@@ -218,10 +232,13 @@ export default function UserTabs() {
           top: navOffset + navH + tabsH,
           left: 0,
           right: 0,
-          bottom: FOOTER_H,
+          // bottom respects footer glow + safe-area bottom
+          bottom: `calc(${FOOTER_H}px + env(safe-area-inset-bottom, 0px))`,
           overflowY: "auto",
           WebkitOverflowScrolling: "touch",
           zIndex: 10,
+          overscrollBehaviorY: "contain",
+          paddingBottom: "10px",
         }}
       >
         <div className="container pt-3 pb-4" style={{ maxWidth: 1180 }}>
@@ -243,7 +260,6 @@ export default function UserTabs() {
             {activeTab === "notes" && <Notes />}
           </div>
         </div>
-        <div style={{ height: 16 }} />
       </div>
 
       {/* ===== FOOTER GLOW ===== */}
@@ -254,7 +270,7 @@ export default function UserTabs() {
           left: 0,
           right: 0,
           bottom: 0,
-          height: FOOTER_H,
+          height: `calc(${FOOTER_H}px + env(safe-area-inset-bottom, 0px))`,
           background:
             "radial-gradient(70% 120% at 50% 0%, rgba(34,211,238,0.18), transparent 70%)",
           pointerEvents: "none",
@@ -264,6 +280,10 @@ export default function UserTabs() {
 
       {/* ===== STYLES ===== */}
       <style>{`
+        :root {
+          color-scheme: light;
+        }
+
         .ut-nav {
           position: fixed;
           left: 0; right: 0;
@@ -272,7 +292,7 @@ export default function UserTabs() {
           min-height: 64px;
           padding: 10px 14px;
           padding-top: calc(env(safe-area-inset-top, 0px) + 6px);
-          background: linear-gradient(90deg, #1e3a8a 0%, #2563eb 50%, #38bdf8 100%);
+          background: linear-gradient(100deg, #1e3a8a 0%, #2563eb 45%, #38bdf8 100%);
           border-bottom: 1px solid rgba(255,255,255,0.12);
           box-shadow: 0 10px 30px rgba(2,6,23,0.18);
           backdrop-filter: saturate(140%) blur(6px);
@@ -283,6 +303,7 @@ export default function UserTabs() {
           font-size: clamp(18px, 2.4vw, 24px);
           color: #0b0b0b;
           line-height: 1.2;
+          letter-spacing: -0.015em;
         }
 
         .ut-tabs-wrap {
@@ -305,6 +326,7 @@ export default function UserTabs() {
           scroll-snap-type: x proximity;
           scroll-padding-left: 12px; scroll-padding-right: 12px;
           scrollbar-width: thin;
+          -webkit-overflow-scrolling: touch;
         }
         .ut-tablist::-webkit-scrollbar { height: 6px; }
         .ut-tablist::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 999px; }
@@ -324,10 +346,10 @@ export default function UserTabs() {
           font-size: .92rem;
           color: ${COLORS.text};
           border: 1px solid ${COLORS.border};
-          background: rgba(255,255,255,0.75);
+          background: rgba(255,255,255,0.82);
           white-space: nowrap;
           scroll-snap-align: center;
-          transition: transform .16s ease, background .2s ease;
+          transition: transform .16s ease, background .2s ease, box-shadow .2s ease;
         }
         .ut-chip:hover { transform: translateY(-1px); }
         .ut-chip.is-active {
@@ -340,22 +362,25 @@ export default function UserTabs() {
 
         /* --- CRITICAL FIX: popups from child pages must appear above nav/tabs --- */
         .ut-content :where(.position-fixed, .modal, .modal.show, .toast, .offcanvas, [role="dialog"], [data-overlay]) {
-          z-index: 20000 !important;   /* Always above .ut-nav (1040) and .ut-tabs-wrap (1030) */
+          z-index: 20000 !important;
         }
         .ut-content :where(.modal, .offcanvas, .toast, .position-fixed) {
-          max-height: 100dvh;           /* prevent clipping on very small screens */
+          max-height: 100svh;
         }
 
         @keyframes contentFade {
           from { opacity: 0; transform: translateY(6px); }
           to   { opacity: 1; transform: translateY(0); }
         }
+
         @media (prefers-reduced-motion: reduce) {
           * { animation: none !important; transition: none !important; }
+          .ut-tablist { scroll-behavior: auto !important; }
         }
 
+        /* Mobile polish */
         @media (max-width: 576px) {
-          .ut-chip { padding: 0.55rem 0.85rem; font-size: .9rem; }
+          .ut-chip { padding: 0.52rem 0.82rem; font-size: .9rem; }
           .ut-title { font-size: 18px; }
           .ut-nav .btn { padding: .35rem .7rem; font-size: .875rem; }
         }

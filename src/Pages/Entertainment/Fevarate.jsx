@@ -1,3 +1,4 @@
+// src/pages/Favorite.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useAuth } from "../../context/AuthContext";
@@ -77,42 +78,46 @@ const Favorite = () => {
   /* =================== FLUID, MOBILE-FIRST STYLES =================== */
   const styles = `
     :root{
-      /* Fluid scales */
-      --fs-10: clamp(10px, 1.8vw, 12px);
-      --fs-11: clamp(11px, 1.9vw, 13px);
-      --fs-12: clamp(12px, 2vw, 14px);
-      --fs-14: clamp(13.5px, 2.2vw, 16px);
-      --fs-16: clamp(14px, 2.4vw, 18px);
-      --fs-18: clamp(15px, 2.8vw, 20px);
-      --fs-20: clamp(16px, 3.2vw, 22px);
-      --fs-24: clamp(18px, 3.8vw, 26px);
+      /* Tighter, pro fluid scales */
+      --fs-10: clamp(10px, 1.5vw, 12px);
+      --fs-11: clamp(11px, 1.6vw, 13px);
+      --fs-12: clamp(12px, 1.8vw, 14px);
+      --fs-14: clamp(13px, 2.0vw, 16px);
+      --fs-16: clamp(14px, 2.2vw, 18px);
+      --fs-18: clamp(15px, 2.6vw, 20px);
+      --fs-20: clamp(16px, 3.0vw, 22px);
+      --fs-24: clamp(18px, 3.6vw, 26px);
 
-      --pad-6: clamp(4px, 1.2vw, 6px);
-      --pad-8: clamp(6px, 1.4vw, 8px);
-      --pad-10: clamp(8px, 1.8vw, 10px);
-      --pad-12: clamp(10px, 2vw, 12px);
-      --pad-14: clamp(12px, 2.2vw, 14px);
-      --pad-16: clamp(12px, 2.4vw, 16px);
-      --gap-6: clamp(4px, 1.2vw, 6px);
-      --gap-8: clamp(6px, 1.4vw, 8px);
-      --gap-10: clamp(8px, 1.8vw, 10px);
-      --gap-12: clamp(10px, 2vw, 12px);
-      --gap-14: clamp(12px, 2.2vw, 14px);
-      --gap-16: clamp(12px, 2.4vw, 16px);
+      --pad-6: clamp(4px, 1vw, 6px);
+      --pad-8: clamp(6px, 1.2vw, 8px);
+      --pad-10: clamp(8px, 1.6vw, 10px);
+      --pad-12: clamp(10px, 1.8vw, 12px);
+      --pad-14: clamp(12px, 2.0vw, 14px);
+      --pad-16: clamp(12px, 2.2vw, 16px);
+      --gap-6: clamp(4px, 1vw, 6px);
+      --gap-8: clamp(6px, 1.2vw, 8px);
+      --gap-10: clamp(8px, 1.6vw, 10px);
+      --gap-12: clamp(10px, 1.8vw, 12px);
+      --gap-14: clamp(12px, 2.0vw, 14px);
+      --gap-16: clamp(12px, 2.2vw, 16px);
 
       --tap: 44px;
 
-      /* Colors */
-      --bg:#f8fafc; --card:#fff; --text:#0f172a; --muted:#475569; --border:#e2e8f0; --border-strong:#d0d7e2;
+      /* Palette */
+      --bg:#f7fafc; --card:#fff; --text:#0f172a; --muted:#475569; --border:#e2e8f0; --border-strong:#d0d7e2;
       --accent:#2563eb; --accent2:#7c3aed; --green:#10b981; --amber:#f59e0b; --danger:#ef4444;
       --chip-bg:#eef2ff; --chip-text:#4338ca; --light:#fff; --soft:#f1f5f9;
 
-      --shadow:0 8px 20px rgba(2,6,23,.08);
-      --shadow-2:0 10px 28px rgba(2,6,23,.12);
+      --shadow:0 8px 20px rgba(2,6,23,.07);
+      --shadow-2:0 12px 28px rgba(2,6,23,.12);
 
       --container-w: 1200px;
-      --poster-w: clamp(52px, 13vw, 96px);
-      --poster-h: clamp(74px, 20vw, 138px);
+
+      /* **Smaller posters** — compact but still readable */
+      --poster-w: clamp(44px, 12vw, 80px);
+      --poster-h: clamp(64px, 17vw, 118px);
+
+      --ring: 0 0 0 3px rgba(16,185,129,.18);
     }
 
     .fav-container{
@@ -186,30 +191,38 @@ const Favorite = () => {
     .input-clear{ position:absolute; right:10px; top:50%; transform:translateY(-50%); border:0; background:var(--soft); color:#334155; border:1px solid var(--border); border-radius:9999px; padding:4px 8px; font-weight:800; font-size:var(--fs-10); min-height:32px; }
     .input-clear:hover{ background:#e2e8f0; }
 
-    /* Item with poster (mobile clear) */
+    /* List grid (text + compact poster) */
     .list-grid{ display:grid; grid-template-columns:repeat(1,1fr); gap:var(--gap-10); }
     @media (min-width:700px){ .list-grid{ grid-template-columns:repeat(2,1fr); } }
     @media (min-width:1100px){ .list-grid{ grid-template-columns:repeat(3,1fr); } }
 
+    /* Item card — more compact, elegant, animated */
     .item{
-      display:grid; grid-template-columns: var(--poster-w) 1fr auto; align-items:stretch;
+      display:grid; grid-template-columns: var(--poster-w) 1fr auto; align-items:center;
       gap:var(--gap-10);
       background:#fff; border:1px solid var(--border); border-radius:12px; padding:var(--pad-10);
-      transition:.15s;
+      transition:.18s ease; animation:fadeInUp .22s ease both;
     }
     .item:hover{ transform:translateY(-2px); box-shadow:var(--shadow-2); background:#fcfcfd; border-color:#cbd5e1; }
+    .item.selected{ box-shadow: var(--ring); }
+
+    @keyframes fadeInUp{
+      from{ opacity:.0; transform: translateY(4px) scale(.997); }
+      to{ opacity:1; transform: translateY(0) scale(1); }
+    }
+
     .poster{
       width: var(--poster-w); height: var(--poster-h);
       border:1px solid var(--border); border-radius:10px; overflow:hidden; background:#fff;
       display:flex; align-items:center; justify-content:center;
     }
     .poster img{ width:100%; height:100%; object-fit:cover; object-position:center; display:block; }
-    .poster .ph{ font-size: var(--fs-10); color:#94a3b8; font-weight:800; text-align:center; padding:4px; }
+    .poster .ph{ font-size: var(--fs-11); color:#94a3b8; font-weight:800; text-align:center; padding:4px; }
 
     /* Checkbox pro */
     .checkwrap{ display:inline-flex; align-items:center; gap:8px; }
     .checkwrap input[type="checkbox"]{
-      appearance:none; width:20px; height:20px; border-radius:6px; border:1.5px solid #cbd5e1; display:grid; place-items:center; background:#fff; transition:.15s;
+      appearance:none; width:18px; height:18px; border-radius:6px; border:1.5px solid #cbd5e1; display:grid; place-items:center; background:#fff; transition:.15s;
     }
     .checkwrap input[type="checkbox"]::after{
       content:""; width:12px; height:12px; transform:scale(0); transition:.12s;
@@ -222,11 +235,18 @@ const Favorite = () => {
     .checkwrap input[type="checkbox"]:checked::after{
       background:#16a34a; transform:scale(1);
     }
-    .selected-chip{ background:#dcfce7; color:#166534; border:1px solid #86efac; padding:4px 8px; border-radius:9999px; font-weight:800; font-size:var(--fs-10); }
+    .selected-chip{ background:#dcfce7; color:#166534; border:1px solid #86efac; padding:3px 8px; border-radius:9999px; font-weight:800; font-size:var(--fs-10); }
 
     .item h6{ margin:0; font-size: var(--fs-16); font-weight:900; color:var(--text); line-height:1.25; }
-    .item small.muted{ color:var(--muted); display:block; font-size: var(--fs-12); }
+    .item .title-row{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .item small.muted{ color:var(--muted); display:block; font-size: var(--fs-12); line-height:1.25; }
+    .chips-row{ display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+    .chip-soft{ background:#eef2f7; color:#1f2937; border:1px solid #e2e8f0; border-radius:999px; padding:3px 8px; font-weight:700; font-size:var(--fs-10); }
+    .chip-watch{ background:#ecfdf5; color:#065f46; border:1px solid #86efac; }
+    .chip-pending{ background:#fff7ed; color:#9a3412; border:1px solid #fed7aa; }
+
     .item .right{ margin-left:auto; display:flex; gap:var(--gap-8); align-items:center; }
+    .type-pill{ background:#f1f5f9; border:1px solid #e2e8f0; color:#334155; border-radius:9999px; padding:4px 8px; font-size:var(--fs-10); font-weight:800; }
 
     /* Buttons */
     .btn{ border:0; border-radius:10px; padding: var(--pad-10) var(--pad-14); font-weight:900; transition:.2s; color:#fff; white-space:nowrap; font-size: var(--fs-14); min-height: var(--tap); }
@@ -255,21 +275,22 @@ const Favorite = () => {
       display:flex; gap:var(--gap-10); align-items:center; justify-content:space-between; flex-wrap:wrap;
     }
 
-    /* Favorites grid cards */
+    /* Favorites grid cards — compact posters too */
     .grid-modern{display:grid;gap:var(--gap-12);grid-template-columns:repeat(1,1fr)}
     @media (min-width:700px){.grid-modern{grid-template-columns:repeat(2,1fr)}}
     @media (min-width:1100px){.grid-modern{grid-template-columns:repeat(3,1fr)}}
     .media-card{
-      position:relative;background:#fff;border:2px solid #fecaca;border-radius:14px;padding:var(--pad-12);
-      box-shadow:0 6px 18px rgba(15,23,42,.06);transition:.2s; display:grid; grid-template-columns: var(--poster-w) 1fr auto; gap: var(--gap-10); align-items: stretch;
+      position:relative;background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:var(--pad-12);
+      box-shadow:0 8px 20px rgba(15,23,42,.06);transition:.18s; display:grid; grid-template-columns: var(--poster-w) 1fr auto; gap: var(--gap-10); align-items:center;
+      animation: fadeInUp .22s ease both;
     }
-    .media-card:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(15,23,42,.10);border-color:#ef4444}
+    .media-card:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(15,23,42,.10);border-color:#cbd5e1}
     .media-poster{ grid-column: 1/2; }
     .media-title{font-weight:900;font-size: var(--fs-16);color:#111827;margin:0 0 4px; line-height:1.25;}
     .media-sub{color:#64748b;font-size: var(--fs-12)}
-    .media-meta{display:flex;gap:var(--gap-8);align-items:center;margin-top:var(--pad-8);flex-wrap:wrap}
-    .badge{ background:#fee2e2;color:#7f1d1d;border:1px solid #fecaca;padding:4px 10px;border-radius:9999px;font-weight:800;font-size: var(--fs-10) }
-    .badge-gray{background:#f1f5f9;color:#334155;border:1px solid #e2e8f0}
+    .media-meta{display:flex;gap:var(--gap-8);align-items:center;margin-top:var(--pad-6);flex-wrap:wrap}
+    .badge{ background:#eef2f7;color:#1f2937;border:1px solid #e2e8f0;padding:3px 8px;border-radius:9999px;font-weight:800;font-size: var(--fs-10) }
+    .badge-gray{background:#f8fafc;color:#334155;border:1px solid #e2e8f0}
     .badge-type{background:#fff7ed;color:#9a3412;border:1px solid #fed7aa}
     .card-actions{display:flex;gap:var(--gap-8);align-items:center;margin-left:auto}
 
@@ -307,71 +328,46 @@ const Favorite = () => {
     .row{ display:flex; flex-direction:column; gap: var(--gap-14); }
     .col-12{ width:100%; }
 
-    @media (prefers-reduced-motion: reduce){
-      *{ animation-duration:0.001ms !important; animation-iteration-count:1 !important; transition-duration:0.001ms !important; }
-    }
-
-    /* ===== MOBILE FULL-VIEW OVERRIDES (nothing hidden on phones) ===== */
-
-    /* Prevent sticky from covering content */
-    .cardish .body { padding-bottom: calc(var(--tap) + var(--pad-16)); }
-
-    /* Allow wrapping everywhere */
+    /* ===== MOBILE FULL-VIEW OVERRIDES (all details visible) ===== */
     *, *::before, *::after { overflow-wrap: anywhere; }
 
-    /* Titles never truncate on mobile */
     @media (max-width: 480px){
-      h6, .media-title, .big-title {
-        white-space: normal !important;
-        overflow: visible !important;
-        text-overflow: clip !important;
-      }
-    }
+      /* Titles never truncate */
+      h6, .media-title, .big-title { white-space: normal !important; overflow: visible !important; text-overflow: clip !important; }
 
-    /* Chips can wrap */
-    .pill, .badge, .badge-gray, .badge-type { white-space: normal; }
-
-    /* Force single-column cards and stack content vertically */
-    @media (max-width: 480px) {
+      /* Lists: stack vertical with compact poster on top */
       .list-grid { grid-template-columns: 1fr !important; }
       .item {
         grid-template-columns: 1fr !important;
         grid-template-rows: auto auto auto;
+        align-items: start;
       }
       .item .poster {
         width: 100% !important;
         height: auto !important;
-        aspect-ratio: 2 / 3;
+        aspect-ratio: 3 / 4;
         border-radius: 12px;
       }
       .item .poster img { width: 100%; height: 100%; object-fit: cover; }
-      .item > div[style*="minWidth:0"] { min-width: 0 !important; }
       .item .right {
         width: 100%;
         justify-content: flex-start;
         margin-top: var(--pad-8);
       }
 
-      /* Sticky actions: make controls full width */
-      .sticky-actions { gap: var(--gap-10); }
-      .sticky-actions select,
-      .sticky-actions .form-select { width: 100% !important; max-width: 100% !important; }
-      .sticky-actions .btn { width: 100%; }
-    }
-
-    /* Favorites grid: full detail, stacked on phones */
-    @media (max-width: 480px) {
+      /* Favorites grid: stacked */
       .grid-modern { grid-template-columns: 1fr !important; }
-      .media-card { grid-template-columns: 1fr !important; }
+      .media-card { grid-template-columns: 1fr !important; align-items: start; }
       .media-card .media-poster.poster {
         width: 100% !important;
         height: auto !important;
-        aspect-ratio: 2 / 3;
+        aspect-ratio: 3 / 4;
       }
-      .media-card .card-actions {
-        width: 100%;
-        justify-content: flex-start;
-      }
+
+      /* Sticky actions: full width controls */
+      .sticky-actions { gap: var(--gap-10); }
+      .sticky-actions select, .sticky-actions .form-select { width: 100% !important; max-width: 100% !important; }
+      .sticky-actions .btn { width: 100%; }
     }
 
     /* Input: keep space for clear button */
@@ -492,7 +488,6 @@ const Favorite = () => {
       setFavLoading(true);
       const { data } = await axios.get(BUCKET_URL, { params:{ user_id: AUTH_USER_ID, favorite_category: bucketName }});
       setFavCache(p => ({...p, [bucketName]: data || { movies:[], series:[], counts:{ movies:0, series:0, total:0 }}}));
-      // normalize pages after fetch
       const d = data || { movies:[], series:[] };
       normalizePages((d.movies||[]).length, favPageMovies, setFavPageMovies);
       normalizePages((d.series||[]).length, favPageSeries, setFavPageSeries);
@@ -518,7 +513,6 @@ const Favorite = () => {
       return { ...cache, [favBucket]: { ...curr, movies, series, counts } };
     });
 
-    // after optimistic update, normalize current page indexes so pages backfill
     setTimeout(()=>{
       const dataNow = favCache[favBucket] || { movies:[], series:[] };
       normalizePages(newMoviesLen ?? (dataNow.movies||[]).length, favPageMovies, setFavPageMovies);
@@ -536,8 +530,8 @@ const Favorite = () => {
 
   /* =============== Render helpers =============== */
   const GenreChips = ({ list }) => !list?.length ? null : (
-    <div style={{ marginTop:6, display: "flex", flexWrap: "wrap", gap: 6 }}>
-      {list.map((g,i)=>(<span key={i} className="pill" style={{borderColor:"#a5f3fc", color:"#155e75"}}>{g}</span>))}
+    <div className="chips-row">
+      {list.map((g,i)=>(<span key={i} className="chip-soft" style={{borderColor:"#a5f3fc", color:"#155e75"}}>{g}</span>))}
     </div>
   );
 
@@ -545,11 +539,19 @@ const Favorite = () => {
     const line1 = `${item.release_year ? `Year: ${item.release_year} • ` : ""}${item.category_name||""}${item.subcategory_name?` • ${item.subcategory_name}`:""}`;
     const extra = label==="movie" ? item.parts : item.seasons;
     const extraText = Array.isArray(extra) ? extra.join(", ") : extra;
+    const watchedChip = item.is_watched
+      ? <span className="chip-soft chip-watch">Watched</span>
+      : <span className="chip-soft chip-pending">Not Watched</span>;
+
     return (
       <>
         <small className="muted">{line1}</small>
         {extraText?.length ? <small className="muted"><br/>{label==="movie"?"Parts: ":"Seasons: "}{extraText}</small> : null}
         {item.genres?.length ? <GenreChips list={item.genres}/> : null}
+        <div className="chips-row" style={{marginTop:6}}>
+          {watchedChip}
+          {item.release_year ? <span className="chip-soft">({item.release_year})</span> : null}
+        </div>
       </>
     );
   };
@@ -566,7 +568,7 @@ const Favorite = () => {
         const checked = selectedItems.some(p=>p.type===label && p.id===r.id);
         const hasPoster = !!r.poster_url;
         return (
-          <div className="item" key={`${label}-${r.id}`}>
+          <div className={`item ${checked ? "selected" : ""}`} key={`${label}-${r.id}`}>
             {/* poster */}
             <div className="poster">
               {hasPoster ? (
@@ -580,7 +582,7 @@ const Favorite = () => {
 
             {/* text */}
             <div style={{minWidth:0}}>
-              <div style={{display:"flex", alignItems:"center", gap:8, flexWrap:"wrap"}}>
+              <div className="title-row">
                 <SelectBox
                   checked={checked}
                   onChange={(state)=> addOrRemoveSelected(state, {
@@ -597,7 +599,7 @@ const Favorite = () => {
 
             {/* actions */}
             <div className="right">
-              <span className="pill">{label==="movie"?"Movie":"Series"}</span>
+              <span className="type-pill">{label==="movie"?"Movie":"Series"}</span>
             </div>
           </div>
         );
@@ -607,7 +609,6 @@ const Favorite = () => {
 
   const bucketData = (favBucket && favCache[favBucket]) || { movies:[], series:[], counts:{ movies:0, series:0, total:0 } };
 
-  // page slices
   const moviesPageSlice = bucketData.movies.slice(favPageMovies*PAGE_SIZE, favPageMovies*PAGE_SIZE+PAGE_SIZE);
   const seriesPageSlice = bucketData.series.slice(favPageSeries*PAGE_SIZE, favPageSeries*PAGE_SIZE+PAGE_SIZE);
 
@@ -732,7 +733,6 @@ const Favorite = () => {
             <div className="cardish">
               <div className="header" style={{gap:12}}>
                 <span className="title">Filter by Category</span>
-                {/* Type toggle */}
                 <div className="seg" role="tablist" aria-label="Category type">
                   {["all","movie","series"].map(t=>(
                     <button key={t} className={discoverType===t?"active":""} onClick={()=>setDiscoverType(t)} role="tab" aria-selected={discoverType===t}>
@@ -790,7 +790,6 @@ const Favorite = () => {
             <div className="cardish">
               <div className="header" style={{gap:12}}>
                 <span className="title">Watch Filter</span>
-                {/* Type toggle */}
                 <div className="seg" role="tablist" aria-label="Watch type">
                   {["all","movie","series"].map(t=>(
                     <button key={t} className={discoverType===t?"active":""} onClick={()=>setDiscoverType(t)} role="tab" aria-selected={discoverType===t}>
@@ -862,7 +861,6 @@ const Favorite = () => {
                   {favBucket ? favBucket : "Pick a Favorite Bucket"}
                 </div>
 
-                {/* Type toggle */}
                 <div className="seg" role="tablist" aria-label="Favorites type">
                   {["all","movie","series"].map(t=>(
                     <button key={t} className={favType===t?"active":""} onClick={()=>{ setFavType(t); }} role="tab" aria-selected={favType===t}>
