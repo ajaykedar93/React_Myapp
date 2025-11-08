@@ -70,11 +70,15 @@ export default function DailyTransactionPage() {
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
+  // ---------- NEW: First-load spinner ----------
+  const [booting, setBooting] = useState(true);
+
+  // ---------- NEW: Filter by date (default today) ----------
+  const [filterDate, setFilterDate] = useState(getLocalDate());
+
   // ---------- Pagination ----------
   const perPage = 20;
   const startIdx = (page - 1) * perPage;
-  const pagedTransactions = useMemo(() => transactions.slice(startIdx, startIdx + perPage), [transactions, startIdx]);
-  const totalPages = Math.ceil(transactions.length / perPage) || 1;
 
   // ---------- Refs ----------
   const tableEndRef = useRef(null);
@@ -93,6 +97,17 @@ export default function DailyTransactionPage() {
     }, 60 * 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Lock body scroll while booting
+  useEffect(() => {
+    if (booting) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = prev;
+      };
+    }
+  }, [booting]);
 
   // ---------- Abort helpers ----------
   const newAborter = (key) => {
@@ -153,11 +168,11 @@ export default function DailyTransactionPage() {
     };
   };
 
-  // ---------- INSTANT LOAD: hydrate from cache synchronously ----------
+  // ---------- INSTANT LOAD + FIRST API BATCH ----------
   useEffect(() => {
     const cached = loadCache();
     if (cached) {
-      // Paint immediately
+      // We still keep spinner until first API batch completes
       setCategories(cached.categories || []);
       setSubcategories(cached.subcategories || []);
       setTransactions(cached.transactions || []);
@@ -170,7 +185,6 @@ export default function DailyTransactionPage() {
       );
     }
 
-    // Kick off parallel network refresh (do NOT await -> instant mount)
     (async () => {
       try {
         const [lookups, tx, sum] = await Promise.all([fetchLookups(), fetchTransactions(), fetchSummary()]);
@@ -179,8 +193,6 @@ export default function DailyTransactionPage() {
         setTransactions(tx);
         setSummary(sum);
         setPage(1);
-
-        // Persist fresh snapshot for next instant open
         saveCache({
           categories: lookups.categories,
           subcategories: lookups.subcategories,
@@ -189,10 +201,12 @@ export default function DailyTransactionPage() {
         });
       } catch (e) {
         if (!axios.isCancel(e)) showPopup("Network error — showing cached data", "error");
+      } finally {
+        setBooting(false);
       }
     })();
 
-    // Auto-refresh when back online
+    // Auto-refresh when back online (non-blocking / no spinner)
     const onBackOnline = () => {
       (async () => {
         try {
@@ -230,6 +244,40 @@ export default function DailyTransactionPage() {
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
+  // ---------- Derived: transactions for selected date ----------
+  const dayTransactions = useMemo(() => {
+    const key = (d) => String(d || "").slice(0, 10);
+    return transactions.filter((t) => key(t.transaction_date) === key(filterDate));
+  }, [transactions, filterDate]);
+
+  // ---------- Derived: summary for selected date ----------
+  const daySummary = useMemo(() => {
+    let debit = 0,
+      credit = 0;
+    for (const t of dayTransactions) {
+      const amt = Number(t.amount || 0);
+      if ((t.type || "").toLowerCase() === "credit") credit += amt;
+      else debit += amt;
+    }
+    return {
+      total_debit: debit,
+      total_credit: credit,
+      total_transactions: dayTransactions.length,
+    };
+  }, [dayTransactions]);
+
+  // ---------- Pagination over filtered list ----------
+  const pagedTransactions = useMemo(
+    () => dayTransactions.slice(startIdx, startIdx + perPage),
+    [dayTransactions, startIdx]
+  );
+  const totalPages = Math.ceil(dayTransactions.length / perPage) || 1;
+
+  // Reset to page 1 whenever date filter changes or list changes
+  useEffect(() => {
+    setPage(1);
+  }, [filterDate, transactions.length]);
+
   // ---------- Mutations ----------
   const addOrUpdateTransaction = async () => {
     if (!form.amount || !form.category_id) {
@@ -251,15 +299,13 @@ export default function DailyTransactionPage() {
         showPopup("Transaction added", "success");
       }
 
-      // Refresh fast (parallel) + cache
-      const [tx, sum] = await Promise.all([fetchTransactions(), fetchSummary()]);
+      const [tx] = await Promise.all([fetchTransactions()]);
       setTransactions(tx);
-      setSummary(sum);
       saveCache({
         categories,
         subcategories,
         transactions: tx,
-        summary: sum,
+        summary, // keep server summary (we display local daySummary anyway)
       });
 
       setHighlightId(id);
@@ -274,6 +320,8 @@ export default function DailyTransactionPage() {
         transaction_date: getLocalDate(),
       });
       setPage(1);
+      // Optional: if you want the filter to jump to the added transaction's date
+      // setFilterDate(getLocalDate());
     } catch (e) {
       if (axios.isCancel(e)) return;
       showPopup("Failed to save transaction", "error");
@@ -290,14 +338,13 @@ export default function DailyTransactionPage() {
       showPopup("Transaction deleted", "success");
       setConfirmDeleteId(null);
 
-      const [tx, sum] = await Promise.all([fetchTransactions(), fetchSummary()]);
+      const [tx] = await Promise.all([fetchTransactions()]);
       setTransactions(tx);
-      setSummary(sum);
       saveCache({
         categories,
         subcategories,
         transactions: tx,
-        summary: sum,
+        summary,
       });
       setPage(1);
     } catch (e) {
@@ -337,7 +384,7 @@ export default function DailyTransactionPage() {
 
   return (
     <div className="container-fluid py-3" style={{ background: "var(--bg)" }}>
-      {/* Mobile-first styles */}
+      {/* Global styles (includes loader) */}
       <style>{`
         :root{
           --ink-900:#0f172a; --ink-700:#334155; --ink-600:#475569; --ink-500:#64748b;
@@ -406,9 +453,67 @@ export default function DailyTransactionPage() {
         .toast-error{ background: #b33a3a; }
         .modal-backdrop{ position: fixed; inset:0; background: rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; z-index: 1100; padding: 16px; }
         .modal-card{ background:#fff; border-radius:14px; border:1px solid var(--border); width:100%; max-width:420px; padding:16px; box-shadow: 0 18px 48px rgba(0,0,0,.25); }
+
+        /* ---------- Full-screen professional loader ---------- */
+        .boot-overlay{
+          position: fixed; inset: 0;
+          display: flex; align-items: center; justify-content: center; flex-direction: column;
+          gap: 18px; z-index: 2000;
+          background:
+            radial-gradient(1200px 600px at 20% 10%, rgba(95,75,182,.08), transparent 60%),
+            radial-gradient(1000px 500px at 80% 90%, rgba(31,95,120,.08), transparent 60%),
+            var(--bg);
+          backdrop-filter: saturate(1.1);
+        }
+        .loader-wrap{
+          display:flex; align-items:center; justify-content:center; gap:14px;
+          padding: 22px 26px; border:1px solid #e8ecf3; background:#fff; border-radius: 18px;
+          box-shadow: 0 20px 60px rgba(16,24,40,.12);
+        }
+        .ring{
+          width: 48px; height: 48px; display:inline-block; position: relative;
+        }
+        .ring:before, .ring:after{
+          content:""; position:absolute; inset:0; border-radius:50%;
+          border:3px solid transparent; border-top-color:#5f4bb6; border-right-color:#1f5f78;
+          animation: spin 0.9s linear infinite;
+        }
+        .ring:after{
+          inset:6px; border-top-color:#1f5f78; border-right-color:#5f4bb6; animation-duration:1.4s; opacity:.85;
+        }
+        @keyframes spin{ to{ transform: rotate(360deg); } }
+
+        .brand-text{
+          font-weight: 900;
+          background: var(--brand-grad);
+          -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+          letter-spacing: .3px;
+        }
+        .subtle{
+          font-size: 13px; color: var(--ink-600);
+        }
+        @media (prefers-reduced-motion: reduce){
+          .ring:before, .ring:after{ animation: none; border-top-color:#5f4bb6; border-right-color:#1f5f78; }
+        }
       `}</style>
 
-      <div className="page-wrap">
+      {/* FIRST-LOAD OVERLAY */}
+      {booting && (
+        <div className="boot-overlay" role="status" aria-live="polite" aria-label="Loading data">
+          <div className="loader-wrap" aria-hidden="true">
+            <span className="ring" />
+            <div>
+              <div className="brand-text" style={{ fontSize: 18, lineHeight: 1 }}>
+                Preparing Daily Transactions…
+              </div>
+              <div className="subtle">Fetching categories, subcategories, entries & summary</div>
+            </div>
+          </div>
+          <div className="subtle">Please wait</div>
+        </div>
+      )}
+
+      <div className="page-wrap" aria-busy={booting ? "true" : "false"} aria-hidden={booting ? "true" : "false"}>
         {/* Title */}
         <h3 className="title mb-3">Daily Transactions</h3>
 
@@ -424,19 +529,19 @@ export default function DailyTransactionPage() {
           </div>
         )}
 
-        {/* KPI */}
+        {/* KPI (for selected date) */}
         <div className="kpi-grid">
           <div className="card-ui kpi-card text-center">
             <h6>Total Debit</h6>
-            <h5 className="text-danger m-0">{INR.format(Number(summary.total_debit || 0))}</h5>
+            <h5 className="text-danger m-0">{INR.format(Number(daySummary.total_debit || 0))}</h5>
           </div>
           <div className="card-ui kpi-card text-center">
             <h6>Total Credit</h6>
-            <h5 className="text-success m-0">{INR.format(Number(summary.total_credit || 0))}</h5>
+            <h5 className="text-success m-0">{INR.format(Number(daySummary.total_credit || 0))}</h5>
           </div>
           <div className="card-ui kpi-card text-center">
             <h6>Total Transactions</h6>
-            <h5 className="m-0">{Number(summary.total_transactions || 0)}</h5>
+            <h5 className="m-0">{Number(daySummary.total_transactions || 0)}</h5>
           </div>
         </div>
 
@@ -526,14 +631,40 @@ export default function DailyTransactionPage() {
           </div>
 
           <div className="mt-3 d-flex gap-2 flex-wrap">
-            <button className="btn-solid" onClick={addOrUpdateTransaction}>
+            <button className="btn-solid" onClick={addOrUpdateTransaction} disabled={booting}>
               {editingId ? "Update Transaction" : "Add Transaction"}
             </button>
             {editingId && (
-              <button className="btn-ghost" onClick={cancelEdit}>
+              <button className="btn-ghost" onClick={cancelEdit} disabled={booting}>
                 Cancel
               </button>
             )}
+          </div>
+        </div>
+
+        {/* -------- NEW: Filter by Date (below the form) -------- */}
+        <div className="card-ui mb-3">
+          <div className="d-flex flex-wrap align-items-end justify-content-between gap-2">
+            <div>
+              <label className="form-label mb-1">Filter by Date</label>
+              <input
+                type="date"
+                className="form-control"
+                value={filterDate}
+                onChange={(e) => setFilterDate(e.target.value)}
+                style={{ maxWidth: 220 }}
+              />
+            </div>
+            <div className="text-muted" style={{ fontSize: "var(--fs-sm)" }}>
+              Showing transactions for{" "}
+              <strong>
+                {new Date(filterDate).toLocaleDateString("en-GB", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                })}
+              </strong>
+            </div>
           </div>
         </div>
 

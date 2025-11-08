@@ -29,7 +29,7 @@ export default function Manage_Movies() {
   const [busyCount, setBusyCount] = useState(0);
   const [movies, setMovies] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
-  const [listProgress, setListProgress] = useState(0); // % for list loading
+  const [listProgress, setListProgress] = useState(0);
   const [q, setQ] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [page, setPage] = useState(0);
@@ -154,16 +154,14 @@ export default function Manage_Movies() {
     setTimeout(() => setListProgress(0), 250);
   };
 
-  // ---- load list (single page only, one request at a time) ----
+  // ---- load list ----
   const loadList = useCallback(
     async (opts = { restoreScroll: false }) => {
       if (opts.restoreScroll && listWrapRef.current) {
         lastScrollRef.current = listWrapRef.current.scrollTop;
       }
-
-      // cancel any in-flight list fetch
       listAbortRef.current?.abort();
-      const ac = new AbortController();
+      const ac = new AbortSignal.abort ? new AbortController() : new AbortController();
       listAbortRef.current = ac;
 
       setLoadingList(true);
@@ -185,7 +183,6 @@ export default function Manage_Movies() {
           const reader = res.body.getReader();
           let received = 0;
           const chunks = [];
-          // progressive stream
           // eslint-disable-next-line no-constant-condition
           while (true) {
             const { done, value } = await reader.read();
@@ -630,13 +627,11 @@ export default function Manage_Movies() {
             <span className="fw-semibold">Movies</span>
             <div className="d-flex align-items-center gap-2">
               <span className="text-muted small">Page {page + 1}</span>
-              {/* header progress removed (full-page overlay is used) */}
             </div>
           </div>
 
           {/* mobile cards */}
           <div className="d-md-none p-2 mm-mobile-list" ref={listWrapRef}>
-            {/* per-request: no per-section spinners; full-page overlay handles loading */}
             {movies.length ? (
               <div className="d-flex flex-column gap-2">
                 {movies.map((m) => (
@@ -698,7 +693,6 @@ export default function Manage_Movies() {
 
           {/* desktop table */}
           <div className="table-responsive d-none d-md-block position-relative" ref={listWrapRef}>
-            {/* section overlay removed — full-page overlay handles loading */}
             <table className="table align-middle mb-0">
               <thead style={{ background: "#f8fafc" }}>
                 <tr>
@@ -837,7 +831,8 @@ export default function Manage_Movies() {
           </h5>
 
           <div className="modal-body scroll-area">
-            <label className="form-label">Poster (drop or click)</label>
+            {/* Poster */}
+            <label className="form-label">Poster (drag & drop or click)</label>
             <div
               className={`mm-dropzone mb-3 ${dragActive ? "glow" : ""}`}
               onDragOver={onDragOver}
@@ -846,20 +841,21 @@ export default function Manage_Movies() {
               onClick={onPickPoster}
             >
               <div className="fw-semibold mb-1">
-                Drop image here {editPoster ? " (selected)" : ""}
+                {editPoster ? "Poster selected" : "Drop image here or click to browse"}
               </div>
-              <div className="text-muted small">JPG/PNG/WebP. Click to browse.</div>
+              <div className="text-muted small">JPG / PNG / WebP</div>
               {editPoster ? (
                 <img
                   src={editPoster}
                   alt="Poster preview"
                   className="img-thumbnail mt-2"
-                  style={{ maxHeight: 150, objectFit: "cover" }}
+                  style={{ maxHeight: 220, objectFit: "cover", borderRadius: "1rem" }}
                 />
               ) : null}
               <input ref={fileInputRef} type="file" accept="image/*" className="d-none" onChange={onFileChange} />
             </div>
 
+            {/* Watched */}
             <label className="form-label">Watched?</label>
             <div className="d-flex align-items-center justify-content-between border rounded p-2 mb-3">
               <span className="text-muted small">Mark this if you already watched it.</span>
@@ -874,6 +870,7 @@ export default function Manage_Movies() {
               </label>
             </div>
 
+            {/* Parts — MOBILE FIRST cards, Desktop table */}
             <div className="d-flex justify-content-between align-items-center mb-2">
               <label className="form-label mb-0">Parts</label>
               <button
@@ -882,10 +879,7 @@ export default function Manage_Movies() {
                 onClick={() =>
                   setEditParts((p) => [
                     ...p,
-                    {
-                      part_number: Math.max(2, (p[p.length - 1]?.part_number || p.length + 1)),
-                      year: "",
-                    },
+                    { part_number: Math.max(2, (p[p.length - 1]?.part_number || p.length + 1)), year: "" },
                   ])
                 }
               >
@@ -893,24 +887,28 @@ export default function Manage_Movies() {
               </button>
             </div>
 
-            {editParts?.length ? (
-              <div className="table-responsive mb-2">
-                <table className="table table-sm align-middle mb-0">
-                  <thead>
-                    <tr className="table-light">
-                      <th>Part #</th>
-                      <th>Year</th>
-                      <th />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {editParts.map((p, idx) => (
-                      <tr key={idx}>
-                        <td>
+            {/* Mobile / small screens: card list with BIG inputs */}
+            <div className="d-md-none">
+              {editParts?.length ? (
+                <div className="d-flex flex-column gap-2">
+                  {editParts.map((p, idx) => (
+                    <div key={idx} className="mm-part-card">
+                      <div className="d-flex align-items-center justify-content-between">
+                        <div className="fw-semibold">Part #{p.part_number || "?"}</div>
+                        <button
+                          className="btn btn-sm btn-outline-danger"
+                          onClick={() => setEditParts((arr) => arr.filter((_, i) => i !== idx))}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                      <div className="row g-2 mt-1">
+                        <div className="col-6">
+                          <label className="form-label small">Part #</label>
                           <input
-                            className={`form-control form-control-sm ${
-                              Number(p.part_number) >= 1 ? "" : "is-invalid"
-                            }`}
+                            className="form-control mm-input"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
                             value={p.part_number}
                             onChange={(e) => {
                               const v = onlyDigits(e.target.value);
@@ -920,12 +918,16 @@ export default function Manage_Movies() {
                                 return copy;
                               });
                             }}
+                            placeholder="2"
                           />
                           <small className="text-muted">New parts must be ≥ 2</small>
-                        </td>
-                        <td>
+                        </div>
+                        <div className="col-6">
+                          <label className="form-label small">Year</label>
                           <input
-                            className={`form-control form-control-sm ${p.year && isYear(p.year) ? "" : "is-invalid"}`}
+                            className={`form-control mm-input ${p.year && isYear(p.year) ? "" : "is-invalid"}`}
+                            inputMode="numeric"
+                            pattern="[0-9]*"
                             value={p.year}
                             onChange={(e) => {
                               const v = clamp4(e.target.value);
@@ -935,26 +937,91 @@ export default function Manage_Movies() {
                                 return copy;
                               });
                             }}
-                            placeholder="2024"
+                            placeholder="2025"
                           />
-                          {(!p.year || !isYear(p.year)) && <div className="invalid-feedback">Year 1888–2100</div>}
-                        </td>
-                        <td className="text-end">
-                          <button
-                            className="btn btn-sm btn-outline-danger btn-anim"
-                            onClick={() => setEditParts((arr) => arr.filter((_, i) => i !== idx))}
-                          >
-                            Delete
-                          </button>
-                        </td>
+                          {(!p.year || !isYear(p.year)) && (
+                            <div className="invalid-feedback">Enter full year (1888–2100)</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-muted small">No parts yet.</p>
+              )}
+            </div>
+
+            {/* Desktop: compact table (still large enough to see full year) */}
+            <div className="d-none d-md-block">
+              {editParts?.length ? (
+                <div className="table-responsive mb-2">
+                  <table className="table align-middle mb-0">
+                    <thead>
+                      <tr className="table-light">
+                        <th style={{ width: 160 }}>Part #</th>
+                        <th style={{ width: 200 }}>Year</th>
+                        <th />
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <p className="text-muted small">No parts yet.</p>
-            )}
+                    </thead>
+                    <tbody>
+                      {editParts.map((p, idx) => (
+                        <tr key={idx}>
+                          <td>
+                            <input
+                              className="form-control mm-input"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              value={p.part_number}
+                              onChange={(e) => {
+                                const v = onlyDigits(e.target.value);
+                                setEditParts((arr) => {
+                                  const copy = [...arr];
+                                  copy[idx] = { ...copy[idx], part_number: v ? Number(v) : "" };
+                                  return copy;
+                                });
+                              }}
+                              placeholder="2"
+                            />
+                            <small className="text-muted">New parts must be ≥ 2</small>
+                          </td>
+                          <td>
+                            <input
+                              className={`form-control mm-input ${p.year && isYear(p.year) ? "" : "is-invalid"}`}
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              value={p.year}
+                              onChange={(e) => {
+                                const v = clamp4(e.target.value);
+                                setEditParts((arr) => {
+                                  const copy = [...arr];
+                                  copy[idx] = { ...copy[idx], year: v };
+                                  return copy;
+                                });
+                              }}
+                              placeholder="2025"
+                            />
+                            {(!p.year || !isYear(p.year)) && (
+                              <div className="invalid-feedback">Enter full year (1888–2100)</div>
+                            )}
+                          </td>
+                          <td className="text-end">
+                            <button
+                              className="btn btn-sm btn-outline-danger btn-anim"
+                              onClick={() => setEditParts((arr) => arr.filter((_, i) => i !== idx))}
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-muted small">No parts yet.</p>
+              )}
+            </div>
           </div>
 
           <div className="modal-footer d-flex justify-content-end gap-2">
@@ -1033,13 +1100,14 @@ export default function Manage_Movies() {
           transition: box-shadow .12s ease, transform .12s ease;
         }
         .mm-dropzone.glow{ box-shadow: 0 0 0 .2rem rgba(16,185,129,.12); transform: scale(1.01); }
+
         .mm-switch{ position:relative; display:inline-flex; align-items:center; gap:.35rem; }
         .mm-switch input{ display:none; }
         .mm-slider{ width:50px; height:28px; background:#e2e8f0; border-radius:999px; position:relative; transition: background .18s ease; }
         .mm-slider::after{ content:""; position:absolute; top:3px; left:3px; width:22px; height:22px; border-radius:999px; background:#fff; transition: transform .18s ease; box-shadow:0 2px 6px rgba(0,0,0,.15); }
         .mm-switch input:checked + .mm-slider{ background:linear-gradient(135deg,#10b981,#6366f1); }
         .mm-switch input:checked + .mm-slider::after{ transform:translateX(22px); }
-        .mm-switch-label{ font-size:.7rem; font-weight:600; color:#0f172a; }
+        .mm-switch-label{ font-size:.75rem; font-weight:700; color:#0f172a; }
 
         .toastish{
           position:fixed; top:1rem; right:1rem;
@@ -1078,7 +1146,6 @@ export default function Manage_Movies() {
         .mm-watch-dot{ width: 16px; height: 16px; border-radius: 999px; border: 2px solid #fff; box-shadow: 0 0 0 2px rgba(15,23,42,.12); }
         .mm-watch-dot.yes{ background: linear-gradient(135deg,#10b981,#22c55e); }
         .mm-watch-dot.no{ background: rgba(148,163,184,.35); }
-
         .mm-mobile-actions{ display:flex; gap:.4rem; }
         .mm-btn{ flex:1; border:none; border-radius:.7rem; font-size:.7rem; font-weight:500; padding:.35rem .4rem .45rem; display:flex; align-items:center; justify-content:center; gap:.25rem; transition: transform .12s ease, box-shadow .12s ease; }
         .mm-btn:active{ transform: translateY(1px); }
@@ -1112,8 +1179,22 @@ export default function Manage_Movies() {
           .movie-view-poster img, .movie-view-placeholder{ width:100%; height:auto; max-height:260px; object-fit:contain; border-radius:1rem; }
         }
 
-        .scroll-area{ max-height:60vh; overflow-y:auto; }
-        @media (max-width:575.98px){ .scroll-area{ max-height:58vh; } }
+        .scroll-area{ max-height:70vh; overflow-y:auto; }
+        @media (max-width:575.98px){ .scroll-area{ max-height:72vh; } }
+
+        /* EDIT PARTS: mobile cards */
+        .mm-part-card{
+          border:1px solid rgba(15,23,42,.06);
+          border-radius:1rem;
+          padding:.75rem;
+          background:#fff;
+          box-shadow: 0 6px 18px rgba(15,23,42,.06);
+        }
+        .mm-input{
+          font-size:1rem; /* bigger text so digits don't look clipped */
+          padding:.55rem .65rem;
+          border-radius:.75rem;
+        }
       `}</style>
     </>
   );
