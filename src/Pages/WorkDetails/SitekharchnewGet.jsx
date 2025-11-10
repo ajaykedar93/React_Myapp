@@ -306,6 +306,29 @@ export default function SitekharchGet() {
   return (
     <>
       <style>{`
+        :root{
+          --ink:#0f172a; --muted:#6b7280;
+        }
+        *{ box-sizing:border-box; }
+        html, body, #root{ height:100%; }
+        body{
+          margin:0;
+          font-family: Inter, "Segoe UI", system-ui, -apple-system, Roboto, Arial, "Noto Sans", sans-serif;
+          color:var(--ink);
+          /* small, responsive text for the whole page */
+          font-size: clamp(12.5px, 1.6vw, 14.5px);
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* Utility to make any text show fully and wrap nicely */
+        .text-wrap{
+          white-space: pre-wrap;      /* preserve \\n from DB */
+          overflow-wrap: anywhere;    /* break very long tokens/URLs */
+          word-break: break-word;     /* fallback for older engines */
+          line-height: 1.4;
+        }
+
         .page-wrap {
           min-height: 100vh;
           background: linear-gradient(180deg, #f97316 0%, #fb7185 35%, #f97316 70%, #fde68a 100%);
@@ -321,6 +344,23 @@ export default function SitekharchGet() {
           color: #fff;
           box-shadow: 0 18px 35px rgba(0,0,0,0.18);
         }
+
+        /* Responsive controls (month + download) */
+        .top-controls{
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+          gap: 8px;
+          width: 100%;
+        }
+        .top-controls .form-control,
+        .top-controls .btn{
+          width: 100%;
+          min-height: 36px;
+          font-size: inherit;    /* use global clamp size */
+          padding: 8px 10px;
+          border-radius: 10px;
+        }
+
         .stat-box {
           background: rgba(250, 250, 250, 0.18);
           border: 1px solid rgba(255,255,255,0.25);
@@ -332,6 +372,7 @@ export default function SitekharchGet() {
         .stat-box h5 {
           color: #fff;
           font-weight: 700;
+          margin: 0;
         }
         .section-card {
           background: #fff;
@@ -365,7 +406,7 @@ export default function SitekharchGet() {
         .badge-date {
           background: rgba(253, 186, 116, 0.18);
           color: #92400e;
-          font-size: .7rem;
+          font-size: .72rem;
         }
         .popup-overlay-center {
           position: fixed;
@@ -428,10 +469,10 @@ export default function SitekharchGet() {
               }`}
               style={{ borderRadius: "1rem" }}
             >
-              <div style={{ fontSize: "2.2rem" }}>
+              <div style={{ fontSize: "2rem" }}>
                 {popup.type === "success" ? "✅" : "⚠️"}
               </div>
-              <p className="fw-semibold mb-1">{popup.message}</p>
+              <p className="fw-semibold mb-1 text-wrap">{popup.message}</p>
               <small className="text-muted">closing in 2s…</small>
             </div>
           </div>
@@ -486,13 +527,14 @@ export default function SitekharchGet() {
                 </div>
                 <div className="mb-2">
                   <label className="form-label small mb-1">Details</label>
-                  <input
-                    type="text"
-                    className="form-control"
+                  <textarea
+                    className="form-control text-wrap"
                     value={editKharch.details || ""}
                     onChange={(e) =>
                       setEditKharch((p) => ({ ...p, details: e.target.value }))
                     }
+                    placeholder="Write full details…"
+                    rows={3}
                   />
                 </div>
                 <div className="row g-2 mb-2">
@@ -607,9 +649,8 @@ export default function SitekharchGet() {
                 </div>
                 <div className="mb-3">
                   <label className="form-label small mb-1">Details</label>
-                  <input
-                    type="text"
-                    className="form-control"
+                  <textarea
+                    className="form-control text-wrap"
                     value={editReceived.details || ""}
                     onChange={(e) =>
                       setEditReceived((p) => ({
@@ -617,6 +658,8 @@ export default function SitekharchGet() {
                         details: e.target.value,
                       }))
                     }
+                    placeholder="Add any notes…"
+                    rows={2}
                   />
                 </div>
                 <button type="submit" className="btn btn-primary w-100">
@@ -634,7 +677,7 @@ export default function SitekharchGet() {
           <div className="card popup-card">
             <div className="card-body text-center">
               <h6 className="mb-2">Delete this kharch?</h6>
-              <p className="small text-muted mb-3">
+              <p className="small text-muted mb-3 text-wrap">
                 {deleteKharch.kharch_date} – {deleteKharch.details || "—"}
               </p>
               <div className="d-flex justify-content-center gap-2">
@@ -696,7 +739,7 @@ export default function SitekharchGet() {
       <div className="page-wrap">
         <div className="container-fluid" style={{ maxWidth: "1100px" }}>
           {/* HEADER */}
-          <div className="header-card p-3 p-sm-4 mb-4 d-flex flex-column gap-3 gap-sm-0 flex-sm-row justify-content-between align-items-sm-center">
+          <div className="header-card p-3 p-sm-4 mb-4 d-flex flex-column gap-3">
             <div>
               <p
                 className="text-uppercase mb-1"
@@ -710,13 +753,14 @@ export default function SitekharchGet() {
                 entries for the same month.
               </p>
             </div>
-            <div className="d-flex gap-2 flex-wrap">
+
+            {/* Responsive controls */}
+            <div className="top-controls">
               <input
                 type="month"
                 className="form-control"
                 value={month}
                 onChange={(e) => setMonth(e.target.value)}
-                style={{ minWidth: "160px" }}
               />
               <button className="btn btn-outline-light" onClick={handleDownload}>
                 Download PDF
@@ -731,7 +775,7 @@ export default function SitekharchGet() {
                 <p className="small mb-1" style={{ opacity: 0.9 }}>
                   Total Kharch
                 </p>
-                <h5 className="mb-0">₹{totalKharch.toFixed(2)}</h5>
+                <h5>₹{totalKharch.toFixed(2)}</h5>
               </div>
             </div>
             <div className="col-12 col-md-4">
@@ -739,7 +783,7 @@ export default function SitekharchGet() {
                 <p className="small mb-1" style={{ opacity: 0.9 }}>
                   Total Received
                 </p>
-                <h5 className="mb-0">₹{totalReceived.toFixed(2)}</h5>
+                <h5>₹{totalReceived.toFixed(2)}</h5>
               </div>
             </div>
             <div className="col-12 col-md-4">
@@ -747,7 +791,7 @@ export default function SitekharchGet() {
                 <p className="small mb-1" style={{ opacity: 0.9 }}>
                   Balance
                 </p>
-                <h5 className="mb-0">₹{(balance || 0).toFixed(2)}</h5>
+                <h5>₹{(balance || 0).toFixed(2)}</h5>
               </div>
             </div>
           </div>
@@ -790,40 +834,46 @@ export default function SitekharchGet() {
                             </span>
                           ) : null}
                         </div>
-                        <p className="mb-1 fw-semibold">
+
+                        {/* FULL WRAPPED TEXT */}
+                        <p className="mb-1 fw-semibold text-wrap">
                           {row.details || "—"}
                         </p>
+
                         {row.extra_details ? (
-                          <p className="mb-1 small text-muted">
+                          <p className="mb-1 small text-muted text-wrap">
                             Extra: {row.extra_details}
                           </p>
                         ) : null}
+
                         {Array.isArray(row.extra_items) &&
                           row.extra_items.length > 0 && (
-                            <p className="mb-1 small text-muted">
-                              Extras:{" "}
-                              {row.extra_items
-                                .map(
-                                  (x) =>
-                                    `₹${x.amount || 0} (${x.details || ""})`
-                                )
-                                .join(", ")}
-                            </p>
+                            <ul className="mb-1 small text-muted text-wrap" style={{ paddingLeft: "1.1rem" }}>
+                              {row.extra_items.map((x, i2) => (
+                                <li key={i2} className="text-wrap">
+                                  ₹{Number(x.amount || 0).toFixed(2)} {x.details ? `(${x.details})` : ""}
+                                </li>
+                              ))}
+                            </ul>
                           )}
+
                         <p className="mb-0 small text-secondary">
                           Total row: <b>₹{total.toFixed(2)}</b>
                         </p>
                       </div>
+
                       <div className="d-flex gap-2 align-items-start">
                         <button
                           className="btn btn-sm btn-outline-primary"
                           onClick={() => setEditKharch(row)}
+                          style={{ minHeight: 32, fontSize: "inherit" }}
                         >
                           Edit
                         </button>
                         <button
                           className="btn btn-sm btn-outline-danger"
                           onClick={() => setDeleteKharch(row)}
+                          style={{ minHeight: 32, fontSize: "inherit" }}
                         >
                           Delete
                         </button>
@@ -835,13 +885,14 @@ export default function SitekharchGet() {
             )}
 
             {/* pagination */}
-            <div className="d-flex justify-content-between align-items-center mt-4">
+            <div className="d-flex justify-content-between align-items-center mt-4 flex-wrap gap-2">
               <small className="text-muted">
                 Page {page + 1} of {totalPages || 1}
               </small>
               <div className="d-flex gap-2">
                 <button
                   className="btn btn-sm btn-outline-secondary"
+                  style={{ minHeight: 32, fontSize: "inherit" }}
                   disabled={page === 0}
                   onClick={() => setPage((p) => Math.max(0, p - 1))}
                 >
@@ -849,6 +900,7 @@ export default function SitekharchGet() {
                 </button>
                 <button
                   className="btn btn-sm btn-outline-secondary"
+                  style={{ minHeight: 32, fontSize: "inherit" }}
                   disabled={page + 1 >= totalPages}
                   onClick={() =>
                     setPage((p) => (p + 1 < totalPages ? p + 1 : p))
@@ -905,18 +957,20 @@ export default function SitekharchGet() {
                           {r.payment_mode || "cash"}
                         </span>
                       </div>
-                      <p className="mb-0 small">{r.details || "—"}</p>
+                      <p className="mb-0 small text-wrap">{r.details || "—"}</p>
                     </div>
                     <div className="d-flex gap-1">
                       <button
                         className="btn btn-sm btn-outline-primary"
                         onClick={() => setEditReceived(r)}
+                        style={{ minHeight: 30, fontSize: "inherit" }}
                       >
                         Edit
                       </button>
                       <button
                         className="btn btn-sm btn-outline-danger"
                         onClick={() => setDeleteReceived(r)}
+                        style={{ minHeight: 30, fontSize: "inherit" }}
                       >
                         Del
                       </button>
