@@ -133,19 +133,19 @@ function DateSelect({ value, onChange, label, idPrefix = "ds", required = false 
 
   return (
     <div className="w-100">
-      {label && <label className="form-label">{label}</label>}
+      {label && <label className="form-label fs-12-14">{label}</label>}
       <div className="d-flex gap-2 flex-wrap">
-        <select id={`${idPrefix}-day`} className="form-select" value={day} onChange={(e) => setDay(Number(e.target.value))} required={required} style={{ maxWidth: 110 }}>
+        <select id={`${idPrefix}-day`} className="form-select fs-12-14" value={day} onChange={(e) => setDay(Number(e.target.value))} required={required} style={{ maxWidth: 110 }}>
           {dayOptions.map(d => <option key={d} value={d}>{d}</option>)}
         </select>
-        <select id={`${idPrefix}-month`} className="form-select" value={monthShort} onChange={(e) => setMonthShort(e.target.value)} required={required} style={{ maxWidth: 140 }}>
+        <select id={`${idPrefix}-month`} className="form-select fs-12-14" value={monthShort} onChange={(e) => setMonthShort(e.target.value)} required={required} style={{ maxWidth: 140 }}>
           {MONTHS.map(m => <option key={m.short} value={m.short}>{m.short}</option>)}
         </select>
-        <select id={`${idPrefix}-year`} className="form-select" value={year} onChange={(e) => setYear(Number(e.target.value))} required={required} style={{ maxWidth: 130 }}>
+        <select id={`${idPrefix}-year`} className="form-select fs-12-14" value={year} onChange={(e) => setYear(Number(e.target.value))} required={required} style={{ maxWidth: 130 }}>
           {years.map(y => <option key={y} value={y}>{y}</option>)}
         </select>
       </div>
-      <div className="form-text mt-1">Format: <strong>{toDMY(day, monthShort, year)}</strong></div>
+      <div className="form-text mt-1 fs-11-13">Format: <strong>{toDMY(day, monthShort, year)}</strong></div>
     </div>
   );
 }
@@ -156,9 +156,9 @@ export default function Notes() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
-  // Search & Month filter (only)
+  // Search & Month filter
   const [search, setSearch] = useState("");
-  const [monthFilter, setMonthFilter] = useState("All"); // "All" or MONTHS.short
+  const [monthFilter, setMonthFilter] = useState("All");
 
   // Edit modal
   const [editItem, setEditItem] = useState(null);
@@ -171,32 +171,96 @@ export default function Notes() {
   const PAGE_SIZE = 10;
   const [page, setPage] = useState(1);
 
-  // Refs
+  // Sections refs (for top tabs)
   const addFormRef = useRef(null);
+  const listRef = useRef(null);
 
-  // ===== style once =====
+  // Track expanded notes (inline Show more / Show less)
+  const [expandedIds, setExpandedIds] = useState(() => new Set());
+
+  // ===== style once (responsive typography + pro cards + tabs) =====
   useEffect(() => {
     const id = "notes-page-style-cards";
     if (document.getElementById(id)) return;
     const s = document.createElement("style");
     s.id = id;
     s.innerHTML = `
-      .glass { backdrop-filter: blur(10px); background: rgba(255,255,255,0.9); border: 1px solid rgba(15,23,42,0.12); border-radius: 16px; box-shadow: 0 12px 32px rgba(0,0,0,0.08); }
+      :root{
+        --txt-10-12: clamp(10px, 2.7vw, 12px);
+        --txt-11-13: clamp(11px, 2.8vw, 13px);
+        --txt-12-14: clamp(12px, 3.2vw, 14px);
+        --txt-13-15: clamp(13px, 3.4vw, 15px);
+        --txt-14-16: clamp(14px, 3.8vw, 16px);
+        --txt-16-20: clamp(16px, 4.6vw, 20px);
+
+        --brand-1: #0ea5e9;   /* sky 500 */
+        --brand-2: #22c55e;   /* green 500 */
+        --brand-3: #38bdf8;   /* sky 400 */
+        --ink-700:#334155;
+      }
+
+      .fs-10-12 { font-size: var(--txt-10-12); }
+      .fs-11-13, .fs-11-13 * { font-size: var(--txt-11-13); }
+      .fs-12-14, .fs-12-14 * { font-size: var(--txt-12-14); }
+      .fs-13-15 { font-size: var(--txt-13-15); }
+      .fs-14-16 { font-size: var(--txt-14-16); }
+
+      .glass { backdrop-filter: blur(10px); background: rgba(255,255,255,0.92); border: 1px solid rgba(2,6,23,0.08); border-radius: 16px; box-shadow: 0 12px 28px rgba(0,0,0,0.06); }
+
+      /* Top section tabs (pills) */
+      .section-tabs {
+        background: linear-gradient(180deg,#ffffff, #f9fbff);
+        border: 1px solid rgba(2,6,23,0.06);
+        border-radius: 14px;
+        padding: 6px;
+      }
+      .section-tabs .nav-link{
+        border-radius: 999px;
+        font-weight: 800;
+        color: #0f172a;
+        padding: .45rem .9rem;
+      }
+      .section-tabs .nav-link.active{
+        background: linear-gradient(90deg, var(--brand-1), var(--brand-2));
+        color: white;
+        box-shadow: 0 8px 18px rgba(14,165,233,.25);
+      }
+
       .overlay-backdrop{ position:fixed; inset:0; display:grid; place-items:center; background:rgba(255,255,255,0.72); z-index:2000; animation:fadeIn .2s ease both; }
       .center-msg{ position:fixed; inset:0; display:grid; place-items:center; background:rgba(0,0,0,0.25); z-index:2100; animation:fadeIn .2s ease both; }
-      .center-msg .card{ min-width:280px; background:#fff; border:1px solid rgba(15,23,42,0.12); border-radius:16px; padding:18px; box-shadow:0 12px 32px rgba(0,0,0,0.08); animation:scaleIn .2s ease both; }
+      .center-msg .card{ min-width:280px; background:#fff; border:1px solid rgba(2,6,23,0.08); border-radius:16px; padding:18px; box-shadow:0 12px 30px rgba(0,0,0,0.08); animation:scaleIn .2s ease both; }
       .center-msg .card.success{ border-left:6px solid #22c55e;} .center-msg .card.error{ border-left:6px solid #ef4444;}
 
-      .note-card { position: relative; border-radius: 16px; border: 1px solid rgba(15,23,42,0.08); transition: box-shadow .2s ease, border-color .2s ease; }
+      .note-card { position: relative; border-radius: 16px; border: 1px solid rgba(2,6,23,0.08); transition: box-shadow .2s ease, border-color .2s ease, transform .15s ease; }
+      .note-card:hover{ transform: translateY(-1px); box-shadow: 0 16px 30px rgba(0,0,0,.06); }
       .note-badge { position:absolute; top:12px; right:12px; }
-      .note-badge .badge { padding:.45rem .6rem; font-weight:600; border-radius: 999px; }
+      .note-badge .badge { padding:.4rem .65rem; font-weight:700; border-radius: 999px; font-size: var(--txt-10-12); }
       .truncate-3 { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
-      .btn-chip { border-radius: 999px; padding:.35rem .75rem; }
+      .btn-chip { border-radius: 999px; padding:.42rem .8rem; font-weight: 700; }
 
-      .fab-add { position: fixed; right: 16px; bottom: 16px; z-index: 2200; border-radius: 999px; width: 56px; height: 56px; display:grid; place-items:center; box-shadow: 0 12px 28px rgba(0,0,0,0.18); }
-      @media (min-width: 768px) {
-        .fab-add { right: 24px; bottom: 24px; width: 60px; height: 60px; }
+      .btn-link-mini{
+        border: none; background: transparent; padding: 0; margin-top: .4rem;
+        font-size: var(--txt-12-14); color: var(--brand-1); font-weight: 800;
+        text-decoration: none;
       }
+      .btn-link-mini:hover{ text-decoration: underline; color: var(--brand-3); }
+
+      /* FAB bigger on mobile */
+      .fab-add { position: fixed; right: 14px; bottom: 14px; z-index: 2200; border-radius: 999px; width: 56px; height: 56px; display:grid; place-items:center; box-shadow: 0 12px 28px rgba(0,0,0,0.18); font-size: 26px; font-weight: 800; }
+      @media (min-width: 768px) {
+        .fab-add { right: 22px; bottom: 22px; width: 60px; height: 60px; font-size: 28px; }
+      }
+
+      /* Tighten grid gutters on tiny screens for full-card look */
+      @media (max-width: 380px){
+        .row.g-3 { --bs-gutter-x: .6rem; --bs-gutter-y: .6rem; }
+      }
+
+      .form-label { font-weight: 700; color: #334155; }
+      .form-control, .form-select { font-size: var(--txt-12-14); padding: .55rem .75rem; border-radius: 12px; }
+
+      .btn { font-weight: 800; }
+      .btn-lg { font-size: var(--txt-13-15); }
 
       @keyframes fadeIn{from{opacity:0} to{opacity:1}}
       @keyframes scaleIn{from{transform:scale(.96);opacity:0} to{transform:scale(1);opacity:1)}
@@ -211,16 +275,14 @@ export default function Notes() {
     toastTimerRef.current = setTimeout(() => setOverlayMsg({ show: false, type: "", text: "" }), ms);
   };
 
-  // fetch (no backend filters now; we filter on client)
+  // fetch
   const fetchNotes = async () => {
     setLoading(true);
     try {
       const res = await fetch(BASE_URL);
       const json = await res.json();
       if (!res.ok) throw new Error(json.message || "Fetch failed");
-
       let data = Array.isArray(json.data) ? json.data : [];
-      // newest first by date
       data.sort((a,b) => dmyToUTC(b.note_date) - dmyToUTC(a.note_date));
       setNotes(data);
     } catch (err) {
@@ -229,14 +291,12 @@ export default function Notes() {
       setLoading(false);
     }
   };
-
   useEffect(() => { fetchNotes(); }, []);
 
   // add
   const addNote = async () => {
     if (!form.title) return showCenterMsg("error", "Title is required.");
     if (!form.note_date) return showCenterMsg("error", "Please select a date.");
-
     const normalized = normalizeDMY(form.note_date);
     if (!normalized) return showCenterMsg("error", "Invalid date format.");
 
@@ -287,7 +347,6 @@ export default function Notes() {
       if (!r.ok) throw new Error("Delete failed");
       showCenterMsg("success", "Note deleted");
       await fetchNotes();
-      // keep current page in bounds
       setPage((p) => {
         const newTotal = Math.max(0, filtered.length - 1);
         const totalPages = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
@@ -305,7 +364,6 @@ export default function Notes() {
     if (!editItem) return;
     const normalized = normalizeDMY(editItem.note_date);
     if (!normalized) return showCenterMsg("error", "Invalid date format.");
-
     const payload = { ...editItem, note_date: normalized };
 
     setBusy(true);
@@ -339,7 +397,7 @@ export default function Notes() {
     });
   }, [notes, search, monthFilter]);
 
-  // pagination derived from filtered list
+  // pagination
   const total = filtered.length;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const pageItems = useMemo(() => {
@@ -352,13 +410,29 @@ export default function Notes() {
   // Reset to page 1 if month/search changes
   useEffect(() => { setPage(1); }, [search, monthFilter]);
 
+  // Tabs (scroll to sections)
+  const scrollToRef = (r) => r.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+
+  // Expand helpers
+  const isExpanded = (id) => expandedIds.has(id);
+  const toggleExpand = (id) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  // Heuristic: if details > N chars, offer Show more
+  const NEEDS_LEN = 180;
+
   return (
     <div
       className="container-xxl py-3 py-md-4"
       style={{
         minHeight: "100vh",
         background:
-          "radial-gradient(1200px 600px at -10% -10%, rgba(6,182,212,0.18), transparent 60%), radial-gradient(1200px 600px at 110% -10%, rgba(34,197,94,0.16), transparent 60%), linear-gradient(180deg, #ffffff 0%, #fcfffb 45%, #f7fbff 100%)",
+          "radial-gradient(1200px 600px at -10% -10%, rgba(14,165,233,0.18), transparent 60%), radial-gradient(1200px 600px at 110% -10%, rgba(34,197,94,0.16), transparent 60%), linear-gradient(180deg, #ffffff 0%, #fcfffb 45%, #f7fbff 100%)",
         fontFamily: "Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
         color: "#0b1221",
       }}
@@ -368,14 +442,10 @@ export default function Notes() {
         <div className="d-flex align-items-center gap-3">
           <div
             style={{
-              width: 44,
-              height: 44,
-              borderRadius: 12,
-              background: "linear-gradient(180deg,#06b6d4,#22c55e)",
-              display: "grid",
-              placeItems: "center",
-              color: "#05212a",
-              fontWeight: 800,
+              width: 44, height: 44, borderRadius: 12,
+              background: "linear-gradient(180deg,#0ea5e9,#22c55e)",
+              display: "grid", placeItems: "center",
+              color: "#05212a", fontWeight: 800, fontSize: "var(--txt-14-16)",
             }}
           >
             N
@@ -384,27 +454,39 @@ export default function Notes() {
             <h4
               className="m-0"
               style={{
-                background: "linear-gradient(90deg,#06b6d4,#22c55e,#a78bfa)",
-                WebkitBackgroundClip: "text",
-                backgroundClip: "text",
-                color: "transparent",
+                background: "linear-gradient(90deg,#0ea5e9,#22c55e,#38bdf8)",
+                WebkitBackgroundClip: "text", backgroundClip: "text",
+                color: "transparent", fontSize: "var(--txt-16-20)",
+                fontWeight: 900, letterSpacing: ".2px",
               }}
             >
               Notes Manager
             </h4>
-            <div className="text-muted small">Add and manage all your notes easily.</div>
+            <div className="text-muted fs-11-13">Add and manage all your notes easily.</div>
           </div>
         </div>
         <div className="text-end mt-2 mt-md-0">
-          <div className="text-muted small">Total</div>
-          <div className="fw-bold">{total}</div>
+          <div className="text-muted fs-11-13">Total</div>
+          <div className="fw-bold fs-14-16">{total}</div>
         </div>
       </div>
 
-      {/* 🔎 Search & Month (ABOVE Add section) */}
+      {/* Section Tabs */}
+      <div className="section-tabs mb-3">
+        <ul className="nav nav-pills gap-2">
+          <li className="nav-item">
+            <button className="nav-link active" onClick={() => scrollToRef(listRef)}>All Notes</button>
+          </li>
+          <li className="nav-item">
+            <button className="nav-link" onClick={() => scrollToRef(addFormRef)}>Add Note</button>
+          </li>
+        </ul>
+      </div>
+
+      {/* 🔎 Search & Month */}
       <div className="glass p-3 mb-3 d-flex flex-wrap gap-2 align-items-end">
         <div className="flex-grow-1" style={{ minWidth: 200 }}>
-          <label className="form-label mb-1">Search by Title</label>
+          <label className="form-label mb-1 fs-12-14">Search by Title</label>
           <input
             className="form-control"
             placeholder="e.g. Buy groceries"
@@ -412,8 +494,8 @@ export default function Notes() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div style={{ width: 160 }}>
-          <label className="form-label mb-1">Month</label>
+        <div style={{ width: 160, minWidth: 148 }}>
+          <label className="form-label mb-1 fs-12-14">Month</label>
           <select
             className="form-select"
             value={monthFilter}
@@ -429,10 +511,10 @@ export default function Notes() {
 
       {/* Add Form */}
       <div ref={addFormRef} className="glass p-3 p-md-4 mb-4">
-        <h5 className="mb-3">Add Note</h5>
+        <h5 className="mb-3 fs-14-16">Add Note</h5>
         <div className="row g-3">
           <div className="col-md-4 col-12">
-            <label className="form-label">Title</label>
+            <label className="form-label fs-12-14">Title</label>
             <input
               className="form-control"
               value={form.title}
@@ -449,25 +531,25 @@ export default function Notes() {
               required
             />
           </div>
-          <div className="col-md-4 col-12">
-            <label className="form-label">User Name (optional)</label>
-            <input
-              className="form-control"
-              value={form.user_name}
-              onChange={(e) => setForm({ ...form, user_name: e.target.value })}
-              placeholder="Your name"
-            />
-          </div>
-          <div className="col-12">
-            <label className="form-label">Details</label>
-            <textarea
-              className="form-control"
-              rows="2"
-              value={form.details}
-              onChange={(e) => setForm({ ...form, details: e.target.value })}
-              placeholder="Write details..."
-            ></textarea>
-          </div>
+            <div className="col-md-4 col-12">
+              <label className="form-label fs-12-14">User Name (optional)</label>
+              <input
+                className="form-control"
+                value={form.user_name}
+                onChange={(e) => setForm({ ...form, user_name: e.target.value })}
+                placeholder="Your name"
+              />
+            </div>
+            <div className="col-12">
+              <label className="form-label fs-12-14">Details</label>
+              <textarea
+                className="form-control"
+                rows="2"
+                value={form.details}
+                onChange={(e) => setForm({ ...form, details: e.target.value })}
+                placeholder="Write details..."
+              ></textarea>
+            </div>
         </div>
         <div className="mt-3 d-flex gap-2 flex-wrap">
           <button
@@ -481,13 +563,13 @@ export default function Notes() {
       </div>
 
       {/* Notes grid (paginated) */}
-      <div className="glass p-2 p-md-3">
+      <div ref={listRef} className="glass p-2 p-md-3">
         {loading ? (
           <div className="text-center py-4">
             <LoadingSpiner />
           </div>
         ) : pageItems.length === 0 ? (
-          <div className="text-center py-4 text-muted">No notes found.</div>
+          <div className="text-center py-4 text-muted fs-12-14">No notes found.</div>
         ) : (
           <div className="row g-3">
             {pageItems.map((n, idx) => {
@@ -495,6 +577,11 @@ export default function Notes() {
               const badgeClass = getBadgeClassForDate(datePretty);
               const glow = getGlowForBadgeClass(badgeClass);
               const rowNumber = (page - 1) * PAGE_SIZE + (idx + 1);
+
+              const details = n.details || "-";
+              const long = details.length > NEEDS_LEN;
+              const expanded = isExpanded(n.id);
+
               return (
                 <div className="col-12 col-sm-6 col-lg-4 col-xl-3" key={n.id}>
                   <div
@@ -512,27 +599,40 @@ export default function Notes() {
                     </div>
 
                     <div className="d-flex align-items-center justify-content-between mb-1">
-                      <span className="text-muted small">#{rowNumber}</span>
+                      <span className="text-muted fs-10-12">#{rowNumber}</span>
                     </div>
 
                     <h6
                       className="fw-bold mb-1"
                       title={n.title}
-                      style={{ wordBreak: "break-word" }}
+                      style={{ wordBreak: "break-word", fontSize: "var(--txt-14-16)" }}
                     >
                       {n.title}
                     </h6>
 
                     <div
-                      className="text-secondary small truncate-3"
-                      title={n.details || "-"}
+                      className={`text-secondary ${expanded ? "" : "truncate-3"}`}
+                      title={details}
+                      style={{ fontSize: "var(--txt-12-14)", lineHeight: 1.48 }}
                     >
-                      {n.details || "-"}
+                      {details}
                     </div>
+
+                    {/* Show more / Show less */}
+                    {long && !expanded && (
+                      <button className="btn-link-mini" onClick={() => toggleExpand(n.id)}>
+                        Show more
+                      </button>
+                    )}
+                    {expanded && (
+                      <button className="btn-link-mini" onClick={() => toggleExpand(n.id)}>
+                        Show less
+                      </button>
+                    )}
 
                     <div className="mt-3 d-flex justify-content-end gap-2">
                       <button
-                        className="btn btn-outline-primary btn-sm btn-chip"
+                        className="btn btn-outline-primary btn-sm btn-chip fs-12-14"
                         onClick={() =>
                           setEditItem({
                             ...n,
@@ -543,7 +643,7 @@ export default function Notes() {
                         Edit
                       </button>
                       <button
-                        className="btn btn-outline-danger btn-sm btn-chip"
+                        className="btn btn-outline-danger btn-sm btn-chip fs-12-14"
                         onClick={() => deleteNote(n.id)}
                       >
                         Delete
@@ -559,22 +659,22 @@ export default function Notes() {
         {/* Pagination footer */}
         {!loading && total > 0 && (
           <div className="d-flex flex-wrap align-items-center justify-content-between p-2 p-md-3 gap-2 mt-2">
-            <div className="text-muted small">
+            <div className="text-muted fs-12-14">
               Showing <b>{showingFrom}</b>–<b>{showingTo}</b> of <b>{total}</b>
             </div>
             <div className="btn-group">
               <button
-                className="btn btn-outline-secondary btn-sm"
+                className="btn btn-outline-secondary btn-sm fs-12-14"
                 disabled={page <= 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
               >
                 ‹ Prev
               </button>
-              <span className="btn btn-light btn-sm disabled">
+              <span className="btn btn-light btn-sm disabled fs-12-14">
                 {page} / {totalPages}
               </span>
               <button
-                className="btn btn-outline-secondary btn-sm"
+                className="btn btn-outline-secondary btn-sm fs-12-14"
                 disabled={page >= totalPages}
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               >
@@ -588,12 +688,7 @@ export default function Notes() {
       {/* Floating Add button */}
       <button
         className="fab-add btn btn-success"
-        onClick={() =>
-          addFormRef.current?.scrollIntoView({
-            behavior: "smooth",
-            block: "start",
-          })
-        }
+        onClick={() => scrollToRef(addFormRef)}
         aria-label="Add Note"
         title="Add Note"
       >
@@ -609,7 +704,7 @@ export default function Notes() {
           }
         >
           <div className="card" style={{ maxWidth: 520 }}>
-            <h5 className="mb-3">Edit Note</h5>
+            <h5 className="mb-3 fs-14-16">Edit Note</h5>
             <input
               className="form-control mb-2"
               value={editItem.title}
@@ -651,7 +746,7 @@ export default function Notes() {
         <div className="overlay-backdrop">
           <div className="d-flex flex-column align-items-center">
             <LoadingSpiner />
-            <div>Working…</div>
+            <div className="fs-12-14 mt-2">Working…</div>
           </div>
         </div>
       )}
@@ -660,10 +755,10 @@ export default function Notes() {
       {overlayMsg.show && (
         <div className="center-msg">
           <div className={`card ${overlayMsg.type}`}>
-            <h6 className="mb-1">
+            <h6 className="mb-1 fs-14-16">
               {overlayMsg.type === "error" ? "Error" : "Success"}
             </h6>
-            <div>{overlayMsg.text}</div>
+            <div className="fs-12-14">{overlayMsg.text}</div>
           </div>
         </div>
       )}

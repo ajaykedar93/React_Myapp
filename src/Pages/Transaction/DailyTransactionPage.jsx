@@ -3,13 +3,13 @@ import axios from "axios";
 
 const API = "https://express-backend-myapp.onrender.com/api";
 
-// ---------- HTTP (short timeout for cold starts) ----------
+// ---------- HTTP (longer timeout for cold starts) ----------
 const http = axios.create({
   baseURL: API,
-  timeout: 10000,
+  timeout: 45000, // was 10000
 });
 
-// ---------- Cache helpers (instant paint) ----------
+// ---------- Cache helpers ----------
 const CACHE_KEY = "dtp_v1";
 const loadCache = () => {
   try {
@@ -32,17 +32,27 @@ function getLocalDate() {
   return now.toLocaleDateString("en-CA"); // YYYY-MM-DD
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-async function retry(fn, { tries = 3, delay = 400 }) {
+async function retry(fn, { tries = 4, delay = 600 }) {
   let lastErr;
   for (let i = 0; i < tries; i++) {
     try {
       return await fn();
     } catch (e) {
       lastErr = e;
-      if (i < tries - 1) await sleep(delay * (i + 1));
+      if (i < tries - 1) await sleep(delay * (i + 1)); // backoff
     }
   }
   throw lastErr;
+}
+
+// ---------- Warm-up (wake the free dyno) ----------
+async function warmUp() {
+  // try health first, then a cheap list
+  try {
+    await retry(() => http.get(`/health`, { params: { t: Date.now() } }), { tries: 2, delay: 500 });
+  } catch {
+    // ignore
+  }
 }
 
 export default function DailyTransactionPage() {
@@ -70,10 +80,8 @@ export default function DailyTransactionPage() {
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
-  // ---------- NEW: First-load spinner ----------
+  // ---------- Boot spinner ----------
   const [booting, setBooting] = useState(true);
-
-  // ---------- NEW: Filter by date (default today) ----------
   const [filterDate, setFilterDate] = useState(getLocalDate());
 
   // ---------- Pagination ----------
@@ -84,7 +92,7 @@ export default function DailyTransactionPage() {
   const tableEndRef = useRef(null);
   const abortersRef = useRef({}); // {key: AbortController}
 
-  // ---------- Formatters ----------
+  // ---------- INR ----------
   const INR = useMemo(
     () => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }),
     []
@@ -134,11 +142,11 @@ export default function DailyTransactionPage() {
     }, 120);
   };
 
-  // ---------- API ----------
+  // ---------- API wrappers ----------
   const fetchTransactions = async () => {
     const res = await retry(
       () => http.get(`/dailyTransaction`, { signal: newAborter("tx"), params: { t: Date.now() } }),
-      { tries: 3, delay: 300 }
+      { tries: 4, delay: 500 }
     );
     return Array.isArray(res.data) ? res.data : [];
   };
@@ -146,7 +154,7 @@ export default function DailyTransactionPage() {
   const fetchSummary = async () => {
     const res = await retry(
       () => http.get(`/dailyTransaction/daily-summary`, { signal: newAborter("sum"), params: { t: Date.now() } }),
-      { tries: 3, delay: 300 }
+      { tries: 4, delay: 500 }
     );
     return res.data || { total_debit: 0, total_credit: 0, total_transactions: 0 };
   };
@@ -154,12 +162,12 @@ export default function DailyTransactionPage() {
   const fetchLookups = async () => {
     const [cats, subs] = await Promise.all([
       retry(() => http.get(`/category`, { signal: newAborter("cats"), params: { t: Date.now() } }), {
-        tries: 3,
-        delay: 300,
+        tries: 4,
+        delay: 500,
       }),
       retry(() => http.get(`/subcategory`, { signal: newAborter("subs"), params: { t: Date.now() } }), {
-        tries: 3,
-        delay: 300,
+        tries: 4,
+        delay: 500,
       }),
     ]);
     return {
@@ -168,60 +176,91 @@ export default function DailyTransactionPage() {
     };
   };
 
-  // ---------- INSTANT LOAD + FIRST API BATCH ----------
+  // ---------- INSTANT LOAD + RESILIENT FIRST BATCH ----------
   useEffect(() => {
     const cached = loadCache();
     if (cached) {
-      // We still keep spinner until first API batch completes
       setCategories(cached.categories || []);
       setSubcategories(cached.subcategories || []);
       setTransactions(cached.transactions || []);
-      setSummary(
-        cached.summary || {
-          total_debit: 0,
-          total_credit: 0,
-          total_transactions: 0,
-        }
-      );
+      setSummary(cached.summary || { total_debit: 0, total_credit: 0, total_transactions: 0 });
     }
 
+    let bootCap;
     (async () => {
       try {
-        const [lookups, tx, sum] = await Promise.all([fetchLookups(), fetchTransactions(), fetchSummary()]);
-        setCategories(lookups.categories);
-        setSubcategories(lookups.subcategories);
-        setTransactions(tx);
-        setSummary(sum);
-        setPage(1);
+        // warmup quickly to reduce cold start errors
+        await warmUp();
+        // Cap the boot overlay: hide after 2500ms even if a call is still pending
+        bootCap = setTimeout(() => setBooting(false), 2500);
+
+        const results = await Promise.allSettled([fetchLookups(), fetchTransactions(), fetchSummary()]);
+
+        const lookupsRes = results[0];
+        const txRes = results[1];
+        const sumRes = results[2];
+
+        let anySuccess = false;
+
+        if (lookupsRes.status === "fulfilled") {
+          setCategories(lookupsRes.value.categories);
+          setSubcategories(lookupsRes.value.subcategories);
+          anySuccess = true;
+        }
+        if (txRes.status === "fulfilled") {
+          setTransactions(txRes.value);
+          anySuccess = true;
+        }
+        if (sumRes.status === "fulfilled") {
+          setSummary(sumRes.value);
+          anySuccess = true;
+        }
+
+        // Cache whatever we successfully got (merge with current state to avoid wiping)
         saveCache({
-          categories: lookups.categories,
-          subcategories: lookups.subcategories,
-          transactions: tx,
-          summary: sum,
+          categories: lookupsRes.status === "fulfilled" ? lookupsRes.value.categories : categories,
+          subcategories: lookupsRes.status === "fulfilled" ? lookupsRes.value.subcategories : subcategories,
+          transactions: txRes.status === "fulfilled" ? txRes.value : transactions,
+          summary: sumRes.status === "fulfilled" ? sumRes.value : summary,
         });
-      } catch (e) {
-        if (!axios.isCancel(e)) showPopup("Network error — showing cached data", "error");
+
+        if (!anySuccess) {
+          showPopup("Network error — showing cached data", "error");
+        }
       } finally {
-        setBooting(false);
+        setPage(1);
+        setBooting(false); // ensure it closes even if some calls failed
       }
     })();
 
-    // Auto-refresh when back online (non-blocking / no spinner)
     const onBackOnline = () => {
       (async () => {
         try {
-          const [lookups, tx, sum] = await Promise.all([fetchLookups(), fetchTransactions(), fetchSummary()]);
-          setCategories(lookups.categories);
-          setSubcategories(lookups.subcategories);
-          setTransactions(tx);
-          setSummary(sum);
+          const results = await Promise.allSettled([fetchLookups(), fetchTransactions(), fetchSummary()]);
+          const lookupsRes = results[0];
+          const txRes = results[1];
+          const sumRes = results[2];
+
+          if (lookupsRes.status === "fulfilled") {
+            setCategories(lookupsRes.value.categories);
+            setSubcategories(lookupsRes.value.subcategories);
+          }
+          if (txRes.status === "fulfilled") {
+            setTransactions(txRes.value);
+          }
+          if (sumRes.status === "fulfilled") {
+            setSummary(sumRes.value);
+          }
+
           saveCache({
-            categories: lookups.categories,
-            subcategories: lookups.subcategories,
-            transactions: tx,
-            summary: sum,
+            categories: lookupsRes.status === "fulfilled" ? lookupsRes.value.categories : categories,
+            subcategories: lookupsRes.status === "fulfilled" ? lookupsRes.value.subcategories : subcategories,
+            transactions: txRes.status === "fulfilled" ? txRes.value : transactions,
+            summary: sumRes.status === "fulfilled" ? sumRes.value : summary,
           });
-        } catch {}
+        } catch {
+          // ignore silent refresh errors
+        }
       })();
     };
     window.addEventListener("online", onBackOnline);
@@ -229,8 +268,10 @@ export default function DailyTransactionPage() {
     return () => {
       window.removeEventListener("online", onBackOnline);
       cleanupAborters();
+      if (bootCap) clearTimeout(bootCap);
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once
 
   // ---------- Dependent subcategory filter ----------
   useEffect(() => {
@@ -266,14 +307,13 @@ export default function DailyTransactionPage() {
     };
   }, [dayTransactions]);
 
-  // ---------- Pagination over filtered list ----------
+  // ---------- Pagination ----------
   const pagedTransactions = useMemo(
     () => dayTransactions.slice(startIdx, startIdx + perPage),
     [dayTransactions, startIdx]
   );
   const totalPages = Math.ceil(dayTransactions.length / perPage) || 1;
 
-  // Reset to page 1 whenever date filter changes or list changes
   useEffect(() => {
     setPage(1);
   }, [filterDate, transactions.length]);
@@ -305,7 +345,7 @@ export default function DailyTransactionPage() {
         categories,
         subcategories,
         transactions: tx,
-        summary, // keep server summary (we display local daySummary anyway)
+        summary, // keep server summary (local daySummary used for the card)
       });
 
       setHighlightId(id);
@@ -320,8 +360,6 @@ export default function DailyTransactionPage() {
         transaction_date: getLocalDate(),
       });
       setPage(1);
-      // Optional: if you want the filter to jump to the added transaction's date
-      // setFilterDate(getLocalDate());
     } catch (e) {
       if (axios.isCancel(e)) return;
       showPopup("Failed to save transaction", "error");
@@ -454,7 +492,7 @@ export default function DailyTransactionPage() {
         .modal-backdrop{ position: fixed; inset:0; background: rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; z-index: 1100; padding: 16px; }
         .modal-card{ background:#fff; border-radius:14px; border:1px solid var(--border); width:100%; max-width:420px; padding:16px; box-shadow: 0 18px 48px rgba(0,0,0,.25); }
 
-        /* ---------- Full-screen professional loader ---------- */
+        /* ---------- Full-screen loader ---------- */
         .boot-overlay{
           position: fixed; inset: 0;
           display: flex; align-items: center; justify-content: center; flex-direction: column;
@@ -642,7 +680,7 @@ export default function DailyTransactionPage() {
           </div>
         </div>
 
-        {/* -------- NEW: Filter by Date (below the form) -------- */}
+        {/* Filter by Date */}
         <div className="card-ui mb-3">
           <div className="d-flex flex-wrap align-items-end justify-content-between gap-2">
             <div>
@@ -668,7 +706,7 @@ export default function DailyTransactionPage() {
           </div>
         </div>
 
-        {/* MOBILE VIEW: cards */}
+        {/* MOBILE VIEW */}
         <div className="mobile-view">
           <div className="mobile-list">
             {pagedTransactions.length === 0 ? (
@@ -754,7 +792,7 @@ export default function DailyTransactionPage() {
           )}
         </div>
 
-        {/* DESKTOP/TABLET VIEW: table */}
+        {/* DESKTOP/TABLET VIEW */}
         <div className="table-view">
           <div className="tbl-wrap">
             <div className="table-responsive">

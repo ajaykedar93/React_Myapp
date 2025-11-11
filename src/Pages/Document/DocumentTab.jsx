@@ -67,9 +67,20 @@ const DocumentTab = () => {
     if (e.key === "ArrowLeft") setActiveTab(tabs[(idx - 1 + tabs.length) % tabs.length].key);
   };
 
+  const renderContent = () => {
+    switch (activeTab) {
+      case "AddDocument": return <Document />;
+      case "ManageDocuments": return <ManageDocuments />;
+      case "AccessDocuments": return <DocAccess />;
+      case "DocCategory": return <DocCategory />;
+      case "ImpDocument": return <AdminImpDocument />;
+      default: return null;
+    }
+  };
+
   return (
     <div className="doc-page">
-      {/* FIXED NAVBAR — same size/structure as other pages */}
+      {/* FIXED NAVBAR ONLY */}
       <nav className="navbar-fixed">
         <motion.h2
           className="navbar-title"
@@ -92,10 +103,10 @@ const DocumentTab = () => {
         </motion.button>
       </nav>
 
-      {/* Spacer that exactly matches the navbar height */}
+      {/* Spacer so content never hides under navbar */}
       <div className="nav-spacer" />
 
-      {/* Tabs */}
+      {/* Tabs (NOT fixed) */}
       <div className="tabs-container" onKeyDown={onKeyDownTabs}>
         <div
           className="tabs-rail"
@@ -133,7 +144,7 @@ const DocumentTab = () => {
             );
           })}
 
-          {/* Animated underline positioned via left/width/top */}
+          {/* Animated underline via left/width/top */}
           <AnimatePresence>
             {ink.ready && (
               <motion.span
@@ -154,7 +165,7 @@ const DocumentTab = () => {
         </div>
       </div>
 
-      {/* Tab Content */}
+      {/* Content (normal flow; page scrolls — navbar stays fixed) */}
       <motion.div
         id={`panel-${activeTab}`}
         className="tab-content"
@@ -165,64 +176,81 @@ const DocumentTab = () => {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35 }}
       >
-        {activeTab === "AddDocument" && <Document />}
-        {activeTab === "ManageDocuments" && <ManageDocuments />}
-        {activeTab === "AccessDocuments" && <DocAccess />}
-        {activeTab === "DocCategory" && <DocCategory />}
-        {activeTab === "ImpDocument" && <AdminImpDocument />}
+        {renderContent()}
       </motion.div>
 
       <style>{`
         :root{
-          --nav-h: 64px; /* same height as other pages */
+          --nav-h: 64px;
+          --gap-top: 8px;          /* small space ABOVE navbar on mobile */
+          --gap-between: 8px;      /* small space BETWEEN navbar and tabs */
           --bg-grad: linear-gradient(135deg, #f6f8fc 0%, #e9eff7 100%);
-          --nav-grad: linear-gradient(90deg, #fde68a 0%, #facc15 55%, #f59e0b 100%); /* yellow */
-          --nav-overlay: rgba(0,0,0,.04);
+          --nav-grad: linear-gradient(90deg, #fde68a 0%, #facc15 55%, #f59e0b 100%);
           --ink-900:#0f172a; --ink-700:#334155;
           --surface:#ffffff; --border:#e6e9ef;
           --gold:#f6c15a; --gold-press:#e3a83e;
           --tab-ink:#f59e0b;
           --tab-pill:#f7f8ff;
         }
-        @media (max-width: 575.98px){ :root{ --nav-h: 58px; } }
+        @media (max-width: 575.98px){
+          :root{ --nav-h: 58px; }
+        }
         @media (min-width: 1400px){ :root{ --nav-h: 66px; } }
 
         .doc-page {
           background: var(--bg-grad);
           min-height: 100dvh;
           font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-          overflow: hidden;
+          /* allow page to scroll naturally under fixed navbar */
+          overflow: auto;
         }
 
-        /* NAVBAR — exact same sizing behavior */
+        /* NAVBAR (fixed only) */
         .navbar-fixed {
-          position: fixed; top: env(safe-area-inset-top, 0px); left: 0; right: 0;
-          height: var(--nav-h); z-index: 1000;
+          position: fixed;
+          left: 0; right: 0;
+          top: 0;
+          height: var(--nav-h);
+          z-index: 1000;
           background: var(--nav-grad);
-          color: #111827; /* darker text to contrast yellow */
+          color: #111827;
           display: flex; align-items: center; justify-content: space-between;
           padding: 12px 28px;
           border-bottom: 1px solid rgba(0,0,0,.08);
           box-shadow: 0 12px 30px rgba(0,0,0,.12), inset 0 -1px 0 rgba(255,255,255,.22);
           backdrop-filter: saturate(140%) blur(6px);
         }
-        .nav-spacer { height: calc(var(--nav-h) + env(safe-area-inset-top, 0px)); }
+
+        /* MOBILE: inset the navbar slightly and add a top gap */
+        @media (max-width: 575.98px){
+          .navbar-fixed {
+            top: calc(env(safe-area-inset-top, 0px) + var(--gap-top));
+            left: 8px; right: 8px;
+            border-radius: 14px;
+          }
+        }
+
+        /* Spacer so content starts below navbar (and keeps a small gap on mobile) */
+        .nav-spacer {
+          height: calc(var(--nav-h) + env(safe-area-inset-top, 0px));
+        }
+        @media (max-width: 575.98px){
+          .nav-spacer {
+            height: calc(var(--gap-top) + env(safe-area-inset-top, 0px) + var(--nav-h) + var(--gap-between));
+          }
+        }
 
         .navbar-title {
           margin: 0;
           font-size: clamp(20px, 2.4vw, 28px);
           font-weight: 900; letter-spacing: .3px;
-          color: #0b0b0b; /* bold black heading */
-          text-shadow: none;
+          color: #0b0b0b; text-shadow: none;
         }
         .btn-dashboard {
-          position: relative;
-          overflow: hidden;
+          position: relative; overflow: hidden;
           background: linear-gradient(180deg, var(--gold), #f0b33c);
-          color: #1b1b1b;
-          font-weight: 800;
-          padding: 10px 18px;
-          border-radius: 26px;
+          color: #1b1b1b; font-weight: 800;
+          padding: 10px 18px; border-radius: 26px;
           border: none; cursor: pointer; font-size: 0.95rem;
           transition: transform .15s ease, filter .15s ease, box-shadow .15s ease;
           box-shadow: 0 8px 18px rgba(0,0,0,.15), inset 0 1px 0 rgba(255,255,255,.45);
@@ -251,10 +279,11 @@ const DocumentTab = () => {
           100% { transform: translateX(420%) rotate(18deg); }
         }
 
-        /* Tabs */
+        /* TABS (not fixed; normal flow) */
         .tabs-container {
           width: min(1200px, 92%);
-          margin: 6px auto 14px; /* small, consistent gap under navbar */
+          margin: 6px auto 14px;
+          z-index: 1; /* below navbar */
         }
         .tabs-rail{
           position: relative;
@@ -267,6 +296,7 @@ const DocumentTab = () => {
           overflow-x: auto;
           -webkit-overflow-scrolling: touch;
           scrollbar-width: thin;
+          min-height: 52px;
         }
         .tabs-rail::-webkit-scrollbar{ height: 8px; }
         .tabs-rail::-webkit-scrollbar-thumb{ background: #d6d9e2; border-radius: 8px; }
@@ -321,6 +351,7 @@ const DocumentTab = () => {
           pointer-events:none;
         }
 
+        /* CONTENT (normal flow; page scrolls) */
         .tab-content {
           width: min(1200px, 92%);
           min-height: 520px;

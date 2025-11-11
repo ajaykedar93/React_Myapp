@@ -1,11 +1,5 @@
 // src/pages/WorkDetails.jsx
-import React, {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useCallback,
-} from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
 import { FaClipboardList, FaInbox, FaHammer, FaEye } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
@@ -20,8 +14,7 @@ import InwardGet from "./InwardGet";
 import LoadingSpiner from "../Entertainment/LoadingSpiner";
 
 const API_BASE =
-  import.meta?.env?.VITE_API_BASE ??
-  "https://express-backend-myapp.onrender.com/api";
+  import.meta?.env?.VITE_API_BASE ?? "https://express-backend-myapp.onrender.com/api";
 
 const spring = { type: "spring", stiffness: 280, damping: 22, mass: 0.5 };
 
@@ -42,9 +35,7 @@ const TabButton = ({ active, color, icon, label, onClick, onKeyDown }) => (
       border: active ? `1px solid ${color.border}` : "1px solid #e2e8f0",
       background: active ? color.bgActive : "#ffffff",
       color: active ? color.fgActive : "#374151",
-      boxShadow: active
-        ? `0 10px 26px ${color.shadow}`
-        : "0 1px 6px rgba(0,0,0,.06)",
+      boxShadow: active ? `0 10px 26px ${color.shadow}` : "0 1px 6px rgba(0,0,0,.06)",
       fontWeight: 700,
       transition: "all .25s ease",
       minHeight: 44,
@@ -67,9 +58,7 @@ const TabButton = ({ active, color, icon, label, onClick, onKeyDown }) => (
         }}
       />
     )}
-    <span style={{ display: "grid", placeItems: "center", fontSize: 16 }}>
-      {icon}
-    </span>
+    <span style={{ display: "grid", placeItems: "center", fontSize: 16 }}>{icon}</span>
     <span className="wd-tab-label">{label}</span>
     {active && (
       <motion.span
@@ -110,6 +99,7 @@ const Toast = ({ open, type, msg, onClose }) => (
   </AnimatePresence>
 );
 
+/* ---------- Busy Overlay ---------- */
 const BusyOverlay = ({ show }) => (
   <AnimatePresence>
     {show && (
@@ -118,11 +108,7 @@ const BusyOverlay = ({ show }) => (
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
-        style={{
-          backdropFilter: "blur(3px)",
-          background: "rgba(0,0,0,0.35)",
-          zIndex: 1999,
-        }}
+        style={{ backdropFilter: "blur(3px)", background: "rgba(0,0,0,0.35)", zIndex: 1999 }}
       >
         <div className="spinner-border text-light" role="status" />
       </motion.div>
@@ -134,28 +120,17 @@ export default function WorkDetails() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("DPR");
   const [busy, setBusy] = useState(false);
-  const [toast, setToast] = useState({
-    open: false,
-    type: "success",
-    msg: "",
-  });
+  const [toast, setToast] = useState({ open: false, type: "success", msg: "" });
   const toastTimer = useRef(null);
 
   const showToast = useCallback((type, msg) => {
     setToast({ open: true, type, msg });
     if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(
-      () => setToast((t) => ({ ...t, open: false })),
-      2600
-    );
+    toastTimer.current = setTimeout(() => setToast((t) => ({ ...t, open: false })), 2600);
   }, []);
 
-  useEffect(
-    () => () => toastTimer.current && clearTimeout(toastTimer.current),
-    []
-  );
+  useEffect(() => () => toastTimer.current && clearTimeout(toastTimer.current), []);
 
-  // color palette per tab
   const palette = {
     DPR: {
       bgActive: "linear-gradient(135deg,#fef3c7,#fde68a)",
@@ -215,7 +190,6 @@ export default function WorkDetails() {
     },
   };
 
-  // tabs
   const tabs = useMemo(
     () => [
       { name: "DPR", icon: <FaClipboardList /> },
@@ -253,70 +227,55 @@ export default function WorkDetails() {
   return (
     <>
       <style>{`
+        :root { --nav-h: 60px; --nav-offset: 0px; }
         body, html { background: #fafafa; overflow-x: hidden; }
         .wd-app { height: 100dvh; overflow: hidden; background: #fff; }
 
         .wd-nav {
           position: fixed;
-          top: 0; left: 0; right: 0;
+          top: var(--nav-offset);
+          left: 0; right: 0;
           z-index: 999;
           background: linear-gradient(90deg, #fb7185, #f97316, #facc15);
           color: white;
-          height: 60px;
+          height: var(--nav-h);
           display: flex;
           align-items: center;
           justify-content: space-between;
           padding: 0 16px;
           box-shadow: 0 10px 30px rgba(249,115,22,0.3);
         }
+
         .wd-main {
-          height: calc(100dvh - 60px);
+          /* only content scrolls; account for navbar height + mobile offset */
+          height: calc(100dvh - var(--nav-h) - var(--nav-offset));
           overflow-y: auto;
           padding: 16px;
           background: #fefefe;
-          margin-top: 60px;
+          margin-top: calc(var(--nav-h) + var(--nav-offset));
         }
-        .wd-tab-label {
-          font-size: 15px;
-          font-weight: 600;
-          letter-spacing: .3px;
-        }
+
+        .wd-tab-label { font-size: 15px; font-weight: 600; letter-spacing: .3px; }
         .wd-content-card {
-          background: #fff;
-          border-radius: 14px;
-          padding: 16px;
+          background: #fff; border-radius: 14px; padding: 16px;
           box-shadow: 0 10px 30px rgba(0,0,0,.06);
         }
 
         /* tab row scrollable */
         .wd-tabs-row {
-          display: flex;
-          flex-wrap: nowrap;
-          gap: 8px;
-          overflow-x: auto;
-          scrollbar-width: none;
+          display: flex; flex-wrap: nowrap; gap: 8px; overflow-x: auto; scrollbar-width: none;
         }
-        .wd-tabs-row::-webkit-scrollbar {
-          display: none;
-        }
+        .wd-tabs-row::-webkit-scrollbar { display: none; }
 
-        /* ---------- MOBILE FIX ---------- */
+        /* ---------- MOBILE ONLY: add small gap above navbar ---------- */
         @media (max-width: 576px) {
+          :root { --nav-offset: 8px; }            /* tiny space above navbar */
+          .wd-nav { left: 8px; right: 8px; border-radius: 12px; } /* optional nice inset */
           .wd-tab-btn {
-            min-width: 92px;
-            padding: 8px 8px;
-            flex-direction: column;
-            gap: 4px;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
+            min-width: 92px; padding: 8px 8px; flex-direction: column; gap: 4px;
+            align-items: center; justify-content: center; text-align: center;
           }
-          .wd-tab-label {
-            display: block;
-            font-size: 11px;
-            line-height: 1.1;
-            white-space: normal;
-          }
+          .wd-tab-label { display: block; font-size: 11px; line-height: 1.1; white-space: normal; }
         }
       `}</style>
 
@@ -354,7 +313,6 @@ export default function WorkDetails() {
               ))}
             </div>
 
-            {/* Content */}
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeTab}
