@@ -150,6 +150,37 @@ function DateSelect({ value, onChange, label, idPrefix = "ds", required = false 
   );
 }
 
+/* ====== Hook: detect if a block overflows 3 lines ====== */
+function useOverflowMap(ids, depKey) {
+  const refs = useRef({});
+  const [map, setMap] = useState({}); // { [id]: true/false }
+
+  useEffect(() => {
+    const calc = () => {
+      const next = {};
+      ids.forEach((id) => {
+        const el = refs.current[id];
+        if (!el) { next[id] = false; return; }
+
+        // Temporarily remove clamp to get full height
+        el.classList.add("no-clamp");
+        const full = el.scrollHeight;
+        el.classList.remove("no-clamp");
+
+        const clamp = el.clientHeight; // height with 3-line clamp
+        next[id] = full > clamp + 2;   // needs "Show more" only if overflowing
+      });
+      setMap(next);
+    };
+
+    calc();
+    window.addEventListener("resize", calc);
+    return () => window.removeEventListener("resize", calc);
+  }, [ids.join("|"), depKey]);
+
+  return { refs, needMore: map };
+}
+
 export default function Notes() {
   const [form, setForm] = useState({ title: "", note_date: "", details: "", user_name: "", user_email: "" });
   const [notes, setNotes] = useState([]);
@@ -171,14 +202,14 @@ export default function Notes() {
   const PAGE_SIZE = 10;
   const [page, setPage] = useState(1);
 
-  // Sections refs (for top tabs)
+  // Sections refs
   const addFormRef = useRef(null);
   const listRef = useRef(null);
 
-  // Track expanded notes (inline Show more / Show less)
+  // Expanded note ids
   const [expandedIds, setExpandedIds] = useState(() => new Set());
 
-  // ===== style once (responsive typography + pro cards + tabs) =====
+  // ===== style once (adds spacing, pro card, smaller FAB) =====
   useEffect(() => {
     const id = "notes-page-style-cards";
     if (document.getElementById(id)) return;
@@ -193,9 +224,9 @@ export default function Notes() {
         --txt-14-16: clamp(14px, 3.8vw, 16px);
         --txt-16-20: clamp(16px, 4.6vw, 20px);
 
-        --brand-1: #0ea5e9;   /* sky 500 */
-        --brand-2: #22c55e;   /* green 500 */
-        --brand-3: #38bdf8;   /* sky 400 */
+        --brand-1: #0ea5e9;
+        --brand-2: #22c55e;
+        --brand-3: #38bdf8;
         --ink-700:#334155;
       }
 
@@ -207,7 +238,6 @@ export default function Notes() {
 
       .glass { backdrop-filter: blur(10px); background: rgba(255,255,255,0.92); border: 1px solid rgba(2,6,23,0.08); border-radius: 16px; box-shadow: 0 12px 28px rgba(0,0,0,0.06); }
 
-      /* Top section tabs (pills) */
       .section-tabs {
         background: linear-gradient(180deg,#ffffff, #f9fbff);
         border: 1px solid rgba(2,6,23,0.06);
@@ -235,9 +265,28 @@ export default function Notes() {
       .note-card:hover{ transform: translateY(-1px); box-shadow: 0 16px 30px rgba(0,0,0,.06); }
       .note-badge { position:absolute; top:12px; right:12px; }
       .note-badge .badge { padding:.4rem .65rem; font-weight:700; border-radius: 999px; font-size: var(--txt-10-12); }
-      .truncate-3 { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
-      .btn-chip { border-radius: 999px; padding:.42rem .8rem; font-weight: 700; }
 
+      /* keep card text away from the badge (adds right padding) */
+      .pr-badge { padding-right: 86px; }
+
+      /* add a subtle divider for a more "professional" look */
+      .note-meta { display:flex; align-items:center; justify-content:space-between; gap:.5rem; padding-bottom:.35rem; margin-bottom:.5rem; border-bottom:1px dashed rgba(2,6,23,0.08); }
+
+      /* 3-line clamp */
+      .truncate-3 {
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .truncate-3.no-clamp {
+        display: block;
+        -webkit-line-clamp: unset !important;
+        -webkit-box-orient: unset !important;
+        overflow: visible !important;
+      }
+
+      .btn-chip { border-radius: 999px; padding:.42rem .8rem; font-weight: 700; }
       .btn-link-mini{
         border: none; background: transparent; padding: 0; margin-top: .4rem;
         font-size: var(--txt-12-14); color: var(--brand-1); font-weight: 800;
@@ -245,13 +294,12 @@ export default function Notes() {
       }
       .btn-link-mini:hover{ text-decoration: underline; color: var(--brand-3); }
 
-      /* FAB bigger on mobile */
-      .fab-add { position: fixed; right: 14px; bottom: 14px; z-index: 2200; border-radius: 999px; width: 56px; height: 56px; display:grid; place-items:center; box-shadow: 0 12px 28px rgba(0,0,0,0.18); font-size: 26px; font-weight: 800; }
+      /* Smaller floating add button (always compact) */
+      .fab-add { position: fixed; right: 14px; bottom: 14px; z-index: 2200; border-radius: 999px; width: 44px; height: 44px; display:grid; place-items:center; box-shadow: 0 10px 20px rgba(0,0,0,0.14); font-size: 20px; font-weight: 800; line-height: 1; }
       @media (min-width: 768px) {
-        .fab-add { right: 22px; bottom: 22px; width: 60px; height: 60px; font-size: 28px; }
+        .fab-add { right: 18px; bottom: 18px; width: 44px; height: 44px; font-size: 20px; }
       }
 
-      /* Tighten grid gutters on tiny screens for full-card look */
       @media (max-width: 380px){
         .row.g-3 { --bs-gutter-x: .6rem; --bs-gutter-y: .6rem; }
       }
@@ -423,8 +471,10 @@ export default function Notes() {
       return next;
     });
   };
-  // Heuristic: if details > N chars, offer Show more
-  const NEEDS_LEN = 180;
+
+  // ====== Need "Show more" only if 3-line clamp overflows ======
+  const currentIds = pageItems.map(n => n.id);
+  const { refs: detailsRefs, needMore } = useOverflowMap(currentIds, `${page}|${search}|${monthFilter}`);
 
   return (
     <div
@@ -579,8 +629,8 @@ export default function Notes() {
               const rowNumber = (page - 1) * PAGE_SIZE + (idx + 1);
 
               const details = n.details || "-";
-              const long = details.length > NEEDS_LEN;
               const expanded = isExpanded(n.id);
+              const showMore = needMore[n.id] && !expanded;
 
               return (
                 <div className="col-12 col-sm-6 col-lg-4 col-xl-3" key={n.id}>
@@ -598,37 +648,54 @@ export default function Notes() {
                       </span>
                     </div>
 
-                    <div className="d-flex align-items-center justify-content-between mb-1">
+                    {/* Meta row with subtle divider; right padding keeps space from badge */}
+                    <div className="note-meta pr-badge">
                       <span className="text-muted fs-10-12">#{rowNumber}</span>
+                      {n.user_name ? (
+                        <span className="text-muted fs-10-12 text-truncate" title={n.user_name}>
+                          {n.user_name}
+                        </span>
+                      ) : <span />}
                     </div>
 
-                    <h6
-                      className="fw-bold mb-1"
-                      title={n.title}
-                      style={{ wordBreak: "break-word", fontSize: "var(--txt-14-16)" }}
-                    >
-                      {n.title}
-                    </h6>
+                    <div className="pr-badge">
+                      <h6
+                        className="fw-bold mb-1"
+                        title={n.title}
+                        style={{ wordBreak: "break-word", fontSize: "var(--txt-14-16)" }}
+                      >
+                        {n.title}
+                      </h6>
 
-                    <div
-                      className={`text-secondary ${expanded ? "" : "truncate-3"}`}
-                      title={details}
-                      style={{ fontSize: "var(--txt-12-14)", lineHeight: 1.48 }}
-                    >
-                      {details}
+                      <div
+                        ref={(el) => { if (el) detailsRefs.current[n.id] = el; }}
+                        className={`text-secondary ${expanded ? "" : "truncate-3"}`}
+                        title={details}
+                        style={{ fontSize: "var(--txt-12-14)", lineHeight: 1.48 }}
+                      >
+                        {details}
+                      </div>
+
+                      {/* Show more / Show less */}
+                      {showMore && (
+                        <button
+                          className="btn-link-mini"
+                          onClick={() => toggleExpand(n.id)}
+                          aria-label="Show more"
+                        >
+                          Show more
+                        </button>
+                      )}
+                      {expanded && (
+                        <button
+                          className="btn-link-mini"
+                          onClick={() => toggleExpand(n.id)}
+                          aria-label="Show less"
+                        >
+                          Show less
+                        </button>
+                      )}
                     </div>
-
-                    {/* Show more / Show less */}
-                    {long && !expanded && (
-                      <button className="btn-link-mini" onClick={() => toggleExpand(n.id)}>
-                        Show more
-                      </button>
-                    )}
-                    {expanded && (
-                      <button className="btn-link-mini" onClick={() => toggleExpand(n.id)}>
-                        Show less
-                      </button>
-                    )}
 
                     <div className="mt-3 d-flex justify-content-end gap-2">
                       <button
@@ -685,7 +752,7 @@ export default function Notes() {
         )}
       </div>
 
-      {/* Floating Add button */}
+      {/* Floating Add button (compact) */}
       <button
         className="fab-add btn btn-success"
         onClick={() => scrollToRef(addFormRef)}
