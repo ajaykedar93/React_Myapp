@@ -9,11 +9,11 @@ import {
 } from "react-icons/fi";
 
 /**
- * WebsitesUrl.jsx — Professional, mobile-first (fixed 10/page)
- * - Image is fully visible (no crop). Clicking opens a full-screen preview with a small Close button below.
- * - All text wraps (small but fully visible).
- * - Success/error popups are truly centered on every device (portal).
- * - Buttons/layout are responsive and never overflow on mobile.
+ * WebsitesUrl.jsx — Mobile-safe overlays & full-screen image preview (10/page)
+ * - Image preview now uses a PORTAL to escape stacking contexts and always renders above navbar.
+ * - All overlays (confirm, busy) are also portaled and have higher z-index.
+ * - Body scroll locks while preview/notice/confirm are open (mobile friendly).
+ * - Layout remains flexible for mobile; images are fully visible (no crop) and open full-screen.
  */
 
 const API_BASE = "https://express-backend-myapp.onrender.com"; // no trailing slash
@@ -78,8 +78,18 @@ const Badge = ({ tone = "info", children }) => {
   return <span className={cls}>{children}</span>;
 };
 
+/** Utility to lock/unlock body scroll when overlays are open */
+function useBodyLock(locked) {
+  useEffect(() => {
+    const original = document.body.style.overflow;
+    if (locked) document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = original; };
+  }, [locked]);
+}
+
 /** Centered popup via portal (guaranteed center on mobile & desktop) */
 function CenterNotice({ open, type = "success", title, message, onClose }) {
+  useBodyLock(open);
   const palette =
     type === "success"
       ? { Icon: FiCheckCircle, border: "#20c997" }
@@ -105,8 +115,8 @@ function CenterNotice({ open, type = "success", title, message, onClose }) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
-          style={{ zIndex: 5000, background: "rgba(0,0,0,.25)" }}
+          className="position-fixed top-0 start-0 w-100"
+          style={{ zIndex: 6000, height: "100dvh", display: "grid", placeItems: "center", background: "rgba(0,0,0,.25)" }}
         >
           <motion.div
             initial={{ scale: 0.98, opacity: 0 }}
@@ -136,56 +146,66 @@ function CenterNotice({ open, type = "success", title, message, onClose }) {
   );
 }
 
-const Confirm = ({ open, title, message, onCancel, onConfirm }) => (
-  <AnimatePresence>
-    {open && (
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="position-fixed top-0 start-0 w-100 h-100 d-grid"
-        style={{ background: "rgba(0,0,0,.5)", zIndex: 1055, placeItems: "center" }}
-      >
+const Confirm = ({ open, title, message, onCancel, onConfirm }) => {
+  useBodyLock(open);
+  if (!open) return null;
+  return createPortal(
+    <AnimatePresence>
+      {open && (
         <motion.div
-          initial={{ y: 16, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: 16, opacity: 0 }}
-          transition={spring}
-          className="card shadow-lg w-100"
-          style={{ maxWidth: 520, borderTop: "4px solid #dc3545" }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="position-fixed top-0 start-0 w-100"
+          style={{ zIndex: 5900, height: "100dvh", background: "rgba(0,0,0,.5)", display: "grid", placeItems: "center" }}
         >
-          <div className="card-body">
-            <div className="d-flex align-items-center justify-content-between mb-2">
-              <h5 className="fw-bold mb-0">{title}</h5>
-              <Badge tone="danger">Confirm</Badge>
+          <motion.div
+            initial={{ y: 16, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 16, opacity: 0 }}
+            transition={spring}
+            className="card shadow-lg w-100"
+            style={{ maxWidth: 520, borderTop: "4px solid #dc3545" }}
+          >
+            <div className="card-body">
+              <div className="d-flex align-items-center justify-content-between mb-2">
+                <h5 className="fw-bold mb-0">{title}</h5>
+                <Badge tone="danger">Confirm</Badge>
+              </div>
+              <div className="text-secondary mb-4 small">{message}</div>
+              <div className="d-flex flex-wrap justify-content-end gap-2">
+                <button onClick={onCancel} className="btn btn-outline-secondary">Cancel</button>
+                <button onClick={onConfirm} className="btn btn-danger fw-bold">Delete</button>
+              </div>
             </div>
-            <div className="text-secondary mb-4 small">{message}</div>
-            <div className="d-flex flex-wrap justify-content-end gap-2">
-              <button onClick={onCancel} className="btn btn-outline-secondary">Cancel</button>
-              <button onClick={onConfirm} className="btn btn-danger fw-bold">Delete</button>
-            </div>
-          </div>
+          </motion.div>
         </motion.div>
-      </motion.div>
-    )}
-  </AnimatePresence>
-);
+      )}
+    </AnimatePresence>,
+    document.body
+  );
+};
 
-const BusyOverlay = ({ show }) => (
-  <AnimatePresence>
-    {show && (
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="position-fixed top-0 start-0 w-100 h-100 d-grid"
-        style={{ backdropFilter: "blur(2px)", background: "rgba(0,0,0,.15)", zIndex: 1050, placeItems: "center" }}
-      >
-        <div className="spinner-border text-dark" role="status" aria-label="loading" />
-      </motion.div>
-    )}
-  </AnimatePresence>
-);
+const BusyOverlay = ({ show }) => {
+  useBodyLock(show);
+  if (!show) return null;
+  return createPortal(
+    <AnimatePresence>
+      {show && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="position-fixed top-0 start-0 w-100"
+          style={{ zIndex: 5800, height: "100dvh", backdropFilter: "blur(2px)", background: "rgba(0,0,0,.15)", display: "grid", placeItems: "center" }}
+        >
+          <div className="spinner-border text-light" role="status" aria-label="loading" />
+        </motion.div>
+      )}
+    </AnimatePresence>,
+    document.body
+  );
+};
 
 // ----------------------------- Image Dropzone -----------------------------
 function Dropzone({ file, setFile }) {
@@ -601,7 +621,7 @@ export default function WebsitesUrl() {
         </div>
       </div>
 
-      {/* Confirm delete */}
+      {/* Confirm delete (portal) */}
       <Confirm
         open={confirm.open}
         title="Delete Website"
@@ -610,7 +630,7 @@ export default function WebsitesUrl() {
         onConfirm={doDelete}
       />
 
-      {/* Centered notice */}
+      {/* Centered notice (portal) */}
       <CenterNotice
         open={notice.open}
         type={notice.type}
@@ -619,38 +639,41 @@ export default function WebsitesUrl() {
         onClose={() => setNotice((n) => ({ ...n, open: false }))}
       />
 
-      {/* Image full-screen preview overlay */}
-      <AnimatePresence>
-        {preview.open && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="position-fixed top-0 start-0 w-100 h-100"
-            style={{ zIndex: 4000, background: "rgba(0,0,0,.85)" }}
-            onClick={() => setPreview({ open: false, src: "", title: "" })}
-          >
-            <div className="container h-100 d-flex flex-column justify-content-center align-items-center overflow-auto py-3">
-              <img
-                src={preview.src}
-                alt={preview.title}
-                className="img-fluid d-block"
-                style={{ maxWidth: "100%", maxHeight: "80vh", objectFit: "contain" }}
-                onClick={(e) => e.stopPropagation()}
-              />
-              <button
-                className="btn btn-light btn-sm mt-3 d-inline-flex align-items-center gap-1"
-                onClick={(e) => { e.stopPropagation(); setPreview({ open: false, src: "", title: "" }); }}
-                title="Close"
-              >
-                <FiX /> Close
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Image full-screen preview overlay (portal) */}
+      {createPortal(
+        <AnimatePresence>
+          {preview.open && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="position-fixed top-0 start-0 w-100"
+              style={{ zIndex: 6100, height: "100dvh", background: "rgba(0,0,0,.85)" }}
+              onClick={() => setPreview({ open: false, src: "", title: "" })}
+            >
+              <div className="container h-100 d-flex flex-column justify-content-center align-items-center overflow-auto py-3" style={{ touchAction: "manipulation" }}>
+                <img
+                  src={preview.src}
+                  alt={preview.title}
+                  className="img-fluid d-block"
+                  style={{ maxWidth: "100%", maxHeight: "80vh", objectFit: "contain" }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+                <button
+                  className="btn btn-light btn-sm mt-3 d-inline-flex align-items-center gap-1"
+                  onClick={(e) => { e.stopPropagation(); setPreview({ open: false, src: "", title: "" }); }}
+                  title="Close"
+                >
+                  <FiX /> Close
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
 
-      {/* Busy overlay */}
+      {/* Busy overlay (portal) */}
       <BusyOverlay show={loading} />
     </div>
   );

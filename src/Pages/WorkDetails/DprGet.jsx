@@ -1,5 +1,5 @@
 // src/pages/DprGet.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 
 const BASE_URL = "https://express-backend-myapp.onrender.com/api/dpr";
 
@@ -7,26 +7,57 @@ function getCurrentMonthName() {
   return new Date().toLocaleString("en-US", { month: "long" });
 }
 
+function ymd(dateLike) {
+  if (!dateLike) return "";
+  try {
+    if (typeof dateLike === "string" && /^\d{4}-\d{2}-\d{2}/.test(dateLike)) {
+      return dateLike.slice(0, 10);
+    }
+    const d = new Date(dateLike);
+    if (Number.isNaN(d.getTime())) return "";
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+      .toISOString()
+      .slice(0, 10);
+  } catch {
+    return "";
+  }
+}
+
+async function parseMaybeJson(res) {
+  const text = await res.text();
+  if (!text) return null;
+  try { return JSON.parse(text); } catch { return { raw: text }; }
+}
+
 export default function DprGet() {
   const [month, setMonth] = useState(getCurrentMonthName());
   const [dprs, setDprs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [popup, setPopup] = useState({ show: false, type: "success", message: "" });
+
   const [editRow, setEditRow] = useState(null);
   const [deleteRow, setDeleteRow] = useState(null);
 
-  const showPopup = (type, message) => {
+  const showPopup = (type, message, ms = 2000) => {
     setPopup({ show: true, type, message });
-    setTimeout(() => setPopup({ show: false, type: "success", message: "" }), 2000);
+    window.clearTimeout(showPopup._t);
+    showPopup._t = window.setTimeout(
+      () => setPopup({ show: false, type: "success", message: "" }),
+      ms
+    );
   };
 
   const fetchDpr = async (m) => {
     setLoading(true);
     try {
       const res = await fetch(`${BASE_URL}/month/${encodeURIComponent(m)}`);
-      const data = await res.json();
-      if (data.ok) setDprs(data.data || []);
-      else showPopup("error", data.error || "Failed to load DPR");
+      const data = await parseMaybeJson(res);
+      if (!res.ok) {
+        const msg = data?.error || data?.message || "Failed to load DPR";
+        throw new Error(`${res.status}: ${msg}`);
+      }
+      const list = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
+      setDprs(list);
     } catch (err) {
       console.error(err);
       showPopup("error", "Server error loading DPR");
@@ -35,21 +66,29 @@ export default function DprGet() {
     }
   };
 
-  useEffect(() => {
-    fetchDpr(month);
-  }, [month]);
+  useEffect(() => { fetchDpr(month); }, [month]);
+
+  const confirmDelete = (row) => setDeleteRow({ id: row.id, details: row.details });
 
   const handleDelete = async () => {
     if (!deleteRow) return;
     setLoading(true);
     try {
       const res = await fetch(`${BASE_URL}/${deleteRow.id}`, { method: "DELETE" });
-      const data = await res.json();
-      if (res.ok && data.ok) {
+      if (res.status === 204) {
         showPopup("success", "Deleted successfully ✅");
         setDeleteRow(null);
-        fetchDpr(month);
-      } else showPopup("error", data.error || "Delete failed");
+        await fetchDpr(month);
+        return;
+      }
+      const data = await parseMaybeJson(res);
+      if (!res.ok || data?.ok === false) {
+        const msg = data?.error || data?.message || "Delete failed";
+        throw new Error(`${res.status}: ${msg}`);
+      }
+      showPopup("success", "Deleted successfully ✅");
+      setDeleteRow(null);
+      await fetchDpr(month);
     } catch (err) {
       console.error(err);
       showPopup("error", "Delete failed");
@@ -58,16 +97,24 @@ export default function DprGet() {
     }
   };
 
+  const openEdit = (row) => {
+    setEditRow({
+      id: row.id,
+      work_date: ymd(row.work_date),
+      details: row.details || "",
+      work_time: row.work_time || "",
+    });
+  };
+
   const handleUpdate = async (e) => {
     e.preventDefault();
     if (!editRow) return;
     setLoading(true);
 
-    const cleanDate = editRow.work_date ? editRow.work_date.toString().slice(0, 10) : null;
     const payload = {
       details: editRow.details || "",
       work_time: editRow.work_time || "",
-      work_date: cleanDate,
+      work_date: editRow.work_date ? ymd(editRow.work_date) : null,
     };
 
     try {
@@ -76,12 +123,14 @@ export default function DprGet() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (res.ok && data.ok) {
-        showPopup("success", "Updated successfully ✅");
-        setEditRow(null);
-        fetchDpr(month);
-      } else showPopup("error", data.error || "Update failed");
+      const data = await parseMaybeJson(res);
+      if (!res.ok || data?.ok === false) {
+        const msg = data?.error || data?.message || "Update failed";
+        throw new Error(`${res.status}: ${msg}`);
+      }
+      showPopup("success", "Updated successfully ✅");
+      setEditRow(null);
+      await fetchDpr(month);
     } catch (err) {
       console.error(err);
       showPopup("error", "Update failed");
@@ -94,19 +143,24 @@ export default function DprGet() {
     window.open(`${BASE_URL}/export/${encodeURIComponent(month)}`, "_blank");
   };
 
+  const MONTHS = useMemo(
+    () => [
+      "January","February","March","April","May","June",
+      "July","August","September","October","November","December",
+    ],
+    []
+  );
+
   return (
     <>
       <style>{`
-        :root{
-          --ink:#0f172a; --muted:#6b7280;
-        }
+        :root{ --ink:#0f172a; --muted:#6b7280; }
         *{ box-sizing:border-box; }
         html, body, #root{ height:100%; }
         body{
           margin:0;
-          font-family: Inter, "Segoe UI", system-ui, -apple-system, Roboto, Arial, "Noto Sans", sans-serif;
+          font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial, "Noto Sans", sans-serif;
           color:var(--ink);
-          /* slightly smaller but responsive text */
           font-size: clamp(13px, 1.7vw, 15px);
         }
         .page-wrap{
@@ -114,12 +168,8 @@ export default function DprGet() {
           background: linear-gradient(180deg,#0f172a 0%, #312e81 25%, #1e3a8a 60%, #f59e0b 100%);
           padding: clamp(12px, 2vw, 20px);
         }
-        .container{
-          width:min(1100px,100%);
-          margin:0 auto;
-        }
+        .container{ width:min(1100px,100%); margin:0 auto; }
 
-        /* header */
         .header{
           background: rgba(15,23,42,.92);
           color:#fff;
@@ -133,13 +183,10 @@ export default function DprGet() {
           grid-template-columns: 1fr auto;
           gap:10px; align-items:center;
         }
-        @media (max-width:560px){
-          .header-top{ grid-template-columns:1fr; }
-        }
+        @media (max-width:560px){ .header-top{ grid-template-columns:1fr; } }
         .title{ margin:0; font-weight:800; font-size: clamp(18px,2.4vw,22px); }
         .sub{ opacity:.9; }
 
-        /* responsive toolbar */
         .toolbar{
           display:grid;
           grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -164,13 +211,9 @@ export default function DprGet() {
           white-space:nowrap;
         }
         .btn:active{ transform: translateY(1px) scale(.99); }
-        .btn-download{
-          background: linear-gradient(90deg,#f59e0b,#f97316);
-          color:#fff;
-        }
+        .btn-download{ background: linear-gradient(90deg,#f59e0b,#f97316); color:#fff; }
         .btn-download:hover{ opacity:.92; }
 
-        /* list/cards */
         .list{ display:grid; gap:12px; margin-top:14px; }
         .card{
           background: linear-gradient(180deg,#ffffff,#f8fafc);
@@ -197,48 +240,36 @@ export default function DprGet() {
         .btn-delete{ background:#dc2626; color:#fff; border:none; border-radius:8px; padding:8px 10px; font-weight:700; }
         .btn-edit:hover{ opacity:.95; } .btn-delete:hover{ opacity:.95; }
 
-        /* FULL text blocks — show everything, wrap long strings, keep line breaks */
         .details{
           margin:6px 0 8px 0; font-weight:600; line-height:1.4;
-          white-space: pre-wrap;         /* keep newlines from DB */
-          overflow-wrap: anywhere;       /* very long words/URLs */
-          word-break: break-word;        /* fallback */
+          white-space: pre-wrap; overflow-wrap:anywhere; word-break:break-word;
         }
-        .time{
-          color:var(--muted);
-        }
-        .extra{
-          margin:8px 0 0 18px;
-          color:var(--muted);
-        }
-        .extra li{
-          margin-bottom:2px;
-          white-space: pre-wrap;
-          overflow-wrap: anywhere;
-          word-break: break-word;
-        }
+        .time{ color:var(--muted); }
+        .extra{ margin:8px 0 0 18px; color:var(--muted); }
+        .extra li{ margin-bottom:2px; white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; }
 
-        /* modals / overlays */
+        /* overlays */
         .overlay{
           position:fixed; inset:0; background:rgba(0,0,0,.45);
           display:flex; align-items:center; justify-content:center;
-          z-index:99; backdrop-filter: blur(3px); padding:16px;
+          z-index: 9999; backdrop-filter: blur(3px); padding:16px;
         }
-        .modal{
+        /* renamed from .modal to avoid Bootstrap collisions */
+        .dialog{
           background:#fff; width:min(520px,100%);
           border-radius:16px; box-shadow:0 10px 25px rgba(0,0,0,.3);
           padding:16px; animation:fadeIn .25s ease;
         }
-        .modal h6{ margin:0 0 8px 0; }
-        .row{ display:grid; gap:8px; margin-top:8px; }
-        .row > label{ font-weight:700; }
-        .modal input, .modal textarea{
+        .dialog h6{ margin:0 0 8px 0; }
+        .field{ display:grid; gap:8px; margin-top:8px; }
+        .field > label{ font-weight:700; }
+        .dialog input, .dialog textarea{
           width:100%; border:1px solid #e5e7eb; border-radius:10px;
           padding:10px 12px; outline:none;
         }
-        .modal textarea{ min-height:110px; resize:vertical; }
-        .modal .btns{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; }
-        @media (max-width:420px){ .modal .btns{ grid-template-columns:1fr; } }
+        .dialog textarea{ min-height:110px; resize:vertical; }
+        .dialog .btns{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; }
+        @media (max-width:420px){ .dialog .btns{ grid-template-columns:1fr; } }
 
         .toast{
           background:#fff; border-radius:12px; padding:14px;
@@ -250,7 +281,7 @@ export default function DprGet() {
 
         .loading{
           position:fixed; inset:0; background:rgba(0,0,0,.35);
-          display:grid; place-items:center; z-index:90;
+          display:grid; place-items:center; z-index: 9998;
         }
         .spinner{
           width:58px; height:58px; border:5px solid rgba(255,255,255,.3);
@@ -265,29 +296,31 @@ export default function DprGet() {
       {popup.show && (
         <div className="overlay" role="alert" aria-live="assertive">
           <div className={`toast ${popup.type}`}>
-            <h5 style={{ margin: 0 }}>{popup.type === "success" ? "✅ Success" : "⚠️ Error"}</h5>
+            <h5 style={{ margin: 0 }}>
+              {popup.type === "success" ? "✅ Success" : "⚠️ Error"}
+            </h5>
             <p style={{ margin: "6px 0" }}>{popup.message}</p>
             <small>Closing in 2s…</small>
           </div>
         </div>
       )}
 
-      {/* Edit Modal */}
+      {/* Edit Dialog */}
       {editRow && (
         <div className="overlay" role="dialog" aria-modal="true">
-          <div className="modal">
+          <div className="dialog">
             <h6>Edit DPR</h6>
             <form onSubmit={handleUpdate}>
-              <div className="row">
+              <div className="field">
                 <label htmlFor="dt">Date</label>
                 <input
                   id="dt"
                   type="date"
-                  value={editRow.work_date ? editRow.work_date.toString().slice(0, 10) : ""}
+                  value={ymd(editRow.work_date)}
                   onChange={(e) => setEditRow({ ...editRow, work_date: e.target.value })}
                 />
               </div>
-              <div className="row">
+              <div className="field">
                 <label htmlFor="det">Details</label>
                 <textarea
                   id="det"
@@ -296,7 +329,7 @@ export default function DprGet() {
                   placeholder="Enter full details..."
                 />
               </div>
-              <div className="row">
+              <div className="field">
                 <label htmlFor="wt">Time</label>
                 <input
                   id="wt"
@@ -314,15 +347,17 @@ export default function DprGet() {
         </div>
       )}
 
-      {/* Delete Modal */}
+      {/* Delete Confirm Dialog */}
       {deleteRow && (
         <div className="overlay" role="dialog" aria-modal="true">
-          <div className="modal">
+          <div className="dialog">
             <h6>Delete this DPR?</h6>
-            <div className="details" style={{ marginTop: 6 }}>{deleteRow.details}</div>
+            <div className="details" style={{ marginTop: 6 }}>
+              {deleteRow.details || "(no details)"}
+            </div>
             <div className="btns">
-              <button className="btn select" onClick={() => setDeleteRow(null)}>Cancel</button>
-              <button className="btn btn-delete" onClick={handleDelete}>Delete</button>
+              <button type="button" className="btn select" onClick={() => setDeleteRow(null)}>Cancel</button>
+              <button type="button" className="btn btn-delete" onClick={handleDelete}>OK, Delete</button>
             </div>
           </div>
         </div>
@@ -347,13 +382,10 @@ export default function DprGet() {
             </div>
             <div className="toolbar">
               <select className="select" value={month} onChange={(e) => setMonth(e.target.value)}>
-                {[
-                  "January","February","March","April","May","June",
-                  "July","August","September","October","November","December",
-                ].map((m) => (<option key={m}>{m}</option>))}
+                {MONTHS.map((m) => (<option key={m}>{m}</option>))}
               </select>
-              <button className="btn btn-download" onClick={handleDownload}>⬇ Download PDF</button>
-              <button className="btn select" onClick={() => fetchDpr(month)}>↻ Refresh</button>
+              <button type="button" className="btn btn-download" onClick={handleDownload}>⬇ Download PDF</button>
+              <button type="button" className="btn select" onClick={() => fetchDpr(month)}>↻ Refresh</button>
             </div>
           </div>
 
@@ -368,22 +400,16 @@ export default function DprGet() {
                   <div className="card-head">
                     <div className="badges">
                       <span className="badge badge-grey">#{i + 1}</span>
-                      <span className="badge badge-date">
-                        {dpr.work_date ? dpr.work_date.toString().slice(0, 10) : "-"}
-                      </span>
-                      {dpr.category_name && (
-                        <span className="badge badge-grey">{dpr.category_name}</span>
-                      )}
+                      <span className="badge badge-date">{ymd(dpr.work_date) || "-"}</span>
+                      {dpr.category_name && <span className="badge badge-grey">{dpr.category_name}</span>}
                     </div>
                     <div className="actions">
-                      <button className="btn-edit" onClick={() => setEditRow(dpr)}>✏ Edit</button>
-                      <button className="btn-delete" onClick={() => setDeleteRow(dpr)}>🗑 Delete</button>
+                      <button type="button" className="btn-edit" onClick={() => openEdit(dpr)}>✏ Edit</button>
+                      <button type="button" className="btn-delete" onClick={() => confirmDelete(dpr)}>🗑 Delete</button>
                     </div>
                   </div>
 
-                  {/* FULL details shown, wrapped and respecting line breaks */}
                   <div className="details">{dpr.details || "-"}</div>
-
                   <div className="time">⏰ Time: <b>{dpr.work_time || "-"}</b></div>
 
                   {Array.isArray(dpr.extra_details) && dpr.extra_details.length > 0 && (

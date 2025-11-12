@@ -128,7 +128,7 @@ export default function TransactionDashboard() {
         /* NAVBAR (fixed) */
         .td-nav {
           position: fixed;
-          top: var(--nav-offset);
+          top: calc(var(--nav-offset));
           left: 0; right: 0;
           height: var(--nav-h);
           z-index: 100;
@@ -181,31 +181,33 @@ export default function TransactionDashboard() {
 
         /* ---------- MOBILE-ONLY TWEAKS ---------- */
         @media (max-width: 576px){
-          /* show a small space above navbar */
-          :root { --nav-offset: 8px; } /* gap above navbar on mobile */
+          /* Add some extra space ONLY on mobile above the navbar */
+          :root { --nav-offset: 14px; } /* increase/decrease as you like */
 
+          /* Keep navbar FULL-WIDTH on mobile so it's never clipped */
           .td-nav {
-            left: 8px; right: 8px;        /* inset for nice breathing room */
-            border-radius: 14px;          /* rounded navbar on mobile */
+            left: 0; right: 0;             /* full width */
+            border-radius: 0;              /* flush edges so nothing is hidden */
           }
 
-          /* Make tabs FIXED under the navbar (with a tiny gap) */
+          /* Make tabs FIXED right under the navbar and fully visible */
           .td-tabs {
             position: fixed;
-            top: calc(var(--nav-offset) + var(--nav-h) + 8px);
-            left: 8px; right: 8px;
+            top: calc(var(--nav-offset) + var(--nav-h) + env(safe-area-inset-top, 0px));
+            left: 0; right: 0;             /* full width */
             margin: 0;
-            z-index: 95;
+            z-index: 95;                   /* below navbar but above content */
+            border-radius: 0;              /* consistent with full-width look */
           }
 
           /* Spacer so content starts below the fixed tabs */
           .td-tabs-spacer {
-            height: calc(var(--tabs-h) + 12px); /* matches tabs height + small gap */
+            height: calc(var(--tabs-h) + 12px);
           }
 
           /* Adjust main height to account for fixed tabs */
           .td-main {
-            height: calc(100dvh - var(--nav-h) - var(--nav-offset) - var(--tabs-h) - 12px - env(safe-area-inset-top, 0px));
+            height: calc(100dvh - var(--nav-h) - var(--nav-offset) - var(--tabs-h) - env(safe-area-inset-top, 0px));
             padding-top: 6px;
           }
 
@@ -251,7 +253,7 @@ export default function TransactionDashboard() {
                       aria-selected={selected}
                       aria-controls={`panel-${tab.key}`}
                       className="td-tab"
-                      style={{ ["--chip-active"]: color }}
+                      style={{ ['--chip-active']: color }}
                       onClick={() => setActiveTab(tab.key)}
                     >
                       <span aria-hidden style={{ marginRight: 6, display: "inline-flex", fontSize: "1rem" }}>
