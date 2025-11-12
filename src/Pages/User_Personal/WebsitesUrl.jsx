@@ -1,21 +1,23 @@
 // src/pages/WebsitesUrl.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
 import {
   FiPlus, FiSearch, FiTrash2, FiEdit2, FiGlobe, FiUploadCloud, FiX, FiImage,
-  FiExternalLink, FiCheckCircle, FiAlertTriangle, FiInfo, FiRotateCcw, FiCopy, FiZoomIn
+  FiExternalLink, FiCheckCircle, FiAlertTriangle, FiInfo, FiRotateCcw, FiCopy
 } from "react-icons/fi";
 
 /**
- * WebsitesUrl.jsx — Bootstrap version (fixed 10/page, mobile-perfect)
- * - Fixed pagination: ALWAYS 10 items per page
- * - Smooth responsive grid, full-height on mobile (100dvh), sticky header
+ * WebsitesUrl.jsx — Professional, mobile-first (fixed 10/page)
+ * - Image is fully visible (no crop). Clicking opens a full-screen preview with a small Close button below.
+ * - All text wraps (small but fully visible).
+ * - Success/error popups are truly centered on every device (portal).
+ * - Buttons/layout are responsive and never overflow on mobile.
  */
 
 const API_BASE = "https://express-backend-myapp.onrender.com"; // no trailing slash
 const PAGE_SIZE = 10;
-
 const spring = { type: "spring", stiffness: 420, damping: 32, mass: 0.7 };
 
 async function api(path, { method = "GET", body, headers, json = true } = {}) {
@@ -41,8 +43,7 @@ const normalizeUrl = (raw) => {
   return `https://${trimmed}`;
 };
 
-/* ---------- image helpers (FIXED) ---------- */
-/** Make any relative URL absolute (KEEP /api prefix) */
+/* ---------- image helpers ---------- */
 const toAbsUrl = (u) => {
   if (!u) return "";
   if (/^https?:\/\//i.test(u)) return u;
@@ -50,7 +51,6 @@ const toAbsUrl = (u) => {
   return `${API_BASE}${path}`;
 };
 
-/** Accepts multiple shapes: string, {href|url|src}, other known fields */
 const getImageSrc = (item) => {
   const v =
     item?.image ??
@@ -78,7 +78,7 @@ const Badge = ({ tone = "info", children }) => {
   return <span className={cls}>{children}</span>;
 };
 
-/** Centered popup WITHOUT overlay — always centered in viewport */
+/** Centered popup via portal (guaranteed center on mobile & desktop) */
 function CenterNotice({ open, type = "success", title, message, onClose }) {
   const palette =
     type === "success"
@@ -96,42 +96,43 @@ function CenterNotice({ open, type = "success", title, message, onClose }) {
     }
   }, [open]);
 
-  return (
+  if (!open) return null;
+
+  return createPortal(
     <AnimatePresence>
       {open && (
         <motion.div
-          initial={{ opacity: 0, scale: 0.98 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.98 }}
-          transition={spring}
-          className="position-fixed d-block"
-          style={{
-            zIndex: 2000,
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%, -50%)",
-            width: "min(92vw, 520px)",
-            pointerEvents: "none",
-          }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+          style={{ zIndex: 5000, background: "rgba(0,0,0,.25)" }}
         >
-          <div className="card shadow-lg" style={{ borderTop: `4px solid ${palette.border}`, pointerEvents: "auto" }}>
+          <motion.div
+            initial={{ scale: 0.98, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.98, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 280, damping: 26 }}
+            className="card shadow-lg w-100"
+            style={{ maxWidth: 520, borderTop: `4px solid ${palette.border}` }}
+          >
             <div className="card-body">
               <div className="d-flex align-items-center gap-3 mb-2">
-                <div className="d-inline-flex align-items-center justify-content-center rounded-circle border"
-                     style={{ width: 40, height: 40 }}>
+                <div className="d-inline-flex align-items-center justify-content-center rounded-circle border" style={{ width: 40, height: 40 }}>
                   <Icon />
                 </div>
                 <h5 className="card-title mb-0 fw-bold">{title}</h5>
               </div>
-              <p className="card-text text-secondary mb-4">{message}</p>
+              <p className="card-text text-secondary mb-4 small">{message}</p>
               <div className="text-end">
                 <button ref={okBtnRef} className="btn btn-primary fw-bold" onClick={onClose}>OK</button>
               </div>
             </div>
-          </div>
+          </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }
 
@@ -150,16 +151,16 @@ const Confirm = ({ open, title, message, onCancel, onConfirm }) => (
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 16, opacity: 0 }}
           transition={spring}
-          className="card shadow-lg"
-          style={{ maxWidth: 520, width: "92%", borderTop: "4px solid #dc3545" }}
+          className="card shadow-lg w-100"
+          style={{ maxWidth: 520, borderTop: "4px solid #dc3545" }}
         >
           <div className="card-body">
             <div className="d-flex align-items-center justify-content-between mb-2">
               <h5 className="fw-bold mb-0">{title}</h5>
               <Badge tone="danger">Confirm</Badge>
             </div>
-            <div className="text-secondary mb-4">{message}</div>
-            <div className="d-flex justify-content-end gap-2">
+            <div className="text-secondary mb-4 small">{message}</div>
+            <div className="d-flex flex-wrap justify-content-end gap-2">
               <button onClick={onCancel} className="btn btn-outline-secondary">Cancel</button>
               <button onClick={onConfirm} className="btn btn-danger fw-bold">Delete</button>
             </div>
@@ -250,7 +251,7 @@ export default function WebsitesUrl() {
   const [notice, setNotice] = useState({ open: false, type: "success", title: "", message: "" });
   const [confirm, setConfirm] = useState({ open: false, id: null, name: "" });
 
-  // preview state
+  // image preview overlay state
   const [preview, setPreview] = useState({ open: false, src: "", title: "" });
 
   // form state
@@ -261,8 +262,6 @@ export default function WebsitesUrl() {
   const [fFile, setFFile] = useState(null);
   const [saving, setSaving] = useState(false);
 
-  // "show more" URL state
-  const [expanded, setExpanded] = useState({});
   // image ok/broken state
   const [imgOk, setImgOk] = useState({}); // { [id]: boolean }
 
@@ -282,9 +281,6 @@ export default function WebsitesUrl() {
       showNotice("error", "Copy Failed", "Unable to copy the link.");
     }
   };
-
-  const openPreview = (src, title) => setPreview({ open: true, src, title: title || "Preview" });
-  const closePreview = () => setPreview({ open: false, src: "", title: "" });
 
   const loadCategories = async () => {
     try {
@@ -387,9 +383,6 @@ export default function WebsitesUrl() {
     }
   };
 
-  const clampStyle = { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", wordBreak: "break-all", whiteSpace: "normal", maxWidth: "100%" };
-  const expandedStyle = { wordBreak: "break-all", whiteSpace: "normal", maxWidth: "100%" };
-
   return (
     <div className="min-vh-100" style={{ background: "#f5f7fb", minHeight: "100dvh" }}>
       {/* Header */}
@@ -440,9 +433,9 @@ export default function WebsitesUrl() {
         {/* Add/Edit Form */}
         <motion.form onSubmit={submitForm} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={spring} className="card shadow-sm mb-4">
           <div className="card-body">
-            <div className="d-flex align-items-center justify-content-between mb-3">
+            <div className="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
               <h5 className="mb-0 fw-bold">{editing ? "Edit Website" : "Add Website"}</h5>
-              <div className="d-flex align-items-center gap-2">
+              <div className="d-flex align-items-center gap-2 flex-wrap">
                 {editing ? <Badge>Update</Badge> : <Badge>Create</Badge>}
                 {editing && (
                   <button type="button" onClick={resetForm} className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1" title="Reset to Add mode">
@@ -480,7 +473,7 @@ export default function WebsitesUrl() {
               </div>
             </div>
 
-            <div className="mt-3 d-flex justify-content-end gap-2">
+            <div className="mt-3 d-flex flex-wrap justify-content-end gap-2">
               <button type="button" onClick={resetForm} className="btn btn-outline-secondary">Reset</button>
               <button type="submit" disabled={saving} className="btn btn-primary fw-bold d-inline-flex align-items-center gap-2">
                 {editing ? (saving ? "Saving..." : <> <FiCheckCircle/> Save Changes</>) : saving ? "Adding..." : <> <FiPlus/> Add Website</> }
@@ -520,42 +513,37 @@ export default function WebsitesUrl() {
             <AnimatePresence>
               {items.map((it) => {
                 const displayUrl = normalizeUrl(it.url);
-                const imgSrc = getImageSrc(it); // e.g. /api/websites/:id/image → toAbsUrl → https://.../api/websites/:id/image
-                const showImg = !!imgSrc && imgOk[it.id] !== false; // hide if previously failed
-                const isExpanded = !!expanded[it.id];
+                const imgSrc = getImageSrc(it);
+                const showImg = !!imgSrc && imgOk[it.id] !== false;
 
                 return (
                   <motion.div key={it.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="col-12 col-sm-6 col-lg-4 col-xl-3">
                     <div className="card h-100 shadow-sm">
-                      {/* Image area */}
-                      <div
-                        className="position-relative d-flex align-items-center justify-content-center bg-light"
-                        style={{ minHeight: 140, maxHeight: 340, overflow: "hidden", borderBottom: "1px solid rgba(0,0,0,.05)", cursor: showImg ? "zoom-in" : "default" }}
-                        onClick={() => { if (showImg) openPreview(imgSrc, it.name || it.url); }}
-                        title={showImg ? "Click to preview" : undefined}
-                      >
+                      {/* Image area – full image, no crop; tap to open preview */}
+                      <div className="bg-white border-bottom">
                         {showImg ? (
                           <img
                             src={imgSrc}
                             alt={it.name || it.url}
-                            style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
+                            className="img-fluid w-100 d-block"
+                            style={{ height: "auto", cursor: "zoom-in" }}
+                            onClick={() => setPreview({ open: true, src: imgSrc, title: it.name || it.url })}
                             onError={() => setImgOk((m) => ({ ...m, [it.id]: false }))}
                           />
                         ) : (
-                          <div className="d-flex align-items-center justify-content-center position-absolute top-0 start-0 w-100 h-100 text-secondary">
-                            <FiImage size={48} />
+                          <div className="d-flex align-items-center justify-content-center py-4 text-secondary">
+                            <FiImage size={36} />
                           </div>
                         )}
-
-                        <div className="position-absolute end-0 bottom-0 m-2 d-flex gap-1">
-                          <button type="button" className="btn btn-dark btn-sm d-inline-flex align-items-center gap-1" onClick={(e) => { e.stopPropagation(); window.open(displayUrl, "_blank", "noopener"); }} title="Open">
+                        <div className="px-2 pb-2 d-flex flex-wrap gap-2 justify-content-end">
+                          <button
+                            type="button"
+                            className="btn btn-dark btn-sm d-inline-flex align-items-center gap-1"
+                            onClick={() => window.open(displayUrl, "_blank", "noopener")}
+                            title="Open"
+                          >
                             <FiExternalLink /> Open
                           </button>
-                          {showImg && (
-                            <button type="button" className="btn btn-outline-light btn-sm d-inline-flex align-items-center gap-1" onClick={(e) => { e.stopPropagation(); openPreview(imgSrc, it.name || it.url); }} title="Full Image">
-                              <FiZoomIn /> Full
-                            </button>
-                          )}
                         </div>
                       </div>
 
@@ -568,28 +556,18 @@ export default function WebsitesUrl() {
                             </div>
 
                             {it.url && (
-                              <div className="small text-secondary d-flex flex-column gap-1 mt-1" title={it.url}>
-                                <div className="d-flex align-items-start gap-2">
-                                  <button type="button" className="btn btn-outline-secondary btn-sm py-0 px-2 d-inline-flex align-items-center gap-1" onClick={() => copyLink(it.url)} aria-label="Copy link" title="Copy link" style={{ lineHeight: 1.2, whiteSpace: "nowrap" }}>
-                                    <FiCopy /> Copy
-                                  </button>
-                                  <span style={isExpanded ? expandedStyle : clampStyle}>
-                                    <FiGlobe className="me-1" />
-                                    {displayUrl}
-                                  </span>
-                                </div>
-
-                                <div>
-                                  <button type="button" className="btn btn-link btn-sm p-0" onClick={() => setExpanded((m) => ({ ...m, [it.id]: !isExpanded }))}>
-                                    {isExpanded ? "Show less" : "Show more"}
-                                  </button>
-                                </div>
+                              <div className="small text-secondary mt-1" title={it.url} style={{ wordBreak: "break-all", whiteSpace: "normal" }}>
+                                <FiGlobe className="me-1" />
+                                {displayUrl}
                               </div>
                             )}
                           </div>
                           {it.category ? <Badge>{it.category}</Badge> : <span />}
                         </div>
-                        <div className="mt-auto d-flex justify-content-end gap-2">
+                        <div className="mt-auto d-flex flex-wrap justify-content-end gap-2">
+                          <button onClick={() => copyLink(it.url)} className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1">
+                            <FiCopy /> Copy
+                          </button>
                           <button onClick={() => fillFormForEdit(it)} className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1">
                             <FiEdit2 /> Edit
                           </button>
@@ -623,23 +601,6 @@ export default function WebsitesUrl() {
         </div>
       </div>
 
-      {/* Full-image Preview Modal */}
-      <AnimatePresence>
-        {preview.open && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="position-fixed top-0 start-0 w-100 h-100 d-grid" style={{ background: "rgba(0,0,0,.8)", zIndex: 1065, placeItems: "center" }} onClick={closePreview}>
-            <motion.div initial={{ scale: 0.98, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.98, y: 10 }} transition={spring} className="p-2" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "95vw", maxHeight: "90vh" }}>
-              <div className="d-flex justify-content-between align-items-center mb-2">
-                <h6 className="text-white-50 mb-0">{preview.title}</h6>
-                <button className="btn btn-sm btn-light" onClick={closePreview}><FiX /></button>
-              </div>
-              <div className="bg-black d-flex align-items-center justify-content-center" style={{ maxWidth: "95vw", maxHeight: "85vh" }}>
-                <img src={preview.src} alt={preview.title} style={{ maxWidth: "95vw", maxHeight: "85vh", objectFit: "contain" }} />
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Confirm delete */}
       <Confirm
         open={confirm.open}
@@ -657,6 +618,37 @@ export default function WebsitesUrl() {
         message={notice.message}
         onClose={() => setNotice((n) => ({ ...n, open: false }))}
       />
+
+      {/* Image full-screen preview overlay */}
+      <AnimatePresence>
+        {preview.open && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="position-fixed top-0 start-0 w-100 h-100"
+            style={{ zIndex: 4000, background: "rgba(0,0,0,.85)" }}
+            onClick={() => setPreview({ open: false, src: "", title: "" })}
+          >
+            <div className="container h-100 d-flex flex-column justify-content-center align-items-center overflow-auto py-3">
+              <img
+                src={preview.src}
+                alt={preview.title}
+                className="img-fluid d-block"
+                style={{ maxWidth: "100%", maxHeight: "80vh", objectFit: "contain" }}
+                onClick={(e) => e.stopPropagation()}
+              />
+              <button
+                className="btn btn-light btn-sm mt-3 d-inline-flex align-items-center gap-1"
+                onClick={(e) => { e.stopPropagation(); setPreview({ open: false, src: "", title: "" }); }}
+                title="Close"
+              >
+                <FiX /> Close
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Busy overlay */}
       <BusyOverlay show={loading} />
