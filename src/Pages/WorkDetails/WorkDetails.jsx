@@ -270,12 +270,25 @@ export default function WorkDetails() {
         /* ---------- MOBILE ONLY: add small gap above navbar ---------- */
         @media (max-width: 576px) {
           :root { --nav-offset: 8px; }            /* tiny space above navbar */
-          .wd-nav { left: 8px; right: 8px; border-radius: 12px; } /* optional nice inset */
+          .wd-nav { left: 8px; right: 8px; border-radius: 12px; } /* same mobile look */
           .wd-tab-btn {
             min-width: 92px; padding: 8px 8px; flex-direction: column; gap: 4px;
             align-items: center; justify-content: center; text-align: center;
           }
           .wd-tab-label { display: block; font-size: 11px; line-height: 1.1; white-space: normal; }
+        }
+
+        /* ---------- LAPTOP / LARGE SCREENS ---------- */
+        @media (min-width: 768px) {
+          /* limit nav + content width to about 1100px and center it */
+          .wd-nav {
+            padding-left: max(16px, calc(50% - 550px));
+            padding-right: max(16px, calc(50% - 550px));
+          }
+          .wd-main {
+            padding-left: max(16px, calc(50% - 550px));
+            padding-right: max(16px, calc(50% - 550px));
+          }
         }
       `}</style>
 

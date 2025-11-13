@@ -26,17 +26,29 @@ function ymd(dateLike) {
 async function parseMaybeJson(res) {
   const text = await res.text();
   if (!text) return null;
-  try { return JSON.parse(text); } catch { return { raw: text }; }
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { raw: text };
+  }
 }
 
 export default function DprGet() {
   const [month, setMonth] = useState(getCurrentMonthName());
   const [dprs, setDprs] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [popup, setPopup] = useState({ show: false, type: "success", message: "" });
+  const [popup, setPopup] = useState({
+    show: false,
+    type: "success",
+    message: "",
+  });
 
   const [editRow, setEditRow] = useState(null);
   const [deleteRow, setDeleteRow] = useState(null);
+
+  // PAGINATION
+  const PER_PAGE = 10;
+  const [currentPage, setCurrentPage] = useState(1);
 
   const showPopup = (type, message, ms = 2000) => {
     setPopup({ show: true, type, message });
@@ -56,7 +68,11 @@ export default function DprGet() {
         const msg = data?.error || data?.message || "Failed to load DPR";
         throw new Error(`${res.status}: ${msg}`);
       }
-      const list = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
+      const list = Array.isArray(data?.data)
+        ? data.data
+        : Array.isArray(data)
+        ? data
+        : [];
       setDprs(list);
     } catch (err) {
       console.error(err);
@@ -66,15 +82,31 @@ export default function DprGet() {
     }
   };
 
-  useEffect(() => { fetchDpr(month); }, [month]);
+  useEffect(() => {
+    // when month changes, go to first page
+    setCurrentPage(1);
+    fetchDpr(month);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [month]);
 
-  const confirmDelete = (row) => setDeleteRow({ id: row.id, details: row.details });
+  // Clamp currentPage if total records shrink (e.g., after delete)
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(dprs.length / PER_PAGE) || 1);
+    if (currentPage > maxPage) {
+      setCurrentPage(maxPage);
+    }
+  }, [dprs.length, currentPage]);
+
+  const confirmDelete = (row) =>
+    setDeleteRow({ id: row.id, details: row.details });
 
   const handleDelete = async () => {
     if (!deleteRow) return;
     setLoading(true);
     try {
-      const res = await fetch(`${BASE_URL}/${deleteRow.id}`, { method: "DELETE" });
+      const res = await fetch(`${BASE_URL}/${deleteRow.id}`, {
+        method: "DELETE",
+      });
       if (res.status === 204) {
         showPopup("success", "Deleted successfully ✅");
         setDeleteRow(null);
@@ -140,16 +172,39 @@ export default function DprGet() {
   };
 
   const handleDownload = () => {
-    window.open(`${BASE_URL}/export/${encodeURIComponent(month)}`, "_blank");
+    window.open(
+      `${BASE_URL}/export/${encodeURIComponent(month)}`,
+      "_blank"
+    );
+  };
+
+  const handleGoDashboard = () => {
+    // change path if your dashboard route is different
+    window.location.href = "/dashboard";
   };
 
   const MONTHS = useMemo(
     () => [
-      "January","February","March","April","May","June",
-      "July","August","September","October","November","December",
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
     ],
     []
   );
+
+  // Pagination derived values
+  const totalPages = Math.max(1, Math.ceil(dprs.length / PER_PAGE) || 1);
+  const startIndex = (currentPage - 1) * PER_PAGE;
+  const pageItems = dprs.slice(startIndex, startIndex + PER_PAGE);
 
   return (
     <>
@@ -167,6 +222,7 @@ export default function DprGet() {
           min-height:100vh;
           background: linear-gradient(180deg,#0f172a 0%, #312e81 25%, #1e3a8a 60%, #f59e0b 100%);
           padding: clamp(12px, 2vw, 20px);
+          padding-bottom: 48px; /* space so Next button is never hidden */
         }
         .container{ width:min(1100px,100%); margin:0 auto; }
 
@@ -183,9 +239,32 @@ export default function DprGet() {
           grid-template-columns: 1fr auto;
           gap:10px; align-items:center;
         }
-        @media (max-width:560px){ .header-top{ grid-template-columns:1fr; } }
+        @media (max-width:560px){
+          .header-top{ grid-template-columns:1fr; }
+          .header-right .dashboard-btn{ display:none; } /* keep mobile view same */
+        }
         .title{ margin:0; font-weight:800; font-size: clamp(18px,2.4vw,22px); }
         .sub{ opacity:.9; }
+
+        .header-right{
+          display:flex;
+          justify-content:flex-end;
+        }
+        .dashboard-btn{
+          min-height:32px;
+          padding:6px 14px;
+          border-radius:999px;
+          border:none;
+          font-weight:700;
+          cursor:pointer;
+          background:linear-gradient(90deg,#22c55e,#16a34a);
+          color:#fff;
+          box-shadow:0 6px 16px rgba(0,0,0,.35);
+          white-space:nowrap;
+        }
+        .dashboard-btn:active{
+          transform:translateY(1px) scale(.98);
+        }
 
         .toolbar{
           display:grid;
@@ -288,6 +367,29 @@ export default function DprGet() {
           border-top-color:#fff; border-radius:50%; animation:spin .6s linear infinite;
         }
 
+        .pagination{
+          margin-top:16px;
+          margin-bottom:8px;
+          display:flex;
+          justify-content:center;
+          align-items:center;
+          gap:12px;
+          color:#f9fafb;
+          font-weight:600;
+        }
+        .pagination button{
+          border:none;
+          border-radius:999px;
+          padding:6px 14px;
+          font-weight:600;
+          cursor:pointer;
+          background:#e5e7eb;
+        }
+        .pagination button:disabled{
+          opacity:.5;
+          cursor:default;
+        }
+
         @keyframes spin{ to{ transform: rotate(360deg);} }
         @keyframes fadeIn{ from{opacity:0; transform: translateY(-6px);} to{opacity:1; transform: translateY(0);} }
       `}</style>
@@ -317,7 +419,9 @@ export default function DprGet() {
                   id="dt"
                   type="date"
                   value={ymd(editRow.work_date)}
-                  onChange={(e) => setEditRow({ ...editRow, work_date: e.target.value })}
+                  onChange={(e) =>
+                    setEditRow({ ...editRow, work_date: e.target.value })
+                  }
                 />
               </div>
               <div className="field">
@@ -325,7 +429,9 @@ export default function DprGet() {
                 <textarea
                   id="det"
                   value={editRow.details || ""}
-                  onChange={(e) => setEditRow({ ...editRow, details: e.target.value })}
+                  onChange={(e) =>
+                    setEditRow({ ...editRow, details: e.target.value })
+                  }
                   placeholder="Enter full details..."
                 />
               </div>
@@ -334,13 +440,23 @@ export default function DprGet() {
                 <input
                   id="wt"
                   value={editRow.work_time || ""}
-                  onChange={(e) => setEditRow({ ...editRow, work_time: e.target.value })}
+                  onChange={(e) =>
+                    setEditRow({ ...editRow, work_time: e.target.value })
+                  }
                   placeholder="e.g., 02:30 PM"
                 />
               </div>
               <div className="btns">
-                <button className="btn btn-download" type="submit">Save</button>
-                <button type="button" className="btn select" onClick={() => setEditRow(null)}>Cancel</button>
+                <button className="btn btn-download" type="submit">
+                  Save
+                </button>
+                <button
+                  type="button"
+                  className="btn select"
+                  onClick={() => setEditRow(null)}
+                >
+                  Cancel
+                </button>
               </div>
             </form>
           </div>
@@ -356,8 +472,20 @@ export default function DprGet() {
               {deleteRow.details || "(no details)"}
             </div>
             <div className="btns">
-              <button type="button" className="btn select" onClick={() => setDeleteRow(null)}>Cancel</button>
-              <button type="button" className="btn btn-delete" onClick={handleDelete}>OK, Delete</button>
+              <button
+                type="button"
+                className="btn select"
+                onClick={() => setDeleteRow(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-delete"
+                onClick={handleDelete}
+              >
+                OK, Delete
+              </button>
             </div>
           </div>
         </div>
@@ -377,54 +505,151 @@ export default function DprGet() {
             <div className="header-top">
               <div>
                 <h5 className="title">📋 DPR Records – {month}</h5>
-                <div className="sub">Manage, update, or download monthly DPR details</div>
+                <div className="sub">
+                  Manage, update, or download monthly DPR details
+                </div>
+              </div>
+              <div className="header-right">
+                <button
+                  type="button"
+                  className="dashboard-btn"
+                  onClick={handleGoDashboard}
+                >
+                  🏠 Dashboard
+                </button>
               </div>
             </div>
             <div className="toolbar">
-              <select className="select" value={month} onChange={(e) => setMonth(e.target.value)}>
-                {MONTHS.map((m) => (<option key={m}>{m}</option>))}
+              <select
+                className="select"
+                value={month}
+                onChange={(e) => setMonth(e.target.value)}
+              >
+                {MONTHS.map((m) => (
+                  <option key={m}>{m}</option>
+                ))}
               </select>
-              <button type="button" className="btn btn-download" onClick={handleDownload}>⬇ Download PDF</button>
-              <button type="button" className="btn select" onClick={() => fetchDpr(month)}>↻ Refresh</button>
+              <button
+                type="button"
+                className="btn btn-download"
+                onClick={handleDownload}
+              >
+                ⬇ Download PDF
+              </button>
+              <button
+                type="button"
+                className="btn select"
+                onClick={() => fetchDpr(month)}
+              >
+                ↻ Refresh
+              </button>
             </div>
           </div>
 
-          {(!loading && dprs.length === 0) ? (
-            <p style={{ color: "#fff", textAlign: "center", margin: "18px 0", fontWeight: 700 }}>
+          {!loading && dprs.length === 0 ? (
+            <p
+              style={{
+                color: "#fff",
+                textAlign: "center",
+                margin: "18px 0",
+                fontWeight: 700,
+              }}
+            >
               No DPR entries found for {month}.
             </p>
           ) : (
-            <div className="list">
-              {dprs.map((dpr, i) => (
-                <article key={dpr.id} className="card" aria-label={`DPR #${i + 1}`}>
-                  <div className="card-head">
-                    <div className="badges">
-                      <span className="badge badge-grey">#{i + 1}</span>
-                      <span className="badge badge-date">{ymd(dpr.work_date) || "-"}</span>
-                      {dpr.category_name && <span className="badge badge-grey">{dpr.category_name}</span>}
+            <>
+              <div className="list">
+                {pageItems.map((dpr, i) => (
+                  <article
+                    key={dpr.id}
+                    className="card"
+                    aria-label={`DPR #${startIndex + i + 1}`}
+                  >
+                    <div className="card-head">
+                      <div className="badges">
+                        <span className="badge badge-grey">
+                          #{startIndex + i + 1}
+                        </span>
+                        <span className="badge badge-date">
+                          {ymd(dpr.work_date) || "-"}
+                        </span>
+                        {dpr.category_name && (
+                          <span className="badge badge-grey">
+                            {dpr.category_name}
+                          </span>
+                        )}
+                      </div>
+                      <div className="actions">
+                        <button
+                          type="button"
+                          className="btn-edit"
+                          onClick={() => openEdit(dpr)}
+                        >
+                          ✏ Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-delete"
+                          onClick={() => confirmDelete(dpr)}
+                        >
+                          🗑 Delete
+                        </button>
+                      </div>
                     </div>
-                    <div className="actions">
-                      <button type="button" className="btn-edit" onClick={() => openEdit(dpr)}>✏ Edit</button>
-                      <button type="button" className="btn-delete" onClick={() => confirmDelete(dpr)}>🗑 Delete</button>
+
+                    <div className="details">{dpr.details || "-"}</div>
+                    <div className="time">
+                      ⏰ Time: <b>{dpr.work_time || "-"}</b>
                     </div>
-                  </div>
 
-                  <div className="details">{dpr.details || "-"}</div>
-                  <div className="time">⏰ Time: <b>{dpr.work_time || "-"}</b></div>
+                    {Array.isArray(dpr.extra_details) &&
+                      dpr.extra_details.length > 0 && (
+                        <ul className="extra">
+                          {dpr.extra_details.map((extra, idx) => (
+                            <li key={idx}>
+                              {extra}
+                              {dpr.extra_times?.[idx]
+                                ? ` (${dpr.extra_times[idx]})`
+                                : ""}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                  </article>
+                ))}
+              </div>
 
-                  {Array.isArray(dpr.extra_details) && dpr.extra_details.length > 0 && (
-                    <ul className="extra">
-                      {dpr.extra_details.map((extra, idx) => (
-                        <li key={idx}>
-                          {extra}
-                          {dpr.extra_times?.[idx] ? ` (${dpr.extra_times[idx]})` : ""}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </article>
-              ))}
-            </div>
+              {/* Pagination Controls */}
+              {dprs.length > 0 && (
+                <div className="pagination">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCurrentPage((p) => Math.max(1, p - 1))
+                    }
+                    disabled={currentPage === 1}
+                  >
+                    ← Previous
+                  </button>
+                  <span>
+                    Page {currentPage} of {totalPages} &nbsp;(
+                    {dprs.length} records)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCurrentPage((p) =>
+                        Math.min(totalPages, p + 1)
+                      )
+                    }
+                    disabled={currentPage === totalPages}
+                  >
+                    Next →
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
