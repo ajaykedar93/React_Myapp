@@ -50,9 +50,15 @@ export default function AddSeries() {
     const id = ++seasonIdRef.current;
     setSeasons((prev) => [...prev, { id, season_no: String(nextNum), year: "" }]);
   }, [seasons]);
-  const updateSeason = useCallback((id, field, value) =>
-    setSeasons((prev) => prev.map((s) => (s.id === id ? { ...s, [field]: value } : s))), []);
-  const removeSeason = useCallback((id) => setSeasons((prev) => prev.filter((s) => s.id !== id)), []);
+  const updateSeason = useCallback(
+    (id, field, value) =>
+      setSeasons((prev) => prev.map((s) => (s.id === id ? { ...s, [field]: value } : s))),
+    []
+  );
+  const removeSeason = useCallback(
+    (id) => setSeasons((prev) => prev.filter((s) => s.id !== id)),
+    []
+  );
 
   // Poster (drag/drop)
   const [posterDataUrl, setPosterDataUrl] = useState("");
@@ -75,14 +81,18 @@ export default function AddSeries() {
   const suggestBoxRef = useRef(null);
 
   // ----- Helpers -----
-  const toTitle = (s) => (s || "").toLowerCase().replace(/(^|\s)\S/g, (t) => t.toUpperCase()).trim();
+  const toTitle = (s) =>
+    (s || "")
+      .toLowerCase()
+      .replace(/(^|\s)\S/g, (t) => t.toUpperCase())
+      .trim();
   const onlyDigits = (s) => String(s || "").replace(/\D/g, "");
   const clamp4 = (s) => onlyDigits(s).slice(0, 4);
   const isYear = (v) => /^\d{4}$/.test(String(v)) && +v >= 1888 && +v <= 2100;
   const isNullOrYear = (v) => v === "" || isYear(v);
 
   // STRICT integer helpers (avoid "" -> 0 and "0" as valid)
-  const isInt = (v) => /^\d+$/.test(String(v));               // non-negative
+  const isInt = (v) => /^\d+$/.test(String(v)); // non-negative
   const isPositiveInt = (v) => /^\d+$/.test(String(v)) && Number(v) > 0;
 
   // Load meta (categories, genres, count)
@@ -96,7 +106,11 @@ export default function AddSeries() {
           fetch(EP.GENRES),
           fetch(EP.SERIES_COUNT),
         ]);
-        const [cData, gData, ctData] = await Promise.all([cRes.json(), gRes.json(), ctRes.json()]);
+        const [cData, gData, ctData] = await Promise.all([
+          cRes.json(),
+          gRes.json(),
+          ctRes.json(),
+        ]);
         if (cancelled) return;
         setCategories(Array.isArray(cData) ? cData : []);
         setGenres(Array.isArray(gData) ? gData : []);
@@ -111,7 +125,9 @@ export default function AddSeries() {
         if (!cancelled) setLoadingMeta(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // When category changes, fetch subcategories (series router)
@@ -119,7 +135,10 @@ export default function AddSeries() {
     let cancelled = false;
     (async () => {
       setSubcategoryId("");
-      if (!isPositiveInt(categoryId)) { setSubcategories([]); return; }
+      if (!isPositiveInt(categoryId)) {
+        setSubcategories([]);
+        return;
+      }
       try {
         const u = new URL(EP.SUBCATEGORIES);
         u.searchParams.set("category_id", String(categoryId));
@@ -130,7 +149,9 @@ export default function AddSeries() {
         if (!cancelled) setSubcategories([]);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [categoryId]);
 
   // Close genres panel / suggestions on outside click
@@ -181,17 +202,28 @@ export default function AddSeries() {
     seriesName.trim() && isPositiveInt(categoryId) && yearOk && genresOk && seasonsOk;
 
   // Drag & Drop
-  const onDragOver = (e) => { e.preventDefault(); e.stopPropagation(); setDragActive(true); };
-  const onDragLeave = (e) => { e.preventDefault(); e.stopPropagation(); setDragActive(false); };
+  const onDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(true);
+  };
+  const onDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+  };
   const onDrop = (e) => {
-    e.preventDefault(); e.stopPropagation(); setDragActive(false);
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
     const file = e.dataTransfer?.files?.[0];
     if (file && file.type.startsWith("image/")) {
       const reader = new FileReader();
       reader.onload = (ev) => setPosterDataUrl(String(ev.target?.result || ""));
       reader.readAsDataURL(file);
     } else if (file) {
-      setErrorText("Please drop an image file."); setShowError(true);
+      setErrorText("Please drop an image file.");
+      setShowError(true);
     }
   };
   const onClickDrop = () => fileInputRef.current?.click();
@@ -202,7 +234,8 @@ export default function AddSeries() {
       reader.onload = (ev) => setPosterDataUrl(String(ev.target?.result || ""));
       reader.readAsDataURL(file);
     } else if (file) {
-      setErrorText("Please choose an image file."); setShowError(true);
+      setErrorText("Please choose an image file.");
+      setShowError(true);
     }
   };
 
@@ -217,20 +250,33 @@ export default function AddSeries() {
     let cancelled = false;
     const run = async () => {
       const q = seriesName.trim();
-      if (q.length < 2) { setSuggestions([]); setSuggestOpen(false); return; }
+      if (q.length < 2) {
+        setSuggestions([]);
+        setSuggestOpen(false);
+        return;
+      }
       try {
         const u = new URL(EP.SUGGEST);
         u.searchParams.set("q", q);
         u.searchParams.set("limit", "8");
         const r = await fetch(u.toString());
         const j = await r.json();
-        if (!cancelled) { setSuggestions(Array.isArray(j) ? j : []); setSuggestOpen(true); }
+        if (!cancelled) {
+          setSuggestions(Array.isArray(j) ? j : []);
+          setSuggestOpen(true);
+        }
       } catch {
-        if (!cancelled) { setSuggestions([]); setSuggestOpen(false); }
+        if (!cancelled) {
+          setSuggestions([]);
+          setSuggestOpen(false);
+        }
       }
     };
     const t = setTimeout(run, 250);
-    return () => { cancelled = true; clearTimeout(t); };
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
   }, [seriesName]);
 
   // Duplicate check: NAME-ONLY
@@ -238,20 +284,27 @@ export default function AddSeries() {
     let cancelled = false;
     const run = async () => {
       const name = seriesName.trim();
-      if (!name) { setDupNameOnly({ loading: false, duplicate: false }); return; }
+      if (!name) {
+        setDupNameOnly({ loading: false, duplicate: false });
+        return;
+      }
       try {
         setDupNameOnly({ loading: true, duplicate: false });
         const u = new URL(EP.DUP_SERIES);
         u.searchParams.set("series_name", name);
         const r = await fetch(u.toString());
         const j = await r.json();
-        if (!cancelled) setDupNameOnly({ loading: false, duplicate: Boolean(j?.duplicate) });
+        if (!cancelled)
+          setDupNameOnly({ loading: false, duplicate: Boolean(j?.duplicate) });
       } catch {
         if (!cancelled) setDupNameOnly({ loading: false, duplicate: false });
       }
     };
     const t = setTimeout(run, 350);
-    return () => { cancelled = true; clearTimeout(t); };
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
   }, [seriesName]);
 
   // Duplicate check: COMPOSITE (name + category + release_year + optional subcategory_id)
@@ -259,30 +312,40 @@ export default function AddSeries() {
     let cancelled = false;
     const run = async () => {
       const name = seriesName.trim();
-      if (!name || !isPositiveInt(categoryId) || !yearOk) { setDupComposite({ loading: false, duplicate: false }); return; }
+      if (!name || !isPositiveInt(categoryId) || !yearOk) {
+        setDupComposite({ loading: false, duplicate: false });
+        return;
+      }
       try {
         setDupComposite({ loading: true, duplicate: false });
         const u = new URL(EP.DUP_SERIES);
         u.searchParams.set("series_name", name);
         u.searchParams.set("category_id", String(categoryId));
         if (year !== "") u.searchParams.set("release_year", String(year)); // <-- API expects release_year
-        if (isPositiveInt(subcategoryId)) u.searchParams.set("subcategory_id", String(subcategoryId));
+        if (isPositiveInt(subcategoryId))
+          u.searchParams.set("subcategory_id", String(subcategoryId));
         const r = await fetch(u.toString());
         const j = await r.json();
-        if (!cancelled) setDupComposite({ loading: false, duplicate: Boolean(j?.duplicate) });
+        if (!cancelled)
+          setDupComposite({ loading: false, duplicate: Boolean(j?.duplicate) });
       } catch {
         if (!cancelled) setDupComposite({ loading: false, duplicate: false });
       }
     };
     const t = setTimeout(run, 350);
-    return () => { cancelled = true; clearTimeout(t); };
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
   }, [seriesName, categoryId, subcategoryId, year, yearOk]);
 
   // Submit
   const onSubmit = async (e) => {
     e.preventDefault();
     if (!seriesName.trim() || !isPositiveInt(categoryId) || !yearOk) {
-      setErrorText("Series name, Category and a valid Year (empty or 1888–2100) are required.");
+      setErrorText(
+        "Series name, Category and a valid Year (empty or 1888–2100) are required."
+      );
       setShowError(true);
       return;
     }
@@ -292,7 +355,9 @@ export default function AddSeries() {
       return;
     }
     if (!seasonsOk) {
-      setErrorText("Check seasons: unique season number (≥ 2) and year empty or 1888–2100.");
+      setErrorText(
+        "Check seasons: unique season number (≥ 2) and year empty or 1888–2100."
+      );
       setShowError(true);
       return;
     }
@@ -311,7 +376,9 @@ export default function AddSeries() {
         body: JSON.stringify({
           series_name: toTitle(seriesName),
           category_id: Number(categoryId),
-          subcategory_id: isPositiveInt(subcategoryId) ? Number(subcategoryId) : null, // optional
+          subcategory_id: isPositiveInt(subcategoryId)
+            ? Number(subcategoryId)
+            : null, // optional
           release_year: year === "" ? null : Number(year),
           poster_url: posterDataUrl || null,
           genre_ids: genreIds,
@@ -349,7 +416,9 @@ export default function AddSeries() {
         const j = await r.json();
         const total = Number(j?.total) || nextSeq || 0;
         setNextSeq(total + 1);
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
 
       // Reset form
       setSeriesName("");
@@ -360,7 +429,8 @@ export default function AddSeries() {
       setIsWatched(false);
       setPosterDataUrl("");
       setSeasons([]);
-      setSuggestions([]); setSuggestOpen(false);
+      setSuggestions([]);
+      setSuggestOpen(false);
       setDupNameOnly({ loading: false, duplicate: false });
       setDupComposite({ loading: false, duplicate: false });
     } catch (err) {
@@ -397,7 +467,8 @@ export default function AddSeries() {
           title={selectedCategory.name}
           style={{
             display: "inline-block",
-            width: 18, height: 18,
+            width: 18,
+            height: 18,
             backgroundColor: selectedCategory.color,
             boxShadow: "0 0 0 2px rgba(0,0,0,.05)",
           }}
@@ -426,7 +497,9 @@ export default function AddSeries() {
       aria-label="Subcategory"
       disabled={!isPositiveInt(categoryId) || subcategories.length === 0}
     >
-      <option value="">{subcategories.length ? "Select subcategory (optional)" : "No subcategories"}</option>
+      <option value="">
+        {subcategories.length ? "Select subcategory (optional)" : "No subcategories"}
+      </option>
       {subcategories.map((s) => (
         <option key={s.subcategory_id} value={s.subcategory_id}>
           {s.name}
@@ -439,11 +512,15 @@ export default function AddSeries() {
     <div className="position-relative" ref={genresBtnRef}>
       <button
         type="button"
-        className={`btn ${genresOk ? "btn-outline-secondary" : "btn-outline-danger"} w-100 d-flex justify-content-between align-items-center btn-lift`}
+        className={`btn ${
+          genresOk ? "btn-outline-secondary" : "btn-outline-danger"
+        } w-100 d-flex justify-content-between align-items-center btn-lift`}
         onClick={() => setGenresOpen((s) => !s)}
         aria-expanded={genresOpen}
       >
-        {selectedGenres.length ? `${selectedGenres.length} selected` : "Select genres (required)"}
+        {selectedGenres.length
+          ? `${selectedGenres.length} selected`
+          : "Select genres (required)"}
         <span className="ms-2 small">▾</span>
       </button>
 
@@ -451,18 +528,35 @@ export default function AddSeries() {
         <div
           id="series-genres-panel"
           className="mt-2 p-2 rounded shadow bg-white border"
-          style={{ position: "absolute", left: 0, right: 0, zIndex: 1055, maxHeight: 300, overflowY: "auto" }}
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            zIndex: 1055,
+            maxHeight: 300,
+            overflowY: "auto",
+          }}
         >
           <div className="row g-2">
             {genres.map((g) => {
               const id = `genre-${g.genre_id}`;
               const checked = genreIds.includes(Number(g.genre_id));
               return (
-                <div className="col-6" key={g.genre_id}>
+                // full-width on very small screens, 2 columns from sm+
+                <div className="col-12 col-sm-6" key={g.genre_id}>
                   <label
                     htmlFor={id}
-                    className={`d-flex align-items-center gap-2 rounded border p-2 ${checked ? "bg-light" : ""}`}
-                    style={{ cursor: "pointer", userSelect: "none" }}
+                    className={`d-flex align-items-start gap-2 rounded border p-2 h-100 ${
+                      checked ? "bg-light" : ""
+                    }`}
+                    style={{
+                      cursor: "pointer",
+                      userSelect: "none",
+                      fontSize: "0.85rem",
+                      lineHeight: 1.3,
+                      wordBreak: "break-word",
+                      overflowWrap: "break-word",
+                    }}
                   >
                     <input
                       id={id}
@@ -470,9 +564,17 @@ export default function AddSeries() {
                       className="form-check-input m-0"
                       checked={checked}
                       onChange={() => toggleGenre(g.genre_id)}
-                      style={{ transform: "scale(1.05)" }}
+                      style={{ flexShrink: 0, marginTop: 2 }}
                     />
-                    <span className="flex-grow-1">{g.name}</span>
+                    <span
+                      className="flex-grow-1 text-wrap"
+                      style={{
+                        wordBreak: "break-word",
+                        overflowWrap: "break-word",
+                      }}
+                    >
+                      {g.name}
+                    </span>
                   </label>
                 </div>
               );
@@ -487,7 +589,14 @@ export default function AddSeries() {
             <span
               key={g.genre_id}
               className="badge rounded-pill"
-              style={{ background: "linear-gradient(135deg, rgba(13,110,253,.9), rgba(111,66,193,.9))", color: "#fff", cursor: "pointer" }}
+              style={{
+                background:
+                  "linear-gradient(135deg, rgba(13,110,253,.9), rgba(111,66,193,.9))",
+                color: "#fff",
+                cursor: "pointer",
+                wordBreak: "break-word",
+                overflowWrap: "break-word",
+              }}
               onClick={() => toggleGenre(g.genre_id)}
               title="Click to remove"
             >
@@ -496,7 +605,9 @@ export default function AddSeries() {
           ))}
         </div>
       )}
-      {!genresOk && <div className="form-text text-danger">At least one genre is required.</div>}
+      {!genresOk && (
+        <div className="form-text text-danger">At least one genre is required.</div>
+      )}
     </div>
   );
 
@@ -504,20 +615,39 @@ export default function AddSeries() {
     <div className="card border-0 shadow-sm">
       <div
         className="card-header fw-semibold d-flex align-items-center justify-content-between"
-        style={{ background: "linear-gradient(135deg, rgba(32,201,151,.15), rgba(111,66,193,.15))" }}
+        style={{
+          background:
+            "linear-gradient(135deg, rgba(32,201,151,.15), rgba(111,66,193,.15))",
+        }}
       >
         <span>Live Preview</span>
-        {nextSeq != null && <span className="badge text-bg-dark">Next Seq: {nextSeq}</span>}
+        {nextSeq != null && (
+          <span className="badge text-bg-dark">Next Seq: {nextSeq}</span>
+        )}
       </div>
       <div className="card-body">
-        {seriesName || categoryId || subcategoryId || year !== "" || genreIds.length || posterDataUrl || seasons.length || isWatched ? (
+        {seriesName ||
+        categoryId ||
+        subcategoryId ||
+        year !== "" ||
+        genreIds.length ||
+        posterDataUrl ||
+        seasons.length ||
+        isWatched ? (
           <div className="d-flex flex-column gap-3">
             <div className="d-flex align-items-center gap-2 flex-wrap">
-              <span className={`badge rounded-pill ${canPreview ? "text-bg-success" : "text-bg-secondary"}`}>
+              <span
+                className={`badge rounded-pill ${
+                  canPreview ? "text-bg-success" : "text-bg-secondary"
+                }`}
+              >
                 {canPreview ? "Ready" : "Incomplete"}
               </span>
               {selectedCategory ? (
-                <span className="badge" style={{ backgroundColor: selectedCategory.color }}>
+                <span
+                  className="badge"
+                  style={{ backgroundColor: selectedCategory.color }}
+                >
                   {selectedCategory.name}
                 </span>
               ) : (
@@ -527,7 +657,11 @@ export default function AddSeries() {
                 <span className="badge text-bg-info">{selectedSubcategory.name}</span>
               )}
               {/* ✨ Watched badge */}
-              <span className={`badge ${isWatched ? "text-bg-primary" : "text-bg-secondary"}`}>
+              <span
+                className={`badge ${
+                  isWatched ? "text-bg-primary" : "text-bg-secondary"
+                }`}
+              >
                 {isWatched ? "Watched: Yes" : "Watched: No"}
               </span>
             </div>
@@ -541,7 +675,10 @@ export default function AddSeries() {
                   style={{ width: 96, height: 128, objectFit: "cover" }}
                 />
               ) : (
-                <div className="border rounded d-flex align-items-center justify-content-center" style={{ width: 96, height: 128 }}>
+                <div
+                  className="border rounded d-flex align-items-center justify-content-center"
+                  style={{ width: 96, height: 128 }}
+                >
                   <span className="text-muted small">No Poster</span>
                 </div>
               )}
@@ -550,18 +687,28 @@ export default function AddSeries() {
                 <div className="fw-semibold">{toTitle(seriesName || "—")}</div>
                 <div className="text-muted small mt-1">Year: {year || "—"}</div>
                 <div className="small mt-2">
-                  Genres: {selectedGenres.length ? selectedGenres.map((g) => g.name).join(", ") : "—"}
+                  Genres:{" "}
+                  {selectedGenres.length
+                    ? selectedGenres.map((g) => g.name).join(", ")
+                    : "—"}
                 </div>
                 {seasons.length > 0 && (
                   <div className="small mt-2">
-                    Extra Seasons: {seasons.map((s) => `S${s.season_no || "?"}(${s.year ? s.year : "—"})`).join(", ")}
+                    Extra Seasons:{" "}
+                    {seasons
+                      .map(
+                        (s) => `S${s.season_no || "?"}(${s.year ? s.year : "—"})`
+                      )
+                      .join(", ")}
                   </div>
                 )}
               </div>
             </div>
           </div>
         ) : (
-          <div className="text-muted small">Start filling the form to see a live preview here.</div>
+          <div className="text-muted small">
+            Start filling the form to see a live preview here.
+          </div>
         )}
       </div>
     </div>
@@ -578,7 +725,9 @@ export default function AddSeries() {
     <div className="d-flex align-items-center justify-content-between rounded border p-3 bg-white shadow-sm">
       <div>
         <div className="fw-semibold">Watched?</div>
-        <div className="text-muted small">Mark if you’ve already watched this series.</div>
+        <div className="text-muted small">
+          Mark if you’ve already watched this series.
+        </div>
       </div>
       <div className="form-check form-switch ms-3" style={{ transform: "scale(1.1)" }}>
         <input
@@ -617,8 +766,10 @@ export default function AddSeries() {
             <div
               className="mx-auto mb-3 rounded-circle d-flex align-items-center justify-content-center"
               style={{
-                width: 72, height: 72,
-                background: "linear-gradient(135deg, rgba(25,135,84,.2), rgba(25,135,84,.1))",
+                width: 72,
+                height: 72,
+                background:
+                  "linear-gradient(135deg, rgba(25,135,84,.2), rgba(25,135,84,.1))",
                 border: "2px solid rgba(25,135,84,.35)",
               }}
             >
@@ -626,7 +777,10 @@ export default function AddSeries() {
             </div>
             <h5 className="mb-2">Series Added</h5>
             <p className="text-muted mb-4">{successText}</p>
-            <button className="btn btn-success px-4 btn-lift" onClick={() => setShowSuccess(false)}>
+            <button
+              className="btn btn-success px-4 btn-lift"
+              onClick={() => setShowSuccess(false)}
+            >
               Done
             </button>
           </div>
@@ -649,16 +803,23 @@ export default function AddSeries() {
             <div
               className="mx-auto mb-3 rounded-circle d-flex align-items-center justify-content-center"
               style={{
-                width: 72, height: 72,
-                background: "linear-gradient(135deg, rgba(220,53,69,.2), rgba(220,53,69,.1))",
+                width: 72,
+                height: 72,
+                background:
+                  "linear-gradient(135deg, rgba(220,53,69,.2), rgba(220,53,69,.1))",
                 border: "2px solid rgba(220,53,69,.35)",
               }}
             >
-              <span style={{ fontSize: 30, color: "rgb(220,53,69)", lineHeight: 1 }}>!</span>
+              <span style={{ fontSize: 30, color: "rgb(220,53,69)", lineHeight: 1 }}>
+                !
+              </span>
             </div>
             <h5 className="mb-2">Action Failed</h5>
             <p className="text-muted mb-4">{errorText || "Something went wrong."}</p>
-            <button className="btn btn-danger px-4 btn-lift" onClick={() => setShowError(false)}>
+            <button
+              className="btn btn-danger px-4 btn-lift"
+              onClick={() => setShowError(false)}
+            >
               Close
             </button>
           </div>
@@ -669,7 +830,10 @@ export default function AddSeries() {
       {/* Page Header */}
       <header
         className="border-bottom"
-        style={{ background: "linear-gradient(135deg, rgba(32,201,151,.08), rgba(111,66,193,.08))" }}
+        style={{
+          background:
+            "linear-gradient(135deg, rgba(32,201,151,.08), rgba(111,66,193,.08))",
+        }}
       >
         <div className="container py-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
           <div>
@@ -686,7 +850,9 @@ export default function AddSeries() {
             <h3 className="mb-0">📺 Add New Series</h3>
           </div>
           <div className="d-flex align-items-center gap-2">
-            {nextSeq != null && <span className="badge text-bg-dark">Next Seq: {nextSeq}</span>}
+            {nextSeq != null && (
+              <span className="badge text-bg-dark">Next Seq: {nextSeq}</span>
+            )}
           </div>
         </div>
       </header>
@@ -699,7 +865,10 @@ export default function AddSeries() {
             <form className="card border-0 shadow" onSubmit={onSubmit}>
               <div
                 className="card-header fw-semibold d-flex align-items-center justify-content-between"
-                style={{ background: "linear-gradient(135deg, rgba(32,201,151,.15), rgba(111,66,193,.15))" }}
+                style={{
+                  background:
+                    "linear-gradient(135deg, rgba(32,201,151,.15), rgba(111,66,193,.15))",
+                }}
               >
                 <span>Series Details</span>
                 <div className="d-flex gap-2">
@@ -715,14 +884,19 @@ export default function AddSeries() {
                       setIsWatched(false);
                       setPosterDataUrl("");
                       setSeasons([]);
-                      setSuggestions([]); setSuggestOpen(false);
+                      setSuggestions([]);
+                      setSuggestOpen(false);
                       setDupNameOnly({ loading: false, duplicate: false });
                       setDupComposite({ loading: false, duplicate: false });
                     }}
                   >
                     Reset
                   </button>
-                  <button type="submit" className="btn btn-primary btn-sm btn-lift" disabled={submitting}>
+                  <button
+                    type="submit"
+                    className="btn btn-primary btn-sm btn-lift"
+                    disabled={submitting}
+                  >
                     {submitting ? "Saving…" : "Save Series"}
                   </button>
                 </div>
@@ -731,7 +905,11 @@ export default function AddSeries() {
               <div className="card-body">
                 <div className="row g-3">
                   {/* Series Name + suggestions */}
-                  <div className="col-12" ref={suggestBoxRef} style={{ position: "relative" }}>
+                  <div
+                    className="col-12"
+                    ref={suggestBoxRef}
+                    style={{ position: "relative" }}
+                  >
                     <label className="form-label">
                       Series Name <span className="text-danger">*</span>
                     </label>
@@ -748,7 +926,14 @@ export default function AddSeries() {
                     {suggestOpen && suggestions.length > 0 && (
                       <div
                         className="mt-1 border rounded bg-white shadow-sm"
-                        style={{ position: "absolute", left: 0, right: 0, zIndex: 1056, maxHeight: 260, overflowY: "auto" }}
+                        style={{
+                          position: "absolute",
+                          left: 0,
+                          right: 0,
+                          zIndex: 1056,
+                          maxHeight: 260,
+                          overflowY: "auto",
+                        }}
                       >
                         {suggestions.map((s) => (
                           <div
@@ -756,17 +941,26 @@ export default function AddSeries() {
                             onClick={() => chooseSuggestion(s)}
                             className="px-3 py-2 suggestion-item"
                             style={{ cursor: "pointer" }}
-                            onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(13,110,253,.08)")}
-                            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                            onMouseEnter={(e) =>
+                              (e.currentTarget.style.background =
+                                "rgba(13,110,253,.08)")
+                            }
+                            onMouseLeave={(e) =>
+                              (e.currentTarget.style.background = "transparent")
+                            }
                           >
                             {s}
                           </div>
                         ))}
                       </div>
                     )}
-                    {dupNameOnly.loading && <div className="form-text">Checking name duplicates…</div>}
+                    {dupNameOnly.loading && (
+                      <div className="form-text">Checking name duplicates…</div>
+                    )}
                     {!dupNameOnly.loading && dupNameOnly.duplicate && (
-                      <div className="small text-danger mt-1">A series with this name already exists.</div>
+                      <div className="small text-danger mt-1">
+                        A series with this name already exists.
+                      </div>
                     )}
                   </div>
 
@@ -783,7 +977,9 @@ export default function AddSeries() {
                       type="text"
                       inputMode="numeric"
                       pattern="\d{4}"
-                      className={`form-control ${year !== "" && !yearOk ? "is-invalid" : ""}`}
+                      className={`form-control ${
+                        year !== "" && !yearOk ? "is-invalid" : ""
+                      }`}
                       value={year}
                       onChange={(e) => setYear(clamp4(e.target.value))}
                       onPaste={(e) => {
@@ -794,8 +990,12 @@ export default function AddSeries() {
                       autoComplete="off"
                       placeholder="e.g., 2024 (optional)"
                     />
-                    {year !== "" && !yearOk && <div className="invalid-feedback">Empty or 1888–2100.</div>}
-                    <div className="form-text">Season 1 is auto-created using this year.</div>
+                    {year !== "" && !yearOk && (
+                      <div className="invalid-feedback">Empty or 1888–2100.</div>
+                    )}
+                    <div className="form-text">
+                      Season 1 is auto-created using this year.
+                    </div>
                   </div>
 
                   {/* Subcategory (list from API) */}
@@ -820,9 +1020,15 @@ export default function AddSeries() {
                   {/* Duplicate composite flag */}
                   {isPositiveInt(categoryId) && yearOk && (
                     <div className="col-12">
-                      {dupComposite.loading && <div className="form-text">Checking duplicate (name + category + year + subcategory)…</div>}
+                      {dupComposite.loading && (
+                        <div className="form-text">
+                          Checking duplicate (name + category + year + subcategory)…
+                        </div>
+                      )}
                       {!dupComposite.loading && dupComposite.duplicate && (
-                        <div className="small text-danger">Duplicate exists for these details.</div>
+                        <div className="small text-danger">
+                          Duplicate exists for these details.
+                        </div>
                       )}
                     </div>
                   )}
@@ -844,23 +1050,48 @@ export default function AddSeries() {
                   <div className="col-12">
                     <label className="form-label">Poster (drag & drop)</label>
                     <div
-                      className={`border rounded-3 p-4 text-center ${dragActive ? "bg-light" : ""}`}
-                      style={{ borderStyle: "dashed", cursor: "pointer", transition: "background .15s, transform .15s" }}
+                      className={`border rounded-3 p-4 text-center ${
+                        dragActive ? "bg-light" : ""
+                      }`}
+                      style={{
+                        borderStyle: "dashed",
+                        cursor: "pointer",
+                        transition: "background .15s, transform .15s",
+                      }}
                       onDragOver={onDragOver}
                       onDragLeave={onDragLeave}
                       onDrop={onDrop}
                       onClick={onClickDrop}
-                      onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.01)")}
-                      onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                      onMouseEnter={(e) =>
+                        (e.currentTarget.style.transform = "scale(1.01)")
+                      }
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.transform = "scale(1)")
+                      }
                     >
-                      <div className="mb-2 fw-semibold">Drop your image here{posterDataUrl ? " (ready)" : ""}</div>
-                      <div className="text-muted small">JPG/PNG/WebP recommended. Click to choose a file.</div>
+                      <div className="mb-2 fw-semibold">
+                        Drop your image here{posterDataUrl ? " (ready)" : ""}
+                      </div>
+                      <div className="text-muted small">
+                        JPG/PNG/WebP recommended. Click to choose a file.
+                      </div>
                       {posterDataUrl ? (
                         <div className="mt-3">
-                          <img src={posterDataUrl} alt="Poster preview" className="img-thumbnail" style={{ maxHeight: 180, objectFit: "cover" }} />
+                          <img
+                            src={posterDataUrl}
+                            alt="Poster preview"
+                            className="img-thumbnail"
+                            style={{ maxHeight: 180, objectFit: "cover" }}
+                          />
                         </div>
                       ) : null}
-                      <input ref={fileInputRef} type="file" accept="image/*" className="d-none" onChange={onFileChange} />
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="d-none"
+                        onChange={onFileChange}
+                      />
                     </div>
                   </div>
                 </div>
@@ -870,13 +1101,16 @@ export default function AddSeries() {
 
           {/* RIGHT: Live Preview / Tips */}
           <div className="col-12 col-lg-4">
-            <div className="position-sticky" style={{ top: 24 }}>
+            <div className="preview-sticky position-sticky" style={{ top: 24 }}>
               <LivePreviewCard />
 
               <div className="card border-0 shadow-sm mt-4">
                 <div
                   className="card-header fw-semibold"
-                  style={{ background: "linear-gradient(135deg, rgba(32,201,151,.15), rgba(111,66,193,.15))" }}
+                  style={{
+                    background:
+                      "linear-gradient(135deg, rgba(32,201,151,.15), rgba(111,66,193,.15))",
+                  }}
                 >
                   Quick Tips
                 </div>
@@ -902,6 +1136,15 @@ export default function AddSeries() {
         .focus-ring { transition: border-color .12s ease, box-shadow .12s ease; }
         .focus-ring:focus { border-color: rgba(32,201,151,.6); box-shadow: 0 0 0 .2rem rgba(32,201,151,.15); }
         .suggestion-item { user-select: none; }
+
+        /* Disable sticky preview on mobile so page doesn't feel stuck / auto-scroll to top */
+        @media (max-width: 991.98px) {
+          .preview-sticky {
+            position: static !important;
+            top: auto !important;
+          }
+        }
+
         @keyframes popIn{from{transform:scale(.96);opacity:.6}to{transform:scale(1);opacity:1}}
       `}</style>
     </>
@@ -912,25 +1155,42 @@ export default function AddSeries() {
    LOCAL HELPERS (optional export)
    ========================= */
 export function toTitle(s) {
-  return (s || "").toLowerCase().replace(/(^|\s)\S/g, (t) => t.toUpperCase()).trim();
+  return (s || "")
+    .toLowerCase()
+    .replace(/(^|\s)\S/g, (t) => t.toUpperCase())
+    .trim();
 }
 
 /* =========================
    SEASONS SECTION (memoized rows)
    ========================= */
 
-function ExtraSeasons({ seasons, addSeason, updateSeason, removeSeason, clamp4, onlyDigits, isNullOrYear }) {
+function ExtraSeasons({
+  seasons,
+  addSeason,
+  updateSeason,
+  removeSeason,
+  clamp4,
+  onlyDigits,
+  isNullOrYear,
+}) {
   return (
     <div className="mb-3">
       <div className="d-flex align-items-center justify-content-between mb-2">
         <label className="form-label mb-0">Extra Seasons (Season 2 and beyond)</label>
-        <button type="button" className="btn btn-outline-primary btn-sm btn-lift" onClick={addSeason}>
+        <button
+          type="button"
+          className="btn btn-outline-primary btn-sm btn-lift"
+          onClick={addSeason}
+        >
           + Add Season
         </button>
       </div>
 
       {seasons.length === 0 && (
-        <div className="text-muted small">Season 1 is created automatically. Add Season 2+ here.</div>
+        <div className="text-muted small">
+          Season 1 is created automatically. Add Season 2+ here.
+        </div>
       )}
 
       {seasons.map((s) => (
@@ -948,7 +1208,14 @@ function ExtraSeasons({ seasons, addSeason, updateSeason, removeSeason, clamp4, 
   );
 }
 
-const SeasonRow = memo(function SeasonRow({ row, updateSeason, removeSeason, clamp4, onlyDigits, isNullOrYear }) {
+const SeasonRow = memo(function SeasonRow({
+  row,
+  updateSeason,
+  removeSeason,
+  clamp4,
+  onlyDigits,
+  isNullOrYear,
+}) {
   const seasonNum = String(row.season_no ?? "");
   const yearVal = String(row.year ?? "");
   const numValid = /^\d+$/.test(seasonNum) && Number(seasonNum) >= 2;
@@ -957,8 +1224,10 @@ const SeasonRow = memo(function SeasonRow({ row, updateSeason, removeSeason, cla
   return (
     <div className="row g-2 align-items-end mb-2">
       {/* Season Number */}
-      <div className="col-6 col-md-3">
-        <label className="form-label" htmlFor={`sn-${row.id}`}>Season Number</label>
+      <div className="col-12 col-sm-6 col-md-3">
+        <label className="form-label" htmlFor={`sn-${row.id}`}>
+          Season Number
+        </label>
         <input
           id={`sn-${row.id}`}
           type="text"
@@ -966,15 +1235,24 @@ const SeasonRow = memo(function SeasonRow({ row, updateSeason, removeSeason, cla
           className={`form-control ${!numValid ? "is-invalid" : ""}`}
           value={seasonNum}
           onChange={(e) =>
-            updateSeason(row.id, "season_no", onlyDigits(e.target.value).replace(/^0+/, ""))
+            updateSeason(
+              row.id,
+              "season_no",
+              onlyDigits(e.target.value).replace(/^0+/, "")
+            )
           }
           onPaste={(e) => {
             e.preventDefault();
-            const v = onlyDigits(e.clipboardData.getData("text")).replace(/^0+/, "");
+            const v = onlyDigits(e.clipboardData.getData("text")).replace(
+              /^0+/,
+              ""
+            );
             updateSeason(row.id, "season_no", v);
           }}
           onFocus={(e) => e.target.select()}
-          onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.preventDefault();
+          }}
           placeholder="2"
           autoComplete="off"
         />
@@ -982,8 +1260,10 @@ const SeasonRow = memo(function SeasonRow({ row, updateSeason, removeSeason, cla
       </div>
 
       {/* Season Year (optional) */}
-      <div className="col-6 col-md-3">
-        <label className="form-label" htmlFor={`yr-${row.id}`}>Season Year</label>
+      <div className="col-12 col-sm-6 col-md-3">
+        <label className="form-label" htmlFor={`yr-${row.id}`}>
+          Season Year
+        </label>
         <input
           id={`yr-${row.id}`}
           type="text"
@@ -997,15 +1277,23 @@ const SeasonRow = memo(function SeasonRow({ row, updateSeason, removeSeason, cla
             updateSeason(row.id, "year", clamp4(e.clipboardData.getData("text")));
           }}
           onFocus={(e) => e.target.select()}
-          onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.preventDefault();
+          }}
           placeholder="e.g., 2026 (optional)"
           autoComplete="off"
         />
-        {!yrValid && <div className="invalid-feedback">Empty or 1888–2100.</div>}
+        {!yrValid && (
+          <div className="invalid-feedback">Empty or 1888–2100.</div>
+        )}
       </div>
 
-      <div className="col-12 col-md-auto">
-        <button type="button" className="btn btn-outline-danger btn-lift" onClick={() => removeSeason(row.id)}>
+      <div className="col-12 col-md-auto mt-2 mt-md-0">
+        <button
+          type="button"
+          className="btn btn-outline-danger btn-lift"
+          onClick={() => removeSeason(row.id)}
+        >
           Remove
         </button>
       </div>

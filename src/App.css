@@ -40,3 +40,9 @@
 .read-the-docs {
   color: #888;
 }
+@media (max-width: 991.98px) {
+  .preview-sticky {
+    position: static !important;
+    top: auto !important;
+  }
+}

@@ -54,8 +54,11 @@ function SectionHeader({
 }) {
   return (
     <div className="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
-      <h3 className="section-title m-0">{title}</h3>
-      <div className="d-flex align-items-center gap-2">
+      <h3 className="section-title m-0 d-flex align-items-center gap-2">
+        <span className="section-pill" />
+        <span>{title}</span>
+      </h3>
+      <div className="d-flex align-items-center gap-2 flex-wrap">
         <span className="badge bg-dark-subtle text-dark">{total} total</span>
         {pageCount > 0 && (
           <>
@@ -134,8 +137,14 @@ const Download = () => {
   };
   const totalMoviePages = Math.max(1, Math.ceil(movies.length / itemsPerPage));
   const totalSeriesPages = Math.max(1, Math.ceil(series.length / itemsPerPage));
-  const paginatedMovies = useMemo(() => slicePage(movies, moviePage), [movies, moviePage]);
-  const paginatedSeries = useMemo(() => slicePage(series, seriesPage), [series, seriesPage]);
+  const paginatedMovies = useMemo(
+    () => slicePage(movies, moviePage),
+    [movies, moviePage]
+  );
+  const paginatedSeries = useMemo(
+    () => slicePage(series, seriesPage),
+    [series, seriesPage]
+  );
 
   // selection helpers
   const keyOf = (item, type) => `${type}-${item.movie_id || item.series_id}`;
@@ -175,39 +184,95 @@ const Download = () => {
   const hasAnySelectedOnPage = (list, type) =>
     list.some((it) => isSelectedKey(keyOf(it, type)));
 
-  // export
+  // export (improved for mobile / iOS)
   const handleExport = async () => {
+    if (!selectedItems.length) return;
     try {
       const payload = { items: selectedItems, type: exportType };
       const res = await axios.post(`${API_BASE}/download/export`, payload, {
         responseType: "blob",
       });
 
-      const url = window.URL.createObjectURL(new Blob([res.data]));
-      const link = document.createElement("a");
       const ext =
-        exportType === "excel" ? "xlsx" :
-        exportType === "csv" ? "csv" :
-        exportType === "txt" ? "txt" : "pdf";
+        exportType === "excel"
+          ? "xlsx"
+          : exportType === "csv"
+          ? "csv"
+          : exportType === "txt"
+          ? "txt"
+          : "pdf";
+
+      const fileName = `selected_movies_series.${ext}`;
+      const contentType =
+        res.headers["content-type"] ||
+        (ext === "pdf"
+          ? "application/pdf"
+          : ext === "xlsx"
+          ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          : ext === "csv"
+          ? "text/csv"
+          : "text/plain");
+
+      const blob = new Blob([res.data], { type: contentType });
+
+      // iOS Safari / some mobile browsers have trouble with direct download
+      const isIOS =
+        typeof navigator !== "undefined" &&
+        /iPad|iPhone|iPod/.test(navigator.userAgent) &&
+        !window.MSStream;
+
+      if (isIOS) {
+        // Open in new tab; user can "Save to Files" or share
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const dataUrl = reader.result;
+          const win = window.open(dataUrl, "_blank");
+          if (!win) {
+            alert("Please allow pop-ups in your browser to download the file.");
+          }
+        };
+        reader.readAsDataURL(blob);
+        return;
+      }
+
+      // Normal desktop / Android path – direct download
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", `selected_movies_series.${ext}`);
+      link.setAttribute("download", fileName);
+      link.style.display = "none";
       document.body.appendChild(link);
       link.click();
       link.remove();
+      window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error("Error exporting:", err);
+      alert("Failed to export file. Please try again.");
     }
   };
 
   // animations
   const listContainer = {
     hidden: { opacity: 0 },
-    show: { opacity: 1, transition: { when: "beforeChildren", staggerChildren: 0.05 } },
+    show: {
+      opacity: 1,
+      transition: { when: "beforeChildren", staggerChildren: 0.05 },
+    },
   };
   const itemCard = {
     hidden: { opacity: 0, y: 10, scale: 0.98 },
-    show: { opacity: 1, y: 0, scale: 1, transition: { type: "spring", stiffness: 260, damping: 20 } },
-    exit: { opacity: 0, y: -6, scale: 0.98, transition: { duration: 0.12 } },
+    show: {
+      opacity: 1,
+      y: 0,
+      scale: 1,
+      transition: { type: "spring", stiffness: 260, damping: 20 },
+    },
+    exit: {
+      opacity: 0,
+      y: -6,
+      scale: 0.98,
+      transition: { duration: 0.12 },
+    },
   };
 
   return (
@@ -280,7 +345,9 @@ const Download = () => {
                 className="btn btn-gradient shadow-sm"
                 onClick={handleExport}
                 disabled={selectedItems.length === 0}
-                title={selectedItems.length ? "Export selected" : "Select at least one item"}
+                title={
+                  selectedItems.length ? "Export selected" : "Select at least one item"
+                }
               >
                 ⬇ Download ({selectedItems.length})
               </button>
@@ -301,7 +368,9 @@ const Download = () => {
           >
             <div className="container d-flex align-items-center justify-content-between gap-2">
               <div className="d-flex align-items-center gap-2 flex-wrap">
-                <span className="badge bg-primary">{selectedItems.length} selected</span>
+                <span className="badge bg-primary">
+                  {selectedItems.length} selected
+                </span>
                 <div className="scroll-chips">
                   {selectedItems.slice(0, 6).map((s) => (
                     <span className="chip" key={s.key}>
@@ -309,12 +378,17 @@ const Download = () => {
                     </span>
                   ))}
                   {selectedItems.length > 6 && (
-                    <span className="chip muted">+{selectedItems.length - 6} more</span>
+                    <span className="chip muted">
+                      +{selectedItems.length - 6} more
+                    </span>
                   )}
                 </div>
               </div>
               <div className="d-flex gap-2">
-                <button className="btn btn-soft btn-sm" onClick={() => setSelectedItems([])}>
+                <button
+                  className="btn btn-soft btn-sm"
+                  onClick={() => setSelectedItems([])}
+                >
                   Clear all
                 </button>
                 <button
@@ -342,7 +416,10 @@ const Download = () => {
                   <span className="badge bg-dark-subtle text-dark">—</span>
                 </div>
                 {[...Array(5)].map((__, i) => (
-                  <div className="card shadow-sm mb-3 border-0 skeleton-card" key={i}>
+                  <div
+                    className="card shadow-sm mb-3 border-0 skeleton-card"
+                    key={i}
+                  >
                     <div className="card-body">
                       <LineSkeleton w="30%" />
                       <LineSkeleton w="55%" />
@@ -370,7 +447,10 @@ const Download = () => {
                 onSelectAll={() => selectAllOnPage(paginatedMovies, "movie")}
                 onClearPage={() => clearPageSelection(paginatedMovies, "movie")}
                 pageCount={paginatedMovies.length}
-                hasAnySelectedOnPage={hasAnySelectedOnPage(paginatedMovies, "movie")}
+                hasAnySelectedOnPage={hasAnySelectedOnPage(
+                  paginatedMovies,
+                  "movie"
+                )}
               />
 
               <AnimatePresence mode="popLayout">
@@ -384,7 +464,9 @@ const Download = () => {
                   >
                     <div className="empty-emoji">😶</div>
                     <div className="empty-title">No movies found</div>
-                    <div className="empty-sub">Try changing filters or search.</div>
+                    <div className="empty-sub">
+                      Try changing filters or search.
+                    </div>
                   </motion.div>
                 ) : (
                   paginatedMovies.map((m) => {
@@ -395,12 +477,29 @@ const Download = () => {
                     return (
                       <motion.div
                         key={key}
-                        className={`card shadow-sm hover-card mb-3 border-0 ${selected ? "ring" : ""}`}
+                        className={`card shadow-sm hover-card mb-3 border-0 ${
+                          selected ? "ring" : ""
+                        }`}
                         variants={itemCard}
                         layout
                         whileHover={{ y: -2 }}
-                        transition={{ type: "spring", stiffness: 260, damping: 20 }}
+                        transition={{
+                          type: "spring",
+                          stiffness: 260,
+                          damping: 20,
+                        }}
                         tabIndex={0}
+                        onClick={(e) => {
+                          // avoid double toggle when clicking checkbox
+                          if (
+                            e.target &&
+                            e.target.closest &&
+                            e.target.closest("input[type='checkbox']")
+                          ) {
+                            return;
+                          }
+                          toggleSelect(m, "movie");
+                        }}
                         onKeyDown={(e) => {
                           if (e.key === " " || e.key === "Enter") {
                             e.preventDefault();
@@ -408,7 +507,8 @@ const Download = () => {
                           }
                         }}
                       >
-                        <div className="card-body d-flex align-items-start gap-3">
+                        <div className="card-inner-gradient" />
+                        <div className="card-body d-flex align-items-start gap-3 position-relative">
                           <motion.input
                             type="checkbox"
                             className="big-check"
@@ -420,32 +520,45 @@ const Download = () => {
                           <div className="w-100">
                             <div className="d-flex align-items-center flex-wrap gap-2 mb-1">
                               {number && (
-                                <span className="badge rounded-pill bg-primary">{number}</span>
+                                <span className="badge rounded-pill bg-primary">
+                                  {number}
+                                </span>
                               )}
                               <h5 className="card-title fw-bold mb-0 truncate-1">
                                 {m.movie_name}
                               </h5>
                               {m.release_year ? (
-                                <span className="chip small neutral">({m.release_year})</span>
+                                <span className="chip small neutral">
+                                  ({m.release_year})
+                                </span>
                               ) : null}
                             </div>
 
                             <div className="meta-row">
                               <span className="meta-key">Parts</span>
                               <span className="meta-val">
-                                {m.parts?.length > 0 ? m.parts.join(", ") : "Part 1"}
+                                {m.parts?.length > 0
+                                  ? m.parts.join(", ")
+                                  : "Part 1"}
                               </span>
                             </div>
 
                             <div className="meta-row">
                               <span className="meta-key">Category</span>
-                              <span className="meta-val" style={{ color: m.category_color }}>
+                              <span
+                                className="meta-val"
+                                style={{ color: m.category_color }}
+                              >
                                 {m.category_name || "—"}
                               </span>
                             </div>
 
                             <span
-                              className={`badge ${m.is_watched ? "bg-success" : "bg-warning text-dark"}`}
+                              className={`badge watched-pill ${
+                                m.is_watched
+                                  ? "bg-success"
+                                  : "bg-warning text-dark"
+                              }`}
                             >
                               {m.is_watched ? "Watched" : "Not Watched"}
                             </span>
@@ -472,7 +585,10 @@ const Download = () => {
                 onSelectAll={() => selectAllOnPage(paginatedSeries, "series")}
                 onClearPage={() => clearPageSelection(paginatedSeries, "series")}
                 pageCount={paginatedSeries.length}
-                hasAnySelectedOnPage={hasAnySelectedOnPage(paginatedSeries, "series")}
+                hasAnySelectedOnPage={hasAnySelectedOnPage(
+                  paginatedSeries,
+                  "series"
+                )}
               />
 
               <AnimatePresence mode="popLayout">
@@ -486,7 +602,9 @@ const Download = () => {
                   >
                     <div className="empty-emoji">🫥</div>
                     <div className="empty-title">No series found</div>
-                    <div className="empty-sub">Adjust filters or search again.</div>
+                    <div className="empty-sub">
+                      Adjust filters or search again.
+                    </div>
                   </motion.div>
                 ) : (
                   paginatedSeries.map((s) => {
@@ -497,12 +615,28 @@ const Download = () => {
                     return (
                       <motion.div
                         key={key}
-                        className={`card shadow-sm hover-card mb-3 border-0 ${selected ? "ring" : ""}`}
+                        className={`card shadow-sm hover-card mb-3 border-0 ${
+                          selected ? "ring" : ""
+                        }`}
                         variants={itemCard}
                         layout
                         whileHover={{ y: -2 }}
-                        transition={{ type: "spring", stiffness: 260, damping: 20 }}
+                        transition={{
+                          type: "spring",
+                          stiffness: 260,
+                          damping: 20,
+                        }}
                         tabIndex={0}
+                        onClick={(e) => {
+                          if (
+                            e.target &&
+                            e.target.closest &&
+                            e.target.closest("input[type='checkbox']")
+                          ) {
+                            return;
+                          }
+                          toggleSelect(s, "series");
+                        }}
                         onKeyDown={(e) => {
                           if (e.key === " " || e.key === "Enter") {
                             e.preventDefault();
@@ -510,7 +644,8 @@ const Download = () => {
                           }
                         }}
                       >
-                        <div className="card-body d-flex align-items-start gap-3">
+                        <div className="card-inner-gradient" />
+                        <div className="card-body d-flex align-items-start gap-3 position-relative">
                           <motion.input
                             type="checkbox"
                             className="big-check"
@@ -522,32 +657,45 @@ const Download = () => {
                           <div className="w-100">
                             <div className="d-flex align-items-center flex-wrap gap-2 mb-1">
                               {number && (
-                                <span className="badge rounded-pill bg-primary">{number}</span>
+                                <span className="badge rounded-pill bg-primary">
+                                  {number}
+                                </span>
                               )}
                               <h5 className="card-title fw-bold mb-0 truncate-1">
                                 {s.series_name}
                               </h5>
                               {s.release_year ? (
-                                <span className="chip small neutral">({s.release_year})</span>
+                                <span className="chip small neutral">
+                                  ({s.release_year})
+                                </span>
                               ) : null}
                             </div>
 
                             <div className="meta-row">
                               <span className="meta-key">Seasons</span>
                               <span className="meta-val">
-                                {s.seasons?.length > 0 ? s.seasons.join(", ") : "Season 1"}
+                                {s.seasons?.length > 0
+                                  ? s.seasons.join(", ")
+                                  : "Season 1"}
                               </span>
                             </div>
 
                             <div className="meta-row">
                               <span className="meta-key">Category</span>
-                              <span className="meta-val" style={{ color: s.category_color }}>
+                              <span
+                                className="meta-val"
+                                style={{ color: s.category_color }}
+                              >
                                 {s.category_name || "—"}
                               </span>
                             </div>
 
                             <span
-                              className={`badge ${s.is_watched ? "bg-success" : "bg-warning text-dark"}`}
+                              className={`badge watched-pill ${
+                                s.is_watched
+                                  ? "bg-success"
+                                  : "bg-warning text-dark"
+                              }`}
                             >
                               {s.is_watched ? "Watched" : "Not Watched"}
                             </span>
@@ -586,7 +734,7 @@ const Download = () => {
           top: 0;
           z-index: 5;
           backdrop-filter: saturate(1.1) blur(6px);
-          background: linear-gradient(180deg, rgba(255,255,255,.82), rgba(255,255,255,.64));
+          background: linear-gradient(180deg, rgba(255,255,255,.9), rgba(255,255,255,.7));
           border-bottom: 1px solid rgba(15,23,42,.06);
         }
 
@@ -601,29 +749,65 @@ const Download = () => {
         .section-title{
           color: #0b1221; font-weight: 800; letter-spacing: .2px;
         }
+        .section-pill{
+          width: 10px; height: 24px;
+          border-radius: 999px;
+          background: linear-gradient(180deg,#38bdf8,#22c55e);
+        }
 
         .btn-gradient{
           background: linear-gradient(90deg,#10b981,#3b82f6);
           color:#fff; border:none; border-radius: 10px;
-          transition: transform .18s ease, box-shadow .22s ease;
+          transition: transform .18s ease, box-shadow .22s ease, filter .18s ease;
         }
-        .btn-gradient:disabled{ opacity:.7; cursor:not-allowed; }
-        .btn-gradient:hover:not(:disabled){ transform: translateY(-1px); box-shadow: 0 14px 28px rgba(0,0,0,.15); }
+        .btn-gradient:disabled{ opacity:.7; cursor:not-allowed; filter: grayscale(.1); }
+        .btn-gradient:hover:not(:disabled){
+          transform: translateY(-1px);
+          box-shadow: 0 14px 28px rgba(0,0,0,.15);
+        }
 
         .btn-soft{
           background: rgba(15,23,42,.04);
           border: 1px solid rgba(15,23,42,.06);
           color: #0b1221;
+          border-radius: 999px;
         }
 
-        .hover-card{ transition: box-shadow .18s ease, transform .18s ease; }
+        .hover-card{
+          position: relative;
+          overflow: hidden;
+          border-radius: 16px;
+          transition: box-shadow .18s ease, transform .18s ease;
+        }
         .hover-card:hover{ box-shadow: 0 16px 32px rgba(2,6,23,.08); }
-        .ring{ outline: 2px solid rgba(34,197,94,.35); outline-offset: 2px; }
 
-        .big-check{ width: 22px; height: 22px; accent-color:#10b981; cursor:pointer; margin-top: 6px; flex: 0 0 auto; }
-        @media (max-width: 576px){ .big-check{ margin-top: 2px; } }
+        .card-inner-gradient{
+          position:absolute;
+          inset:0;
+          background: radial-gradient(120% 120% at -10% -10%, rgba(59,130,246,0.09), transparent),
+                      radial-gradient(110% 110% at 110% -10%, rgba(16,185,129,0.08), transparent);
+          opacity:0;
+          transition: opacity .18s ease;
+          pointer-events:none;
+        }
+        .hover-card:hover .card-inner-gradient{
+          opacity:1;
+        }
 
-        .meta-row{ font-size: .9rem; color:#334155; display:flex; gap:.5rem; margin:.25rem 0; flex-wrap:wrap; }
+        .ring{ outline: 2px solid rgba(34,197,94,.4); outline-offset: 2px; }
+
+        .big-check{
+          width: 22px; height: 22px; accent-color:#10b981;
+          cursor:pointer; margin-top: 6px; flex: 0 0 auto;
+        }
+        @media (max-width: 576px){
+          .big-check{ margin-top: 2px; }
+        }
+
+        .meta-row{
+          font-size: .9rem; color:#334155;
+          display:flex; gap:.5rem; margin:.25rem 0; flex-wrap:wrap;
+        }
         .meta-key{
           display:inline-flex; align-items:center; gap:.35rem;
           background: rgba(2,6,23,.04);
@@ -636,10 +820,16 @@ const Download = () => {
           display:inline-flex; align-items:center; gap:.25rem;
           padding:.2rem .55rem; border-radius:999px; font-size:.75rem;
           background: rgba(2,6,23,.05); color:#0b1221; border:1px solid rgba(2,6,23,.06);
+          white-space: nowrap;
         }
         .chip.small{ font-size:.72rem; padding:.15rem .45rem; }
         .chip.neutral{ background: rgba(148,163,184,.12); color:#334155; }
         .chip.muted{ background: rgba(15,23,42,.04); color:#64748b; }
+
+        .watched-pill{
+          margin-top:.25rem;
+          border-radius:999px;
+        }
 
         .truncate-1{
           overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width: 100%;
@@ -673,12 +863,15 @@ const Download = () => {
           background: linear-gradient(90deg, rgba(226,232,240,.35), rgba(226,232,240,.85), rgba(226,232,240,.35));
           background-size: 300% 100%; animation: shimmer 1.2s infinite;
         }
-        @keyframes shimmer{ 0%{background-position:0% 0} 100%{background-position: -300% 0} }
+        @keyframes shimmer{
+          0%{background-position:0% 0}
+          100%{background-position: -300% 0}
+        }
 
         /* Sticky bottom selection bar */
         .selection-bar{
           position: fixed; bottom: 0; left: 0; right: 0; z-index: 6;
-          background: rgba(255,255,255,.92);
+          background: rgba(255,255,255,.96);
           backdrop-filter: blur(6px) saturate(1.1);
           border-top: 1px solid rgba(15,23,42,.08);
           padding: .5rem 0;
