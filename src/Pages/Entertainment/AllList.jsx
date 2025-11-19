@@ -22,9 +22,10 @@ export default function AllList() {
   });
   const [error, setError] = useState("");
   const [selectedItem, setSelectedItem] = useState(null);
-
-  // UI-only filter
   const [viewFilter, setViewFilter] = useState("all"); // "all" | "watched" | "not-watched"
+
+  // poster preview modal
+  const [posterPreview, setPosterPreview] = useState(null); // { src, title } | null
 
   const abortRef = useRef(null);
   const fakeRef = useRef(null);
@@ -145,7 +146,18 @@ export default function AllList() {
               onClick={() => setSelectedItem({ ...it, _type: type })}
             >
               {/* poster */}
-              <div className="lib-poster">
+              <div
+                className={`lib-poster ${hasPoster ? "is-clickable" : ""}`}
+                onClick={(e) => {
+                  e.stopPropagation(); // don't trigger card detail click
+                  if (hasPoster) {
+                    setPosterPreview({
+                      src: it.poster_url,
+                      title: it.title || "Poster",
+                    });
+                  }
+                }}
+              >
                 {hasPoster ? (
                   <img
                     src={it.poster_url}
@@ -276,6 +288,26 @@ export default function AllList() {
     );
   };
 
+  // Poster-only modal
+  const PosterModal = ({ poster, onClose }) => {
+    if (!poster) return null;
+    return (
+      <div className="poster-overlay" onClick={onClose}>
+        <div className="poster-modal" onClick={(e) => e.stopPropagation()}>
+          <button className="poster-close" onClick={onClose}>×</button>
+          <div className="poster-modal-inner">
+            <img src={poster.src} alt={poster.title} />
+            {poster.title && (
+              <div className="poster-caption text-center mt-2 small text-muted">
+                {poster.title}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Derived filtered items (client-side only)
   const filteredItems = useMemo(() => {
     const items = payload.items || [];
@@ -346,6 +378,18 @@ export default function AllList() {
         .tab-btn:hover{ background: rgba(148,163,184,.09); color: #0f172a; }
         .tab-btn.active{ background: var(--tab-active); color: #fff; box-shadow: 0 12px 24px rgba(99,102,241,.25); }
 
+        /* total count badge at top */
+        .total-count-badge{
+          border-radius: 999px;
+          padding: .35rem .75rem;
+          font-weight: 600;
+          background: linear-gradient(120deg, #0ea5e9, #6366f1);
+          color: #ffffff;
+          box-shadow: 0 10px 22px rgba(99,102,241,.25);
+          border: none;
+          font-size: .8rem;
+        }
+
         .search-wrap{ margin-top: 1.4rem; }
         .search-wrap .form-control{
           border-radius: .9rem; border: 1px solid rgba(148,163,184,.35); background: #fff;
@@ -393,31 +437,106 @@ export default function AllList() {
         }
         .filter-btn.active .dot{ background: #fff; }
 
+        /* CARD LAYOUT – ENHANCED with dark green outer effect */
         .lib-card{
-          background: #fff; border-radius: 1rem; display: flex; gap: .9rem; align-items: flex-start;
-          padding: .9rem; min-height: 150px; box-shadow: 0 6px 18px rgba(15,23,42,.03);
-          transition: transform .12s ease, box-shadow .12s ease, border .12s ease; cursor: pointer;
-          border: 1.5px solid rgba(248,113,113,.16);
+          background: radial-gradient(circle at top left, #ffffff, #f1f5f9);
+          border-radius: 1.05rem;
+          display: flex;
+          gap: .9rem;
+          align-items: flex-start;
+          padding: .95rem;
+          min-height: 150px;
+          box-shadow: 0 8px 20px rgba(15,23,42,.06);
+          transition:
+            transform .16s ease,
+            box-shadow .16s ease,
+            border-color .16s ease,
+            background .16s ease;
+          cursor: pointer;
+          border: 1.5px solid rgba(148,163,184,.18);
+          position: relative;
+          overflow: hidden;
         }
-        .lib-card.is-movie{ border-left: 4px solid rgba(248,113,113,.8); }
-        .lib-card.is-series{ border-left: 4px solid rgba(248,113,113,.45); }
-        .lib-card:hover, .lib-card:focus-within{
-          transform: translateY(-2px); box-shadow: 0 12px 24px rgba(15,23,42,.08);
-          border-color: rgba(248,113,113,.4);
+        .lib-card::before{
+          content: "";
+          position: absolute;
+          inset: -2px;
+          border-radius: inherit;
+          border: 1.5px solid transparent;
+          box-shadow: 0 0 0 0 rgba(22,163,74,0);
+          pointer-events: none;
+          transition:
+            box-shadow .18s ease,
+            border-color .18s ease;
+        }
+        .lib-card.is-movie{ border-left: 4px solid rgba(248,113,113,.85); }
+        .lib-card.is-series{ border-left: 4px solid rgba(248,113,113,.55); }
+
+        .lib-card:hover,
+        .lib-card:focus-within,
+        .lib-card:active{
+          transform: translateY(-3px);
+          box-shadow: 0 18px 40px rgba(15,23,42,.22);
+          background: radial-gradient(circle at top left, #ffffff, #e5e7eb);
+          border-color: rgba(22,163,74,.55);
+        }
+        .lib-card:hover::before,
+        .lib-card:focus-within::before,
+        .lib-card:active::before{
+          border-color: rgba(22,163,74,.75);
+          box-shadow:
+            0 0 0 1px rgba(22,163,74,.65),
+            0 0 35px 0 rgba(22,163,74,.45);
         }
 
         .lib-poster{
-          width: 110px; height: var(--poster-h); background: #f8fafc; border: 1px solid rgba(148,163,184,.3);
-          border-radius: .75rem; display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0;
+          width: 110px;
+          height: var(--poster-h);
+          background: #020617;
+          border: 1px solid rgba(15,23,42,.35);
+          border-radius: .8rem;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          overflow: hidden;
+          flex-shrink: 0;
         }
-        .lib-poster img{ width: 100%; height: 100%; object-fit: contain; object-position: center; background: #fff; display: block; }
-        .lib-poster-ph{ font-size: .6rem; font-weight: 700; color: #94a3b8; text-align: center; padding: .4rem; }
+        .lib-poster.is-clickable{
+          cursor: zoom-in;
+        }
+        .lib-poster img{
+          width: 100%;
+          height: 100%;
+          object-fit: contain;  /* show full image, no crop */
+          object-position: center;
+          display: block;
+        }
+        .lib-poster-ph{
+          font-size: .6rem;
+          font-weight: 700;
+          color: #cbd5e1;
+          text-align: center;
+          padding: .4rem;
+        }
 
         .status-pill{
-          margin-left: auto; padding: .28rem .6rem; border-radius: 9999px; border: 1px solid transparent; white-space: nowrap;
+          margin-left: auto;
+          padding: .28rem .6rem;
+          border-radius: 9999px;
+          border: 1px solid transparent;
+          white-space: nowrap;
+          font-weight: 600;
         }
-        .status-pill.watched{ background: rgba(22,163,74,.08); border-color: rgba(22,163,74,.35); color: #166534; }
-        .status-pill.not-watched{ background: rgba(248,113,113,.12); border-color: rgba(248,113,113,.3); color: #b91c1c; }
+        .status-pill.watched{
+          background: rgba(22,163,74,.08);
+          border-color: rgba(22,163,74,.35);
+          color: #166534;
+        }
+        .status-pill.not-watched{
+          background: rgba(248,113,113,.12);
+          border-color: rgba(248,113,113,.32);
+          color: #b91c1c;
+        }
 
         .seq-badge{ background: rgba(15,118,110,.05); color: #0f766e; }
         .type-badge{ background: rgba(99,102,241,.07); color: #4338ca; }
@@ -432,8 +551,11 @@ export default function AllList() {
         }
 
         .cat-badge-big{
-          background: rgba(14,165,233,.09); border: 1px solid rgba(14,165,233,.45); font-weight: 600;
-          color: #0f172a; padding: .35rem .7rem;
+          background: rgba(14,165,233,.09);
+          border: 1px solid rgba(14,165,233,.45);
+          font-weight: 600;
+          color: #0f172a;
+          padding: .35rem .7rem;
         }
 
         .genre-badge{ background: rgba(15,23,42,.04); color: #0f172a; }
@@ -442,28 +564,118 @@ export default function AllList() {
 
         /* progress */
         .load-wrap{ display:flex; align-items:center; gap:.75rem; }
-        .progress{ height: 10px; width: 220px; background: #eef2f7; border-radius: 999px; overflow: hidden; border: 1px solid rgba(148,163,184,.35); }
-        .progress > .bar{ height: 100%; width: 0%; background: linear-gradient(90deg, #14b8a6, #6366f1); transition: width .15s ease; }
+        .progress{
+          height: 10px;
+          width: 220px;
+          background: #eef2f7;
+          border-radius: 999px;
+          overflow: hidden;
+          border: 1px solid rgba(148,163,184,.35);
+        }
+        .progress > .bar{
+          height: 100%;
+          width: 0%;
+          background: linear-gradient(90deg, #14b8a6, #6366f1);
+          transition: width .15s ease;
+        }
 
-        /* popup */
+        /* popup - DETAILS */
         .details-overlay{
-          position: fixed; inset: 0; background: rgba(15,23,42,.42); backdrop-filter: blur(4px);
-          display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 1rem;
+          position: fixed; inset: 0;
+          background: rgba(15,23,42,.46);
+          backdrop-filter: blur(5px);
+          display: flex; align-items: center; justify-content: center;
+          z-index: 9999; padding: 1rem;
         }
         .details-card{
-          background: #fff; border-radius: 1rem; max-width: 680px; width: 100%; min-height: 260px;
-          box-shadow: 0 18px 46px rgba(15,23,42,.25); position: relative; padding: 1.2rem 1.3rem;
+          background: linear-gradient(to bottom, #ffffff, #f3f4f6);
+          border-radius: 1rem;
+          max-width: 680px; width: 100%; min-height: 260px;
+          box-shadow: 0 24px 60px rgba(15,23,42,.35);
+          position: relative; padding: 1.3rem 1.4rem;
+          border: 1px solid rgba(148,163,184,.4);
         }
         .details-close{
-          position: absolute; top: .5rem; right: .5rem; border: none; background: rgba(15,23,42,.04);
-          width: 32px; height: 32px; border-radius: 9999px; font-size: 1.1rem; line-height: 1; display: grid; place-items: center; cursor: pointer;
+          position: absolute; top: .5rem; right: .5rem;
+          border: none; background: rgba(15,23,42,.06);
+          width: 32px; height: 32px; border-radius: 9999px;
+          font-size: 1.1rem; line-height: 1;
+          display: grid; place-items: center; cursor: pointer;
+        }
+        .details-close:hover{
+          background: rgba(15,23,42,.12);
         }
         .details-poster{
-          width: 150px; height: 200px; background: #f8fafc; border: 1px solid rgba(148,163,184,.3);
-          border-radius: .75rem; display: flex; align-items: center; justify-content: center; overflow: hidden;
+          width: 150px; height: 200px;
+          background: radial-gradient(circle at top, #0f172a, #1f2937);
+          border: 1px solid rgba(148,163,184,.5);
+          border-radius: .8rem;
+          display: flex; align-items: center; justify-content: center;
+          overflow: hidden;
         }
         .details-poster img{ width: 100%; height: 100%; object-fit: contain; }
         .details-ph{ color: #94a3b8; font-size: .7rem; font-weight: 600; }
+
+        /* popup - POSTER ONLY */
+        .poster-overlay{
+          position: fixed;
+          inset: 0;
+          background: rgba(15,23,42,.8);
+          backdrop-filter: blur(6px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 10000;
+          padding: 1rem;
+        }
+        .poster-modal{
+          max-width: 90vw;
+          max-height: 90vh;
+          background: #020617;
+          border-radius: .9rem;
+          padding: .75rem .9rem 1rem;
+          position: relative;
+          box-shadow: 0 30px 80px rgba(0,0,0,.75);
+          border: 1px solid rgba(148,163,184,.5);
+        }
+        .poster-modal-inner{
+          max-width: min(480px, 80vw);
+          max-height: calc(80vh - 2.5rem);
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+        }
+        .poster-modal-inner img{
+          max-width: 100%;
+          max-height: 100%;
+          height: auto;
+          width: auto;
+          object-fit: contain;
+          border-radius: .6rem;
+          display: block;
+        }
+        .poster-close{
+          position: absolute;
+          top: .45rem;
+          right: .45rem;
+          width: 32px;
+          height: 32px;
+          border-radius: 999px;
+          border: none;
+          background: rgba(15,23,42,.7);
+          color: #e5e7eb;
+          font-size: 1.1rem;
+          display: grid;
+          place-items: center;
+          cursor: pointer;
+        }
+        .poster-close:hover{
+          background: rgba(15,23,42,.95);
+        }
+        .poster-caption{
+          color: #cbd5f5;
+        }
 
         /* search + filter layout */
         .actions-row{
@@ -541,6 +753,13 @@ export default function AllList() {
         >
           Open API ↗
         </a>
+      </div>
+
+      {/* total count badge */}
+      <div className="mt-2 d-flex justify-content-start">
+        <span className="total-count-badge">
+          Total {activeTab === "movies" ? "movies" : "series"}: {payload.total || 0}
+        </span>
       </div>
 
       {/* search + filter */}
@@ -659,8 +878,9 @@ export default function AllList() {
         )}
       </div>
 
-      {/* popup */}
+      {/* popups */}
       <DetailModal item={selectedItem} onClose={() => setSelectedItem(null)} />
+      <PosterModal poster={posterPreview} onClose={() => setPosterPreview(null)} />
     </div>
   );
 }

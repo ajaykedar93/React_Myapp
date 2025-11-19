@@ -113,9 +113,9 @@ const Favorite = () => {
 
       --container-w: 1200px;
 
-      /* **Smaller posters** — compact but still readable */
-      --poster-w: clamp(44px, 12vw, 80px);
-      --poster-h: clamp(64px, 17vw, 118px);
+      /* MEDIUM posters – not tiny, not full screen */
+      --poster-w: clamp(80px, 24vw, 120px);
+      --poster-h: clamp(112px, 32vw, 180px);
 
       --ring: 0 0 0 3px rgba(16,185,129,.18);
     }
@@ -196,7 +196,7 @@ const Favorite = () => {
     @media (min-width:700px){ .list-grid{ grid-template-columns:repeat(2,1fr); } }
     @media (min-width:1100px){ .list-grid{ grid-template-columns:repeat(3,1fr); } }
 
-    /* Item card — more compact, elegant, animated */
+    /* Item card */
     .item{
       display:grid; grid-template-columns: var(--poster-w) 1fr auto; align-items:center;
       gap:var(--gap-10);
@@ -263,6 +263,7 @@ const Favorite = () => {
     .big-title{ font-weight:900; font-size: var(--fs-20); color:#111827; background:#fff; padding:var(--pad-10) var(--pad-12); border-radius:12px; border:1px solid var(--border); box-shadow:var(--shadow); min-width: 240px; max-width: 100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
     .section-title{ font-size: var(--fs-16); font-weight:900; margin-bottom: var(--pad-8); color:var(--text); }
+    .section-title-center{ text-align:center; }
     .divider{ height:1px; background:var(--border); margin: var(--pad-12) 0; }
 
     /* Sticky actions */
@@ -275,7 +276,7 @@ const Favorite = () => {
       display:flex; gap:var(--gap-10); align-items:center; justify-content:space-between; flex-wrap:wrap;
     }
 
-    /* Favorites grid cards — compact posters too */
+    /* Favorites grid cards */
     .grid-modern{display:grid;gap:var(--gap-12);grid-template-columns:repeat(1,1fr)}
     @media (min-width:700px){.grid-modern{grid-template-columns:repeat(2,1fr)}}
     @media (min-width:1100px){.grid-modern{grid-template-columns:repeat(3,1fr)}}
@@ -328,43 +329,33 @@ const Favorite = () => {
     .row{ display:flex; flex-direction:column; gap: var(--gap-14); }
     .col-12{ width:100%; }
 
-    /* ===== MOBILE FULL-VIEW OVERRIDES (all details visible) ===== */
+    /* ===== MOBILE VIEW: keep posters medium, no full-width giant images ===== */
     *, *::before, *::after { overflow-wrap: anywhere; }
 
     @media (max-width: 480px){
-      /* Titles never truncate */
+      /* Titles never truncate oddly */
       h6, .media-title, .big-title { white-space: normal !important; overflow: visible !important; text-overflow: clip !important; }
 
-      /* Lists: stack vertical with compact poster on top */
       .list-grid { grid-template-columns: 1fr !important; }
-      .item {
-        grid-template-columns: 1fr !important;
-        grid-template-rows: auto auto auto;
-        align-items: start;
-      }
-      .item .poster {
-        width: 100% !important;
-        height: auto !important;
-        aspect-ratio: 3 / 4;
-        border-radius: 12px;
-      }
-      .item .poster img { width: 100%; height: 100%; object-fit: cover; }
-      .item .right {
-        width: 100%;
-        justify-content: flex-start;
-        margin-top: var(--pad-8);
+
+      .item{
+        grid-template-columns: var(--poster-w) 1fr;
+        align-items: flex-start;
       }
 
-      /* Favorites grid: stacked */
-      .grid-modern { grid-template-columns: 1fr !important; }
-      .media-card { grid-template-columns: 1fr !important; align-items: start; }
-      .media-card .media-poster.poster {
-        width: 100% !important;
-        height: auto !important;
-        aspect-ratio: 3 / 4;
+      .item .right{
+        margin-top: var(--pad-6);
+        justify-content: flex-end;
       }
 
-      /* Sticky actions: full width controls */
+      .grid-modern{ grid-template-columns: 1fr !important; }
+
+      .media-card{
+        grid-template-columns: var(--poster-w) 1fr auto;
+        align-items: flex-start;
+      }
+
+      /* Sticky actions full-width controls */
       .sticky-actions { gap: var(--gap-10); }
       .sticky-actions select, .sticky-actions .form-select { width: 100% !important; max-width: 100% !important; }
       .sticky-actions .btn { width: 100%; }
@@ -496,7 +487,7 @@ const Favorite = () => {
     }finally{ setFavLoading(false); }
   };
 
-  /* =============== API • Remove favorite (optimistic + normalize) =============== */
+  /* =============== API • Remove favorite =============== */
   const removeFavorite = async (favorite_id)=>{
     if (!favorite_id) return;
     let newMoviesLen = null;
@@ -704,7 +695,7 @@ const Favorite = () => {
                 )}
                 {(discoverType==="all" || discoverType==="series") && !!searchResults.series.length && (
                   <>
-                    <div className="section-title mt-3">Series</div>
+                    <div className="section-title section-title-center mt-3">Series</div>
                     <ResultList items={searchResults.series} label="series"/>
                   </>
                 )}
@@ -773,7 +764,7 @@ const Favorite = () => {
 
                     {(discoverType==="all" || discoverType==="series") && !!categoryData.series?.length && (
                       <>
-                        <div className="section-title mt-3">Series</div>
+                        <div className="section-title section-title-center mt-3">Series</div>
                         <ResultList items={categoryData.series} label="series"/>
                       </>
                     )}
@@ -824,7 +815,7 @@ const Favorite = () => {
 
                 {(discoverType==="all" || discoverType==="series") && !!watchData.series?.length && (
                   <>
-                    <div className="section-title mt-3">Series</div>
+                    <div className="section-title section-title-center mt-3">Series</div>
                     <ResultList items={watchData.series} label="series"/>
                   </>
                 )}
@@ -961,7 +952,7 @@ const Favorite = () => {
                       {/* Series */}
                       {(favType==="all" || favType==="series") && (
                         <>
-                          <div className="section-title">Series</div>
+                          <div className="section-title section-title-center">Series</div>
                           {bucketData.series.length ? (
                             <>
                               <div className="grid-modern">
