@@ -23,6 +23,22 @@ function ymd(dateLike) {
   }
 }
 
+// NEW: pretty display format like "2 Oct 2025"
+function formatPrettyDate(dateLike) {
+  if (!dateLike) return "";
+  try {
+    const d = new Date(dateLike);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleDateString("en-GB", {
+      day: "numeric", // 2
+      month: "short", // Oct
+      year: "numeric" // 2025
+    });
+  } catch {
+    return "";
+  }
+}
+
 async function parseMaybeJson(res) {
   const text = await res.text();
   if (!text) return null;
@@ -572,7 +588,7 @@ export default function DprGet() {
                           #{startIndex + i + 1}
                         </span>
                         <span className="badge badge-date">
-                          {ymd(dpr.work_date) || "-"}
+                          {formatPrettyDate(dpr.work_date) || "-"}
                         </span>
                         {dpr.category_name && (
                           <span className="badge badge-grey">
