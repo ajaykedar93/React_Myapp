@@ -1,7 +1,8 @@
 // src/pages/Entertainment/LoadingSpiner.jsx
-// Professional loading overlay (Bootstrap-only) with smart delays
+// Professional loading overlay (Bootstrap-only) with smart delays + % progress
 // - delayMs: show only if loading lasts longer than delay
 // - minShowMs: keep visible for at least this long once shown (anti-flicker)
+// - progress: optional manual 0–100 API progress; if omitted, auto-simulated
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -18,6 +19,7 @@ export default function LoadingSpiner({
   blockScroll = true,
   delayMs = 250,         // wait this long before showing
   minShowMs = 500,       // keep visible at least this long once shown
+  progress,              // optional: 0–100, API-controlled
 }) {
   const sizes = useMemo(
     () => ({
@@ -60,8 +62,14 @@ export default function LoadingSpiner({
   useEffect(() => {
     // Clear timers on prop change/unmount
     const clearTimers = () => {
-      if (delayTimer.current) { clearTimeout(delayTimer.current); delayTimer.current = null; }
-      if (hideTimer.current) { clearTimeout(hideTimer.current); hideTimer.current = null; }
+      if (delayTimer.current) {
+        clearTimeout(delayTimer.current);
+        delayTimer.current = null;
+      }
+      if (hideTimer.current) {
+        clearTimeout(hideTimer.current);
+        hideTimer.current = null;
+      }
     };
 
     if (!isPrimary) return; // only primary instance controls visibility
@@ -93,18 +101,81 @@ export default function LoadingSpiner({
     return () => clearTimers();
   }, [visible, delayMs, minShowMs, actuallyVisible, isPrimary]);
 
+  // --- Percentage progress handling (manual + auto) ---
+  const [internalProgress, setInternalProgress] = useState(0);
+
+  // If visible goes from false → true, reset progress
+  useEffect(() => {
+    if (!isPrimary) return;
+    if (visible) {
+      setInternalProgress(0);
+    }
+  }, [visible, isPrimary]);
+
+  // Drive progress:
+  // - If progress prop is provided, follow it strictly (clamped 0–100)
+  // - Else auto-increment while actually visible
+  useEffect(() => {
+    if (!isPrimary) return;
+
+    // Manual progress mode:
+    if (typeof progress === "number" && !Number.isNaN(progress)) {
+      const clamped = Math.max(0, Math.min(100, progress));
+      setInternalProgress(clamped);
+      return;
+    }
+
+    // Auto mode
+    if (!actuallyVisible) {
+      setInternalProgress(0);
+      return;
+    }
+
+    // Start at 10 when becoming visible (if still at 0)
+    setInternalProgress((prev) => (prev === 0 ? 10 : prev));
+
+    const id = setInterval(() => {
+      setInternalProgress((prev) => {
+        // When parent turns visible=false, finish to 100
+        if (!visible) return 100;
+
+        if (prev >= 95) return prev; // cap before 100 until we hide
+        if (prev < 50) return prev + 10; // 10,20,30,40,50
+        if (prev < 80) return prev + 5;  // 55,60,65,70,75,80
+        return prev + 3;                 // slow final ramp
+      });
+    }, 280);
+
+    return () => clearInterval(id);
+  }, [actuallyVisible, visible, isPrimary, progress]);
+
+  // When visible becomes false and we are in auto mode, push to 100 quickly
+  useEffect(() => {
+    if (!isPrimary) return;
+    if (typeof progress === "number") return; // manual mode handles itself
+    if (!visible && actuallyVisible) {
+      setInternalProgress(100);
+    }
+  }, [visible, actuallyVisible, progress, isPrimary]);
+
   // Lock body scroll while visible
   useEffect(() => {
     if (!blockScroll || !isPrimary) return;
     if (actuallyVisible) {
       const prev = document.body.style.overflow;
       document.body.style.overflow = "hidden";
-      return () => { document.body.style.overflow = prev; };
+      return () => {
+        document.body.style.overflow = prev;
+      };
     }
   }, [actuallyVisible, isPrimary, blockScroll]);
 
   // Early exits
   if (!actuallyVisible || !isPrimary || !containerRef.current) return null;
+
+  const pct = Math.round(
+    Math.max(0, Math.min(100, internalProgress || 0))
+  );
 
   const overlay = (
     <div
@@ -169,14 +240,41 @@ export default function LoadingSpiner({
           />
         </div>
 
+        {/* Message + % */}
         <div className="text-dark text-center fw-semibold" style={{ letterSpacing: ".35px" }}>
           {message}
+        </div>
+        <div
+          className="text-muted text-center"
+          style={{ fontSize: ".8rem", marginTop: 2, marginBottom: 8 }}
+        >
+          {pct}%
+        </div>
+
+        {/* Small progress track under text */}
+        <div
+          className="w-100"
+          style={{ maxWidth: 260, height: 6, borderRadius: 999, background: "#e5e7eb", overflow: "hidden" }}
+        >
+          <div
+            style={{
+              width: `${pct}%`,
+              height: "100%",
+              borderRadius: 999,
+              background: "linear-gradient(90deg, #0d6efd, #6f42c1)",
+              transition: "width .22s ease-out",
+            }}
+          />
         </div>
       </div>
 
       <style>{`
         @keyframes spinSlow { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }
-        @keyframes pulse { 0% { transform: translateY(-50%) scale(.9); opacity: .6; } 50% { transform: translateY(-50%) scale(1.2); opacity: 1; } 100% { transform: translateY(-50%) scale(.9); opacity: .6; } }
+        @keyframes pulse {
+          0% { transform: translateY(-50%) scale(.9); opacity: .6; }
+          50% { transform: translateY(-50%) scale(1.2); opacity: 1; }
+          100% { transform: translateY(-50%) scale(.9); opacity: .6; }
+        }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes scaleIn { from { transform: scale(.96); opacity: .8; } to { transform: scale(1); opacity: 1; } }
       `}</style>

@@ -317,7 +317,10 @@ export default function Manage() {
                 {preview.meta?.genres?.length ? (
                   <div className="d-flex flex-wrap gap-1 mb-2">
                     {preview.meta.genres.map((g) => (
-                      <span key={g.name || g} className="badge bg-light text-dark">
+                      <span
+                        key={g.name || g}
+                        className="badge bg-light text-dark"
+                      >
                         {g.name || g}
                       </span>
                     ))}
@@ -341,6 +344,9 @@ export default function Manage() {
         }
 
         /* header glow for colorfulness */
+        .fancy-header{
+          position:relative;
+        }
         .fancy-header::after{
           content:"";
           position:absolute; inset:0;
@@ -358,7 +364,7 @@ export default function Manage() {
           border: 1px solid rgba(15,23,42,.06);
         }
 
-        /* progress */
+        /* tiny top progress */
         .progress-thin{
           height:3px;
           background: linear-gradient(90deg, #22c55e, #6366f1);
@@ -457,38 +463,49 @@ export default function Manage() {
           font-size:2.2rem; font-weight:800;
         }
 
-        /* skeleton (centered) */
+        /* centered / mobile-top skeleton loader with % bar */
         .center-skel-wrap{
           position: relative;
-          display:flex; align-items:center; justify-content:center;
-          min-height: 35vh;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          min-height: 60vh;
         }
         .center-skel{
           width:min(420px, 92vw);
           background:#fff;
           border-radius:1rem;
-          padding:1rem 1.25rem;
+          padding:1rem 1.25rem 1.1rem;
           box-shadow:0 18px 40px rgba(15,23,42,.12);
           border:1px solid rgba(15,23,42,.06);
         }
-        .skel-bar{
-          height:12px; border-radius:999px; overflow:hidden; background:#eef2f7; margin:.5rem 0;
+        .center-progress-shell{
+          position:relative;
+          width:100%;
+          height:10px;
+          border-radius:999px;
+          background:#eef2f7;
+          overflow:hidden;
+          margin:.35rem 0 .4rem;
         }
-        .skel-bar > span{
-          display:block; height:100%; width:40%;
-          background: linear-gradient(90deg, #e5e7eb, #f3f4f6, #e5e7eb);
-          animation: shimmer 1.2s infinite;
-          background-size: 200% 100%;
-        }
-        @keyframes shimmer{
-          0%{ transform: translateX(-40%); }
-          100%{ transform: translateX(140%); }
+        .center-progress-fill{
+          height:100%;
+          width:0;
+          border-radius:inherit;
+          background: linear-gradient(90deg, #22c55e, #6366f1);
+          transition: width .25s ease-out;
         }
 
         /* mobile first */
         @media (max-width: 575.98px){
           .tab-btn{ flex:1 1 calc(50% - .45rem); justify-content:center; }
           .manage-modal{ width:100%; border-radius:.9rem; }
+          /* move loader up on mobile (not touching very top) */
+          .center-skel-wrap{
+            align-items:flex-start;
+            padding-top:3.5rem;
+            min-height: 60vh;
+          }
         }
 
         /* respect reduced motion */
@@ -500,15 +517,48 @@ export default function Manage() {
   );
 }
 
-/* Centered skeleton used while lazy tabs load */
+/* Centered skeleton used while lazy tabs load, with % progress bar.
+   Desktop: centered on screen.
+   Mobile: same bar but near the top (not touching the top). */
 function CenterSkeleton({ label = "Loading…" }) {
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    let frame = 0;
+    const id = setInterval(() => {
+      frame += 1;
+      setProgress((prev) => {
+        // Fast at start, slower later, cap at 95%
+        if (prev >= 95) return prev;
+        if (prev < 60) return prev + 10;
+        if (prev < 85) return prev + 4;
+        return prev + 1;
+      });
+    }, 260);
+
+    return () => clearInterval(id);
+  }, []);
+
   return (
     <div className="center-skel-wrap" role="status" aria-live="polite">
       <div className="center-skel">
-        <div style={{ fontWeight: 700, marginBottom: ".25rem" }}>{label}</div>
-        <div className="skel-bar"><span /></div>
-        <div className="skel-bar"><span /></div>
-        <div className="skel-bar" style={{ width: "70%" }}><span /></div>
+        <div className="d-flex justify-content-between align-items-center mb-1">
+          <div style={{ fontWeight: 700, fontSize: ".9rem" }}>{label}</div>
+          <div style={{ fontWeight: 700, fontSize: ".8rem", color: "#4b5563" }}>
+            {Math.round(progress)}%
+          </div>
+        </div>
+
+        <div className="center-progress-shell">
+          <div
+            className="center-progress-fill"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+
+        <small className="text-muted" style={{ fontSize: ".7rem" }}>
+          Preparing your data…
+        </small>
       </div>
     </div>
   );
