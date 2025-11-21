@@ -3,7 +3,14 @@
 // Uses your /api/movies/* endpoints; live suggestions & duplicate checks.
 // ✨ NEW: "Watched?" Yes/No toggle (is_watched) — sent to POST /api/movies and shown in preview.
 
-import React, { useEffect, useMemo, useRef, useState, memo, useCallback } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  memo,
+  useCallback,
+} from "react";
 
 // If your spinner file is named LoadingSpinner.jsx, adjust this import accordingly.
 import LoadingSpiner from "./LoadingSpiner";
@@ -48,7 +55,9 @@ export default function AddMovies() {
   const partIdRef = useRef(0);
   const addPart = useCallback(() => {
     const nextNum =
-      parts.length > 0 ? Math.max(...parts.map((p) => Number(p.part_number) || 2)) + 1 : 2;
+      parts.length > 0
+        ? Math.max(...parts.map((p) => Number(p.part_number) || 2)) + 1
+        : 2;
     const id = ++partIdRef.current;
     setParts((prev) => [...prev, { id, part_number: String(nextNum), year: "" }]);
   }, [parts]);
@@ -75,15 +84,27 @@ export default function AddMovies() {
 
   // Duplicate checks
   const [dupNameOnly, setDupNameOnly] = useState({ loading: false, duplicate: false });
-  const [dupComposite, setDupComposite] = useState({ loading: false, duplicate: false });
+  const [dupComposite, setDupComposite] = useState({
+    loading: false,
+    duplicate: false,
+  });
 
   // Suggestions
   const [suggestions, setSuggestions] = useState([]);
   const [suggestOpen, setSuggestOpen] = useState(false);
   const suggestBoxRef = useRef(null);
 
+  // 🆕 Detect mobile to avoid scroll-jumps when calling select() on inputs
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    if (typeof navigator !== "undefined") {
+      const ua = navigator.userAgent || navigator.vendor || "";
+      setIsMobile(/Mobi|Android|iPhone|iPad|iPod/i.test(ua));
+    }
+  }, []);
+
   // ----- Helpers -----
-  const toTitle = (s) =>
+  const toTitleLocal = (s) =>
     (s || "")
       .toLowerCase()
       .replace(/(^|\s)\S/g, (t) => t.toUpperCase())
@@ -389,7 +410,7 @@ export default function AddMovies() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          movie_name: toTitle(movieName),
+          movie_name: toTitleLocal(movieName),
           category_id: Number(categoryId),
           subcategory_id: isPositiveInt(subcategoryId)
             ? Number(subcategoryId)
@@ -557,7 +578,7 @@ export default function AddMovies() {
               const id = `genre-${g.genre_id}`;
               const checked = genreIds.includes(Number(g.genre_id));
               return (
-                // ⭐ UPDATED GENRES GRID: full-width on mobile, 2 columns on larger screens
+                // full-width on mobile, 2 columns on larger screens
                 <div className="col-12 col-sm-6" key={g.genre_id}>
                   <label
                     htmlFor={id}
@@ -699,7 +720,7 @@ export default function AddMovies() {
               )}
 
               <div className="flex-grow-1">
-                <div className="fw-semibold">{toTitle(movieName || "—")}</div>
+                <div className="fw-semibold">{toTitleLocal(movieName || "—")}</div>
                 <div className="text-muted small mt-1">Year: {year || "—"}</div>
                 <div className="small mt-2">
                   Genres:{" "}
@@ -711,9 +732,7 @@ export default function AddMovies() {
                   <div className="small mt-2">
                     Extra Parts:{" "}
                     {parts
-                      .map(
-                        (p) => `P${p.part_number || "?"}(${p.year || "—"})`
-                      )
+                      .map((p) => `P${p.part_number || "?"}(${p.year || "—"})`)
                       .join(", ")}
                   </div>
                 )}
@@ -935,7 +954,9 @@ export default function AddMovies() {
                       onChange={(e) => setMovieName(e.target.value)}
                       placeholder="Enter movie title"
                       required
-                      onFocus={() => suggestions.length && setSuggestOpen(true)}
+                      onFocus={() => {
+                        if (suggestions.length) setSuggestOpen(true);
+                      }}
                       autoComplete="off"
                     />
                     {suggestOpen && suggestions.length > 0 && (
@@ -955,7 +976,8 @@ export default function AddMovies() {
                             key={s}
                             onClick={() => chooseSuggestion(s)}
                             className="px-3 py-2 suggestion-item"
-                            style={{ cursor: "pointer" }}
+                            style={{ cursor: "pointer", color: "red" }}
+
                             onMouseEnter={(e) =>
                               (e.currentTarget.style.background =
                                 "rgba(13,110,253,.08)")
@@ -1001,7 +1023,10 @@ export default function AddMovies() {
                         e.preventDefault();
                         setYear(clamp4(e.clipboardData.getData("text")));
                       }}
-                      onFocus={(e) => e.target.select()}
+                      onFocus={(e) => {
+                        // avoid select() on mobile to prevent jump
+                        if (!isMobile) e.target.select();
+                      }}
                       autoComplete="off"
                       placeholder="e.g., 2024"
                       required
@@ -1059,6 +1084,7 @@ export default function AddMovies() {
                       clamp4={clamp4}
                       onlyDigits={onlyDigits}
                       isYear={isYear}
+                      isMobile={isMobile} // pass down to control focus behavior
                     />
                   </div>
 
@@ -1117,7 +1143,8 @@ export default function AddMovies() {
 
           {/* RIGHT: Live Preview / Tips */}
           <div className="col-12 col-lg-4">
-            <div className="preview-sticky position-sticky" style={{ top: 24 }}>
+            {/* 🆕: sticky only via CSS on desktop; no position-sticky class here */}
+            <div className="preview-sticky">
               <LivePreviewCard />
 
               <div className="card border-0 shadow-sm mt-4">
@@ -1153,11 +1180,19 @@ export default function AddMovies() {
         .focus-ring:focus { border-color: rgba(13,110,253,.6); box-shadow: 0 0 0 .2rem rgba(13,110,253,.15); }
         .suggestion-item { user-select: none; }
 
-        /* Disable sticky preview on mobile so page doesn't feel stuck / jump to top */
+        /* Desktop: make preview sticky */
+        @media (min-width: 992px) {
+          .preview-sticky {
+            position: sticky;
+            top: 24px;
+          }
+        }
+
+        /* Mobile: no sticky to avoid layout jumps */
         @media (max-width: 991.98px) {
           .preview-sticky {
-            position: static !important;
-            top: auto !important;
+            position: static;
+            top: auto;
           }
         }
 
@@ -1181,7 +1216,16 @@ export function toTitle(s) {
    PARTS SECTION (memoized rows)
    ========================= */
 
-function ExtraParts({ parts, addPart, updatePart, removePart, clamp4, onlyDigits, isYear }) {
+function ExtraParts({
+  parts,
+  addPart,
+  updatePart,
+  removePart,
+  clamp4,
+  onlyDigits,
+  isYear,
+  isMobile, // 🆕 to control focus behavior
+}) {
   return (
     <div className="mb-3">
       <div className="d-flex align-items-center justify-content-between mb-2">
@@ -1210,6 +1254,7 @@ function ExtraParts({ parts, addPart, updatePart, removePart, clamp4, onlyDigits
           clamp4={clamp4}
           onlyDigits={onlyDigits}
           isYear={isYear}
+          isMobile={isMobile}
         />
       ))}
     </div>
@@ -1223,6 +1268,7 @@ const PartRow = memo(function PartRow({
   clamp4,
   onlyDigits,
   isYear,
+  isMobile,
 }) {
   const partNum = String(row.part_number ?? "");
   const yearVal = String(row.year ?? "");
@@ -1251,13 +1297,12 @@ const PartRow = memo(function PartRow({
           }
           onPaste={(e) => {
             e.preventDefault();
-            const v = onlyDigits(e.clipboardData.getData("text")).replace(
-              /^0+/,
-              ""
-            );
+            const v = onlyDigits(e.clipboardData.getData("text")).replace(/^0+/, "");
             updatePart(row.id, "part_number", v);
           }}
-          onFocus={(e) => e.target.select()}
+          onFocus={(e) => {
+            if (!isMobile) e.target.select();
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter") e.preventDefault();
           }}
@@ -1284,7 +1329,9 @@ const PartRow = memo(function PartRow({
             e.preventDefault();
             updatePart(row.id, "year", clamp4(e.clipboardData.getData("text")));
           }}
-          onFocus={(e) => e.target.select()}
+          onFocus={(e) => {
+            if (!isMobile) e.target.select();
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter") e.preventDefault();
           }}

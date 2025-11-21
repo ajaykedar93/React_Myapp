@@ -4,7 +4,14 @@
 // suggestions, duplicate checks (name-only + composite), season add (>=2),
 // ✨ NEW: "Watched?" Yes/No toggle (is_watched) — sent to POST /api/series and shown in preview.
 
-import React, { useEffect, useMemo, useRef, useState, memo, useCallback } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  memo,
+  useCallback,
+} from "react";
 import LoadingSpiner from "./LoadingSpiner";
 
 const API_BASE = "https://express-backend-myapp.onrender.com/api";
@@ -46,7 +53,9 @@ export default function AddSeries() {
   const seasonIdRef = useRef(0);
   const addSeason = useCallback(() => {
     const nextNum =
-      seasons.length > 0 ? Math.max(...seasons.map((s) => Number(s.season_no) || 2)) + 1 : 2;
+      seasons.length > 0
+        ? Math.max(...seasons.map((s) => Number(s.season_no) || 2)) + 1
+        : 2;
     const id = ++seasonIdRef.current;
     setSeasons((prev) => [...prev, { id, season_no: String(nextNum), year: "" }]);
   }, [seasons]);
@@ -72,16 +81,31 @@ export default function AddSeries() {
   const genresBtnRef = useRef(null);
 
   // Duplicates (name-only + composite)
-  const [dupNameOnly, setDupNameOnly] = useState({ loading: false, duplicate: false });
-  const [dupComposite, setDupComposite] = useState({ loading: false, duplicate: false });
+  const [dupNameOnly, setDupNameOnly] = useState({
+    loading: false,
+    duplicate: false,
+  });
+  const [dupComposite, setDupComposite] = useState({
+    loading: false,
+    duplicate: false,
+  });
 
   // Suggestions
   const [suggestions, setSuggestions] = useState([]);
   const [suggestOpen, setSuggestOpen] = useState(false);
   const suggestBoxRef = useRef(null);
 
+  // 🆕 Detect mobile to avoid scroll-jumps when calling select() on inputs
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    if (typeof navigator !== "undefined") {
+      const ua = navigator.userAgent || navigator.vendor || "";
+      setIsMobile(/Mobi|Android|iPhone|iPad|iPod/i.test(ua));
+    }
+  }, []);
+
   // ----- Helpers -----
-  const toTitle = (s) =>
+  const toTitleLocal = (s) =>
     (s || "")
       .toLowerCase()
       .replace(/(^|\s)\S/g, (t) => t.toUpperCase())
@@ -374,7 +398,7 @@ export default function AddSeries() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          series_name: toTitle(seriesName),
+          series_name: toTitleLocal(seriesName),
           category_id: Number(categoryId),
           subcategory_id: isPositiveInt(subcategoryId)
             ? Number(subcategoryId)
@@ -684,7 +708,7 @@ export default function AddSeries() {
               )}
 
               <div className="flex-grow-1">
-                <div className="fw-semibold">{toTitle(seriesName || "—")}</div>
+                <div className="fw-semibold">{toTitleLocal(seriesName || "—")}</div>
                 <div className="text-muted small mt-1">Year: {year || "—"}</div>
                 <div className="small mt-2">
                   Genres:{" "}
@@ -940,7 +964,8 @@ export default function AddSeries() {
                             key={s}
                             onClick={() => chooseSuggestion(s)}
                             className="px-3 py-2 suggestion-item"
-                            style={{ cursor: "pointer" }}
+                            style={{ cursor: "pointer", color: "red" }}
+
                             onMouseEnter={(e) =>
                               (e.currentTarget.style.background =
                                 "rgba(13,110,253,.08)")
@@ -986,7 +1011,9 @@ export default function AddSeries() {
                         e.preventDefault();
                         setYear(clamp4(e.clipboardData.getData("text")));
                       }}
-                      onFocus={(e) => e.target.select()}
+                      onFocus={(e) => {
+                        if (!isMobile) e.target.select();
+                      }}
                       autoComplete="off"
                       placeholder="e.g., 2024 (optional)"
                     />
@@ -1043,6 +1070,7 @@ export default function AddSeries() {
                       clamp4={clamp4}
                       onlyDigits={onlyDigits}
                       isNullOrYear={isNullOrYear}
+                      isMobile={isMobile} // 🆕 pass mobile info down
                     />
                   </div>
 
@@ -1101,7 +1129,8 @@ export default function AddSeries() {
 
           {/* RIGHT: Live Preview / Tips */}
           <div className="col-12 col-lg-4">
-            <div className="preview-sticky position-sticky" style={{ top: 24 }}>
+            {/* 🆕 sticky controlled only via CSS media queries */}
+            <div className="preview-sticky">
               <LivePreviewCard />
 
               <div className="card border-0 shadow-sm mt-4">
@@ -1137,11 +1166,19 @@ export default function AddSeries() {
         .focus-ring:focus { border-color: rgba(32,201,151,.6); box-shadow: 0 0 0 .2rem rgba(32,201,151,.15); }
         .suggestion-item { user-select: none; }
 
-        /* Disable sticky preview on mobile so page doesn't feel stuck / auto-scroll to top */
+        /* Desktop: make preview sticky */
+        @media (min-width: 992px) {
+          .preview-sticky {
+            position: sticky;
+            top: 24px;
+          }
+        }
+
+        /* Mobile: no sticky to avoid layout / scroll jumps */
         @media (max-width: 991.98px) {
           .preview-sticky {
-            position: static !important;
-            top: auto !important;
+            position: static;
+            top: auto;
           }
         }
 
@@ -1173,6 +1210,7 @@ function ExtraSeasons({
   clamp4,
   onlyDigits,
   isNullOrYear,
+  isMobile, // 🆕
 }) {
   return (
     <div className="mb-3">
@@ -1202,6 +1240,7 @@ function ExtraSeasons({
           clamp4={clamp4}
           onlyDigits={onlyDigits}
           isNullOrYear={isNullOrYear}
+          isMobile={isMobile}
         />
       ))}
     </div>
@@ -1215,6 +1254,7 @@ const SeasonRow = memo(function SeasonRow({
   clamp4,
   onlyDigits,
   isNullOrYear,
+  isMobile,
 }) {
   const seasonNum = String(row.season_no ?? "");
   const yearVal = String(row.year ?? "");
@@ -1243,13 +1283,12 @@ const SeasonRow = memo(function SeasonRow({
           }
           onPaste={(e) => {
             e.preventDefault();
-            const v = onlyDigits(e.clipboardData.getData("text")).replace(
-              /^0+/,
-              ""
-            );
+            const v = onlyDigits(e.clipboardData.getData("text")).replace(/^0+/, "");
             updateSeason(row.id, "season_no", v);
           }}
-          onFocus={(e) => e.target.select()}
+          onFocus={(e) => {
+            if (!isMobile) e.target.select();
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter") e.preventDefault();
           }}
@@ -1276,7 +1315,9 @@ const SeasonRow = memo(function SeasonRow({
             e.preventDefault();
             updateSeason(row.id, "year", clamp4(e.clipboardData.getData("text")));
           }}
-          onFocus={(e) => e.target.select()}
+          onFocus={(e) => {
+            if (!isMobile) e.target.select();
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter") e.preventDefault();
           }}
