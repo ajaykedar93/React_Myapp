@@ -4,7 +4,8 @@ import "bootstrap/dist/css/bootstrap.min.css";
 const BASE = "https://express-backend-myapp.onrender.com";
 const API = {
   countries: `${BASE}/api/act_favorite/countries`,
-  create: `${BASE}/api/act_favorite`,
+  // IMPORTANT: must match router: "/user-act-favorite"
+  create: `${BASE}/api/act_favorite/user-act-favorite`,
 };
 
 // Convert selected files → Base64 strings
@@ -75,19 +76,21 @@ export default function AddFevActress() {
     const s = document.createElement("style");
     s.id = id;
     s.innerHTML = `
-      body { font-family: Inter, system-ui, sans-serif; background:#f9fafb; }
-      .card-glass { background:#fff;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.08);border:1px solid rgba(0,0,0,.05);transition:transform .2s ease }
-      .card-glass:hover{ transform: translateY(-2px); }
+      body { font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:#f3f4f6; }
+      .page-wrapper { min-height:100vh; display:flex; align-items:flex-start; justify-content:center; padding-top:1.5rem; padding-bottom:1.5rem; }
+      .card-glass { background:#fff;border-radius:16px;box-shadow:0 10px 30px rgba(15,23,42,.1);border:1px solid rgba(148,163,184,.35);transition:transform .2s ease, box-shadow .2s ease }
+      .card-glass:hover{ transform: translateY(-2px); box-shadow:0 14px 40px rgba(15,23,42,.18); }
       .dropzone { border:2px dashed #a5b4fc;background:#f8fafc;padding:16px;border-radius:12px;text-align:center;transition:all .2s ease }
       .dropzone.dragover{ background:#eef2ff;border-color:#6366f1 }
       .thumb { width:90px;height:90px;border-radius:10px;object-fit:cover;border:1px solid #d1d5db }
       .thumb-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:10px }
-      .center-backdrop { position:fixed;inset:0;background:rgba(0,0,0,.45);display:grid;place-items:center;z-index:2000;animation:fadeIn .25s ease }
-      .center-card { background:#fff;border-radius:16px;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.25);animation:scaleUp .25s ease }
+      .center-backdrop { position:fixed;inset:0;background:rgba(15,23,42,.65);display:grid;place-items:center;z-index:2000;animation:fadeIn .25s ease }
+      .center-card { background:#fff;border-radius:16px;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.28);animation:scaleUp .25s ease }
       .btn-gradient { background:linear-gradient(90deg,#2563eb,#8b5cf6,#22c55e);color:#fff;border:none;font-weight:600 }
-      .btn-gradient:hover{ opacity:.9 }
+      .btn-gradient:hover{ opacity:.9;color:#fff; }
       .muted-hint{ font-size:.85rem;color:#6b7280 }
-      @keyframes fadeIn{from{opacity:0}to{opacity:1}} @keyframes scaleUp{from{transform:scale(.9);opacity:0}to{transform:scale(1);opacity:1}}
+      @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+      @keyframes scaleUp{from{transform:scale(.9);opacity:0}to{transform:scale(1);opacity:1}}
     `;
     document.head.appendChild(s);
   }, []);
@@ -115,10 +118,10 @@ export default function AddFevActress() {
         console.log("Countries response:", j);
 
         let list = [];
-        if (Array.isArray(j)) {
-          list = j; // backend returns a bare array
-        } else if (j && Array.isArray(j.data)) {
-          list = j.data; // { success, data: [...] }
+        if (j && Array.isArray(j.data)) {
+          list = j.data; // { success:true, data:[...] }
+        } else if (Array.isArray(j)) {
+          list = j;
         } else if (j && Array.isArray(j.countries)) {
           list = j.countries;
         }
@@ -152,7 +155,7 @@ export default function AddFevActress() {
     const [src] = await toDataUrls([file]);
     setProfilePreview(src);
     setProfileBase64(src);
-    setProfileUrl(""); // prefer the dropped file
+    setProfileUrl("");
   };
 
   const onProfilePick = async (e) => {
@@ -247,7 +250,7 @@ export default function AddFevActress() {
     }, timeout);
   };
 
-  /* ---------- Create ---------- */
+  /* ---------- Create (POST /api/act_favorite/user-act-favorite) ---------- */
   const onCreate = async (e) => {
     e?.preventDefault?.();
     const favorite_actress_name = (form.favorite_actress_name || "").trim();
@@ -256,7 +259,7 @@ export default function AddFevActress() {
     if (!favorite_actress_name || !favorite_movie_series) {
       return showPopup(
         "Missing Fields",
-        "Actress name & movie/series required",
+        "Actress name & movie/series are required.",
         "danger"
       );
     }
@@ -266,17 +269,14 @@ export default function AddFevActress() {
       favorite_movie_series,
       age: form.age ? Number(form.age) : null,
       actress_dob: form.actress_dob || null,
-      // choose profile: base64 (drop) OR url
       profile_image:
         profileBase64 ||
         (profileUrl && isUrl(profileUrl) ? profileUrl.trim() : null),
       notes: form.notes || null,
     };
 
-    // Optional gallery (mix of base64 & URLs)
     if (imagesToAdd.length) payload.images = imagesToAdd;
 
-    // Backend accepts country_id OR country_name
     if (selectedCountryId) payload.country_id = Number(selectedCountryId);
     else if ((manualCountry || "").trim())
       payload.country_name = manualCountry.trim();
@@ -305,19 +305,12 @@ export default function AddFevActress() {
         throw new Error(msg);
       }
 
-      // be more tolerant for "success"
-      const isSuccess =
-        (json && json.success === true) ||
-        (json && json.status === "ok") ||
-        (json && json.status === "success") ||
-        (json && json.insertId) ||
-        (json && json.id);
-
-      if (!isSuccess) {
+      // Your backend: { success:true, data:{...} }
+      if (!json || json.success !== true) {
         throw new Error(json?.message || "Create failed (unexpected response)");
       }
 
-      showPopup("Success", "Actress added successfully", "success");
+      showPopup("Success", "Actress added successfully.", "success");
 
       // reset form
       setForm({
@@ -362,280 +355,306 @@ export default function AddFevActress() {
   };
 
   return (
-    <div className="container py-4">
-      <div className="text-center mb-3">
-        <h3
-          style={{
-            background: "linear-gradient(90deg,#2563eb,#8b5cf6,#22c55e)",
-            WebkitBackgroundClip: "text",
-            color: "transparent",
-            fontWeight: 800,
-          }}
-        >
-          Add Favourite Actress
-        </h3>
-        <p className="text-muted mb-0">
-          Drag & drop or paste URLs — your choice.
-        </p>
-      </div>
-
-      <div className="card card-glass p-3 p-sm-4">
-        {/* Country */}
-        <label className="form-label fw-semibold">Country</label>
-
-        {loadingCountries ? (
-          <div className="text-muted mb-3">
-            <span className="spinner-border spinner-border-sm text-primary me-2" />
-            Loading countries…
-          </div>
-        ) : countriesError ? (
-          <div className="alert alert-danger py-2">{countriesError}</div>
-        ) : (
-          <>
-            <select
-              className="form-select mb-2"
-              value={selectedCountryId}
-              onChange={(e) => {
-                setSelectedCountryId(e.target.value);
-                setManualCountry("");
-              }}
-            >
-              <option value="">— Choose from list —</option>
-              {countries.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.country_name || c.name || c.title}
-                </option>
-              ))}
-            </select>
-            {!selectedCountryId && (
-              <input
-                className="form-control"
-                placeholder="Or type a new country name"
-                value={manualCountry}
-                onChange={(e) => setManualCountry(e.target.value)}
-              />
-            )}
-          </>
-        )}
-
-        <hr className="my-3" />
-
-        {/* Actress Info */}
-        <form onSubmit={onCreate}>
-          <div className="row g-2">
-            <div className="col-md-6">
-              <label className="form-label">Actress Name *</label>
-              <input
-                className="form-control"
-                value={form.favorite_actress_name}
-                onChange={(e) =>
-                  setForm({ ...form, favorite_actress_name: e.target.value })
-                }
-                required
-              />
+    <div className="page-wrapper">
+      <div className="container">
+        <div className="row justify-content-center">
+          <div className="col-12 col-lg-9 col-xl-8">
+            <div className="text-center mb-3">
+              <h3
+                style={{
+                  background: "linear-gradient(90deg,#2563eb,#8b5cf6,#22c55e)",
+                  WebkitBackgroundClip: "text",
+                  color: "transparent",
+                  fontWeight: 800,
+                }}
+              >
+                Add Favourite Actress
+              </h3>
+              <p className="text-muted mb-0">
+                Drag &amp; drop or paste URLs — works beautifully on mobile &
+                desktop.
+              </p>
             </div>
-            <div className="col-md-3">
-              <label className="form-label">Age</label>
-              <input
-                type="number"
-                className="form-control"
-                value={form.age}
-                onChange={(e) => setForm({ ...form, age: e.target.value })}
-                min={0}
-              />
-            </div>
-            <div className="col-md-3">
-              <label className="form-label">DOB</label>
-              <input
-                type="date"
-                className="form-control"
-                value={form.actress_dob}
-                onChange={(e) =>
-                  setForm({ ...form, actress_dob: e.target.value })
-                }
-              />
-            </div>
-            <div className="col-md-6">
-              <label className="form-label">Favorite Movie/Series *</label>
-              <input
-                className="form-control"
-                value={form.favorite_movie_series}
-                onChange={(e) =>
-                  setForm({ ...form, favorite_movie_series: e.target.value })
-                }
-                required
-              />
-            </div>
-            <div className="col-md-6">
-              <label className="form-label">Notes</label>
-              <textarea
-                rows="2"
-                className="form-control"
-                value={form.notes}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              />
-            </div>
-          </div>
 
-          {/* Profile: drag/drop OR URL */}
-          <div className="mt-3">
-            <label className="form-label fw-semibold">
-              Profile Image (optional)
-            </label>
-            <div
-              ref={dzProfile}
-              className="dropzone"
-              onDrop={onProfileDrop}
-              onDragOver={(e) => {
-                e.preventDefault();
-                dzProfile.current?.classList.add("dragover");
-              }}
-              onDragLeave={() =>
-                dzProfile.current?.classList.remove("dragover")
-              }
-            >
-              <div>Drag & drop a profile image here, or</div>
-              <label className="btn btn-outline-primary btn-sm mt-2">
-                Select File
-                <input
-                  type="file"
-                  accept="image/*"
-                  hidden
-                  onChange={onProfilePick}
-                />
-              </label>
-              {profilePreview && (
-                <div className="text-center mt-3">
-                  <img
-                    src={profilePreview}
-                    alt="Profile"
-                    style={{
-                      width: 150,
-                      height: 150,
-                      borderRadius: 12,
-                      border: "1px solid #ccc",
-                      objectFit: "cover",
-                    }}
-                  />
+            <div className="card card-glass p-3 p-sm-4">
+              {/* Country */}
+              <div className="mb-3">
+                <label className="form-label fw-semibold">Country</label>
+
+                {loadingCountries ? (
+                  <div className="text-muted mb-2 d-flex align-items-center">
+                    <span className="spinner-border spinner-border-sm text-primary me-2" />
+                    Loading countries…
+                  </div>
+                ) : countriesError ? (
+                  <div className="alert alert-danger py-2 mb-2">
+                    {countriesError}
+                  </div>
+                ) : (
+                  <>
+                    <select
+                      className="form-select mb-2"
+                      value={selectedCountryId}
+                      onChange={(e) => {
+                        setSelectedCountryId(e.target.value);
+                        setManualCountry("");
+                      }}
+                    >
+                      <option value="">— Choose from list —</option>
+                      {countries.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.country_name || c.name || c.title}
+                        </option>
+                      ))}
+                    </select>
+                    {!selectedCountryId && (
+                      <input
+                        className="form-control"
+                        placeholder="Or type a new country name"
+                        value={manualCountry}
+                        onChange={(e) => setManualCountry(e.target.value)}
+                      />
+                    )}
+                  </>
+                )}
+              </div>
+
+              <hr className="my-3" />
+
+              {/* Actress Info */}
+              <form onSubmit={onCreate}>
+                <div className="row g-2">
+                  <div className="col-12 col-md-6">
+                    <label className="form-label">Actress Name *</label>
+                    <input
+                      className="form-control"
+                      value={form.favorite_actress_name}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          favorite_actress_name: e.target.value,
+                        })
+                      }
+                      required
+                    />
+                  </div>
+                  <div className="col-6 col-md-3">
+                    <label className="form-label">Age</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      value={form.age}
+                      onChange={(e) =>
+                        setForm({ ...form, age: e.target.value })
+                      }
+                      min={0}
+                    />
+                  </div>
+                  <div className="col-6 col-md-3">
+                    <label className="form-label">DOB</label>
+                    <input
+                      type="date"
+                      className="form-control"
+                      value={form.actress_dob}
+                      onChange={(e) =>
+                        setForm({ ...form, actress_dob: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="col-12 col-md-6">
+                    <label className="form-label">
+                      Favorite Movie/Series *
+                    </label>
+                    <input
+                      className="form-control"
+                      value={form.favorite_movie_series}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          favorite_movie_series: e.target.value,
+                        })
+                      }
+                      required
+                    />
+                  </div>
+                  <div className="col-12 col-md-6">
+                    <label className="form-label">Notes</label>
+                    <textarea
+                      rows="2"
+                      className="form-control"
+                      value={form.notes}
+                      onChange={(e) =>
+                        setForm({ ...form, notes: e.target.value })
+                      }
+                    />
+                  </div>
                 </div>
-              )}
-            </div>
-            <div className="mt-2">
-              <input
-                className="form-control"
-                placeholder="…or paste a profile image URL (https://… or data:image/…)"
 
-                value={profileUrl}
-                onChange={(e) => setProfileUrl(e.target.value)}
-              />
-              <div className="d-flex justify-content-end mt-2">
-                <button
-                  className="btn btn-sm btn-secondary"
-                  onClick={applyProfileUrl}
-                  type="button"
-                >
-                  Use URL
-                </button>
-              </div>
-              <div className="muted-hint">
-                If both are provided, last action wins (URL vs drop).
-              </div>
-            </div>
-          </div>
-
-          {/* Gallery: drag/drop OR multiple URLs */}
-          <div className="mt-4">
-            <label className="form-label fw-semibold">
-              Extra Images (optional)
-            </label>
-            <div
-              ref={dzGallery}
-              className="dropzone"
-              onDrop={onGalleryDrop}
-              onDragOver={(e) => {
-                e.preventDefault();
-                dzGallery.current?.classList.add("dragover");
-              }}
-              onDragLeave={() =>
-                dzGallery.current?.classList.remove("dragover")
-              }
-            >
-              <div>Drag & drop multiple images here, or</div>
-              <label className="btn btn-outline-primary btn-sm mt-2">
-                Select Files
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  hidden
-                  onChange={onGalleryPick}
-                />
-              </label>
-
-              {dropFiles.length > 0 && (
-                <>
-                  <div className="text-muted small mt-2">
-                    {dropFiles.length} image(s) selected
-                  </div>
-                  <div className="thumb-grid mt-2">
-                    {dropFiles.map((p) => (
-                      <div
-                        key={p.id}
-                        className="d-flex flex-column align-items-center gap-1"
-                      >
-                        <img className="thumb" src={p.src} alt="" />
-                        <button
-                          className="btn btn-sm btn-outline-danger"
-                          onClick={(ev) => {
-                            ev.preventDefault();
-                            removePreview(p.id);
+                {/* Profile: drag/drop OR URL */}
+                <div className="mt-3">
+                  <label className="form-label fw-semibold">
+                    Profile Image (optional)
+                  </label>
+                  <div
+                    ref={dzProfile}
+                    className="dropzone"
+                    onDrop={onProfileDrop}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      dzProfile.current?.classList.add("dragover");
+                    }}
+                    onDragLeave={() =>
+                      dzProfile.current?.classList.remove("dragover")
+                    }
+                  >
+                    <div>Drag &amp; drop a profile image here, or</div>
+                    <label className="btn btn-outline-primary btn-sm mt-2">
+                      Select File
+                      <input
+                        type="file"
+                        accept="image/*"
+                        hidden
+                        onChange={onProfilePick}
+                      />
+                    </label>
+                    {profilePreview && (
+                      <div className="text-center mt-3">
+                        <img
+                          src={profilePreview}
+                          alt="Profile"
+                          style={{
+                            width: 150,
+                            height: 150,
+                            borderRadius: 12,
+                            border: "1px solid #ccc",
+                            objectFit: "cover",
                           }}
-                        >
-                          Remove
-                        </button>
+                        />
                       </div>
-                    ))}
+                    )}
                   </div>
-                </>
-              )}
-            </div>
+                  <div className="mt-2">
+                    <input
+                      className="form-control"
+                      placeholder="…or paste a profile image URL (https://… or data:image/…)"
+                      value={profileUrl}
+                      onChange={(e) => setProfileUrl(e.target.value)}
+                    />
+                    <div className="d-flex justify-content-end mt-2">
+                      <button
+                        className="btn btn-sm btn-secondary"
+                        onClick={applyProfileUrl}
+                        type="button"
+                      >
+                        Use URL
+                      </button>
+                    </div>
+                    <div className="muted-hint">
+                      If both are provided, last action wins (URL vs drop).
+                    </div>
+                  </div>
+                </div>
 
-            <div className="mt-2">
-              <textarea
-                rows={3}
-                className="form-control"
-                placeholder={
-                  "…or paste image URLs (one per line)\nhttps://example.com/a.jpg\nhttps://example.com/b.png"
-                }
-                value={galleryUrls}
-                onChange={(e) => setGalleryUrls(e.target.value)}
-              />
-              <div className="d-flex justify-content-end mt-2">
-                <button
-                  className="btn btn-sm btn-secondary"
-                  onClick={addGalleryUrls}
-                  type="button"
-                >
-                  Add URLs
-                </button>
-              </div>
+                {/* Gallery: drag/drop OR multiple URLs */}
+                <div className="mt-4">
+                  <label className="form-label fw-semibold">
+                    Extra Images (optional)
+                  </label>
+                  <div
+                    ref={dzGallery}
+                    className="dropzone"
+                    onDrop={onGalleryDrop}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      dzGallery.current?.classList.add("dragover");
+                    }}
+                    onDragLeave={() =>
+                      dzGallery.current?.classList.remove("dragover")
+                    }
+                  >
+                    <div>Drag &amp; drop multiple images here, or</div>
+                    <label className="btn btn-outline-primary btn-sm mt-2">
+                      Select Files
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        hidden
+                        onChange={onGalleryPick}
+                      />
+                    </label>
+
+                    {dropFiles.length > 0 && (
+                      <>
+                        <div className="text-muted small mt-2">
+                          {dropFiles.length} image(s) selected
+                        </div>
+                        <div className="thumb-grid mt-2">
+                          {dropFiles.map((p) => (
+                            <div
+                              key={p.id}
+                              className="d-flex flex-column align-items-center gap-1"
+                            >
+                              <img className="thumb" src={p.src} alt="" />
+                              <button
+                                className="btn btn-sm btn-outline-danger"
+                                onClick={(ev) => {
+                                  ev.preventDefault();
+                                  removePreview(p.id);
+                                }}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="mt-2">
+                    <textarea
+                      rows={3}
+                      className="form-control"
+                      placeholder={
+                        "…or paste image URLs (one per line)\nhttps://example.com/a.jpg\nhttps://example.com/b.png"
+                      }
+                      value={galleryUrls}
+                      onChange={(e) => setGalleryUrls(e.target.value)}
+                    />
+                    <div className="d-flex justify-content-end mt-2">
+                      <button
+                        className="btn btn-sm btn-secondary"
+                        onClick={addGalleryUrls}
+                        type="button"
+                      >
+                        Add URLs
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="text-end mt-4">
+                  <button
+                    type="button"
+                    className="btn btn-light me-2"
+                    onClick={resetAll}
+                  >
+                    Reset
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn-gradient"
+                    disabled={busy}
+                  >
+                    {busy ? "Saving…" : "Save"}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
-
-          {/* Actions */}
-          <div className="text-end mt-4">
-            <button
-              type="button"
-              className="btn btn-light me-2"
-              onClick={resetAll}
-            >
-              Reset
-            </button>
-            <button type="submit" className="btn btn-gradient" disabled={busy}>
-              {busy ? "Saving…" : "Save"}
-            </button>
-          </div>
-        </form>
+        </div>
       </div>
 
       {/* Popup */}

@@ -2,58 +2,95 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import Portal from "../../components/Portal";
 
-/** FULL detail view: profile + info + ALL images (responsive), plus 4 actions */
+/** FULL detail view: profile + info + ALL images (responsive), plus smooth loading */
+
 const BASE = "https://express-backend-myapp.onrender.com";
+
+// ==== API ENDPOINTS THAT MATCH userActFavorite.js ====
+// Backend mounts at: app.use("/api/act_favorite", require("./routes/userActFavorite"));
 const API = {
-  list: (q, country, name, series) => {
-    const u = new URL(`${BASE}/api/act_favorite`);
-    if (q) u.searchParams.set("q", q);               // ✅ fixed: no trailing space
-    if (country) u.searchParams.set("country", country);
-    if (name) u.searchParams.set("name", name);
-    if (series) u.searchParams.set("series", series);
+  // GET /api/act_favorite/user-act-favorite?q=...
+  list: (q, countryId) => {
+    const u = new URL(`${BASE}/api/act_favorite/user-act-favorite`);
+    if (q) u.searchParams.set("q", q);
+    if (countryId) u.searchParams.set("country_id", countryId);
     return u.toString();
   },
-  onePaged:   (id, limit) => `${BASE}/api/act_favorite/${id}?images=page&offset=0&limit=${limit}`,
-  imagesPage: (id, o, l)  => `${BASE}/api/act_favorite/${id}/images?offset=${o}&limit=${l}`,
-  append:     (id)        => `${BASE}/api/act_favorite/${id}/images/append`,
-  delImages:  (id)        => `${BASE}/api/act_favorite/${id}/images/delete`,
-  delActress: (id)        => `${BASE}/api/act_favorite/${id}`,
+
+  // GET /api/act_favorite/user-act-favorite/:id
+  one: (id) => `${BASE}/api/act_favorite/user-act-favorite/${id}`,
+
+  // PATCH /api/act_favorite/user-act-favorite/:id/images
+  images: (id) => `${BASE}/api/act_favorite/user-act-favorite/${id}/images`,
+
+  // DELETE /api/act_favorite/user-act-favorite/:id
+  delActress: (id) => `${BASE}/api/act_favorite/user-act-favorite/${id}`,
 };
 
-const PAGE_LIMIT_IMAGES = 60;  // a bit higher so we can show more on full page
 const PAGE_SIZE_LIST = 5;
 
 /* ---------- utils ---------- */
 async function safeFetchJSON(url, options) {
   let resp;
-  try { resp = await fetch(url, options); }
-  catch (e) { throw new Error("Network error: " + (e?.message || "failed to fetch")); }
+  try {
+    resp = await fetch(url, options);
+  } catch (e) {
+    throw new Error("Network error: " + (e?.message || "failed to fetch"));
+  }
   if (!resp.ok) {
     let msg = `${resp.status}`;
-    try { const j = await resp.json(); msg = j?.error || msg; } catch {}
+    try {
+      const j = await resp.json();
+      msg = j?.message || j?.error || msg;
+    } catch {}
     throw new Error(msg);
   }
   if (resp.status === 204) return {};
-  try { return await resp.json(); } catch { return {}; }
+
+  let payload;
+  try {
+    payload = await resp.json();
+  } catch {
+    return {};
+  }
+
+  // unwrap your standard { success, data, meta } shape
+  if (payload && typeof payload === "object" && "data" in payload) {
+    return payload.data;
+  }
+  return payload;
 }
+
 const isFiniteNum = (n) => Number.isFinite(Number(n));
 
 const normalizeUrl = (u) => {
-  try { const x = new URL(String(u)); return `${x.origin}${x.pathname}`.trim(); }
-  catch { return String(u || "").split("#")[0].split("?")[0].trim(); }
+  try {
+    const x = new URL(String(u));
+    return `${x.origin}${x.pathname}`.trim();
+  } catch {
+    return String(u || "").split("#")[0].split("?")[0].trim();
+  }
 };
 const uniqueImages = (arr) => {
-  const seen = new Set(); const out = [];
+  const seen = new Set();
+  const out = [];
   for (const u of arr || []) {
     const key = normalizeUrl(u);
-    if (key && !seen.has(key)) { seen.add(key); out.push(u); }
+    if (key && !seen.has(key)) {
+      seen.add(key);
+      out.push(u);
+    }
   }
   return out;
 };
 
 /* ---------- % Progress overlay (centered via Portal) ---------- */
 function useProgress() {
-  const [state, setState] = useState({ visible: false, percent: 0, label: "" });
+  const [state, setState] = useState({
+    visible: false,
+    percent: 0,
+    label: "",
+  });
   const timerRef = useRef(null);
 
   const start = (label = "Loading…", initial = 10) => {
@@ -62,7 +99,7 @@ function useProgress() {
     timerRef.current = setInterval(() => {
       setState((s) => ({
         ...s,
-        percent: Math.min(90, s.percent + Math.ceil((100 - s.percent) * 0.08))
+        percent: Math.min(90, s.percent + Math.ceil((100 - s.percent) * 0.08)),
       }));
     }, 180);
   };
@@ -76,9 +113,13 @@ function useProgress() {
       350
     );
   };
-  useEffect(() => () => timerRef.current && clearInterval(timerRef.current), []);
+  useEffect(
+    () => () => timerRef.current && clearInterval(timerRef.current),
+    []
+  );
   return { state, start, bump, done, set: setState };
 }
+
 function LoadingOverlay({ visible, percent, label }) {
   if (!visible) return null;
   return (
@@ -91,13 +132,14 @@ function LoadingOverlay({ visible, percent, label }) {
           zIndex: 30000,
           padding: 12,
           paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)",
+          transition: "background 0.25s ease-out",
         }}
         aria-busy="true"
         aria-live="polite"
       >
         <div
           className="bg-white rounded-3 shadow p-3"
-          style={{ width: "min(440px, 90vw)" }}
+          style={{ width: "min(440px, 90vw)", transform: "translateY(0)" }}
         >
           <div className="fw-bold mb-2 text-center">{label}</div>
           <div
@@ -108,12 +150,13 @@ function LoadingOverlay({ visible, percent, label }) {
             aria-valuenow={Math.round(percent)}
           >
             <div
-              className="progress-bar"
+              className="progress-bar bg-success"
               style={{
                 width: `${Math.max(
                   1,
                   Math.min(100, Math.round(percent))
                 )}%`,
+                transition: "width 0.25s ease-out",
               }}
             />
           </div>
@@ -127,7 +170,13 @@ function LoadingOverlay({ visible, percent, label }) {
 }
 
 /* ---------- Professional center popups (Portal) ---------- */
-function CenterPopup({ open, title = "Info", message = "", tone = "secondary", onClose }) {
+function CenterPopup({
+  open,
+  title = "Info",
+  message = "",
+  tone = "secondary",
+  onClose,
+}) {
   if (!open) return null;
   const border =
     tone === "danger"
@@ -169,7 +218,14 @@ function CenterPopup({ open, title = "Info", message = "", tone = "secondary", o
     </Portal>
   );
 }
-function ConfirmCenter({ open, title = "Confirm", message = "", tone = "danger", onOk, onCancel }) {
+function ConfirmCenter({
+  open,
+  title = "Confirm",
+  message = "",
+  tone = "danger",
+  onOk,
+  onCancel,
+}) {
   if (!open) return null;
   const titleClass = tone === "danger" ? "text-danger" : "";
   return (
@@ -206,13 +262,28 @@ function ConfirmCenter({ open, title = "Confirm", message = "", tone = "danger",
   );
 }
 
-/* ---------- Lightbox (zoom fullscreen) ---------- */
-function Lightbox({ src, onClose }) {
-  const [scale, setScale] = useState(1);
+/* ---------- Lightbox (zoom fullscreen + drag/pan + next/prev) ---------- */
+function Lightbox({ images, index, onChangeIndex, onClose }) {
+  const [view, setView] = useState({
+    scale: 1,
+    offsetX: 0,
+    offsetY: 0,
+    isPanning: false,
+    lastX: 0,
+    lastY: 0,
+  });
+
+  const hasImages = Array.isArray(images) && images.length > 0;
+  const validIndex =
+    typeof index === "number" && hasImages && index >= 0 && index < images.length;
 
   useEffect(() => {
-    if (!src) return;
-    const onKey = (e) => e.key === "Escape" && onClose();
+    if (!validIndex) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowRight") handleNext();
+      if (e.key === "ArrowLeft") handlePrev();
+    };
     document.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -220,13 +291,93 @@ function Lightbox({ src, onClose }) {
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;
     };
-  }, [src, onClose]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [validIndex, index, images?.length]);
 
-  if (!src) return null;
+  // reset zoom & pan when image changes
+  useEffect(() => {
+    setView({
+      scale: 1,
+      offsetX: 0,
+      offsetY: 0,
+      isPanning: false,
+      lastX: 0,
+      lastY: 0,
+    });
+  }, [index]);
 
-  const blockTouch = (e) => {
+  if (!validIndex) return null;
+
+  const currentSrc = images[index];
+
+  const handleNext = () => {
+    if (!hasImages) return;
+    const next = (index + 1) % images.length;
+    onChangeIndex(next);
+  };
+  const handlePrev = () => {
+    if (!hasImages) return;
+    const prev = (index - 1 + images.length) % images.length;
+    onChangeIndex(prev);
+  };
+
+  const onPointerDown = (e) => {
+    // left button or touch
+    if (e.button !== undefined && e.button !== 0) return;
     e.preventDefault();
-    e.stopPropagation();
+    const x = e.clientX ?? (e.touches?.[0]?.clientX || 0);
+    const y = e.clientY ?? (e.touches?.[0]?.clientY || 0);
+
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    setView((prev) => ({
+      ...prev,
+      isPanning: true,
+      lastX: x,
+      lastY: y,
+    }));
+  };
+
+  const onPointerMove = (e) => {
+    setView((prev) => {
+      if (!prev.isPanning) return prev;
+      const x = e.clientX ?? (e.touches?.[0]?.clientX || 0);
+      const y = e.clientY ?? (e.touches?.[0]?.clientY || 0);
+      const dx = x - prev.lastX;
+      const dy = y - prev.lastY;
+      return {
+        ...prev,
+        offsetX: prev.offsetX + dx,
+        offsetY: prev.offsetY + dy,
+        lastX: x,
+        lastY: y,
+      };
+    });
+  };
+
+  const endPan = (e) => {
+    e?.currentTarget?.releasePointerCapture?.(e.pointerId);
+    setView((prev) => ({ ...prev, isPanning: false }));
+  };
+
+  const zoomOut = () => {
+    setView((prev) => {
+      const nextScale = Math.max(1, Number((prev.scale * 0.9).toFixed(3)));
+      // when zooming back near 1, gently bring pan closer to center
+      const factor = nextScale === 1 ? 0.5 : 1;
+      return {
+        ...prev,
+        scale: nextScale,
+        offsetX: prev.offsetX * factor,
+        offsetY: prev.offsetY * factor,
+      };
+    });
+  };
+
+  const zoomIn = () => {
+    setView((prev) => {
+      const nextScale = Math.min(6, Number((prev.scale * 1.1).toFixed(3)));
+      return { ...prev, scale: nextScale };
+    });
   };
 
   return (
@@ -245,60 +396,104 @@ function Lightbox({ src, onClose }) {
         }}
         onClick={(e) => e.target === e.currentTarget && onClose()}
       >
+        {/* IMAGE AREA */}
         <div
           className="flex-grow-1 d-flex align-items-center justify-content-center w-100"
-          style={{ overflow: "hidden" }}
-          onWheel={blockTouch}
-          onTouchStart={blockTouch}
-          onTouchMove={blockTouch}
-          onTouchEnd={blockTouch}
+          style={{
+            overflow: "hidden",
+            touchAction: "none", // important for mobile: allow free pan
+          }}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={endPan}
+          onPointerCancel={endPan}
         >
-          <img
-            src={src}
-            alt="preview"
+          <div
+            // >>> wrapper fills available area, then we scale it
             style={{
-              maxWidth: "96vw",
-              maxHeight: "70vh",
-              transform: `scale(${scale})`,
+              width: "100%",
+              height: "100%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transform: `translate3d(${view.offsetX}px, ${view.offsetY}px, 0) scale(${view.scale})`,
               transformOrigin: "center center",
-              userSelect: "none",
-              pointerEvents: "none",
-              WebkitUserSelect: "none",
-              WebkitTouchCallout: "none",
+              transition: view.isPanning ? "none" : "transform 0.12s ease-out",
+              cursor:
+                view.scale > 1
+                  ? view.isPanning
+                    ? "grabbing"
+                    : "grab"
+                  : "default",
             }}
-            draggable={false}
-          />
+          >
+            <img
+              src={currentSrc}
+              alt="preview"
+              style={{
+                width: "100%",     // >>> take full container
+                height: "100%",    // >>> take full container
+                objectFit: "contain", // >>> ALWAYS show full image (no crop)
+                userSelect: "none",
+                WebkitUserSelect: "none",
+                WebkitTouchCallout: "none",
+                display: "block",
+              }}
+              draggable={false}
+            />
+          </div>
         </div>
 
+        {/* CONTROLS – compact, auto-wrap on small phones */}
         <div
-          className="d-flex align-items-center justify-content-center gap-2"
+          className="d-flex flex-wrap justify-content-center gap-1 w-100"
           style={{
-            position: "sticky",
-            bottom: 0,
-            padding: "10px 0",
+            paddingTop: 6,
+            paddingBottom: 8,
+            marginBottom: "calc(env(safe-area-inset-bottom, 16px))",
             pointerEvents: "auto",
           }}
-          onClick={(e) => e.stopPropagation()}
-          onTouchStart={(e) => e.stopPropagation()}
         >
           <button
-            className="btn btn-light btn-lg"
-            onClick={() =>
-              setScale((s) => Math.max(1, Number((s * 0.9).toFixed(3))))
-            }
+            className="btn btn-light btn-sm px-2 py-1"
+            style={{ minWidth: 70, fontSize: 12 }}
+            onClick={handlePrev}
           >
-            −
+            ◀ Prev
           </button>
           <button
-            className="btn btn-light btn-lg"
-            onClick={() =>
-              setScale((s) => Math.min(6, Number((s * 1.1).toFixed(3))))
-            }
+            className="btn btn-light btn-sm px-2 py-1"
+            style={{ minWidth: 70, fontSize: 12 }}
+            onClick={zoomOut}
           >
-            +
+            − Zoom
           </button>
-          <button className="btn btn-danger btn-lg" onClick={onClose}>
-            Close
+          <span
+            className="text-white small d-flex align-items-center justify-content-center px-2"
+            style={{ fontSize: 12 }}
+          >
+            {Math.round(view.scale * 100)}%
+          </span>
+          <button
+            className="btn btn-light btn-sm px-2 py-1"
+            style={{ minWidth: 70, fontSize: 12 }}
+            onClick={zoomIn}
+          >
+            + Zoom
+          </button>
+          <button
+            className="btn btn-light btn-sm px-2 py-1"
+            style={{ minWidth: 70, fontSize: 12 }}
+            onClick={handleNext}
+          >
+            Next ▶
+          </button>
+          <button
+            className="btn btn-danger btn-sm px-2 py-1"
+            style={{ minWidth: 70, fontSize: 12 }}
+            onClick={onClose}
+          >
+            Close ✕
           </button>
         </div>
       </div>
@@ -370,7 +565,10 @@ export default function ActressesPage() {
   });
 
   return (
-    <div className="container-fluid" style={{ paddingTop: 12, paddingBottom: 24 }}>
+    <div
+      className="container-fluid"
+      style={{ paddingTop: 12, paddingBottom: 24 }}
+    >
       {!selectedId ? (
         <ListView
           registerListApi={(api) => (listApiRef.current = api)}
@@ -486,7 +684,7 @@ function ListView({ onOpen, progress, registerListApi }) {
     };
   }, []);
 
-  const filtered = React.useMemo(() => {
+  const filtered = useMemo(() => {
     const s = String(q || "").trim().toLowerCase();
     if (!s) return all;
     return all.filter(
@@ -560,15 +758,19 @@ function ListView({ onOpen, progress, registerListApi }) {
                     }}
                   >
                     <div
-                      className="rounded-3 bg-light overflow-hidden"
+                      className="rounded-3 bg-black overflow-hidden d-flex align-items-center justify-content-center"
                       style={{ width: 84, height: 84 }}
                     >
                       {r.profile_image ? (
                         <img
                           src={r.profile_image}
                           alt={r.favorite_actress_name}
-                          className="w-100 h-100"
-                          style={{ objectFit: "cover" }}
+                          style={{
+                            maxWidth: "100%",
+                            maxHeight: "100%",
+                            objectFit: "contain",
+                            display: "block",
+                          }}
                           loading="lazy"
                         />
                       ) : (
@@ -636,7 +838,7 @@ function DetailView({ id, onClose, progress, onImagesDelta, onDeleteActress }) {
   const [err, setErr] = useState("");
   const [actress, setActress] = useState(null);
   const [images, setImages] = useState([]);
-  const [lightboxSrc, setLightboxSrc] = useState("");
+  const [lightboxIndex, setLightboxIndex] = useState(null);
   const [confirmDeleteActress, setConfirmDeleteActress] = useState(false);
   const [errorPopup, setErrorPopup] = useState({
     open: false,
@@ -644,8 +846,14 @@ function DetailView({ id, onClose, progress, onImagesDelta, onDeleteActress }) {
   });
 
   useEffect(() => {
-    setLightboxSrc("");
+    setLightboxIndex(null);
   }, [id]);
+
+  const openLightboxAt = (idx) => {
+    if (!Array.isArray(images) || !images.length) return;
+    if (idx < 0 || idx >= images.length) return;
+    setLightboxIndex(idx);
+  };
 
   const load = async () => {
     if (!isFiniteNum(id) || Number(id) <= 0) {
@@ -658,9 +866,17 @@ function DetailView({ id, onClose, progress, onImagesDelta, onDeleteActress }) {
       setLoading(true);
       setErr("");
       progress.start("Fetching profile…", 14);
-      const data = await safeFetchJSON(API.onePaged(id, PAGE_LIMIT_IMAGES));
+      const data = await safeFetchJSON(API.one(id));
+
+      const mergedImages = uniqueImages(
+        [
+          data.profile_image,
+          ...(Array.isArray(data.images) ? data.images : []),
+        ].filter(Boolean)
+      );
+
       setActress(data);
-      setImages(uniqueImages(data.images || []));
+      setImages(mergedImages);
       progress.done();
     } catch (e) {
       setErr(e.message || "Failed to load");
@@ -678,19 +894,15 @@ function DetailView({ id, onClose, progress, onImagesDelta, onDeleteActress }) {
   const reloadAllImages = async () => {
     try {
       progress.start("Refreshing images…", 12);
-      let all = [];
-      let offset = 0;
-      while (true) {
-        const d = await safeFetchJSON(
-          API.imagesPage(id, offset, PAGE_LIMIT_IMAGES)
-        );
-        const imgs = uniqueImages(d.images || []);
-        all = uniqueImages([...all, ...imgs]);
-        offset += imgs.length;
-        const total = Number(d.total || all.length);
-        if (offset >= total || imgs.length === 0) break;
-      }
-      setImages(all);
+      const data = await safeFetchJSON(API.one(id));
+      const merged = uniqueImages(
+        [
+          data.profile_image,
+          ...(Array.isArray(data.images) ? data.images : []),
+        ].filter(Boolean)
+      );
+      setActress(data);
+      setImages(merged);
       progress.done();
     } catch (e) {
       progress.done();
@@ -704,15 +916,7 @@ function DetailView({ id, onClose, progress, onImagesDelta, onDeleteActress }) {
   const doDeleteActress = async () => {
     try {
       progress.start("Deleting…", 10);
-      const r = await fetch(API.delActress(id), { method: "DELETE" });
-      if (r.status !== 204) {
-        let msg = `Delete failed: ${r.status}`;
-        try {
-          const j = await r.json();
-          msg = j?.error || msg;
-        } catch {}
-        throw new Error(msg);
-      }
+      await safeFetchJSON(API.delActress(id), { method: "DELETE" });
       progress.done();
       onDeleteActress?.();
       onClose && onClose();
@@ -748,7 +952,7 @@ function DetailView({ id, onClose, progress, onImagesDelta, onDeleteActress }) {
   return (
     <>
       <div className="mb-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <button className="btn btn-light" onClick={onClose}>
+        <button className="btn btn-light btn-sm" onClick={onClose}>
           ← Back to list
         </button>
         <div className="fw-bold small text-muted">
@@ -760,7 +964,7 @@ function DetailView({ id, onClose, progress, onImagesDelta, onDeleteActress }) {
       <div className="row g-3 align-items-stretch mb-3">
         <div className="col-12 col-md-5 col-lg-4">
           <div
-            className="rounded-3 bg-light overflow-hidden shadow-sm h-100"
+            className="rounded-3 bg-black shadow-sm h-100 d-flex align-items-center justify-content-center"
             style={{ minHeight: 260 }}
           >
             {!actress.profile_image ? (
@@ -771,9 +975,21 @@ function DetailView({ id, onClose, progress, onImagesDelta, onDeleteActress }) {
               <img
                 src={actress.profile_image}
                 alt={actress.favorite_actress_name}
-                className="w-100 h-100"
-                style={{ objectFit: "cover", cursor: "zoom-in" }}
-                onClick={() => setLightboxSrc(actress.profile_image)}
+                style={{
+                  maxWidth: "100%",
+                  maxHeight: "100%",
+                  objectFit: "contain",
+                  cursor: "zoom-in",
+                  display: "block",
+                }}
+                onClick={() => {
+                  const idx = images.findIndex(
+                    (u) =>
+                      normalizeUrl(u) ===
+                      normalizeUrl(actress.profile_image)
+                  );
+                  openLightboxAt(idx >= 0 ? idx : 0);
+                }}
                 loading="eager"
               />
             )}
@@ -832,14 +1048,9 @@ function DetailView({ id, onClose, progress, onImagesDelta, onDeleteActress }) {
                 </div>
               )}
 
-              {/* Actions – full width on mobile */}
+              {/* Actions – exactly 3 buttons, mobile-friendly */}
               <div className="mt-3">
-                <div className="d-grid d-md-flex gap-2">
-                  <ViewAllImagesButton
-                    actressId={actress.id}
-                    onOpenImage={(src) => setLightboxSrc(src)}
-                    progress={progress}
-                  />
+                <div className="d-grid d-md-flex flex-wrap gap-2">
                   <DeleteImagesButton
                     actressId={actress.id}
                     progress={progress}
@@ -869,7 +1080,7 @@ function DetailView({ id, onClose, progress, onImagesDelta, onDeleteActress }) {
         </div>
       </div>
 
-      {/* FULL GALLERY – responsive grid fills the page */}
+      {/* ALL IMAGES – scrollable gallery section only */}
       <div className="card border-0 shadow-sm mb-3">
         <div className="card-body">
           <div className="d-flex justify-content-between align-items-center mb-2">
@@ -884,34 +1095,56 @@ function DetailView({ id, onClose, progress, onImagesDelta, onDeleteActress }) {
               No extra images yet.
             </div>
           ) : (
-            <div className="row g-2">
-              {images.map((url, i) => (
-                <div
-                  className="col-4 col-sm-3 col-md-2 col-lg-2"
-                  key={normalizeUrl(url) + "-" + i}
-                >
-                  <button
-                    className="btn p-0 w-100 border-0"
-                    onClick={() => setLightboxSrc(url)}
-                    aria-label="Open image"
+            <div
+              style={{
+                maxHeight: "60vh",
+                overflowY: "auto",
+                WebkitOverflowScrolling: "touch",
+                paddingRight: 4,
+              }}
+            >
+              <div className="row g-2">
+                {images.map((url, i) => (
+                  <div
+                    className="col-4 col-sm-3 col-md-2 col-lg-2"
+                    key={normalizeUrl(url) + "-" + i}
                   >
-                    <img
-                      src={url}
-                      alt={`img-${i}`}
-                      className="w-100 rounded-2"
-                      style={{ aspectRatio: "1/1", objectFit: "cover" }}
-                      loading="lazy"
-                    />
-                  </button>
-                </div>
-              ))}
+                    <button
+                      className="btn p-0 w-100 border-0 d-flex align-items-center justify-content-center"
+                      style={{
+                        aspectRatio: "1/1",
+                        background: "#000",
+                      }}
+                      onClick={() => openLightboxAt(i)}
+                      aria-label="Open image"
+                    >
+                      <img
+                        src={url}
+                        alt={`img-${i}`}
+                        style={{
+                          maxWidth: "100%",
+                          maxHeight: "100%",
+                          objectFit: "contain",
+                          display: "block",
+                        }}
+                        loading="lazy"
+                      />
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Lightbox preview */}
-      <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc("")} />
+      {/* Lightbox gallery with zoom + drag/pan */}
+      <Lightbox
+        images={images}
+        index={lightboxIndex}
+        onChangeIndex={setLightboxIndex}
+        onClose={() => setLightboxIndex(null)}
+      />
 
       {/* Delete actress confirm + errors */}
       <ConfirmCenter
@@ -939,7 +1172,10 @@ function AddImagesButton({ actressId, progress, onImagesAdded }) {
   const [addedCount, setAddedCount] = useState(0);
   return (
     <>
-      <button className="btn btn-primary w-100 w-md-auto" onClick={() => setOpen(true)}>
+      <button
+        className="btn btn-primary w-100 w-md-auto"
+        onClick={() => setOpen(true)}
+      >
         Add Extra Image
       </button>
       {open && (
@@ -995,34 +1231,7 @@ function DeleteImagesButton({ actressId, progress, onImagesDeleted }) {
           />
         </Modal>
       )}
-      {deletedCount > 0 && (
-        <div className="small text-success text-center">
-          Deleted {deletedCount} image(s).
-        </div>
-      )}
-    </>
-  );
-}
-function ViewAllImagesButton({ actressId, onOpenImage, progress }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <button
-        className="btn btn-light w-100 w-md-auto"
-        onClick={() => setOpen(true)}
-      >
-        Fullscreen Gallery
-      </button>
-      {open && (
-        <Modal title="All Images (Fullscreen Mode)" onClose={() => setOpen(false)}>
-          <ViewAllImages
-            actressId={actressId}
-            onClose={() => setOpen(false)}
-            onOpenImage={onOpenImage}
-            progress={progress}
-          />
-        </Modal>
-      )}
+      {deletedCount > 0 && null}
     </>
   );
 }
@@ -1037,14 +1246,15 @@ function AddImages({ actressId, onClose, onUploaded, progress }) {
     try {
       setBusy(true);
       progress.start("Uploading…", 12);
-      // NOTE: for real app you should upload file data; here it's demo using object URLs
+      // NOTE: real app should upload real URLs or base64;
+      // here we just demo with Object URLs
       const urls = uniqueImages(
         Array.from(filesList).map((f) => URL.createObjectURL(f))
       );
-      await safeFetchJSON(API.append(actressId), {
-        method: "POST",
+      await safeFetchJSON(API.images(actressId), {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ images: urls }),
+        body: JSON.stringify({ add: urls }),
       });
       progress.done();
       onUploaded && onUploaded(urls.length);
@@ -1110,19 +1320,9 @@ function DeleteImages({ actressId, onClose, progress, onDeleted }) {
   const loadAll = async () => {
     progress.start("Loading images…", 10);
     try {
-      let all = [];
-      let offset = 0;
-      while (true) {
-        const d = await safeFetchJSON(
-          API.imagesPage(actressId, offset, PAGE_LIMIT_IMAGES)
-        );
-        const imgs = uniqueImages(d.images || []);
-        all = uniqueImages([...all, ...imgs]);
-        offset += imgs.length;
-        const total = Number(d.total || all.length);
-        if (offset >= total || imgs.length === 0) break;
-      }
-      setList(all);
+      const data = await safeFetchJSON(API.one(actressId));
+      const imgs = uniqueImages(data.images || []);
+      setList(imgs);
     } catch (e) {
       setErrorPopup({
         open: true,
@@ -1151,10 +1351,10 @@ function DeleteImages({ actressId, onClose, progress, onDeleted }) {
       progress.start("Deleting images…", 12);
       const count = selected.size;
       if (count > 0) {
-        await safeFetchJSON(API.delImages(actressId), {
-          method: "POST",
+        await safeFetchJSON(API.images(actressId), {
+          method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ urls: Array.from(selected) }),
+          body: JSON.stringify({ remove: Array.from(selected) }),
         });
         setList((prev) => prev.filter((u) => !selected.has(u)));
         setSelected(new Set());
@@ -1184,7 +1384,13 @@ function DeleteImages({ actressId, onClose, progress, onDeleted }) {
                 className="col-3 col-sm-2 col-md-2"
                 key={normalizeUrl(url) + "-" + i}
               >
-                <div className="position-relative">
+                <div
+                  className="position-relative d-flex align-items-center justify-content-center"
+                  style={{
+                    aspectRatio: "1/1",
+                    background: "#000",
+                  }}
+                >
                   <input
                     type="checkbox"
                     className="form-check-input position-absolute"
@@ -1195,8 +1401,12 @@ function DeleteImages({ actressId, onClose, progress, onDeleted }) {
                   <img
                     src={url}
                     alt={`img-${i}`}
-                    className="w-100 rounded-2"
-                    style={{ aspectRatio: "1/1", objectFit: "cover" }}
+                    style={{
+                      maxWidth: "100%",
+                      maxHeight: "100%",
+                      objectFit: "contain",
+                      display: "block",
+                    }}
                     loading="lazy"
                   />
                 </div>
@@ -1241,94 +1451,11 @@ function DeleteImages({ actressId, onClose, progress, onDeleted }) {
   );
 }
 
-/* ==================== View All Images – fullscreen modal grid ==================== */
-function ViewAllImages({ actressId, onClose, onOpenImage, progress }) {
-  const [list, setList] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [errorPopup, setErrorPopup] = useState({ open: false, message: "" });
-
-  const loadAll = async () => {
-    progress.start("Loading images…", 10);
-    try {
-      let all = [];
-      let offset = 0;
-      while (true) {
-        const d = await safeFetchJSON(
-          API.imagesPage(actressId, offset, PAGE_LIMIT_IMAGES)
-        );
-        const imgs = uniqueImages(d.images || []);
-        all = uniqueImages([...all, ...imgs]);
-        offset += imgs.length;
-        const total = Number(d.total || all.length);
-        if (offset >= total || imgs.length === 0) break;
-      }
-      setList(all);
-    } catch (e) {
-      setErrorPopup({
-        open: true,
-        message: e.message || "Failed to load images",
-      });
-    } finally {
-      setLoading(false);
-      progress.done();
-    }
-  };
-  useEffect(() => {
-    loadAll();
-    // eslint-disable-next-line
-  }, [actressId]);
-
-  return (
-    <>
-      {loading && (
-        <div className="text-center text-secondary my-2">Loading…</div>
-      )}
-      {!loading && (
-        <>
-          <div className="row g-2">
-            {list.map((url, i) => (
-              <div
-                className="col-4 col-sm-3 col-md-2"
-                key={normalizeUrl(url) + "-" + i}
-              >
-                <button
-                  className="btn p-0 w-100 border-0"
-                  onClick={() => onOpenImage(url)}
-                  aria-label="Open image"
-                >
-                  <img
-                    src={url}
-                    alt={`img-${i}`}
-                    className="w-100 rounded-2"
-                    style={{ aspectRatio: "1/1", objectFit: "cover" }}
-                    loading="lazy"
-                  />
-                </button>
-              </div>
-            ))}
-          </div>
-
-          <div className="d-grid mt-3">
-            <button className="btn btn-secondary" onClick={onClose}>
-              Close
-            </button>
-          </div>
-        </>
-      )}
-
-      <CenterPopup
-        open={errorPopup.open}
-        title="Error"
-        tone="danger"
-        message={errorPopup.message}
-        onClose={() => setErrorPopup({ open: false, message: "" })}
-      />
-    </>
-  );
-}
-
 /* one-time keyframes placeholder */
-if (typeof document !== "undefined" && !document.getElementById("actressespage-kf")) {
+if (
+  typeof document !== "undefined" &&
+  !document.getElementById("actressespage-kf")
+) {
   const st = document.createElement("style");
   st.id = "actressespage-kf";
   st.innerHTML = `@keyframes shimmer { 100% { transform: translateX(100%); } }`;
