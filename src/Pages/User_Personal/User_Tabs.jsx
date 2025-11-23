@@ -10,6 +10,7 @@ import ShowActress from "./ActressesPage";
 import GetPassword from "./GetPassword";
 import Notes from "./Notes";
 import WebsitesUrl from "./WebsitesUrl";
+import Addlist from "./Addfevlist";
 
 /* ---------------- Tokens ---------------- */
 const COLORS = {
@@ -37,13 +38,14 @@ const TABS = [
   { id: "actresslist", label: "Actress List" },
   { id: "websites", label: "Websites" },
   { id: "notes", label: "Notes" },
+  { id: "addlist", label: "Act List" },   // ✅ YOUR NEW TAB
 ];
 
 export default function UserTabs() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("investment");
 
-  // ===== Viewport height fix (mobile address bar changes)
+  /* ==== Mobile viewport fix ==== */
   useEffect(() => {
     const setVh = () => {
       const vh = (window.visualViewport?.height ?? window.innerHeight) * 0.01;
@@ -58,7 +60,7 @@ export default function UserTabs() {
     };
   }, []);
 
-  // ===== Navbar sizing/offset
+  /* ==== Navbar height ==== */
   const navRef = useRef(null);
   const [navH, setNavH] = useState(72);
   const [navOffset, setNavOffset] = useState(0);
@@ -67,7 +69,6 @@ export default function UserTabs() {
     const applyOffsets = () => {
       const h = navRef.current?.offsetHeight || 72;
       setNavH(h);
-      // tiny lift on xs to let the gradient breathe
       setNavOffset(window.innerWidth <= 576 ? 8 : 0);
     };
     applyOffsets();
@@ -81,7 +82,7 @@ export default function UserTabs() {
     };
   }, []);
 
-  // ===== Tabs height
+  /* ==== Tabs height ==== */
   const tabsWrapRef = useRef(null);
   const [tabsH, setTabsH] = useState(56);
 
@@ -97,7 +98,7 @@ export default function UserTabs() {
     };
   }, []);
 
-  // ===== Ink indicator
+  /* ==== Ink indicator ==== */
   const tabListRef = useRef(null);
   const tabRefs = useRef({});
   const [indicator, setIndicator] = useState({ left: 0, width: 0 });
@@ -128,26 +129,26 @@ export default function UserTabs() {
     };
   }, [activeTab]);
 
-  // ===== Render
+  /* ==== Render ==== */
   return (
     <div
       className="ut-root"
       style={{
-        // perfect-fit height with safe-area + mobile UI changes
         minHeight: "calc(var(--vh, 1vh) * 100)",
         width: "100vw",
         overflow: "hidden",
         color: COLORS.text,
         background:
-          `radial-gradient(1400px 700px at 0% -10%, ${COLORS.bgGradA}, transparent 60%), ` +
-          `radial-gradient(1200px 600px at 100% -10%, ${COLORS.bgGradB}, transparent 60%), ` +
-          `linear-gradient(180deg, ${COLORS.bgBaseTop} 0%, ${COLORS.bgBaseBottom} 100%)`,
-        fontFamily: "Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+          `radial-gradient(1400px 700px at 0% -10%, ${COLORS.bgGradA}, transparent 60%), 
+           radial-gradient(1200px 600px at 100% -10%, ${COLORS.bgGradB}, transparent 60%), 
+           linear-gradient(180deg, ${COLORS.bgBaseTop} 0%, ${COLORS.bgBaseBottom} 100%)`,
+        fontFamily:
+          "Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
         position: "relative",
         paddingTop: "env(safe-area-inset-top, 0px)",
       }}
     >
-      {/* ===== FIXED NAVBAR ===== */}
+      {/* --- NAVBAR --- */}
       <nav ref={navRef} className="ut-nav" style={{ top: navOffset }}>
         <div className="container-fluid d-flex justify-content-between align-items-center px-3">
           <div className="d-flex align-items-center gap-2">
@@ -173,58 +174,73 @@ export default function UserTabs() {
             type="button"
             className="btn btn-warning fw-bold rounded-pill px-3 py-2"
             onClick={() => navigate("/dashboard")}
-            style={{ color: "#1f2937", boxShadow: "0 12px 26px rgba(2,6,23,.22)" }}
+            style={{
+              color: "#1f2937",
+              boxShadow: "0 12px 26px rgba(2,6,23,.22)",
+            }}
           >
             Dashboard
           </button>
         </div>
       </nav>
 
-      {/* spacer = navbar height + offset */}
+      {/* Spacer */}
       <div style={{ height: navH + navOffset }} />
 
-      {/* ===== FIXED TABS ===== */}
-      <div ref={tabsWrapRef} className="ut-tabs-wrap" style={{ top: navOffset + navH }}>
+      {/* --- TAB HEADER --- */}
+      <div
+        ref={tabsWrapRef}
+        className="ut-tabs-wrap"
+        style={{ top: navOffset + navH }}
+      >
         <div className="container" style={{ maxWidth: 1180 }}>
-          <div ref={tabListRef} role="tablist" aria-label="User sections" className="ut-tablist">
+          <div
+            ref={tabListRef}
+            role="tablist"
+            aria-label="User sections"
+            className="ut-tablist"
+          >
             <div
               aria-hidden="true"
               className="ut-ink"
               style={{
                 width: indicator.width || 0,
-                transform: `translateX(${indicator.left || 0}px)`,
+                transform: `translateX(${indicator.left}px)`,
               }}
             />
             <div style={{ flex: "0 0 6px" }} />
-            {TABS.map((tab) => {
-              const isActive = activeTab === tab.id;
+
+            {TABS.map((t) => {
+              const isActive = activeTab === t.id;
               return (
                 <button
-                  type="button"
-                  key={tab.id}
+                  key={t.id}
+                  ref={(el) => (tabRefs.current[t.id] = el)}
                   role="tab"
                   aria-selected={isActive}
-                  ref={(el) => (tabRefs.current[tab.id] = el)}
                   onClick={() => {
-                    setActiveTab(tab.id);
-                    tabRefs.current[tab.id]?.scrollIntoView?.({
+                    setActiveTab(t.id);
+                    tabRefs.current[t.id]?.scrollIntoView({
                       inline: "center",
                       block: "nearest",
                       behavior: "smooth",
                     });
                   }}
-                  className={`btn fw-semibold ut-chip me-2 ${isActive ? "is-active" : ""}`}
+                  className={`btn fw-semibold ut-chip me-2 ${
+                    isActive ? "is-active" : ""
+                  }`}
                 >
-                  {tab.label}
+                  {t.label}
                 </button>
               );
             })}
+
             <div style={{ flex: "0 0 6px" }} />
           </div>
         </div>
       </div>
 
-      {/* ===== CONTENT (only this scrolls) ===== */}
+      {/* --- CONTENT AREA (scroll) --- */}
       <div
         className="ut-content"
         style={{
@@ -232,12 +248,9 @@ export default function UserTabs() {
           top: navOffset + navH + tabsH,
           left: 0,
           right: 0,
-          // bottom respects footer glow + safe-area bottom
           bottom: `calc(${FOOTER_H}px + env(safe-area-inset-bottom, 0px))`,
           overflowY: "auto",
           WebkitOverflowScrolling: "touch",
-          zIndex: 10,
-          overscrollBehaviorY: "contain",
           paddingBottom: "10px",
         }}
       >
@@ -248,7 +261,6 @@ export default function UserTabs() {
               background: COLORS.surface,
               border: `1px solid ${COLORS.border}`,
               boxShadow: COLORS.softShadow,
-              animation: "contentFade .25s ease",
             }}
           >
             {activeTab === "investment" && <UserInvestment />}
@@ -258,11 +270,12 @@ export default function UserTabs() {
             {activeTab === "actresslist" && <ShowActress />}
             {activeTab === "websites" && <WebsitesUrl />}
             {activeTab === "notes" && <Notes />}
+            {activeTab === "addlist" && <Addlist />} {/* ✅ NEW TAB COMPONENT */}
           </div>
         </div>
       </div>
 
-      {/* ===== FOOTER GLOW ===== */}
+      {/* Footer glow */}
       <div
         aria-hidden="true"
         style={{
@@ -278,21 +291,18 @@ export default function UserTabs() {
         }}
       />
 
-      {/* ===== STYLES ===== */}
+      {/* Styles */}
       <style>{`
-        :root {
-          color-scheme: light;
-        }
+        :root { color-scheme: light; }
 
         .ut-nav {
           position: fixed;
           left: 0; right: 0;
-          z-index: 1040; /* below Bootstrap modal (1050), below our child overlays (20000) */
-          display: flex; align-items: center;
+          z-index: 1040;
           min-height: 64px;
           padding: 10px 14px;
-          padding-top: calc(env(safe-area-inset-top, 0px) + 6px);
-          background: linear-gradient(100deg, #1e3a8a 0%, #2563eb 45%, #38bdf8 100%);
+          padding-top: calc(env(safe-area-inset-top,0px) + 6px);
+          background: linear-gradient(100deg,#1e3a8a 0%,#2563eb 45%,#38bdf8 100%);
           border-bottom: 1px solid rgba(255,255,255,0.12);
           box-shadow: 0 10px 30px rgba(2,6,23,0.18);
           backdrop-filter: saturate(140%) blur(6px);
@@ -300,16 +310,15 @@ export default function UserTabs() {
 
         .ut-title {
           font-weight: 900;
-          font-size: clamp(18px, 2.4vw, 24px);
+          font-size: clamp(18px,2.4vw,24px);
           color: #0b0b0b;
           line-height: 1.2;
-          letter-spacing: -0.015em;
         }
 
         .ut-tabs-wrap {
           position: fixed;
           left: 0; right: 0;
-          z-index: 1030; /* under nav; both under child overlays */
+          z-index: 1030;
           background: ${COLORS.surface};
           border-top: 1px solid ${COLORS.border};
           border-bottom: 1px solid ${COLORS.border};
@@ -318,71 +327,42 @@ export default function UserTabs() {
         }
 
         .ut-tablist {
-          position: relative;
-          display: flex; flex-wrap: nowrap;
-          overflow-x: auto; overflow-y: hidden;
-          white-space: nowrap;
-          gap: 10px; padding: 10px;
-          scroll-snap-type: x proximity;
-          scroll-padding-left: 12px; scroll-padding-right: 12px;
-          scrollbar-width: thin;
-          -webkit-overflow-scrolling: touch;
+          position:relative;
+          display:flex;
+          overflow-x:auto;
+          gap:10px;
+          padding:10px;
+          scroll-snap-type:x proximity;
+          scrollbar-width:thin;
         }
-        .ut-tablist::-webkit-scrollbar { height: 6px; }
-        .ut-tablist::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 999px; }
+        .ut-tablist::-webkit-scrollbar{height:6px;}
 
         .ut-ink {
-          position: absolute; bottom: 4px; height: 3px; left: 0;
-          border-radius: 999px;
-          background: linear-gradient(90deg, rgba(34,211,238,1), rgba(167,139,250,1));
-          box-shadow: 0 0 18px rgba(34,211,238,0.35);
-          transition: transform .25s ease, width .25s ease;
-          pointer-events: none;
+          position:absolute;
+          bottom:4px; height:3px;
+          background:linear-gradient(90deg,${COLORS.accent},${COLORS.accent2});
+          border-radius:999px;
+          box-shadow:0 0 18px ${COLORS.glow};
+          transition:transform .25s ease,width .25s ease;
         }
 
         .ut-chip {
-          border-radius: 12px;
-          padding: 0.6rem 1rem;
-          font-size: .92rem;
-          color: ${COLORS.text};
-          border: 1px solid ${COLORS.border};
-          background: rgba(255,255,255,0.82);
-          white-space: nowrap;
-          scroll-snap-align: center;
-          transition: transform .16s ease, background .2s ease, box-shadow .2s ease;
+          border-radius:12px;
+          padding:.6rem 1rem;
+          background:rgba(255,255,255,0.82);
+          border:1px solid ${COLORS.border};
+          transition:all .2s ease;
         }
-        .ut-chip:hover { transform: translateY(-1px); }
+
         .ut-chip.is-active {
-          color: #06151a;
-          border-color: transparent;
-          background: linear-gradient(180deg, ${COLORS.accent}, ${COLORS.accent2});
-          box-shadow: 0 14px 28px -14px ${COLORS.glow};
-          transform: translateY(-1px);
+          background:linear-gradient(180deg,${COLORS.accent},${COLORS.accent2});
+          color:#06151a;
+          border-color:transparent;
+          box-shadow:0 14px 28px -14px ${COLORS.glow};
         }
 
-        /* --- CRITICAL FIX: popups from child pages must appear above nav/tabs --- */
-        .ut-content :where(.position-fixed, .modal, .modal.show, .toast, .offcanvas, [role="dialog"], [data-overlay]) {
-          z-index: 20000 !important;
-        }
-        .ut-content :where(.modal, .offcanvas, .toast, .position-fixed) {
-          max-height: 100svh;
-        }
-
-        @keyframes contentFade {
-          from { opacity: 0; transform: translateY(6px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-          * { animation: none !important; transition: none !important; }
-          .ut-tablist { scroll-behavior: auto !important; }
-        }
-
-        /* Mobile polish */
-        @media (max-width: 576px) {
-          .ut-chip { padding: 0.52rem 0.82rem; font-size: .9rem; }
-          .ut-title { font-size: 18px; }
-          .ut-nav .btn { padding: .35rem .7rem; font-size: .875rem; }
+        .ut-content :where(.position-fixed,[role="dialog"],.modal) {
+          z-index:20000 !important;
         }
       `}</style>
     </div>
