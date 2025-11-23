@@ -35,6 +35,7 @@ const safeUUID = () => {
 export default function AddFevActress() {
   const [countries, setCountries] = useState([]);
   const [loadingCountries, setLoadingCountries] = useState(true);
+  const [countriesError, setCountriesError] = useState("");
   const [selectedCountryId, setSelectedCountryId] = useState("");
   const [manualCountry, setManualCountry] = useState("");
 
@@ -94,28 +95,50 @@ export default function AddFevActress() {
   /* ---------- Fetch countries (list only) ---------- */
   useEffect(() => {
     const controller = new AbortController();
+
     const loadCountries = async () => {
       try {
         setLoadingCountries(true);
+        setCountriesError("");
         const res = await fetch(`${API.countries}?limit=200`, {
           signal: controller.signal,
         });
+
         if (!res.ok) {
           const txt = await res.text().catch(() => "");
           throw new Error(
             `Countries request failed (${res.status}): ${txt || res.statusText}`
           );
         }
-        const j = await res.json().catch(() => ({}));
-        // Your /api/countries returns { success, data }
-        if (j?.success) setCountries(Array.isArray(j.data) ? j.data : []);
-        else throw new Error(j?.message || "Countries load failed");
+
+        const j = await res.json().catch(() => null);
+        console.log("Countries response:", j);
+
+        let list = [];
+        if (Array.isArray(j)) {
+          list = j; // backend returns a bare array
+        } else if (j && Array.isArray(j.data)) {
+          list = j.data; // { success, data: [...] }
+        } else if (j && Array.isArray(j.countries)) {
+          list = j.countries;
+        }
+
+        if (!list.length) {
+          throw new Error("No countries found in response");
+        }
+
+        setCountries(list);
       } catch (e) {
-        if (e.name !== "AbortError") console.error(e);
+        if (e.name !== "AbortError") {
+          console.error("Load countries error:", e);
+          setCountriesError(e.message || "Failed to load countries");
+          setCountries([]);
+        }
       } finally {
         setLoadingCountries(false);
       }
     };
+
     loadCountries();
     return () => controller.abort();
   }, []);
@@ -131,6 +154,7 @@ export default function AddFevActress() {
     setProfileBase64(src);
     setProfileUrl(""); // prefer the dropped file
   };
+
   const onProfilePick = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -171,6 +195,7 @@ export default function AddFevActress() {
     ]);
     setImagesToAdd((prev) => [...prev, ...previews]);
   };
+
   const onGalleryPick = async (e) => {
     const files = e.target.files;
     if (!files?.length) return;
@@ -190,6 +215,7 @@ export default function AddFevActress() {
       .split(/\r?\n/)
       .map((l) => l.trim())
       .filter((l) => l.length && isUrl(l));
+
     if (!lines.length) {
       return setCenterPopup({
         show: true,
@@ -198,6 +224,7 @@ export default function AddFevActress() {
         type: "danger",
       });
     }
+
     const newThumbs = lines.map((src) => ({ id: safeUUID(), src }));
     setDropFiles((prev) => [...prev, ...newThumbs]);
     setImagesToAdd((prev) => [...prev, ...lines]);
@@ -215,10 +242,9 @@ export default function AddFevActress() {
   const showPopup = (title, body, type = "info", timeout = 2200) => {
     setCenterPopup({ show: true, title, body, type });
     window.clearTimeout(showPopup._t);
-    showPopup._t = window.setTimeout(
-      () => setCenterPopup({ show: false, title: "", body: "", type: "info" }),
-      timeout
-    );
+    showPopup._t = window.setTimeout(() => {
+      setCenterPopup({ show: false, title: "", body: "", type: "info" });
+    }, timeout);
   };
 
   /* ---------- Create ---------- */
@@ -226,6 +252,7 @@ export default function AddFevActress() {
     e?.preventDefault?.();
     const favorite_actress_name = (form.favorite_actress_name || "").trim();
     const favorite_movie_series = (form.favorite_movie_series || "").trim();
+
     if (!favorite_actress_name || !favorite_movie_series) {
       return showPopup(
         "Missing Fields",
@@ -249,7 +276,7 @@ export default function AddFevActress() {
     // Optional gallery (mix of base64 & URLs)
     if (imagesToAdd.length) payload.images = imagesToAdd;
 
-    // Backend accepts country_id OR country_name (userActFavorite router)
+    // Backend accepts country_id OR country_name
     if (selectedCountryId) payload.country_id = Number(selectedCountryId);
     else if ((manualCountry || "").trim())
       payload.country_name = manualCountry.trim();
@@ -262,7 +289,6 @@ export default function AddFevActress() {
         body: JSON.stringify(payload),
       });
 
-      // Robust non-200 & JSON handling
       const text = await res.text();
       let json = null;
       try {
@@ -279,8 +305,16 @@ export default function AddFevActress() {
         throw new Error(msg);
       }
 
-      if (!json?.success) {
-        throw new Error(json?.message || "Create failed");
+      // be more tolerant for "success"
+      const isSuccess =
+        (json && json.success === true) ||
+        (json && json.status === "ok") ||
+        (json && json.status === "success") ||
+        (json && json.insertId) ||
+        (json && json.id);
+
+      if (!isSuccess) {
+        throw new Error(json?.message || "Create failed (unexpected response)");
       }
 
       showPopup("Success", "Actress added successfully", "success");
@@ -302,10 +336,29 @@ export default function AddFevActress() {
       setManualCountry("");
       setGalleryUrls("");
     } catch (e2) {
+      console.error("Create error:", e2);
       showPopup("Error", e2.message || "Save failed", "danger");
     } finally {
       setBusy(false);
     }
+  };
+
+  const resetAll = () => {
+    setForm({
+      favorite_actress_name: "",
+      age: "",
+      actress_dob: "",
+      favorite_movie_series: "",
+      notes: "",
+    });
+    setProfilePreview(null);
+    setProfileBase64(null);
+    setProfileUrl("");
+    setDropFiles([]);
+    setImagesToAdd([]);
+    setSelectedCountryId("");
+    setManualCountry("");
+    setGalleryUrls("");
   };
 
   return (
@@ -329,11 +382,14 @@ export default function AddFevActress() {
       <div className="card card-glass p-3 p-sm-4">
         {/* Country */}
         <label className="form-label fw-semibold">Country</label>
+
         {loadingCountries ? (
           <div className="text-muted mb-3">
             <span className="spinner-border spinner-border-sm text-primary me-2" />
             Loading countries…
           </div>
+        ) : countriesError ? (
+          <div className="alert alert-danger py-2">{countriesError}</div>
         ) : (
           <>
             <select
@@ -347,7 +403,7 @@ export default function AddFevActress() {
               <option value="">— Choose from list —</option>
               {countries.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.country_name}
+                  {c.country_name || c.name || c.title}
                 </option>
               ))}
             </select>
@@ -434,7 +490,9 @@ export default function AddFevActress() {
                 e.preventDefault();
                 dzProfile.current?.classList.add("dragover");
               }}
-              onDragLeave={() => dzProfile.current?.classList.remove("dragover")}
+              onDragLeave={() =>
+                dzProfile.current?.classList.remove("dragover")
+              }
             >
               <div>Drag & drop a profile image here, or</div>
               <label className="btn btn-outline-primary btn-sm mt-2">
@@ -466,6 +524,7 @@ export default function AddFevActress() {
               <input
                 className="form-control"
                 placeholder="…or paste a profile image URL (https://… or data:image/…)"
+
                 value={profileUrl}
                 onChange={(e) => setProfileUrl(e.target.value)}
               />
@@ -473,6 +532,7 @@ export default function AddFevActress() {
                 <button
                   className="btn btn-sm btn-secondary"
                   onClick={applyProfileUrl}
+                  type="button"
                 >
                   Use URL
                 </button>
@@ -496,7 +556,9 @@ export default function AddFevActress() {
                 e.preventDefault();
                 dzGallery.current?.classList.add("dragover");
               }}
-              onDragLeave={() => dzGallery.current?.classList.remove("dragover")}
+              onDragLeave={() =>
+                dzGallery.current?.classList.remove("dragover")
+              }
             >
               <div>Drag & drop multiple images here, or</div>
               <label className="btn btn-outline-primary btn-sm mt-2">
@@ -552,6 +614,7 @@ export default function AddFevActress() {
                 <button
                   className="btn btn-sm btn-secondary"
                   onClick={addGalleryUrls}
+                  type="button"
                 >
                   Add URLs
                 </button>
@@ -564,23 +627,7 @@ export default function AddFevActress() {
             <button
               type="button"
               className="btn btn-light me-2"
-              onClick={() => {
-                setForm({
-                  favorite_actress_name: "",
-                  age: "",
-                  actress_dob: "",
-                  favorite_movie_series: "",
-                  notes: "",
-                });
-                setProfilePreview(null);
-                setProfileBase64(null);
-                setProfileUrl("");
-                setDropFiles([]);
-                setImagesToAdd([]);
-                setSelectedCountryId("");
-                setManualCountry("");
-                setGalleryUrls("");
-              }}
+              onClick={resetAll}
             >
               Reset
             </button>
@@ -597,7 +644,9 @@ export default function AddFevActress() {
           className="center-backdrop"
           role="dialog"
           aria-modal="true"
-          onClick={() => setCenterPopup({ show: false })}
+          onClick={() =>
+            setCenterPopup({ show: false, title: "", body: "", type: "info" })
+          }
         >
           <div
             className="center-card p-3 text-center"
@@ -607,7 +656,14 @@ export default function AddFevActress() {
             <p className="text-muted">{centerPopup.body}</p>
             <button
               className="btn btn-gradient w-50"
-              onClick={() => setCenterPopup({ show: false })}
+              onClick={() =>
+                setCenterPopup({
+                  show: false,
+                  title: "",
+                  body: "",
+                  type: "info",
+                })
+              }
             >
               OK
             </button>
