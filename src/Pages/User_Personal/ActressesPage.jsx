@@ -322,7 +322,6 @@ function Lightbox({ images, index, onChangeIndex, onClose }) {
   };
 
   const onPointerDown = (e) => {
-    // left button or touch
     if (e.button !== undefined && e.button !== 0) return;
     e.preventDefault();
     const x = e.clientX ?? (e.touches?.[0]?.clientX || 0);
@@ -362,7 +361,6 @@ function Lightbox({ images, index, onChangeIndex, onClose }) {
   const zoomOut = () => {
     setView((prev) => {
       const nextScale = Math.max(1, Number((prev.scale * 0.9).toFixed(3)));
-      // when zooming back near 1, gently bring pan closer to center
       const factor = nextScale === 1 ? 0.5 : 1;
       return {
         ...prev,
@@ -401,7 +399,7 @@ function Lightbox({ images, index, onChangeIndex, onClose }) {
           className="flex-grow-1 d-flex align-items-center justify-content-center w-100"
           style={{
             overflow: "hidden",
-            touchAction: "none", // important for mobile: allow free pan
+            touchAction: "none",
           }}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
@@ -409,7 +407,6 @@ function Lightbox({ images, index, onChangeIndex, onClose }) {
           onPointerCancel={endPan}
         >
           <div
-            // >>> wrapper fills available area, then we scale it
             style={{
               width: "100%",
               height: "100%",
@@ -431,9 +428,9 @@ function Lightbox({ images, index, onChangeIndex, onClose }) {
               src={currentSrc}
               alt="preview"
               style={{
-                width: "100%",     // >>> take full container
-                height: "100%",    // >>> take full container
-                objectFit: "contain", // >>> ALWAYS show full image (no crop)
+                width: "100%",
+                height: "100%",
+                objectFit: "contain",
                 userSelect: "none",
                 WebkitUserSelect: "none",
                 WebkitTouchCallout: "none",
@@ -444,7 +441,7 @@ function Lightbox({ images, index, onChangeIndex, onClose }) {
           </div>
         </div>
 
-        {/* CONTROLS – compact, auto-wrap on small phones */}
+        {/* CONTROLS */}
         <div
           className="d-flex flex-wrap justify-content-center gap-1 w-100"
           style={{
@@ -1062,9 +1059,17 @@ function DetailView({ id, onClose, progress, onImagesDelta, onDeleteActress }) {
                   <AddImagesButton
                     actressId={actress.id}
                     progress={progress}
-                    onImagesAdded={(n) => {
-                      onImagesDelta?.(n);
-                      reloadAllImages();
+                    onImagesAdded={(updatedImages) => {
+                      // updatedImages = full list from server
+                      setImages((prev) => {
+                        const prevLen = prev.length;
+                        const newLen = updatedImages.length;
+                        const addedCount = Math.max(0, newLen - prevLen);
+                        if (addedCount > 0) {
+                          onImagesDelta?.(addedCount);
+                        }
+                        return updatedImages;
+                      });
                     }}
                   />
                   <button
@@ -1169,7 +1174,7 @@ function DetailView({ id, onClose, progress, onImagesDelta, onDeleteActress }) {
 function AddImagesButton({ actressId, progress, onImagesAdded }) {
   const [open, setOpen] = useState(false);
   const [successOpen, setSuccessOpen] = useState(false);
-  const [addedCount, setAddedCount] = useState(0);
+
   return (
     <>
       <button
@@ -1183,11 +1188,11 @@ function AddImagesButton({ actressId, progress, onImagesAdded }) {
           <AddImages
             actressId={actressId}
             onClose={() => setOpen(false)}
-            onUploaded={(n) => {
+            onUploaded={(updatedImages) => {
+              // updatedImages is full list from server
               setOpen(false);
-              setAddedCount(n);
               setSuccessOpen(true);
-              onImagesAdded?.(n);
+              onImagesAdded?.(updatedImages);
             }}
             progress={progress}
           />
@@ -1197,9 +1202,7 @@ function AddImagesButton({ actressId, progress, onImagesAdded }) {
         open={successOpen}
         title="Success"
         tone="success"
-        message={`Images added successfully${
-          addedCount ? ` ( +${addedCount} )` : ""
-        }.`}
+        message={`Images added successfully.`}
         onClose={() => {
           setSuccessOpen(false);
         }}
@@ -1243,21 +1246,33 @@ function AddImages({ actressId, onClose, onUploaded, progress }) {
   const [errorPopup, setErrorPopup] = useState({ open: false, message: "" });
 
   const uploadFiles = async (filesList) => {
+    if (!filesList || filesList.length === 0) return;
     try {
       setBusy(true);
       progress.start("Uploading…", 12);
-      // NOTE: real app should upload real URLs or base64;
-      // here we just demo with Object URLs
-      const urls = uniqueImages(
-        Array.from(filesList).map((f) => URL.createObjectURL(f))
-      );
-      await safeFetchJSON(API.images(actressId), {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ add: urls }),
+
+      // REAL upload with multipart/form-data
+      const formData = new FormData();
+      Array.from(filesList).forEach((file) => {
+        formData.append("files", file); // backend: upload.array("files")
       });
+
+      // EXPECT: backend returns full updated row with images[]
+      const updated = await safeFetchJSON(API.images(actressId), {
+        method: "PATCH",
+        body: formData,
+      });
+
+      // Build full images list from response
+      const allImages = uniqueImages(
+        [
+          updated.profile_image,
+          ...(Array.isArray(updated.images) ? updated.images : []),
+        ].filter(Boolean)
+      );
+
       progress.done();
-      onUploaded && onUploaded(urls.length);
+      onUploaded && onUploaded(allImages);
     } catch (e) {
       progress.done();
       setErrorPopup({
