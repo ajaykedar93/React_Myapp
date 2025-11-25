@@ -5,7 +5,9 @@ import LoadingSpiner from "../Entertainment/LoadingSpiner.jsx";
 import Swal from "sweetalert2";
 
 const BASE_URL = "https://express-backend-myapp.onrender.com/api/password-manager";
+
 const TYPES = ["", "app", "website", "email", "mobile", "screen", "cloud", "document", "private_lock", "other"];
+
 const TYPE_COLORS = {
   app: "bg-success-subtle text-success-emphasis",
   website: "bg-warning-subtle text-warning-emphasis",
@@ -36,14 +38,18 @@ export default function GetPassword() {
 
   const showCenterMsg = (kind, text, ms = 1500) => {
     setOverlayMsg({ show: true, type: kind, text });
-    clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = setTimeout(() => setOverlayMsg({ show: false, type: "", text: "" }), ms);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => {
+      setOverlayMsg({ show: false, type: "", text: "" });
+    }, ms);
   };
 
-  // Styles (text buttons only, dark-blue borders, centered toast, full-screen mobile sheet offset under navbar)
+  // Global styles
   useEffect(() => {
     const id = "pm-style-v6";
+    if (typeof document === "undefined") return;
     if (document.getElementById(id)) return;
+
     const s = document.createElement("style");
     s.id = id;
     s.innerHTML = `
@@ -70,7 +76,6 @@ export default function GetPassword() {
       .btn-outline-darkblue{ color:var(--card-blue); border:1px solid var(--card-blue); background:#fff; }
       .btn-outline-darkblue:hover{ background:#f6f8ff; }
 
-      /* Card list (mobile-first) */
       .pw-card{
         border:2px solid var(--card-blue);
         border-radius:16px; padding:12px 12px;
@@ -103,7 +108,6 @@ export default function GetPassword() {
       .action-grid{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:8px; }
       @media (min-width:576px){ .action-grid{ grid-template-columns:repeat(4, minmax(0,1fr)); } }
 
-      /* Table polish (desktop) */
       .table thead th{ position:sticky; top:0; background:#f8fafc; z-index:1; }
       .table-hover tbody tr:hover{ transform:translateY(-1px); transition:transform .15s, box-shadow .15s; box-shadow:0 2px 12px rgba(0,0,0,.04); }
 
@@ -111,7 +115,6 @@ export default function GetPassword() {
         .table .btn{ padding:.32rem .55rem; font-size:.78rem; border-radius:.45rem; }
       }
 
-      /* centered toast */
       .toast-center{
         position:fixed; left:50%; top:50%; transform:translate(-50%,-50%);
         z-index:4001; background:#fff; border-radius:12px; padding:.65rem .9rem;
@@ -120,17 +123,16 @@ export default function GetPassword() {
       }
       .toast-center.error{ border-left-color:#ef4444; }
 
-      /* ===== Full-screen mobile sheet for Edit (offset under navbar) ===== */
       .modal-scrim{
         position:fixed; inset:0;
         background:rgba(0,0,0,.55);
-        z-index:4000; /* above typical navbars */
+        z-index:4000;
         display:flex; align-items:flex-start; justify-content:center;
       }
       .sheet{
         width:100%;
         height: calc(100dvh - var(--nav-h, 0px));
-        margin-top: var(--nav-h, 0px); /* start below navbar */
+        margin-top: var(--nav-h, 0px);
         max-width:100%;
         background:#fff;
         border-radius:0;
@@ -163,7 +165,6 @@ export default function GetPassword() {
         display:flex; justify-content:flex-end; gap:.5rem;
       }
 
-      /* Desktop/tablet: centered dialog */
       @media (min-width:768px){
         .modal-scrim{ align-items:center; }
         .sheet{
@@ -174,8 +175,7 @@ export default function GetPassword() {
         .sheet-foot{ position:static; }
       }
 
-      /* Background inert visual hint when modal open (optional) */
-      .inert-blur{ filter: blur(0px); } /* keeping crisp, but reserved if you want blur */
+      .inert-blur{ filter: blur(0px); }
     `;
     document.head.appendChild(s);
   }, []);
@@ -183,30 +183,38 @@ export default function GetPassword() {
   // Lock body scroll & set navbar height when overlay/sheet is open
   useEffect(() => {
     const hasOverlay = busy || overlayMsg.show || !!editItem;
-    document.body.style.overflow = hasOverlay ? "hidden" : "";
 
-    // Measure navbar height (supports #navbar-container or .navbar*)
+    if (typeof document !== "undefined") {
+      document.body.style.overflow = hasOverlay ? "hidden" : "";
+    }
+
     const setNavHeightVar = () => {
+      if (typeof document === "undefined") return;
       const nav =
         document.querySelector("#navbar-container") ||
         document.querySelector(".navbar-fixed-top") ||
         document.querySelector(".navbar.sticky-top") ||
         document.querySelector(".navbar");
       const h = nav ? nav.getBoundingClientRect().height : 0;
-      document.documentElement.style.setProperty("--nav-h", `${h}px`);
+      document.documentElement.style.setProperty("--nav-h", h + "px");
     };
 
     if (editItem) {
       setNavHeightVar();
-      // update on resize/orientation change
-      window.addEventListener("resize", setNavHeightVar);
-      window.addEventListener("orientationchange", setNavHeightVar);
+      if (typeof window !== "undefined") {
+        window.addEventListener("resize", setNavHeightVar);
+        window.addEventListener("orientationchange", setNavHeightVar);
+      }
     }
 
     return () => {
-      document.body.style.overflow = "";
-      window.removeEventListener("resize", setNavHeightVar);
-      window.removeEventListener("orientationchange", setNavHeightVar);
+      if (typeof document !== "undefined") {
+        document.body.style.overflow = "";
+      }
+      if (typeof window !== "undefined") {
+        window.removeEventListener("resize", setNavHeightVar);
+        window.removeEventListener("orientationchange", setNavHeightVar);
+      }
     };
   }, [busy, overlayMsg.show, editItem]);
 
@@ -216,26 +224,47 @@ export default function GetPassword() {
     try {
       let url = BASE_URL;
       const qs = [];
-      if (type) qs.push(`type=${encodeURIComponent(type)}`);
-      if (qs.length) url += `?${qs.join("&")}`;
+      if (type) qs.push("type=" + encodeURIComponent(type));
+      if (qs.length > 0) url += "?" + qs.join("&");
 
       const res = await fetch(url, { signal });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json?.message || "Failed to fetch");
+      let json = {};
+      try {
+        json = await res.json();
+      } catch (err) {
+        json = {};
+      }
+
+      if (!res.ok) {
+        const msg = json && json.message ? json.message : "Failed to fetch";
+        throw new Error(msg);
+      }
+
       let data = Array.isArray(json.data) ? json.data : [];
+
       if (q.trim()) {
         const qq = q.trim().toLowerCase();
-        data = data.filter((it) =>
-          (it.name || "").toLowerCase().includes(qq) ||
-          (it.username || "").toLowerCase().includes(qq) ||
-          (it.password || "").toLowerCase().includes(qq) ||
-          (it.type || "").toLowerCase().includes(qq) ||
-          (it.additional_info ? JSON.stringify(it.additional_info).toLowerCase().includes(qq) : false)
-        );
+        data = data.filter((it) => {
+          const name = (it.name || "").toLowerCase();
+          const username = (it.username || "").toLowerCase();
+          const password = (it.password || "").toLowerCase();
+          const typeVal = (it.type || "").toLowerCase();
+          const ai = it.additional_info ? JSON.stringify(it.additional_info).toLowerCase() : "";
+          return (
+            name.includes(qq) ||
+            username.includes(qq) ||
+            password.includes(qq) ||
+            typeVal.includes(qq) ||
+            ai.includes(qq)
+          );
+        });
       }
+
       setItems(data);
     } catch (e) {
-      if (e.name !== "AbortError") showCenterMsg("error", e.message);
+      if (!(e && e.name === "AbortError")) {
+        showCenterMsg("error", e && e.message ? e.message : "Error");
+      }
     } finally {
       setLoadingTable(false);
     }
@@ -253,28 +282,43 @@ export default function GetPassword() {
     if (abortRef.current) abortRef.current.abort();
     const ctl = new AbortController();
     abortRef.current = ctl;
-    const t = setTimeout(() => fetchList(ctl.signal), 180);
+
+    const t = setTimeout(() => {
+      fetchList(ctl.signal);
+    }, 180);
+
     setPage(1);
-    return () => { clearTimeout(t); ctl.abort(); };
+
+    return () => {
+      clearTimeout(t);
+      ctl.abort();
+    };
   }, [type, q]);
 
-  // Helpers
   const showCopied = (msg) => showCenterMsg("success", msg);
+
   const copyToClipboard = async (text, label = "Copied") => {
     try {
-      await navigator.clipboard.writeText(text || "");
-      showCopied(label);
-    } catch {
+      if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text || "");
+        showCopied(label);
+      } else {
+        throw new Error("Clipboard not supported");
+      }
+    } catch (err) {
       showCenterMsg("error", "Copy failed");
     }
   };
 
   const deleteRecord = async (id) => {
-    const row = items.find((x) => x.id === id);
-    const name = row?.name || "this entry";
+    if (!id) return;
+
+    const row = items.find((x) => x.id === id || x._id === id);
+    const name = row && row.name ? row.name : "this entry";
+
     const res = await Swal.fire({
       title: "Delete Entry?",
-      html: `<div style="font-size:1rem">Are you sure you want to remove <b>${name}</b>?</div>`,
+      html: '<div style="font-size:1rem">Are you sure you want to remove <b>' + name + "</b>?</div>",
       icon: "warning",
       showCancelButton: true,
       confirmButtonText: "Yes, delete",
@@ -284,16 +328,18 @@ export default function GetPassword() {
       background: "#fff",
       color: "#111827",
     });
+
     if (!res.isConfirmed) return;
 
     setBusy(true);
     try {
-      const r = await fetch(`${BASE_URL}/${id}`, { method: "DELETE" });
+      const r = await fetch(BASE_URL + "/" + id, { method: "DELETE" });
       if (!r.ok) throw new Error("Delete failed");
-      setItems((prev) => prev.filter((x) => x.id !== id));
+
+      setItems((prev) => prev.filter((x) => (x.id || x._id) !== id));
       showCenterMsg("success", "Deleted");
     } catch (e) {
-      showCenterMsg("error", e.message);
+      showCenterMsg("error", e && e.message ? e.message : "Delete failed");
     } finally {
       setBusy(false);
     }
@@ -301,32 +347,57 @@ export default function GetPassword() {
 
   const handleUpdate = async () => {
     if (!editItem) return;
-    if (!String(editItem.name || "").trim()) return showCenterMsg("error", "Name required");
-    if (!String(editItem.password || "").trim()) return showCenterMsg("error", "Password required");
 
-    let payload = { ...editItem };
+    const name = String(editItem.name || "").trim();
+    const password = String(editItem.password || "").trim();
+
+    if (!name) return showCenterMsg("error", "Name required");
+    if (!password) return showCenterMsg("error", "Password required");
+
+    const payload = { ...editItem };
     if (typeof editItem.additional_info === "string") {
       const s = editItem.additional_info.trim();
-      if (s.startsWith("{") || s.startsWith("[")) {
-        try { payload.additional_info = JSON.parse(s); } catch {}
+      if (s && (s[0] === "{" || s[0] === "[")) {
+        try {
+          payload.additional_info = JSON.parse(s);
+        } catch (err) {
+          // keep as string if JSON parse fails
+        }
       }
     }
 
+    const id = editItem.id || editItem._id;
+    if (!id) return showCenterMsg("error", "Missing id");
+
     setBusy(true);
     try {
-      const res = await fetch(`${BASE_URL}/${editItem.id}`, {
+      const res = await fetch(BASE_URL + "/" + id, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const j = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(j?.message || "Update failed");
-      const updated = j?.data || payload;
-      setItems((prev) => prev.map((x) => (x.id === editItem.id ? updated : x)));
+
+      let j = {};
+      try {
+        j = await res.json();
+      } catch (err) {
+        j = {};
+      }
+
+      if (!res.ok) {
+        const msg = j && j.message ? j.message : "Update failed";
+        throw new Error(msg);
+      }
+
+      const updated = j && j.data ? j.data : payload;
+      setItems((prev) =>
+        prev.map((x) => ((x.id || x._id) === id ? updated : x))
+      );
+
       showCenterMsg("success", "Updated");
       setEditItem(null);
     } catch (e) {
-      showCenterMsg("error", e.message);
+      showCenterMsg("error", e && e.message ? e.message : "Update failed");
     } finally {
       setBusy(false);
     }
@@ -342,14 +413,23 @@ export default function GetPassword() {
   const renderAI = (ai) => {
     if (ai == null) return "-";
     if (typeof ai === "string") return ai || "-";
-    try { return JSON.stringify(ai); } catch { return String(ai); }
+    try {
+      return JSON.stringify(ai);
+    } catch (err) {
+      return String(ai);
+    }
   };
 
-  const dotsOf = (pw) => "•".repeat(Math.min((pw || "").length || 3, 12));
+  const dotsOf = (pw) => {
+    const s = pw || "";
+    const len = s.length || 3;
+    const n = Math.min(len, 12);
+    return "•".repeat(n);
+  };
 
   return (
     <div
-      className={`container-xxl py-3 ${editItem ? "inert-blur" : ""}`}
+      className={"container-xxl py-3 " + (editItem ? "inert-blur" : "")}
       style={{ background: "linear-gradient(180deg,#ffffff,#f7fbff)", minHeight: "100dvh" }}
       aria-hidden={!!editItem}
     >
@@ -358,10 +438,15 @@ export default function GetPassword() {
         <div className="d-flex align-items-center gap-3">
           <div
             style={{
-              width: 44, height: 44, borderRadius: 12,
+              width: 44,
+              height: 44,
+              borderRadius: 12,
               background: "linear-gradient(180deg,#172554,#1e3a8a)",
-              display: "grid", placeItems: "center", color: "#eaf2ff", fontWeight: 800,
-              border: "2px solid #93c5fd"
+              display: "grid",
+              placeItems: "center",
+              color: "#eaf2ff",
+              fontWeight: 800,
+              border: "2px solid #93c5fd",
             }}
           >
             PW
@@ -422,14 +507,23 @@ export default function GetPassword() {
             ) : (
               <div className="row g-3">
                 {pageItems.map((r, idx) => {
+                  const rowId = r.id || r._id;
                   const i = (page - 1) * PAGE_SIZE + idx;
-                  const visible = !!showPwRow[r.id];
+                  const visible = rowId ? !!showPwRow[rowId] : false;
+
                   return (
-                    <div className="col-12" key={r.id}>
+                    <div className="col-12" key={rowId || i}>
                       <div className="pw-card">
                         <div className="pw-head">
                           <span className="round-badge">{i + 1}</span>
-                          <span className={`badge ${TYPE_COLORS[r.type] || "bg-secondary-subtle"}`}>{r.type || "other"}</span>
+                          <span
+                            className={
+                              "badge " +
+                              (TYPE_COLORS[r.type] || "bg-secondary-subtle")
+                            }
+                          >
+                            {r.type || "other"}
+                          </span>
                         </div>
 
                         <div className="pw-row">
@@ -440,12 +534,19 @@ export default function GetPassword() {
                         <div className="pw-row">
                           <div className="pw-label">Username</div>
                           <div className="pw-value">
-                            <span className="font-monospace">{r.username || "-"}</span>
+                            <span className="font-monospace">
+                              {r.username || "-"}
+                            </span>
                             <div className="pw-actions-inline">
                               {r.username && (
                                 <button
                                   className="btn btn-outline-darkblue btn-xs"
-                                  onClick={() => copyToClipboard(r.username, "Username Copied")}
+                                  onClick={() =>
+                                    copyToClipboard(
+                                      r.username,
+                                      "Username Copied"
+                                    )
+                                  }
                                   aria-label="Copy username"
                                 >
                                   Copy Username
@@ -459,21 +560,43 @@ export default function GetPassword() {
                           <div className="pw-label">Password</div>
                           <div className="pw-value">
                             <span className="font-monospace">
-                              {visible ? (r.password || "-") : <span className="pw-dots">{dotsOf(r.password)}</span>}
+                              {visible ? (
+                                r.password || "-"
+                              ) : (
+                                <span className="pw-dots">
+                                  {dotsOf(r.password)}
+                                </span>
+                              )}
                             </span>
                             <div className="pw-actions-inline">
                               {r.password && (
                                 <>
                                   <button
                                     className="btn btn-skin btn-xs"
-                                    onClick={() => setShowPwRow((s) => ({ ...s, [r.id]: !visible }))}
-                                    aria-label={visible ? "Hide password" : "Show password"}
+                                    onClick={() =>
+                                      setShowPwRow((s) => ({
+                                        ...s,
+                                        [rowId]: !visible,
+                                      }))
+                                    }
+                                    aria-label={
+                                      visible
+                                        ? "Hide password"
+                                        : "Show password"
+                                    }
                                   >
-                                    {visible ? "Hide Password" : "Show Password"}
+                                    {visible
+                                      ? "Hide Password"
+                                      : "Show Password"}
                                   </button>
                                   <button
                                     className="btn btn-outline-darkblue btn-xs"
-                                    onClick={() => copyToClipboard(r.password, "Password Copied")}
+                                    onClick={() =>
+                                      copyToClipboard(
+                                        r.password,
+                                        "Password Copied"
+                                      )
+                                    }
                                     aria-label="Copy password"
                                   >
                                     Copy Password
@@ -490,19 +613,41 @@ export default function GetPassword() {
                         </div>
 
                         <div className="action-grid mt-3">
-                          <button className="btn btn-outline-darkblue btn-xs" onClick={() => setEditItem({ ...r })}>
+                          <button
+                            className="btn btn-outline-darkblue btn-xs"
+                            onClick={() => setEditItem({ ...r })}
+                          >
                             Edit
                           </button>
-                          <button className="btn btn-outline-danger btn-xs" onClick={() => deleteRecord(r.id)}>
+                          <button
+                            className="btn btn-outline-danger btn-xs"
+                            onClick={() => deleteRecord(rowId)}
+                          >
                             Delete
                           </button>
                           {r.username && (
-                            <button className="btn btn-outline-secondary btn-xs" onClick={() => copyToClipboard(r.username, "Username Copied")}>
+                            <button
+                              className="btn btn-outline-secondary btn-xs"
+                              onClick={() =>
+                                copyToClipboard(
+                                  r.username,
+                                  "Username Copied"
+                                )
+                              }
+                            >
                               Copy U
                             </button>
                           )}
                           {r.password && (
-                            <button className="btn btn-outline-secondary btn-xs" onClick={() => copyToClipboard(r.password, "Password Copied")}>
+                            <button
+                              className="btn btn-outline-secondary btn-xs"
+                              onClick={() =>
+                                copyToClipboard(
+                                  r.password,
+                                  "Password Copied"
+                                )
+                              }
+                            >
                               Copy P
                             </button>
                           )}
@@ -529,55 +674,148 @@ export default function GetPassword() {
                     <th style={{ minWidth: 160 }}>Username</th>
                     <th style={{ minWidth: 220 }}>Password</th>
                     <th style={{ minWidth: 220 }}>Notes</th>
-                    <th className="text-end" style={{ width: 230 }}>Actions</th>
+                    <th className="text-end" style={{ width: 230 }}>
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {pageItems.length === 0 ? (
                     <tr>
-                      <td colSpan="7" className="text-center py-5 text-muted">No data found</td>
+                      <td
+                        colSpan="7"
+                        className="text-center py-5 text-muted"
+                      >
+                        No data found
+                      </td>
                     </tr>
                   ) : (
                     pageItems.map((r, idx) => {
+                      const rowId = r.id || r._id;
                       const i = (page - 1) * PAGE_SIZE + idx;
-                      const visible = !!showPwRow[r.id];
+                      const visible = rowId ? !!showPwRow[rowId] : false;
+
                       return (
-                        <tr key={r.id}>
+                        <tr key={rowId || i}>
                           <td>{i + 1}</td>
-                          <td><span className={`badge ${TYPE_COLORS[r.type] || "bg-secondary-subtle"}`}>{r.type || "other"}</span></td>
-                          <td><span title={r.name}>{r.name}</span></td>
                           <td>
-                            <span className="font-monospace" title={r.username || "-"}>{r.username || "-"}</span>
+                            <span
+                              className={
+                                "badge " +
+                                (TYPE_COLORS[r.type] ||
+                                  "bg-secondary-subtle")
+                              }
+                            >
+                              {r.type || "other"}
+                            </span>
+                          </td>
+                          <td>
+                            <span title={r.name}>{r.name}</span>
+                          </td>
+                          <td>
+                            <span
+                              className="font-monospace"
+                              title={r.username || "-"}
+                            >
+                              {r.username || "-"}
+                            </span>
                             {r.username && (
-                              <button className="btn btn-outline-darkblue btn-xs ms-2" onClick={() => copyToClipboard(r.username, "Username Copied")}>Copy Username</button>
+                              <button
+                                className="btn btn-outline-darkblue btn-xs ms-2"
+                                onClick={() =>
+                                  copyToClipboard(
+                                    r.username,
+                                    "Username Copied"
+                                  )
+                                }
+                              >
+                                Copy Username
+                              </button>
                             )}
                           </td>
                           <td>
                             <span className="font-monospace">
-                              {visible ? r.password || "-" : <span className="pw-dots">{dotsOf(r.password)}</span>}
+                              {visible ? (
+                                r.password || "-"
+                              ) : (
+                                <span className="pw-dots">
+                                  {dotsOf(r.password)}
+                                </span>
+                              )}
                             </span>
                             {r.password && (
                               <>
                                 <button
                                   className="btn btn-skin btn-xs ms-2"
-                                  onClick={() => setShowPwRow((s) => ({ ...s, [r.id]: !visible }))}
+                                  onClick={() =>
+                                    setShowPwRow((s) => ({
+                                      ...s,
+                                      [rowId]: !visible,
+                                    }))
+                                  }
                                 >
-                                  {visible ? "Hide Password" : "Show Password"}
+                                  {visible
+                                    ? "Hide Password"
+                                    : "Show Password"}
                                 </button>
-                                <button className="btn btn-outline-darkblue btn-xs ms-1" onClick={() => copyToClipboard(r.password, "Password Copied")}>Copy Password</button>
+                                <button
+                                  className="btn btn-outline-darkblue btn-xs ms-1"
+                                  onClick={() =>
+                                    copyToClipboard(
+                                      r.password,
+                                      "Password Copied"
+                                    )
+                                  }
+                                >
+                                  Copy Password
+                                </button>
                               </>
                             )}
                           </td>
-                          <td><span title={renderAI(r.additional_info)}>{renderAI(r.additional_info)}</span></td>
+                          <td>
+                            <span title={renderAI(r.additional_info)}>
+                              {renderAI(r.additional_info)}
+                            </span>
+                          </td>
                           <td className="text-end">
                             <div className="d-inline-flex flex-wrap gap-2">
-                              <button className="btn btn-outline-darkblue btn-xs" onClick={() => setEditItem({ ...r })}>Edit</button>
-                              <button className="btn btn-outline-danger btn-xs" onClick={() => deleteRecord(r.id)}>Delete</button>
+                              <button
+                                className="btn btn-outline-darkblue btn-xs"
+                                onClick={() => setEditItem({ ...r })}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                className="btn btn-outline-danger btn-xs"
+                                onClick={() => deleteRecord(rowId)}
+                              >
+                                Delete
+                              </button>
                               {r.username && (
-                                <button className="btn btn-outline-secondary btn-xs" onClick={() => copyToClipboard(r.username, "Username Copied")}>Copy U</button>
+                                <button
+                                  className="btn btn-outline-secondary btn-xs"
+                                  onClick={() =>
+                                    copyToClipboard(
+                                      r.username,
+                                      "Username Copied"
+                                    )
+                                  }
+                                >
+                                  Copy U
+                                </button>
                               )}
                               {r.password && (
-                                <button className="btn btn-outline-secondary btn-xs" onClick={() => copyToClipboard(r.password, "Password Copied")}>Copy P</button>
+                                <button
+                                  className="btn btn-outline-secondary btn-xs"
+                                  onClick={() =>
+                                    copyToClipboard(
+                                      r.password,
+                                      "Password Copied"
+                                    )
+                                  }
+                                >
+                                  Copy P
+                                </button>
                               )}
                             </div>
                           </td>
@@ -595,30 +833,53 @@ export default function GetPassword() {
         {!loadingTable && items.length > 0 && (
           <div className="d-flex align-items-center justify-content-between p-2 p-sm-3 flex-wrap gap-2">
             <div className="text-muted small">
-              Showing <b>{(page - 1) * PAGE_SIZE + 1}</b>–<b>{Math.min(page * PAGE_SIZE, items.length)}</b> of <b>{items.length}</b>
+              Showing{" "}
+              <b>{(page - 1) * PAGE_SIZE + 1}</b>–
+              <b>{Math.min(page * PAGE_SIZE, items.length)}</b> of{" "}
+              <b>{items.length}</b>
             </div>
             <div className="btn-group">
-              <button className="btn btn-outline-secondary btn-xs" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</button>
-              <span className="btn btn-light btn-xs disabled">{page} / {totalPages}</span>
-              <button className="btn btn-outline-secondary btn-xs" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>Next</button>
+              <button
+                className="btn btn-outline-secondary btn-xs"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                Prev
+              </button>
+              <span className="btn btn-light btn-xs disabled">
+                {page} / {totalPages}
+              </span>
+              <button
+                className="btn btn-outline-secondary btn-xs"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Next
+              </button>
             </div>
           </div>
         )}
       </div>
 
-      {/* ===== Edit Sheet (mobile full-screen, desktop centered, offset below navbar) ===== */}
+      {/* Edit Sheet */}
       {editItem && (
         <div
           className="modal-scrim"
           role="dialog"
           aria-modal="true"
           aria-label="Edit password"
-          onClick={(e) => e.currentTarget === e.target && setEditItem(null)}
+          onClick={(e) => {
+            if (e.currentTarget === e.target) setEditItem(null);
+          }}
         >
           <div className="sheet">
             <div className="sheet-head">
               <h5 className="sheet-title brand-title">Edit Password</h5>
-              <button className="btn btn-light btn-xs" onClick={() => setEditItem(null)} aria-label="Close">
+              <button
+                className="btn btn-light btn-xs"
+                onClick={() => setEditItem(null)}
+                aria-label="Close"
+              >
                 Close
               </button>
             </div>
@@ -629,10 +890,14 @@ export default function GetPassword() {
                 <select
                   className="form-select"
                   value={editItem.type || ""}
-                  onChange={(e) => setEditItem({ ...editItem, type: e.target.value })}
+                  onChange={(e) =>
+                    setEditItem({ ...editItem, type: e.target.value })
+                  }
                 >
                   {TYPES.map((t) => (
-                    <option key={t || "sel"} value={t}>{t || "Select type"}</option>
+                    <option key={t || "sel"} value={t}>
+                      {t || "Select type"}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -643,7 +908,9 @@ export default function GetPassword() {
                   <input
                     className="form-control"
                     value={editItem.name || ""}
-                    onChange={(e) => setEditItem({ ...editItem, name: e.target.value })}
+                    onChange={(e) =>
+                      setEditItem({ ...editItem, name: e.target.value })
+                    }
                   />
                 </div>
                 <div className="col-sm-6">
@@ -651,7 +918,9 @@ export default function GetPassword() {
                   <input
                     className="form-control"
                     value={editItem.username || ""}
-                    onChange={(e) => setEditItem({ ...editItem, username: e.target.value })}
+                    onChange={(e) =>
+                      setEditItem({ ...editItem, username: e.target.value })
+                    }
                   />
                 </div>
               </div>
@@ -663,7 +932,9 @@ export default function GetPassword() {
                     type="text"
                     className="form-control"
                     value={editItem.password || ""}
-                    onChange={(e) => setEditItem({ ...editItem, password: e.target.value })}
+                    onChange={(e) =>
+                      setEditItem({ ...editItem, password: e.target.value })
+                    }
                   />
                 </div>
                 <div className="col-sm-6">
@@ -678,15 +949,30 @@ export default function GetPassword() {
                         ? JSON.stringify(editItem.additional_info)
                         : ""
                     }
-                    onChange={(e) => setEditItem({ ...editItem, additional_info: e.target.value })}
+                    onChange={(e) =>
+                      setEditItem({
+                        ...editItem,
+                        additional_info: e.target.value,
+                      })
+                    }
                   />
                 </div>
               </div>
             </div>
 
             <div className="sheet-foot">
-              <button className="btn btn-light btn-xs me-2" onClick={() => setEditItem(null)}>Cancel</button>
-              <button className="btn btn-outline-darkblue btn-xs px-3" onClick={handleUpdate}>Update</button>
+              <button
+                className="btn btn-light btn-xs me-2"
+                onClick={() => setEditItem(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-outline-darkblue btn-xs px-3"
+                onClick={handleUpdate}
+              >
+                Update
+              </button>
             </div>
           </div>
         </div>
@@ -694,7 +980,10 @@ export default function GetPassword() {
 
       {/* Busy overlay */}
       {busy && (
-        <div className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style={{ background: "rgba(255,255,255,.72)", zIndex: 3999 }}>
+        <div
+          className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+          style={{ background: "rgba(255,255,255,.72)", zIndex: 3999 }}
+        >
           <div className="bg-white rounded-4 shadow p-3 text-center d-flex flex-column align-items-center">
             <LoadingSpiner />
             <div className="text-muted mt-2">Working…</div>
@@ -704,7 +993,12 @@ export default function GetPassword() {
 
       {/* Centered Toast */}
       {overlayMsg.show && (
-        <div className={`toast-center ${overlayMsg.type === "error" ? "error" : ""}`}>
+        <div
+          className={
+            "toast-center " +
+            (overlayMsg.type === "error" ? "error" : "")
+          }
+        >
           {overlayMsg.text}
         </div>
       )}

@@ -66,8 +66,26 @@ function toDateInputValue(dob) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+/* Try to build thumb URL from any of these fields coming from API:
+   - profile_image_url (absolute URL)
+   - profile_image_path (relative, e.g. "/api/add-list-actress/1/profile-image")
+   - profile_image_base64 (data URL)  */
+function getProfileThumbUrl(row) {
+  if (!row) return "";
+  if (row.profile_image_url) return row.profile_image_url;
+  if (row.profile_image_path) return `${BASE}${row.profile_image_path}`;
+  if (row.profile_image_base64) return row.profile_image_base64;
+  return "";
+}
+
 /* ---------- Center popup (success / error info) ---------- */
-function CenterPopup({ open, title = "Info", message = "", tone = "info", onClose }) {
+function CenterPopup({
+  open,
+  title = "Info",
+  message = "",
+  tone = "info",
+  onClose,
+}) {
   if (!open) return null;
   const colorMap = {
     info: "#2563eb",
@@ -102,7 +120,11 @@ function CenterPopup({ open, title = "Info", message = "", tone = "info", onClos
           {message}
         </div>
         <div className="d-grid">
-          <button className="btn btn-sm text-white fw-semibold" style={{ background: borderColor }} onClick={onClose}>
+          <button
+            className="btn btn-sm text-white fw-semibold"
+            style={{ background: borderColor }}
+            onClick={onClose}
+          >
             OK
           </button>
         </div>
@@ -112,7 +134,13 @@ function CenterPopup({ open, title = "Info", message = "", tone = "info", onClos
 }
 
 /* ---------- Confirm dialog (delete) ---------- */
-function ConfirmPopup({ open, title = "Confirm", message = "", onConfirm, onCancel }) {
+function ConfirmPopup({
+  open,
+  title = "Confirm",
+  message = "",
+  onConfirm,
+  onCancel,
+}) {
   if (!open) return null;
   return (
     <div
@@ -148,7 +176,10 @@ function ConfirmPopup({ open, title = "Confirm", message = "", onConfirm, onCanc
           >
             Yes, Delete
           </button>
-          <button className="btn btn-sm btn-light fw-semibold" onClick={onCancel}>
+          <button
+            className="btn btn-sm btn-light fw-semibold"
+            onClick={onCancel}
+          >
             Cancel
           </button>
         </div>
@@ -221,6 +252,61 @@ function OverlayLoader({ open, label = "Please wait…" }) {
   );
 }
 
+/* ---------- Fullscreen profile view (for mobile & desktop) ---------- */
+function ProfileLightbox({ open, url, name, onClose }) {
+  if (!open || !url) return null;
+
+  return (
+    <div
+      className="position-fixed top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center"
+      style={{
+        zIndex: 23000,
+        background: "rgba(0,0,0,0.92)",
+        padding: 10,
+        paddingTop: "calc(env(safe-area-inset-top, 0px) + 10px)",
+      }}
+      onClick={onClose}
+    >
+      <div
+        className="w-100 h-100 d-flex flex-column"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* top bar */}
+        <div className="d-flex justify-content-between align-items-center mb-2">
+          <div
+            className="text-white fw-semibold text-truncate"
+            style={{ maxWidth: "70%" }}
+          >
+            {name || "Profile image"}
+          </div>
+          <button className="btn btn-sm btn-light" onClick={onClose}>
+            ✕ Close
+          </button>
+        </div>
+
+        {/* image area */}
+        <div
+          className="flex-grow-1 d-flex align-items-center justify-content-center"
+          style={{
+            overflow: "hidden",
+          }}
+        >
+          <img
+            src={url}
+            alt={name || "profile"}
+            style={{
+              maxWidth: "100%",
+              maxHeight: "100%",
+              objectFit: "contain", // full image, no crop
+              display: "block",
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ---------- Edit modal ---------- */
 function EditModal({ open, item, form, onChange, onCancel, onSave, saving }) {
   if (!open || !item) return null;
@@ -244,12 +330,16 @@ function EditModal({ open, item, form, onChange, onCancel, onSave, saving }) {
           <h5 className="fw-bold mb-0" style={{ color: "#0f172a" }}>
             Edit Actress #{item.seq ?? item.id}
           </h5>
-          <button className="btn btn-sm btn-outline-secondary" onClick={onCancel}>
+          <button
+            className="btn btn-sm btn-outline-secondary"
+            onClick={onCancel}
+          >
             ✕
           </button>
         </div>
         <p className="small text-muted mb-3">
-          Update details and click <strong>Save Changes</strong>. Name will keep auto-capitalisation.
+          Update details and click <strong>Save Changes</strong>. Name will keep
+          auto-capitalisation.
         </p>
 
         <form
@@ -265,7 +355,9 @@ function EditModal({ open, item, form, onChange, onCancel, onSave, saving }) {
             <input
               className="form-control form-control-sm"
               value={form.actress_name}
-              onChange={(e) => onChange({ ...form, actress_name: e.target.value })}
+              onChange={(e) =>
+                onChange({ ...form, actress_name: e.target.value })
+              }
             />
           </div>
 
@@ -284,27 +376,37 @@ function EditModal({ open, item, form, onChange, onCancel, onSave, saving }) {
               <input
                 className="form-control form-control-sm"
                 value={form.country_name}
-                onChange={(e) => onChange({ ...form, country_name: e.target.value })}
+                onChange={(e) =>
+                  onChange({ ...form, country_name: e.target.value })
+                }
               />
             </div>
           </div>
 
           <div className="mt-2">
-            <label className="form-label small fw-semibold">Best Movie / Series</label>
+            <label className="form-label small fw-semibold">
+              Best Movie / Series
+            </label>
             <input
               className="form-control form-control-sm"
               value={form.best_movie}
-              onChange={(e) => onChange({ ...form, best_movie: e.target.value })}
+              onChange={(e) =>
+                onChange({ ...form, best_movie: e.target.value })
+              }
             />
           </div>
 
           <div className="mt-2">
-            <label className="form-label small fw-semibold">Best Thing / Notes</label>
+            <label className="form-label small fw-semibold">
+              Best Thing / Notes
+            </label>
             <textarea
               className="form-control form-control-sm"
               rows={2}
               value={form.best_thing}
-              onChange={(e) => onChange({ ...form, best_thing: e.target.value })}
+              onChange={(e) =>
+                onChange({ ...form, best_thing: e.target.value })
+              }
             />
           </div>
 
@@ -377,13 +479,19 @@ export default function Addfevlist() {
   });
   const [savingEdit, setSavingEdit] = useState(false);
 
+  // full image view
+  const [profileView, setProfileView] = useState({
+    open: false,
+    url: "",
+    name: "",
+  });
+
   const showOverlay = (label) => setOverlay({ open: true, label });
   const hideOverlay = () => setOverlay({ open: false, label: "" });
 
   const showPopup = (title, message, tone = "info") =>
     setPopup({ open: true, title, message, tone });
-  const closePopup = () =>
-    setPopup((p) => ({ ...p, open: false }));
+  const closePopup = () => setPopup((p) => ({ ...p, open: false }));
 
   /* ----- load list ----- */
   const loadList = async () => {
@@ -408,7 +516,7 @@ export default function Addfevlist() {
     loadList();
   }, []);
 
-  /* ----- image handling ----- */
+  /* ----- image handling for create ----- */
   const handleFile = (file) => {
     if (!file) return;
     const reader = new FileReader();
@@ -525,6 +633,8 @@ export default function Addfevlist() {
     try {
       setSavingEdit(true);
       showOverlay("Updating actress details…");
+      // BACKEND: make sure update route accepts PATCH as well,
+      // or change here to PUT if you only allow PUT.
       await safeFetchJSON(API.update(editItem.id), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -577,7 +687,8 @@ export default function Addfevlist() {
             Favourite Actress List
           </h3>
           <p className="mb-0" style={{ color: "#555", fontSize: 14 }}>
-            Add your favourites, see them in order, update or delete, and export a beautiful list.
+            Add your favourites, see them in order, update or delete, and export
+            a beautiful list.
           </p>
         </div>
 
@@ -629,7 +740,8 @@ export default function Addfevlist() {
                       }
                     />
                     <div className="form-text">
-                      First letter of each word will be capitalised automatically.
+                      First letter of each word will be capitalised
+                      automatically.
                     </div>
                   </div>
 
@@ -749,7 +861,8 @@ export default function Addfevlist() {
                     />
                   </div>
                   <div className="form-text">
-                    Image is saved directly to database (binary).
+                    Image is saved directly to database (binary or path, per
+                    backend).
                   </div>
                 </div>
               </div>
@@ -899,111 +1012,170 @@ export default function Addfevlist() {
               </div>
             ) : (
               <div className="list-group list-group-flush">
-                {current.map((row) => (
-                  <div
-                    key={row.id}
-                    className="list-group-item border-0 border-bottom px-3 py-2"
-                    style={{
-                      animation: "afl-fade-in-up 0.3s ease-out",
-                      background: "transparent",
-                    }}
-                  >
-                    <div className="d-flex gap-2 align-items-start">
-                      <div
-                        className="rounded-pill px-3 py-1 small fw-bold text-white"
-                        style={{
-                          background:
-                            "linear-gradient(135deg, #ff9f68 0%, #ff4c6a 100%)",
-                          minWidth: 48,
-                          textAlign: "center",
-                        }}
-                      >
-                        {row.seq ?? "-"}
-                      </div>
-                      <div className="flex-grow-1">
-                        <div className="d-flex flex-wrap justify-content-between gap-1">
-                          <div>
-                            <div
-                              className="fw-semibold"
-                              style={{ color: "#333", fontSize: 15 }}
-                            >
-                              {row.actress_name || "Unknown"}
-                            </div>
-                            <div className="small" style={{ color: "#666" }}>
-                              {row.country_name && (
-                                <span className="me-2">
-                                  🌎 {row.country_name}
-                                </span>
-                              )}
-                              {row.dob && <span>🎂 {row.dob}</span>}
-                            </div>
-                          </div>
-
-                          {/* actions: edit/delete */}
-                          <div className="d-flex flex-wrap gap-1">
-                            <button
-                              type="button"
-                              className="btn btn-sm text-white px-2"
-                              style={{
-                                background:
-                                  "linear-gradient(135deg, #22c55e 0%, #14b8a6 100%)",
-                                border: "none",
-                                fontSize: 12,
-                              }}
-                              onClick={() => handleOpenEdit(row)}
-                            >
-                              ✏️ Edit
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-sm text-white px-2"
-                              style={{
-                                background:
-                                  "linear-gradient(135deg, #ef4444 0%, #f97316 100%)",
-                                border: "none",
-                                fontSize: 12,
-                              }}
-                              onClick={() => setConfirmDeleteFor(row)}
-                            >
-                              🗑 Delete
-                            </button>
-                          </div>
+                {current.map((row) => {
+                  const thumbUrl = getProfileThumbUrl(row);
+                  return (
+                    <div
+                      key={row.id}
+                      className="list-group-item border-0 border-bottom px-3 py-2"
+                      style={{
+                        animation: "afl-fade-in-up 0.3s ease-out",
+                        background: "transparent",
+                      }}
+                    >
+                      <div className="d-flex flex-column flex-sm-row gap-2 align-items-start">
+                        {/* seq badge */}
+                        <div
+                          className="rounded-pill px-3 py-1 small fw-bold text-white"
+                          style={{
+                            background:
+                              "linear-gradient(135deg, #ff9f68 0%, #ff4c6a 100%)",
+                            minWidth: 48,
+                            textAlign: "center",
+                          }}
+                        >
+                          {row.seq ?? "-"}
                         </div>
 
-                        {row.best_movie && (
-                          <div className="small mt-1">
-                            <span
-                              className="badge rounded-pill me-1"
+                        {/* small profile image */}
+                        <div
+                          className="d-flex align-items-center justify-content-center"
+                          style={{ width: 64, height: 64 }}
+                        >
+                          {thumbUrl ? (
+                            <button
+                              type="button"
+                              className="p-0 border-0 bg-transparent"
+                              onClick={() =>
+                                setProfileView({
+                                  open: true,
+                                  url: thumbUrl,
+                                  name: row.actress_name,
+                                })
+                              }
+                              aria-label="View profile image"
+                            >
+                              <img
+                                src={thumbUrl}
+                                alt={row.actress_name}
+                                style={{
+                                  width: 64,
+                                  height: 64,
+                                  borderRadius: "999px",
+                                  objectFit: "cover",
+                                  display: "block",
+                                  boxShadow:
+                                    "0 4px 12px rgba(15,23,42,0.25)",
+                                }}
+                              />
+                            </button>
+                          ) : (
+                            <div
+                              className="rounded-circle d-flex align-items-center justify-content-center text-muted"
                               style={{
-                                backgroundColor: "#fff4d5",
-                                color: "#a05a00",
+                                width: 56,
+                                height: 56,
+                                background: "#f3f4f6",
+                                fontSize: 11,
                               }}
                             >
-                              Best Movie / Series
-                            </span>
-                            <span style={{ color: "#555" }}>
-                              {row.best_movie}
-                            </span>
+                              No Image
+                            </div>
+                          )}
+                        </div>
+
+                        {/* text & actions */}
+                        <div className="flex-grow-1">
+                          <div className="d-flex flex-wrap justify-content-between gap-1">
+                            <div>
+                              <div
+                                className="fw-semibold"
+                                style={{ color: "#333", fontSize: 15 }}
+                              >
+                                {row.actress_name || "Unknown"}
+                              </div>
+                              <div
+                                className="small"
+                                style={{ color: "#666" }}
+                              >
+                                {row.country_name && (
+                                  <span className="me-2">
+                                    🌎 {row.country_name}
+                                  </span>
+                                )}
+                                {row.dob && <span>🎂 {row.dob}</span>}
+                              </div>
+                            </div>
+
+                            {/* actions */}
+                            <div className="d-flex flex-wrap gap-1">
+                              <button
+                                type="button"
+                                className="btn btn-sm text-white px-2"
+                                style={{
+                                  background:
+                                    "linear-gradient(135deg, #22c55e 0%, #14b8a6 100%)",
+                                  border: "none",
+                                  fontSize: 12,
+                                }}
+                                onClick={() => handleOpenEdit(row)}
+                              >
+                                ✏️ Edit
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-sm text-white px-2"
+                                style={{
+                                  background:
+                                    "linear-gradient(135deg, #ef4444 0%, #f97316 100%)",
+                                  border: "none",
+                                  fontSize: 12,
+                                }}
+                                onClick={() => setConfirmDeleteFor(row)}
+                              >
+                                🗑 Delete
+                              </button>
+                            </div>
                           </div>
-                        )}
-                        {row.best_thing && (
-                          <div className="small mt-1" style={{ color: "#555" }}>
-                            <span
-                              className="badge rounded-pill me-1"
-                              style={{
-                                backgroundColor: "#e2f8ff",
-                                color: "#006b92",
-                              }}
+
+                          {row.best_movie && (
+                            <div className="small mt-1">
+                              <span
+                                className="badge rounded-pill me-1"
+                                style={{
+                                  backgroundColor: "#fff4d5",
+                                  color: "#a05a00",
+                                }}
+                              >
+                                Best Movie / Series
+                              </span>
+                              <span style={{ color: "#555" }}>
+                                {row.best_movie}
+                              </span>
+                            </div>
+                          )}
+                          {row.best_thing && (
+                            <div
+                              className="small mt-1"
+                              style={{ color: "#555" }}
                             >
-                              Best Thing
-                            </span>
-                            {row.best_thing}
-                          </div>
-                        )}
+                              <span
+                                className="badge rounded-pill me-1"
+                                style={{
+                                  backgroundColor: "#e2f8ff",
+                                  color: "#006b92",
+                                }}
+                              >
+                                Best Thing
+                              </span>
+                              {row.best_thing}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1076,6 +1248,12 @@ export default function Addfevlist() {
         onCancel={() => setEditItem(null)}
         onSave={handleSaveEdit}
         saving={savingEdit}
+      />
+      <ProfileLightbox
+        open={profileView.open}
+        url={profileView.url}
+        name={profileView.name}
+        onClose={() => setProfileView({ open: false, url: "", name: "" })}
       />
     </div>
   );
