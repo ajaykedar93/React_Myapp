@@ -6,20 +6,25 @@ import Portal from "../../components/Portal";
 
 const BASE = "https://express-backend-myapp.onrender.com";
 
-// ==== API ENDPOINTS THAT MATCH userActFavorite.js (extend as needed) ====
+// ==== API ENDPOINTS THAT MATCH userActFavorite.js ====
+// Backend mounts at: app.use("/api/act_favorite", require("./routes/userActFavorite"));
 const API = {
+  // GET /api/act_favorite/user-act-favorite?q=...
   list: (q, countryId) => {
     const u = new URL(`${BASE}/api/act_favorite/user-act-favorite`);
     if (q) u.searchParams.set("q", q);
     if (countryId) u.searchParams.set("country_id", countryId);
     return u.toString();
   },
+
+  // GET /api/act_favorite/user-act-favorite/:id
   one: (id) => `${BASE}/api/act_favorite/user-act-favorite/${id}`,
+
+  // PATCH /api/act_favorite/user-act-favorite/:id/images
   images: (id) => `${BASE}/api/act_favorite/user-act-favorite/${id}/images`,
+
+  // DELETE /api/act_favorite/user-act-favorite/:id
   delActress: (id) => `${BASE}/api/act_favorite/user-act-favorite/${id}`,
-  // NEW: profile image endpoint (implement this in your backend)
-  profileImage: (id) =>
-    `${BASE}/api/act_favorite/user-act-favorite/${id}/profile-image`,
 };
 
 const PAGE_SIZE_LIST = 5;
@@ -49,6 +54,7 @@ async function safeFetchJSON(url, options) {
     return {};
   }
 
+  // unwrap your standard { success, data, meta } shape
   if (payload && typeof payload === "object" && "data" in payload) {
     return payload.data;
   }
@@ -78,7 +84,7 @@ const uniqueImages = (arr) => {
   return out;
 };
 
-/* ---------- % Progress overlay ---------- */
+/* ---------- % Progress overlay (centered via Portal) ---------- */
 function useProgress() {
   const [state, setState] = useState({
     visible: false,
@@ -163,7 +169,7 @@ function LoadingOverlay({ visible, percent, label }) {
   );
 }
 
-/* ---------- Center popups ---------- */
+/* ---------- Professional center popups (Portal) ---------- */
 function CenterPopup({
   open,
   title = "Info",
@@ -256,7 +262,7 @@ function ConfirmCenter({
   );
 }
 
-/* ---------- Lightbox ---------- */
+/* ---------- Lightbox (zoom fullscreen + drag/pan + next/prev) ---------- */
 function Lightbox({ images, index, onChangeIndex, onClose }) {
   const [view, setView] = useState({
     scale: 1,
@@ -269,10 +275,7 @@ function Lightbox({ images, index, onChangeIndex, onClose }) {
 
   const hasImages = Array.isArray(images) && images.length > 0;
   const validIndex =
-    typeof index === "number" &&
-    hasImages &&
-    index >= 0 &&
-    index < images.length;
+    typeof index === "number" && hasImages && index >= 0 && index < images.length;
 
   useEffect(() => {
     if (!validIndex) return;
@@ -291,6 +294,7 @@ function Lightbox({ images, index, onChangeIndex, onClose }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [validIndex, index, images?.length]);
 
+  // reset zoom & pan when image changes
   useEffect(() => {
     setView({
       scale: 1,
@@ -303,6 +307,7 @@ function Lightbox({ images, index, onChangeIndex, onClose }) {
   }, [index]);
 
   if (!validIndex) return null;
+
   const currentSrc = images[index];
 
   const handleNext = () => {
@@ -389,6 +394,7 @@ function Lightbox({ images, index, onChangeIndex, onClose }) {
         }}
         onClick={(e) => e.target === e.currentTarget && onClose()}
       >
+        {/* IMAGE AREA */}
         <div
           className="flex-grow-1 d-flex align-items-center justify-content-center w-100"
           style={{
@@ -435,6 +441,7 @@ function Lightbox({ images, index, onChangeIndex, onClose }) {
           </div>
         </div>
 
+        {/* CONTROLS */}
         <div
           className="d-flex flex-wrap justify-content-center gap-1 w-100"
           style={{
@@ -491,7 +498,7 @@ function Lightbox({ images, index, onChangeIndex, onClose }) {
   );
 }
 
-/* ---------- Modal shell ---------- */
+/* ---------- Modal shell (Portal) ---------- */
 function Modal({ title, children, onClose }) {
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose();
@@ -597,10 +604,6 @@ export default function ActressesPage() {
           }
           onDeleteActress={() => {
             listApiRef.current.removeItem?.(selectedId);
-          }}
-          onActressMeta={(updated) => {
-            // keep list profile_image etc in sync if desired
-            listApiRef.current.updateItem?.(selectedId, () => updated);
           }}
         />
       )}
@@ -826,15 +829,8 @@ function ListView({ onOpen, progress, registerListApi }) {
   );
 }
 
-/* ==================== Detail View ==================== */
-function DetailView({
-  id,
-  onClose,
-  progress,
-  onImagesDelta,
-  onDeleteActress,
-  onActressMeta,
-}) {
+/* ==================== Detail View – FULL PAGE ==================== */
+function DetailView({ id, onClose, progress, onImagesDelta, onDeleteActress }) {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [actress, setActress] = useState(null);
@@ -856,26 +852,6 @@ function DetailView({
     setLightboxIndex(idx);
   };
 
-  const mergeImagesFromActress = (data) =>
-    uniqueImages(
-      [data.profile_image, ...(Array.isArray(data.images) ? data.images : [])]
-        .filter(Boolean)
-    );
-
-  const handleActressUpdated = (updated) => {
-    if (!updated) return;
-    const newImages = mergeImagesFromActress(updated);
-    const prevCount = images.length;
-    const newCount = newImages.length;
-    const delta = newCount - prevCount;
-    if (delta !== 0) {
-      onImagesDelta?.(delta);
-    }
-    setActress(updated);
-    setImages(newImages);
-    onActressMeta?.(updated);
-  };
-
   const load = async () => {
     if (!isFiniteNum(id) || Number(id) <= 0) {
       setErr("Invalid record id");
@@ -889,11 +865,15 @@ function DetailView({
       progress.start("Fetching profile…", 14);
       const data = await safeFetchJSON(API.one(id));
 
-      const mergedImages = mergeImagesFromActress(data);
+      const mergedImages = uniqueImages(
+        [
+          data.profile_image,
+          ...(Array.isArray(data.images) ? data.images : []),
+        ].filter(Boolean)
+      );
 
       setActress(data);
       setImages(mergedImages);
-      onActressMeta?.(data);
       progress.done();
     } catch (e) {
       setErr(e.message || "Failed to load");
@@ -912,7 +892,14 @@ function DetailView({
     try {
       progress.start("Refreshing images…", 12);
       const data = await safeFetchJSON(API.one(id));
-      handleActressUpdated(data);
+      const merged = uniqueImages(
+        [
+          data.profile_image,
+          ...(Array.isArray(data.images) ? data.images : []),
+        ].filter(Boolean)
+      );
+      setActress(data);
+      setImages(merged);
       progress.done();
     } catch (e) {
       progress.done();
@@ -970,6 +957,7 @@ function DetailView({
         </div>
       </div>
 
+      {/* HERO SECTION – Profile + Info */}
       <div className="row g-3 align-items-stretch mb-3">
         <div className="col-12 col-md-5 col-lg-4">
           <div
@@ -1057,13 +1045,9 @@ function DetailView({
                 </div>
               )}
 
+              {/* Actions – exactly 3 buttons, mobile-friendly */}
               <div className="mt-3">
                 <div className="d-grid d-md-flex flex-wrap gap-2">
-                  <UpdateProfileImageButton
-                    actressId={actress.id}
-                    progress={progress}
-                    onUpdated={handleActressUpdated}
-                  />
                   <DeleteImagesButton
                     actressId={actress.id}
                     progress={progress}
@@ -1076,6 +1060,7 @@ function DetailView({
                     actressId={actress.id}
                     progress={progress}
                     onImagesAdded={(updatedImages) => {
+                      // updatedImages = full list from server
                       setImages((prev) => {
                         const prevLen = prev.length;
                         const newLen = updatedImages.length;
@@ -1100,7 +1085,7 @@ function DetailView({
         </div>
       </div>
 
-      {/* ALL IMAGES gallery */}
+      {/* ALL IMAGES – scrollable gallery section only */}
       <div className="card border-0 shadow-sm mb-3">
         <div className="card-body">
           <div className="d-flex justify-content-between align-items-center mb-2">
@@ -1158,6 +1143,7 @@ function DetailView({
         </div>
       </div>
 
+      {/* Lightbox gallery with zoom + drag/pan */}
       <Lightbox
         images={images}
         index={lightboxIndex}
@@ -1165,6 +1151,7 @@ function DetailView({
         onClose={() => setLightboxIndex(null)}
       />
 
+      {/* Delete actress confirm + errors */}
       <ConfirmCenter
         open={confirmDeleteActress}
         title="Delete Actress"
@@ -1183,7 +1170,7 @@ function DetailView({
   );
 }
 
-/* ---------- Buttons ---------- */
+/* ---------- Buttons (open modals / popups) ---------- */
 function AddImagesButton({ actressId, progress, onImagesAdded }) {
   const [open, setOpen] = useState(false);
   const [successOpen, setSuccessOpen] = useState(false);
@@ -1202,6 +1189,7 @@ function AddImagesButton({ actressId, progress, onImagesAdded }) {
             actressId={actressId}
             onClose={() => setOpen(false)}
             onUploaded={(updatedImages) => {
+              // updatedImages is full list from server
               setOpen(false);
               setSuccessOpen(true);
               onImagesAdded?.(updatedImages);
@@ -1222,7 +1210,6 @@ function AddImagesButton({ actressId, progress, onImagesAdded }) {
     </>
   );
 }
-
 function DeleteImagesButton({ actressId, progress, onImagesDeleted }) {
   const [open, setOpen] = useState(false);
   const [deletedCount, setDeletedCount] = useState(0);
@@ -1252,48 +1239,9 @@ function DeleteImagesButton({ actressId, progress, onImagesDeleted }) {
   );
 }
 
-// NEW: update profile image button
-function UpdateProfileImageButton({ actressId, progress, onUpdated }) {
-  const [open, setOpen] = useState(false);
-  const [successOpen, setSuccessOpen] = useState(false);
-
-  return (
-    <>
-      <button
-        className="btn btn-outline-primary w-100 w-md-auto"
-        onClick={() => setOpen(true)}
-      >
-        Update Profile Image
-      </button>
-      {open && (
-        <Modal title="Update Profile Image" onClose={() => setOpen(false)}>
-          <UpdateProfileImage
-            actressId={actressId}
-            onClose={() => setOpen(false)}
-            progress={progress}
-            onUpdated={(updatedActress) => {
-              setOpen(false);
-              setSuccessOpen(true);
-              onUpdated?.(updatedActress);
-            }}
-          />
-        </Modal>
-      )}
-      <CenterPopup
-        open={successOpen}
-        title="Success"
-        tone="success"
-        message="Profile image updated."
-        onClose={() => setSuccessOpen(false)}
-      />
-    </>
-  );
-}
-
-/* ==================== Add Images (extra) ==================== */
+/* ==================== Add Images ==================== */
 function AddImages({ actressId, onClose, onUploaded, progress }) {
   const inputRef = useRef(null);
-  const dropRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [errorPopup, setErrorPopup] = useState({ open: false, message: "" });
 
@@ -1303,16 +1251,19 @@ function AddImages({ actressId, onClose, onUploaded, progress }) {
       setBusy(true);
       progress.start("Uploading…", 12);
 
+      // REAL upload with multipart/form-data
       const formData = new FormData();
       Array.from(filesList).forEach((file) => {
-        formData.append("files", file);
+        formData.append("files", file); // backend: upload.array("files")
       });
 
+      // EXPECT: backend returns full updated row with images[]
       const updated = await safeFetchJSON(API.images(actressId), {
         method: "PATCH",
         body: formData,
       });
 
+      // Build full images list from response
       const allImages = uniqueImages(
         [
           updated.profile_image,
@@ -1322,8 +1273,6 @@ function AddImages({ actressId, onClose, onUploaded, progress }) {
 
       progress.done();
       onUploaded && onUploaded(allImages);
-
-      if (inputRef.current) inputRef.current.value = "";
     } catch (e) {
       progress.done();
       setErrorPopup({
@@ -1335,37 +1284,10 @@ function AddImages({ actressId, onClose, onUploaded, progress }) {
     }
   };
 
-  const onDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.dataTransfer?.files && e.dataTransfer.files.length) {
-      uploadFiles(e.dataTransfer.files);
-    }
-  };
-  const onDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  useEffect(() => {
-    const el = dropRef.current;
-    if (!el) return;
-    el.addEventListener("dragover", onDragOver);
-    el.addEventListener("drop", onDrop);
-    return () => {
-      el.removeEventListener("dragover", onDragOver);
-      el.removeEventListener("drop", onDrop);
-    };
-  }, []);
-
   return (
     <>
-      <div
-        ref={dropRef}
-        className="border rounded-3 p-3 text-center bg-light"
-        style={{ borderStyle: "dashed" }}
-      >
-        <div className="fw-bold">Choose or drop images to add</div>
+      <div className="border rounded-3 p-3 text-center bg-light">
+        <div className="fw-bold">Choose images to add</div>
         <div className="small text-secondary mb-2">JPG/PNG/WebP</div>
         <input
           ref={inputRef}
@@ -1383,115 +1305,6 @@ function AddImages({ actressId, onClose, onUploaded, progress }) {
           >
             Pick files
           </button>
-        </div>
-        <div className="small text-secondary mt-2">
-          Or drag &amp; drop images on this box
-        </div>
-      </div>
-      <div className="d-grid mt-3">
-        <button className="btn btn-secondary" onClick={onClose} disabled={busy}>
-          Done
-        </button>
-      </div>
-
-      <CenterPopup
-        open={errorPopup.open}
-        title="Error"
-        tone="danger"
-        message={errorPopup.message}
-        onClose={() => setErrorPopup({ open: false, message: "" })}
-      />
-    </>
-  );
-}
-
-/* ==================== Update Profile Image ==================== */
-function UpdateProfileImage({ actressId, onClose, progress, onUpdated }) {
-  const inputRef = useRef(null);
-  const dropRef = useRef(null);
-  const [busy, setBusy] = useState(false);
-  const [errorPopup, setErrorPopup] = useState({ open: false, message: "" });
-
-  const uploadProfile = async (filesList) => {
-    if (!filesList || filesList.length === 0) return;
-    const file = filesList[0]; // only first file as profile
-    try {
-      setBusy(true);
-      progress.start("Uploading profile image…", 12);
-
-      const formData = new FormData();
-      formData.append("profile_image", file);
-
-      const updated = await safeFetchJSON(API.profileImage(actressId), {
-        method: "PATCH",
-        body: formData,
-      });
-
-      progress.done();
-      onUpdated && onUpdated(updated);
-
-      if (inputRef.current) inputRef.current.value = "";
-    } catch (e) {
-      progress.done();
-      setErrorPopup({
-        open: true,
-        message: e.message || "Failed to upload profile image",
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const onDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.dataTransfer?.files && e.dataTransfer.files.length) {
-      uploadProfile(e.dataTransfer.files);
-    }
-  };
-  const onDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  useEffect(() => {
-    const el = dropRef.current;
-    if (!el) return;
-    el.addEventListener("dragover", onDragOver);
-    el.addEventListener("drop", onDrop);
-    return () => {
-      el.removeEventListener("dragover", onDragOver);
-      el.removeEventListener("drop", onDrop);
-    };
-  }, []);
-
-  return (
-    <>
-      <div
-        ref={dropRef}
-        className="border rounded-3 p-3 text-center bg-light"
-        style={{ borderStyle: "dashed" }}
-      >
-        <div className="fw-bold">Choose or drop a profile image</div>
-        <div className="small text-secondary mb-2">JPG/PNG/WebP</div>
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*"
-          className="form-control"
-          onChange={(e) => e.target.files && uploadProfile(e.target.files)}
-        />
-        <div className="d-grid mt-3">
-          <button
-            className="btn btn-primary"
-            onClick={() => inputRef.current?.click()}
-            disabled={busy}
-          >
-            Pick file
-          </button>
-        </div>
-        <div className="small text-secondary mt-2">
-          Or drag &amp; drop an image on this box
         </div>
       </div>
       <div className="d-grid mt-3">
@@ -1523,9 +1336,7 @@ function DeleteImages({ actressId, onClose, progress, onDeleted }) {
     progress.start("Loading images…", 10);
     try {
       const data = await safeFetchJSON(API.one(actressId));
-      const imgs = uniqueImages(
-        (Array.isArray(data.images) ? data.images : []).filter(Boolean)
-      );
+      const imgs = uniqueImages(data.images || []);
       setList(imgs);
     } catch (e) {
       setErrorPopup({
