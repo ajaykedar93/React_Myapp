@@ -83,6 +83,7 @@ function CenterPopup({ open, title = "Info", message = "", tone = "info", onClos
         zIndex: 21000,
         background: "rgba(15,23,42,0.55)",
         padding: 12,
+        fontFamily: "'Poppins', 'Segoe UI', system-ui, -apple-system, sans-serif",
       }}
       onClick={onClose}
     >
@@ -121,6 +122,7 @@ function ConfirmPopup({ open, title = "Confirm", message = "", onConfirm, onCanc
         zIndex: 21000,
         background: "rgba(15,23,42,0.6)",
         padding: 12,
+        fontFamily: "'Poppins', 'Segoe UI', system-ui, -apple-system, sans-serif",
       }}
       onClick={onCancel}
     >
@@ -167,6 +169,7 @@ function OverlayLoader({ open, label = "Please wait…" }) {
         zIndex: 22000,
         background: "rgba(15,23,42,0.55)",
         padding: 16,
+        fontFamily: "'Poppins', 'Segoe UI', system-ui, -apple-system, sans-serif",
       }}
     >
       <div
@@ -232,6 +235,7 @@ function EditModal({ open, item, form, onChange, onCancel, onSave, saving }) {
         zIndex: 21000,
         background: "rgba(15,23,42,0.6)",
         padding: 12,
+        fontFamily: "'Poppins', 'Segoe UI', system-ui, -apple-system, sans-serif",
       }}
       onClick={onCancel}
     >
@@ -336,55 +340,77 @@ function EditModal({ open, item, form, onChange, onCancel, onSave, saving }) {
   );
 }
 
-/* ---------- Image lightbox (full-size on click) ---------- */
+/* ---------- Image lightbox (FULL SCREEN on click) ---------- */
+/* UPDATED as per your request */
 function ImageLightbox({ open, src, title, onClose }) {
   if (!open || !src) return null;
   return (
     <div
-      className="position-fixed top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center"
+      className="position-fixed top-0 start-0 w-100 h-100"
       style={{
         zIndex: 23000,
-        background: "rgba(15,23,42,0.85)",
-        padding: 16,
+        background: "rgba(15,23,42,0.9)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 12,
+        fontFamily: "'Poppins', 'Segoe UI', system-ui, -apple-system, sans-serif",
       }}
       onClick={onClose}
     >
-      {/* close button top center */}
-      <button
-        type="button"
-        className="btn btn-sm text-white fw-semibold"
-        style={{
-          position: "absolute",
-          top: 16,
-          left: "50%",
-          transform: "translateX(-50%)",
-          background: "rgba(15,23,42,0.9)",
-          borderRadius: 999,
-          paddingInline: 18,
-          border: "1px solid rgba(248,250,252,0.4)",
-        }}
-        onClick={(e) => {
-          e.stopPropagation();
-          onClose();
-        }}
-      >
-        ✕ Close
-      </button>
-
+      {/* Centered card containing image + caption */}
       <div
-        className="d-flex flex-column align-items-center justify-content-center"
         style={{
-          maxWidth: "90vw",
-          maxHeight: "80vh",
+          position: "relative",
+          maxWidth: "min(600px, 100%)",
+          width: "100%",
+          maxHeight: "100%",
+          background: "#020617",
+          borderRadius: 16,
+          padding: "12px 12px 16px",
+          boxShadow: "0 20px 50px rgba(0,0,0,0.6)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          boxSizing: "border-box",
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div
-          className="bg-black rounded-4 shadow-lg d-flex align-items-center justify-content-center"
+        {/* top-right cross icon (inside card, not over text) */}
+        <button
+          type="button"
+          onClick={onClose}
           style={{
-            padding: 8,
-            maxWidth: "100%",
-            maxHeight: "100%",
+            position: "absolute",
+            top: 8,
+            right: 8,
+            width: 30,
+            height: 30,
+            borderRadius: "999px",
+            border: "1px solid rgba(148,163,184,0.8)",
+            background: "rgba(15,23,42,0.9)",
+            color: "#f9fafb",
+            fontSize: 16,
+            lineHeight: "28px",
+            textAlign: "center",
+            cursor: "pointer",
+          }}
+          aria-label="Close"
+        >
+          ✕
+        </button>
+
+        {/* image area */}
+        <div
+          style={{
+            width: "100%",
+            flex: "1 1 auto",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            overflow: "hidden",
+            marginTop: 8,
+            marginBottom: 10,
           }}
         >
           <img
@@ -392,16 +418,24 @@ function ImageLightbox({ open, src, title, onClose }) {
             alt={title || "Profile"}
             style={{
               maxWidth: "100%",
-              maxHeight: "75vh",
+              maxHeight: "70vh",
               objectFit: "contain",
-              borderRadius: 16,
+              display: "block",
             }}
           />
         </div>
+
+        {/* caption strictly below the image */}
         {title && (
           <div
-            className="mt-2 text-center"
-            style={{ color: "#e5e7eb", fontSize: 14 }}
+            style={{
+              width: "100%",
+              textAlign: "center",
+              color: "#e5e7eb",
+              fontSize: 14,
+              marginTop: 4,
+              wordWrap: "break-word",
+            }}
           >
             {title}
           </div>
@@ -662,6 +696,7 @@ export default function Addfevlist() {
       style={{
         background:
           "linear-gradient(135deg, #ffe5c8 0%, #ffd1e3 40%, #c8f5ff 100%)",
+        fontFamily: "'Poppins', 'Segoe UI', system-ui, -apple-system, sans-serif",
       }}
     >
       <div className="container" style={{ maxWidth: 960 }}>
@@ -1001,152 +1036,145 @@ export default function Addfevlist() {
                   return (
                     <div
                       key={row.id}
-                      className="list-group-item border-0 border-bottom px-3 py-2"
+                      className="list-group-item border-0 afl-actress-card"
                       style={{
+                        margin: "10px 12px",
+                        borderRadius: 12,
+                        padding: "14px 12px 16px",
+                        background: "#ffffff",
                         animation: "afl-fade-in-up 0.3s ease-out",
-                        background: "transparent",
                       }}
                     >
-                      {/* Responsive layout:
-                          Mobile: stacked (image → name/details → buttons)
-                          Desktop: left (seq+image), center (details), right (buttons)
-                      */}
-                      <div className="d-flex flex-column flex-md-row gap-3 align-items-stretch">
-                        {/* left column: seq + image */}
+                      {/* CENTERED layout for image + text on all screens */}
+                      <div className="d-flex flex-column align-items-center text-center gap-3">
+                        {/* sequence pill */}
                         <div
-                          className="d-flex flex-column align-items-center align-items-md-start gap-2"
-                          style={{ minWidth: 120 }}
+                          className="rounded-pill px-3 py-1 small fw-bold text-white"
+                          style={{
+                            background:
+                              "linear-gradient(135deg, #ff9f68 0%, #ff4c6a 100%)",
+                          }}
                         >
-                          {/* sequence pill */}
+                          {row.seq ?? "-"}
+                        </div>
+
+                        {/* centered image */}
+                        {imgUrl && (
                           <div
-                            className="rounded-pill px-3 py-1 small fw-bold text-white"
+                            className="afl-profile-img-wrapper"
                             style={{
-                              background:
-                                "linear-gradient(135deg, #ff9f68 0%, #ff4c6a 100%)",
-                              textAlign: "center",
+                              width: "100%",
+                              maxWidth: 220,
+                              borderRadius: 12,
+                              overflow: "hidden",
+                              border: "1px solid #e5e7eb",
+                              background: "#f9fafb",
+                              cursor: "pointer",
                             }}
+                            onClick={() =>
+                              openImageModal(imgUrl, row.actress_name)
+                            }
                           >
-                            {row.seq ?? "-"}
+                            <img
+                              src={imgUrl}
+                              alt={row.actress_name || "Actress profile"}
+                              loading="lazy"
+                              className="afl-profile-img"
+                              style={{
+                                display: "block",
+                                width: "100%",
+                                height: "100%",
+                                objectFit: "cover",
+                              }}
+                            />
+                          </div>
+                        )}
+
+                        {/* details below image, centered */}
+                        <div style={{ maxWidth: 480 }}>
+                          <div
+                            className="fw-semibold"
+                            style={{ color: "#111827", fontSize: 16 }}
+                          >
+                            {row.actress_name || "Unknown"}
+                          </div>
+                          <div className="small" style={{ color: "#6b7280" }}>
+                            {row.country_name && (
+                              <span className="me-2">
+                                🌎 {row.country_name}
+                              </span>
+                            )}
+                            {row.dob && <span>🎂 {row.dob}</span>}
                           </div>
 
-                          {/* profile image (medium size) */}
-                          {imgUrl && (
-                            <div
-                              className="d-flex align-items-center justify-content-center rounded-3 bg-light"
-                              style={{
-                                width: 120,
-                                height: 120,
-                                overflow: "hidden",
-                                border: "1px solid #e5e7eb",
-                                cursor: "pointer",
-                              }}
-                              onClick={() =>
-                                openImageModal(imgUrl, row.actress_name)
-                              }
-                            >
-                              <img
-                                src={imgUrl}
-                                alt={row.actress_name || "Actress profile"}
-                                loading="lazy"
+                          {row.best_movie && (
+                            <div className="small mt-2">
+                              <span
+                                className="badge rounded-pill me-1"
                                 style={{
-                                  maxWidth: "100%",
-                                  maxHeight: "100%",
-                                  objectFit: "contain", // full image visible, no crop/zoom
+                                  backgroundColor: "#fff4d5",
+                                  color: "#92400e",
                                 }}
-                              />
+                              >
+                                Best Movie / Series
+                              </span>
+                              <span style={{ color: "#374151" }}>
+                                {row.best_movie}
+                              </span>
+                            </div>
+                          )}
+
+                          {row.best_thing && (
+                            <div className="small mt-2">
+                              <span
+                                className="badge rounded-pill me-1"
+                                style={{
+                                  backgroundColor: "#ffece0",
+                                  color: "#c05621",
+                                }}
+                              >
+                                Best Thing
+                              </span>
+                              <span
+                                style={{
+                                  fontWeight: 700,
+                                  color: "#f97316",
+                                }}
+                              >
+                                {row.best_thing}
+                              </span>
                             </div>
                           )}
                         </div>
 
-                        {/* center/right column: details + buttons */}
-                        <div className="flex-grow-1 d-flex flex-column justify-content-between">
-                          {/* name + meta */}
-                          <div>
-                            <div
-                              className="fw-semibold"
-                              style={{ color: "#333", fontSize: 15 }}
-                            >
-                              {row.actress_name || "Unknown"}
-                            </div>
-                            <div className="small" style={{ color: "#666" }}>
-                              {row.country_name && (
-                                <span className="me-2">
-                                  🌎 {row.country_name}
-                                </span>
-                              )}
-                              {row.dob && <span>🎂 {row.dob}</span>}
-                            </div>
-
-                            {row.best_movie && (
-                              <div className="small mt-1">
-                                <span
-                                  className="badge rounded-pill me-1"
-                                  style={{
-                                    backgroundColor: "#fff4d5",
-                                    color: "#a05a00",
-                                  }}
-                                >
-                                  Best Movie / Series
-                                </span>
-                                <span style={{ color: "#555" }}>
-                                  {row.best_movie}
-                                </span>
-                              </div>
-                            )}
-
-                            {row.best_thing && (
-                              <div className="small mt-1">
-                                <span
-                                  className="badge rounded-pill me-1"
-                                  style={{
-                                    backgroundColor: "#ffece0",
-                                    color: "#c05621",
-                                  }}
-                                >
-                                  Best Thing
-                                </span>
-                                {/* bold orange text for best thing */}
-                                <span
-                                  style={{
-                                    fontWeight: 700,
-                                    color: "#f97316",
-                                  }}
-                                >
-                                  {row.best_thing}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* actions: edit/delete (bottom on mobile, right on desktop) */}
-                          <div className="d-flex flex-wrap gap-1 mt-2 justify-content-start justify-content-md-end">
-                            <button
-                              type="button"
-                              className="btn btn-sm text-white px-2"
-                              style={{
-                                background:
-                                  "linear-gradient(135deg, #22c55e 0%, #14b8a6 100%)",
-                                border: "none",
-                                fontSize: 12,
-                              }}
-                              onClick={() => handleOpenEdit(row)}
-                            >
-                              ✏️ Edit
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-sm text-white px-2"
-                              style={{
-                                background:
-                                  "linear-gradient(135deg, #ef4444 0%, #f97316 100%)",
-                                border: "none",
-                                fontSize: 12,
-                              }}
-                              onClick={() => setConfirmDeleteFor(row)}
-                            >
-                              🗑 Delete
-                            </button>
-                          </div>
+                        {/* actions: buttons centered under details */}
+                        <div className="d-flex flex-wrap gap-2 mt-1 justify-content-center">
+                          <button
+                            type="button"
+                            className="btn btn-sm text-white px-3"
+                            style={{
+                              background:
+                                "linear-gradient(135deg, #22c55e 0%, #14b8a6 100%)",
+                              border: "none",
+                              fontSize: 12,
+                            }}
+                            onClick={() => handleOpenEdit(row)}
+                          >
+                            ✏️ Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-sm text-white px-3"
+                            style={{
+                              background:
+                                "linear-gradient(135deg, #ef4444 0%, #f97316 100%)",
+                              border: "none",
+                              fontSize: 12,
+                            }}
+                            onClick={() => setConfirmDeleteFor(row)}
+                          >
+                            🗑 Delete
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -1235,7 +1263,7 @@ export default function Addfevlist() {
   );
 }
 
-/* inject simple keyframes once */
+/* inject simple keyframes + custom styles once */
 if (
   typeof document !== "undefined" &&
   !document.getElementById("addfevlist-style")
@@ -1258,6 +1286,28 @@ if (
     @keyframes afl-bar {
       0% { transform: translateX(-10%); }
       100% { transform: translateX(70%); }
+    }
+
+    /* each actress card: black border outside */
+    .afl-actress-card {
+      border: 1px solid #000;
+    }
+
+    /* desktop image size: professional medium */
+    @media (min-width: 768px) {
+      .afl-profile-img-wrapper {
+        max-width: 200px;
+        height: 160px;
+      }
+    }
+
+    /* mobile: allow natural height, still centered by wrapper max-width in JSX */
+    @media (max-width: 767.98px) {
+      .afl-profile-img-wrapper {
+        max-width: 260px;
+        height: auto;
+        margin-inline: auto;
+      }
     }
   `;
   document.head.appendChild(st);

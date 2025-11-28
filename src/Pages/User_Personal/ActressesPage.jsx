@@ -566,23 +566,26 @@ export default function ActressesPage() {
       className="container-fluid"
       style={{ paddingTop: 12, paddingBottom: 24 }}
     >
-      {!selectedId ? (
-        <ListView
-          registerListApi={(api) => (listApiRef.current = api)}
-          onOpen={(id) => {
-            const next = new URL(window.location.href);
-            next.searchParams.set("id", String(id));
-            window.history.pushState({}, "", next.toString());
-            setSearchParams((prev) => {
-              const p = new URLSearchParams(prev);
-              p.set("id", String(id));
-              return p;
-            });
-            progress.start("Opening details…", 12);
-          }}
-          progress={progress}
-        />
-      ) : (
+      {/* LIST VIEW is always mounted, just hidden when detail open */}
+      <ListView
+        hidden={!!selectedId}
+        registerListApi={(api) => (listApiRef.current = api)}
+        onOpen={(id) => {
+          const next = new URL(window.location.href);
+          next.searchParams.set("id", String(id));
+          window.history.pushState({}, "", next.toString());
+          setSearchParams((prev) => {
+            const p = new URLSearchParams(prev);
+            p.set("id", String(id));
+            return p;
+          });
+          progress.start("Opening details…", 12);
+        }}
+        progress={progress}
+      />
+
+      {/* Detail sits on top only when selected */}
+      {selectedId && (
         <DetailView
           key={selectedId}
           id={selectedId}
@@ -607,6 +610,7 @@ export default function ActressesPage() {
           }}
         />
       )}
+
       <LoadingOverlay
         visible={progress.state.visible}
         percent={progress.state.percent}
@@ -617,7 +621,7 @@ export default function ActressesPage() {
 }
 
 /* ==================== List View ==================== */
-function ListView({ onOpen, progress, registerListApi }) {
+function ListView({ onOpen, progress, registerListApi, hidden }) {
   const [all, setAll] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -700,7 +704,7 @@ function ListView({ onOpen, progress, registerListApi }) {
   const canNext = start + PAGE_SIZE_LIST < total;
 
   return (
-    <>
+    <div style={hidden ? { display: "none" } : undefined}>
       <div className="row g-2 align-items-center mb-3">
         <div className="col-12 col-md-6 col-lg-4">
           <input
@@ -825,7 +829,7 @@ function ListView({ onOpen, progress, registerListApi }) {
           </div>
         </>
       )}
-    </>
+    </div>
   );
 }
 

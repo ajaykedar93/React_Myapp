@@ -60,6 +60,36 @@ export default function UserInvestments() {
       .card-hover:hover{transform:translateY(-1px); box-shadow:0 12px 26px rgba(0,0,0,.08)}
       .card .card-body{padding:14px 14px}
       .badge-light-soft{background:#f8fafc; border:1px solid #e5e7eb; border-radius:999px; padding:.15rem .5rem; font-weight:700}
+
+      /* ===== New: professional card with blue bottom border + animation ===== */
+      .inv-card{
+        position:relative;
+        overflow:hidden;
+        border-radius:14px;
+        animation: inv-fade-up .35s ease-out both;
+      }
+      .inv-card::after{
+        content:"";
+        position:absolute;
+        left:0;
+        right:0;
+        bottom:0;
+        height:3px;
+        background:linear-gradient(90deg,#0ea5e9,#22c55e,#38bdf8);
+      }
+      @keyframes inv-fade-up{
+        0%{
+          opacity:0;
+          transform:translateY(6px);
+          box-shadow:0 0 0 rgba(15,23,42,0);
+        }
+        100%{
+          opacity:1;
+          transform:translateY(0);
+          box-shadow:0 12px 30px rgba(15,23,42,.10);
+        }
+      }
+
       /* Responsive visibility */
       @media (max-width: 991.98px){ .desktop-table{display:none !important} }
       @media (min-width: 992px){ .mobile-cards{display:none !important} }
@@ -626,8 +656,8 @@ export default function UserInvestments() {
           ) : list.length === 0 ? (
             <div className="text-center py-4 text-muted">No records found.</div>
           ) : (
-            list.map((r, idx) => (
-              <div key={r.id} className="card card-hover mb-3">
+            list.map((r) => (
+              <div key={r.id} className="card card-hover inv-card mb-3">
                 <div className="card-body">
                   <div className="d-flex justify-content-between align-items-start">
                     <div>

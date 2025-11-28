@@ -38,7 +38,7 @@ const TABS = [
   { id: "actresslist", label: "Actress List" },
   { id: "websites", label: "Websites" },
   { id: "notes", label: "Notes" },
-  { id: "addlist", label: "Act List" },   // ✅ YOUR NEW TAB
+  { id: "addlist", label: "Act List" }, // ✅ YOUR NEW TAB
 ];
 
 export default function UserTabs() {
@@ -87,7 +87,8 @@ export default function UserTabs() {
   const [tabsH, setTabsH] = useState(56);
 
   useLayoutEffect(() => {
-    const calcTabs = () => setTabsH(tabsWrapRef.current?.offsetHeight || 56);
+    const calcTabs = () =>
+      setTabsH(tabsWrapRef.current?.offsetHeight || 56);
     const ro = new ResizeObserver(calcTabs);
     calcTabs();
     if (tabsWrapRef.current) ro.observe(tabsWrapRef.current);
@@ -138,8 +139,7 @@ export default function UserTabs() {
         width: "100vw",
         overflow: "hidden",
         color: COLORS.text,
-        background:
-          `radial-gradient(1400px 700px at 0% -10%, ${COLORS.bgGradA}, transparent 60%), 
+        background: `radial-gradient(1400px 700px at 0% -10%, ${COLORS.bgGradA}, transparent 60%), 
            radial-gradient(1200px 600px at 100% -10%, ${COLORS.bgGradB}, transparent 60%), 
            linear-gradient(180deg, ${COLORS.bgBaseTop} 0%, ${COLORS.bgBaseBottom} 100%)`,
         fontFamily:
@@ -200,6 +200,7 @@ export default function UserTabs() {
             aria-label="User sections"
             className="ut-tablist"
           >
+            {/* Ink indicator (hidden on small mobile via CSS) */}
             <div
               aria-hidden="true"
               className="ut-ink"
@@ -347,22 +348,69 @@ export default function UserTabs() {
         }
 
         .ut-chip {
-          border-radius:12px;
-          padding:.6rem 1rem;
-          background:rgba(255,255,255,0.82);
-          border:1px solid ${COLORS.border};
+          border-radius:999px;
+          padding:.55rem 1rem;
+          background:rgba(148,163,184,0.15); /* OFF state */
+          border:1px solid rgba(148,163,184,0.5);
           transition:all .2s ease;
+          font-size: 0.85rem;
+          white-space: nowrap;
+          color:${COLORS.textMuted};
         }
 
         .ut-chip.is-active {
-          background:linear-gradient(180deg,${COLORS.accent},${COLORS.accent2});
-          color:#06151a;
-          border-color:transparent;
-          box-shadow:0 14px 28px -14px ${COLORS.glow};
+          background:radial-gradient(circle at 0 0,#fef9c3 0,#eab308 40%,#f97316 100%);
+          color:#0b1120;
+          border-color:rgba(234,179,8,0.9);
+          box-shadow:0 0 0 1px rgba(250,204,21,0.8),0 14px 28px -14px rgba(250,204,21,0.8);
         }
 
         .ut-content :where(.position-fixed,[role="dialog"],.modal) {
           z-index:20000 !important;
+        }
+
+        /* ===== MOBILE: one tab label full-width at a time (horizontal paging) ===== */
+        @media (max-width: 575.98px) {
+          .ut-tablist {
+            overflow-x:auto;
+            flex-wrap: nowrap;
+            justify-content: flex-start;
+            gap: 0;
+            padding: 8px 0 10px;
+            scroll-snap-type:x mandatory;
+          }
+
+          .ut-tablist > div[style*="flex: 0 0 6px"] {
+            flex: 0 0 8px;
+          }
+
+          .ut-ink {
+            display:none; /* underline not needed for full-page tabs */
+          }
+
+          .ut-chip {
+            flex: 0 0 100%;         /* full width */
+            max-width: 100%;
+            border-radius: 0;
+            border-left: none;
+            border-right: none;
+            border-top: none;
+            margin-right: 0 !important;
+            padding: 0.55rem 1.25rem;
+            text-align: center;
+            scroll-snap-align: center;
+          }
+
+          .ut-chip:first-of-type {
+            border-top: 1px solid rgba(148,163,184,0.5);
+          }
+
+          .ut-chip.is-active {
+            background:linear-gradient(90deg,#22c55e,#16a34a);
+            color:#f9fafb;
+            border-color:transparent;
+            box-shadow:0 0 0 1px rgba(22,163,74,0.9),0 10px 22px -10px rgba(22,163,74,0.9);
+          }
         }
       `}</style>
     </div>
