@@ -341,7 +341,6 @@ function EditModal({ open, item, form, onChange, onCancel, onSave, saving }) {
 }
 
 /* ---------- Image lightbox (FULL SCREEN on click) ---------- */
-/* UPDATED as per your request */
 function ImageLightbox({ open, src, title, onClose }) {
   if (!open || !src) return null;
   return (
@@ -358,7 +357,6 @@ function ImageLightbox({ open, src, title, onClose }) {
       }}
       onClick={onClose}
     >
-      {/* Centered card containing image + caption */}
       <div
         style={{
           position: "relative",
@@ -376,7 +374,6 @@ function ImageLightbox({ open, src, title, onClose }) {
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* top-right cross icon (inside card, not over text) */}
         <button
           type="button"
           onClick={onClose}
@@ -400,7 +397,6 @@ function ImageLightbox({ open, src, title, onClose }) {
           ✕
         </button>
 
-        {/* image area */}
         <div
           style={{
             width: "100%",
@@ -425,7 +421,6 @@ function ImageLightbox({ open, src, title, onClose }) {
           />
         </div>
 
-        {/* caption strictly below the image */}
         {title && (
           <div
             style={{
@@ -465,7 +460,6 @@ export default function Addfevlist() {
   const [page, setPage] = useState(0);
   const [downloadType, setDownloadType] = useState("pdf");
 
-  // overlay + popup state
   const [overlay, setOverlay] = useState({ open: false, label: "" });
   const [popup, setPopup] = useState({
     open: false,
@@ -475,7 +469,6 @@ export default function Addfevlist() {
   });
   const [confirmDeleteFor, setConfirmDeleteFor] = useState(null);
 
-  // edit state
   const [editItem, setEditItem] = useState(null);
   const [editForm, setEditForm] = useState({
     actress_name: "",
@@ -486,7 +479,6 @@ export default function Addfevlist() {
   });
   const [savingEdit, setSavingEdit] = useState(false);
 
-  // image lightbox state
   const [imageModal, setImageModal] = useState({
     open: false,
     src: "",
@@ -531,7 +523,7 @@ export default function Addfevlist() {
     reader.onloadend = () => {
       const dataUrl = reader.result;
       setProfilePreview(dataUrl);
-      setProfileBase64(dataUrl); // backend strips header safely
+      setProfileBase64(dataUrl);
     };
     reader.readAsDataURL(file);
   };
@@ -675,7 +667,6 @@ export default function Addfevlist() {
     }
   };
 
-  // helper to build profile image URL (use API link from backend)
   const getProfileImageUrl = (row) => {
     if (!row.profile_image_path) return "";
     if (row.profile_image_path.startsWith("http")) return row.profile_image_path;
@@ -700,7 +691,6 @@ export default function Addfevlist() {
       }}
     >
       <div className="container" style={{ maxWidth: 960 }}>
-        {/* page header */}
         <div className="mb-3 text-center">
           <h3
             className="fw-bold mb-1"
@@ -886,7 +876,6 @@ export default function Addfevlist() {
                 </div>
               </div>
 
-              {/* submit + messages */}
               <div className="d-flex flex-wrap align-items-center gap-2 mt-3">
                 <button
                   type="submit"
@@ -1045,9 +1034,7 @@ export default function Addfevlist() {
                         animation: "afl-fade-in-up 0.3s ease-out",
                       }}
                     >
-                      {/* CENTERED layout for image + text on all screens */}
                       <div className="d-flex flex-column align-items-center text-center gap-3">
-                        {/* sequence pill */}
                         <div
                           className="rounded-pill px-3 py-1 small fw-bold text-white"
                           style={{
@@ -1058,13 +1045,12 @@ export default function Addfevlist() {
                           {row.seq ?? "-"}
                         </div>
 
-                        {/* centered image */}
                         {imgUrl && (
                           <div
                             className="afl-profile-img-wrapper"
                             style={{
                               width: "100%",
-                              maxWidth: 220,
+                              maxWidth: 260,
                               borderRadius: 12,
                               overflow: "hidden",
                               border: "1px solid #e5e7eb",
@@ -1080,17 +1066,10 @@ export default function Addfevlist() {
                               alt={row.actress_name || "Actress profile"}
                               loading="lazy"
                               className="afl-profile-img"
-                              style={{
-                                display: "block",
-                                width: "100%",
-                                height: "100%",
-                                objectFit: "cover",
-                              }}
                             />
                           </div>
                         )}
 
-                        {/* details below image, centered */}
                         <div style={{ maxWidth: 480 }}>
                           <div
                             className="fw-semibold"
@@ -1147,7 +1126,6 @@ export default function Addfevlist() {
                           )}
                         </div>
 
-                        {/* actions: buttons centered under details */}
                         <div className="d-flex flex-wrap gap-2 mt-1 justify-content-center">
                           <button
                             type="button"
@@ -1184,7 +1162,6 @@ export default function Addfevlist() {
             )}
           </div>
 
-          {/* pagination controls */}
           <div
             className="card-footer border-0 d-flex justify-content-between align-items-center py-2"
             style={{ background: "rgba(255,255,255,0.95)" }}
@@ -1224,7 +1201,6 @@ export default function Addfevlist() {
         </div>
       </div>
 
-      {/* overlays & popups */}
       <OverlayLoader open={overlay.open} label={overlay.label} />
       <CenterPopup
         open={popup.open}
@@ -1263,14 +1239,9 @@ export default function Addfevlist() {
   );
 }
 
-/* inject simple keyframes + custom styles once */
-if (
-  typeof document !== "undefined" &&
-  !document.getElementById("addfevlist-style")
-) {
-  const st = document.createElement("style");
-  st.id = "addfevlist-style";
-  st.innerHTML = `
+/* inject keyframes + custom styles (always overwrite) */
+if (typeof document !== "undefined") {
+  const css = `
     @keyframes afl-fade-in {
       0% { opacity: 0; transform: translateY(8px); }
       100% { opacity: 1; transform: translateY(0); }
@@ -1288,27 +1259,43 @@ if (
       100% { transform: translateX(70%); }
     }
 
-    /* each actress card: black border outside */
     .afl-actress-card {
       border: 1px solid #000;
     }
 
-    /* desktop image size: professional medium */
-    @media (min-width: 768px) {
-      .afl-profile-img-wrapper {
-        max-width: 200px;
-        height: 160px;
-      }
+    /* default desktop/laptop: show full image inside square, no crop */
+    .afl-profile-img-wrapper {
+      max-width: 260px;
+      height: 260px;
+      margin-inline: auto;
+    }
+    .afl-profile-img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
     }
 
-    /* mobile: allow natural height, still centered by wrapper max-width in JSX */
+    /* mobile view: keep behaviour (auto height, width 100%) */
     @media (max-width: 767.98px) {
       .afl-profile-img-wrapper {
         max-width: 260px;
         height: auto;
         margin-inline: auto;
       }
+      .afl-profile-img {
+        width: 100%;
+        height: auto;
+        object-fit: cover;
+      }
     }
   `;
-  document.head.appendChild(st);
+
+  let st = document.getElementById("addfevlist-style");
+  if (!st) {
+    st = document.createElement("style");
+    st.id = "addfevlist-style";
+    document.head.appendChild(st);
+  }
+  st.innerHTML = css;
 }
