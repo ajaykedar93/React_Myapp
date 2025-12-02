@@ -15,6 +15,14 @@ const inr = new Intl.NumberFormat("en-IN", {
   maximumFractionDigits: 2,
 });
 
+// current month YYYY-MM
+function getCurrentMonthStr() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`;
+}
+
 /* ---------------- Centered Modal ---------------- */
 const CenterModal = ({
   show,
@@ -77,6 +85,7 @@ const TransactionCategorywise = () => {
   const [subcategories, setSubcategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedSubcategory, setSelectedSubcategory] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthStr());
   const [selectedDate, setSelectedDate] = useState("");
   const [transactionsByDate, setTransactionsByDate] = useState([]);
   const [monthlyTotals, setMonthlyTotals] = useState(null);
@@ -155,20 +164,28 @@ const TransactionCategorywise = () => {
   const listUrl = useMemo(() => {
     if (!selectedCategory) return null;
     const qs = new URLSearchParams({ category_id: selectedCategory });
+
     if (selectedSubcategory) qs.set("subcategory_id", selectedSubcategory);
+
+    // If single date selected -> filter that specific date
     if (selectedDate) {
       qs.set("start_date", selectedDate);
       qs.set("end_date", selectedDate);
+    } else if (selectedMonth) {
+      // Otherwise filter full selected month (backend should read "month")
+      qs.set("month", selectedMonth);
     }
+
     return `${API_BASE}/transactions?${qs.toString()}`;
-  }, [selectedCategory, selectedSubcategory, selectedDate]);
+  }, [selectedCategory, selectedSubcategory, selectedDate, selectedMonth]);
 
   const totalsUrl = useMemo(() => {
     if (!selectedCategory) return null;
     const qs = new URLSearchParams({ category_id: selectedCategory });
     if (selectedSubcategory) qs.set("subcategory_id", selectedSubcategory);
+    if (selectedMonth) qs.set("month", selectedMonth);
     return `${API_BASE}/transactions/monthly-total?${qs.toString()}`;
-  }, [selectedCategory, selectedSubcategory]);
+  }, [selectedCategory, selectedSubcategory, selectedMonth]);
 
   /* ---------- Fetch transactions + monthly totals ---------- */
   const fetchTransactions = async () => {
@@ -210,13 +227,13 @@ const TransactionCategorywise = () => {
     }
   };
 
-  // auto fetch when category picked and no date
+  // auto fetch when filters change (category selected)
   useEffect(() => {
-    if (selectedCategory && !selectedDate) {
+    if (selectedCategory && !loading) {
       fetchTransactions();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCategory, selectedSubcategory, selectedDate]);
+  }, [selectedCategory, selectedSubcategory, selectedMonth, selectedDate]);
 
   /* ---------- Download PDF ---------- */
   const handleDownloadPDF = async () => {
@@ -224,6 +241,8 @@ const TransactionCategorywise = () => {
 
     const qs = new URLSearchParams({ category_id: selectedCategory });
     if (selectedSubcategory) qs.set("subcategory_id", selectedSubcategory);
+    if (selectedMonth) qs.set("month", selectedMonth);
+
     const url = `${API_BASE}/transactions/monthly-total/pdf?${qs.toString()}`;
 
     try {
@@ -288,6 +307,7 @@ const TransactionCategorywise = () => {
           email: emailValue,
           category_id: selectedCategory,
           subcategory_id: selectedSubcategory || undefined,
+          month: selectedMonth || undefined,
         }),
       });
 
@@ -450,15 +470,37 @@ const TransactionCategorywise = () => {
             </select>
           </div>
 
+          {/* Month + Date in same column (month above date) */}
           <div className="col-12 col-sm-6 col-md-3 mb-2">
             <label className="form-label fw-semibold tcw-filter-label">
-              Select Date
+              Select Month
+            </label>
+            <input
+              type="month"
+              className="form-control mb-1"
+              value={selectedMonth}
+              onChange={(e) => {
+                setSelectedMonth(e.target.value);
+                // if user picks month, clear specific date filter
+                setSelectedDate("");
+              }}
+            />
+
+            <label className="form-label fw-semibold tcw-filter-label mt-1">
+              Select Date (optional)
             </label>
             <input
               type="date"
               className="form-control"
               value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value;
+                setSelectedDate(v);
+                // keep month in sync with selected date
+                if (v && v.length >= 7) {
+                  setSelectedMonth(v.slice(0, 7));
+                }
+              }}
             />
           </div>
 
@@ -556,7 +598,10 @@ const TransactionCategorywise = () => {
                             </span>
                           </td>
                           <td data-label="Qty">{t.quantity ?? 0}</td>
-                          <td data-label="Purpose" style={{ textAlign: "right" }}>
+                          <td
+                            data-label="Purpose"
+                            style={{ textAlign: "right" }}
+                          >
                             {t.purpose || "-"}
                           </td>
                         </tr>
@@ -804,7 +849,7 @@ const TransactionCategorywise = () => {
             )}
           </div>
           <p className="text-muted mb-0 tcw-modal-body">
-            We’ll send the current month’s category-wise PDF based on your
+            We’ll send the selected month’s category-wise PDF based on your
             selection.
           </p>
         </CenterModal>
