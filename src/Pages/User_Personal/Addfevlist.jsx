@@ -53,6 +53,12 @@ function normalizeName(name) {
     .join(" ");
 }
 
+function normalizeKeyText(v) {
+  // ✅ for duplicate match (ignore case and extra spaces)
+  if (v == null) return "";
+  return String(v).trim().toLowerCase().replace(/\s+/g, " ");
+}
+
 // convert any DOB string to YYYY-MM-DD for <input type="date">
 function toDateInputValue(dob) {
   if (!dob) return "";
@@ -176,8 +182,7 @@ function OverlayLoader({ open, label = "Please wait…" }) {
         className="rounded-4 shadow-lg p-3 p-md-4"
         style={{
           width: "min(360px, 100%)",
-          background:
-            "linear-gradient(135deg, rgba(255,159,104,0.95), rgba(255,76,106,0.95))",
+          background: "linear-gradient(135deg, rgba(255,159,104,0.95), rgba(255,76,106,0.95))",
           color: "#fff",
         }}
       >
@@ -212,8 +217,7 @@ function OverlayLoader({ open, label = "Please wait…" }) {
                 height: "100%",
                 width: "45%",
                 borderRadius: 999,
-                background:
-                  "linear-gradient(90deg, #22c55e 0%, #06b6d4 50%, #a855f7 100%)",
+                background: "linear-gradient(90deg, #22c55e 0%, #06b6d4 50%, #a855f7 100%)",
                 animation: "afl-bar 1.1s ease-in-out infinite alternate",
               }}
             />
@@ -313,12 +317,7 @@ function EditModal({ open, item, form, onChange, onCancel, onSave, saving }) {
           </div>
 
           <div className="mt-3 d-flex justify-content-end gap-2">
-            <button
-              type="button"
-              className="btn btn-sm btn-light"
-              onClick={onCancel}
-              disabled={saving}
-            >
+            <button type="button" className="btn btn-sm btn-light" onClick={onCancel} disabled={saving}>
               Cancel
             </button>
             <button
@@ -326,8 +325,7 @@ function EditModal({ open, item, form, onChange, onCancel, onSave, saving }) {
               disabled={saving}
               className="btn btn-sm text-white px-3"
               style={{
-                background:
-                  "linear-gradient(90deg, #20c997 0%, #12a4d9 100%)",
+                background: "linear-gradient(90deg, #20c997 0%, #12a4d9 100%)",
                 border: "none",
               }}
             >
@@ -490,8 +488,7 @@ export default function Addfevlist() {
 
   const showPopup = (title, message, tone = "info") =>
     setPopup({ open: true, title, message, tone });
-  const closePopup = () =>
-    setPopup((p) => ({ ...p, open: false }));
+  const closePopup = () => setPopup((p) => ({ ...p, open: false }));
 
   /* ----- load list ----- */
   const loadList = async () => {
@@ -540,6 +537,19 @@ export default function Addfevlist() {
     e.stopPropagation();
   };
 
+  // ✅ duplicate check function (name + country)
+  const isDuplicateActress = (actressName, countryName) => {
+    const a = normalizeKeyText(actressName);
+    const c = normalizeKeyText(countryName); // optional
+    if (!a) return false;
+
+    return list.some((row) => {
+      const ra = normalizeKeyText(row.actress_name);
+      const rc = normalizeKeyText(row.country_name);
+      return ra === a && rc === c;
+    });
+  };
+
   /* ----- form submit (create) ----- */
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -548,6 +558,15 @@ export default function Addfevlist() {
 
     if (!form.actress_name.trim()) {
       setErrorMsg("Please enter actress name.");
+      return;
+    }
+
+    // ✅ BLOCK DUPLICATE BEFORE API CALL
+    const dup = isDuplicateActress(form.actress_name, form.country_name);
+    if (dup) {
+      const msg = "❌ Duplicate: SAME actress name already exists for this country. Cannot add again.";
+      setErrorMsg(msg);
+      showPopup("Duplicate Not Allowed", msg, "danger");
       return;
     }
 
@@ -581,8 +600,19 @@ export default function Addfevlist() {
       setProfileBase64("");
       await loadList();
     } catch (e2) {
-      setErrorMsg(e2.message || "Failed to add actress");
-      showPopup("Error", e2.message || "Failed to add actress", "danger");
+      // ✅ if backend also returns duplicate error, show bold red same message
+      const msg = e2.message || "Failed to add actress";
+      const isDupBackend =
+        /duplicate|already exists|exists for this country|409/i.test(msg);
+
+      if (isDupBackend) {
+        const dupMsg = "❌ Duplicate: SAME actress name already exists for this country. Cannot add again.";
+        setErrorMsg(dupMsg);
+        showPopup("Duplicate Not Allowed", dupMsg, "danger");
+      } else {
+        setErrorMsg(msg);
+        showPopup("Error", msg, "danger");
+      }
     } finally {
       setSubmitting(false);
       hideOverlay();
@@ -622,6 +652,19 @@ export default function Addfevlist() {
       return;
     }
 
+    // ✅ Duplicate check on edit (ignore same id)
+    const a = normalizeKeyText(editForm.actress_name);
+    const c = normalizeKeyText(editForm.country_name);
+    const editDup = list.some((row) => {
+      if (row.id === editItem.id) return false;
+      return normalizeKeyText(row.actress_name) === a && normalizeKeyText(row.country_name) === c;
+    });
+    if (editDup) {
+      const msg = "❌ Duplicate: SAME actress name already exists for this country. Cannot save.";
+      showPopup("Duplicate Not Allowed", msg, "danger");
+      return;
+    }
+
     const body = {
       actress_name: normalizeName(editForm.actress_name),
       dob: editForm.dob || null,
@@ -642,7 +685,19 @@ export default function Addfevlist() {
       setEditItem(null);
       await loadList();
     } catch (e) {
-      showPopup("Error", e.message || "Failed to update actress", "danger");
+      const msg = e.message || "Failed to update actress";
+      const isDupBackend =
+        /duplicate|already exists|exists for this country|409/i.test(msg);
+
+      if (isDupBackend) {
+        showPopup(
+          "Duplicate Not Allowed",
+          "❌ Duplicate: SAME actress name already exists for this country. Cannot save.",
+          "danger"
+        );
+      } else {
+        showPopup("Error", msg, "danger");
+      }
     } finally {
       setSavingEdit(false);
       hideOverlay();
@@ -685,17 +740,13 @@ export default function Addfevlist() {
     <div
       className="min-vh-100 py-3 py-md-4"
       style={{
-        background:
-          "linear-gradient(135deg, #ffe5c8 0%, #ffd1e3 40%, #c8f5ff 100%)",
+        background: "linear-gradient(135deg, #ffe5c8 0%, #ffd1e3 40%, #c8f5ff 100%)",
         fontFamily: "'Poppins', 'Segoe UI', system-ui, -apple-system, sans-serif",
       }}
     >
       <div className="container" style={{ maxWidth: 960 }}>
         <div className="mb-3 text-center">
-          <h3
-            className="fw-bold mb-1"
-            style={{ color: "#ff4c6a", letterSpacing: "0.03em" }}
-          >
+          <h3 className="fw-bold mb-1" style={{ color: "#ff4c6a", letterSpacing: "0.03em" }}>
             Favourite Actress List
           </h3>
           <p className="mb-0" style={{ color: "#555", fontSize: 14 }}>
@@ -715,22 +766,16 @@ export default function Addfevlist() {
           <div
             className="card-header border-0 py-2"
             style={{
-              background:
-                "linear-gradient(90deg, #ff9f68 0%, #ff4c6a 100%)",
+              background: "linear-gradient(90deg, #ff9f68 0%, #ff4c6a 100%)",
               color: "#fff",
             }}
           >
             <div className="d-flex flex-wrap align-items-center justify-content-between gap-2">
               <span className="fw-semibold">Add Favourite Actress</span>
-              <span className="badge rounded-pill bg-light text-dark">
-                Total: {list.length}
-              </span>
+              <span className="badge rounded-pill bg-light text-dark">Total: {list.length}</span>
             </div>
           </div>
-          <div
-            className="card-body"
-            style={{ background: "rgba(255,255,255,0.9)" }}
-          >
+          <div className="card-body" style={{ background: "rgba(255,255,255,0.9)" }}>
             <form onSubmit={onSubmit}>
               <div className="row g-3">
                 {/* left: text fields */}
@@ -750,32 +795,24 @@ export default function Addfevlist() {
                         }))
                       }
                     />
-                    <div className="form-text">
-                      First letter of each word will be capitalised automatically.
-                    </div>
+                    <div className="form-text">First letter of each word will be capitalised automatically.</div>
                   </div>
 
                   <div className="row g-2">
                     <div className="col-6">
-                      <label className="form-label small fw-semibold">
-                        DOB (optional)
-                      </label>
+                      <label className="form-label small fw-semibold">DOB (optional)</label>
                       <input
                         type="date"
                         className="form-control form-control-sm"
                         value={form.dob}
-                        onChange={(e) =>
-                          setForm((f) => ({ ...f, dob: e.target.value }))
-                        }
+                        onChange={(e) => setForm((f) => ({ ...f, dob: e.target.value }))}
                       />
                       <div className="form-text">
                         Will display like <b>2 Oct 2025</b>.
                       </div>
                     </div>
                     <div className="col-6">
-                      <label className="form-label small fw-semibold">
-                        Country (optional)
-                      </label>
+                      <label className="form-label small fw-semibold">Country (optional)</label>
                       <input
                         className="form-control form-control-sm"
                         placeholder="Country name"
@@ -791,9 +828,7 @@ export default function Addfevlist() {
                   </div>
 
                   <div className="mt-2">
-                    <label className="form-label small fw-semibold">
-                      Best Movie / Series (optional)
-                    </label>
+                    <label className="form-label small fw-semibold">Best Movie / Series (optional)</label>
                     <input
                       className="form-control form-control-sm"
                       placeholder="Best movie or series name"
@@ -808,9 +843,7 @@ export default function Addfevlist() {
                   </div>
 
                   <div className="mt-2">
-                    <label className="form-label small fw-semibold">
-                      Best Thing / Notes (optional)
-                    </label>
+                    <label className="form-label small fw-semibold">Best Thing / Notes (optional)</label>
                     <textarea
                       className="form-control form-control-sm"
                       rows={2}
@@ -828,9 +861,7 @@ export default function Addfevlist() {
 
                 {/* right: image upload */}
                 <div className="col-12 col-md-5">
-                  <label className="form-label small fw-semibold">
-                    Profile Image (optional)
-                  </label>
+                  <label className="form-label small fw-semibold">Profile Image (optional)</label>
                   <div
                     onDrop={onDrop}
                     onDragOver={onDragOver}
@@ -838,8 +869,7 @@ export default function Addfevlist() {
                     style={{
                       minHeight: 160,
                       borderStyle: "dashed",
-                      background:
-                        "linear-gradient(135deg, #fff7e6 0%, #ffeaf3 100%)",
+                      background: "linear-gradient(135deg, #fff7e6 0%, #ffeaf3 100%)",
                       transition: "box-shadow 0.2s, transform 0.2s",
                     }}
                   >
@@ -870,9 +900,7 @@ export default function Addfevlist() {
                       }}
                     />
                   </div>
-                  <div className="form-text">
-                    Image is saved directly to database (binary).
-                  </div>
+                  <div className="form-text">Image is saved directly to database (binary).</div>
                 </div>
               </div>
 
@@ -882,8 +910,7 @@ export default function Addfevlist() {
                   disabled={submitting}
                   className="btn btn-sm text-white px-4 shadow-sm"
                   style={{
-                    background:
-                      "linear-gradient(90deg, #ff9f68 0%, #ff4c6a 100%)",
+                    background: "linear-gradient(90deg, #ff9f68 0%, #ff4c6a 100%)",
                     border: "none",
                   }}
                 >
@@ -891,18 +918,14 @@ export default function Addfevlist() {
                 </button>
 
                 {successMsg && (
-                  <span
-                    className="small fw-semibold"
-                    style={{ color: "#26a269" }}
-                  >
+                  <span className="small fw-semibold" style={{ color: "#26a269" }}>
                     {successMsg}
                   </span>
                 )}
+
+                {/* ✅ BOLD RED ALERT TEXT */}
                 {errorMsg && (
-                  <span
-                    className="small fw-semibold"
-                    style={{ color: "#c01c28" }}
-                  >
+                  <span className="small fw-bold" style={{ color: "#dc2626" }}>
                     {errorMsg}
                   </span>
                 )}
@@ -920,17 +943,9 @@ export default function Addfevlist() {
             <div className="btn-group btn-group-sm" role="group">
               <button
                 type="button"
-                className={
-                  "btn " +
-                  (downloadType === "pdf"
-                    ? "text-white"
-                    : "btn-outline-light text-dark")
-                }
+                className={"btn " + (downloadType === "pdf" ? "text-white" : "btn-outline-light text-dark")}
                 style={{
-                  background:
-                    downloadType === "pdf"
-                      ? "#ff4c6a"
-                      : "rgba(255,255,255,0.9)",
+                  background: downloadType === "pdf" ? "#ff4c6a" : "rgba(255,255,255,0.9)",
                   borderColor: "#ff4c6a",
                 }}
                 onClick={() => setDownloadType("pdf")}
@@ -939,17 +954,9 @@ export default function Addfevlist() {
               </button>
               <button
                 type="button"
-                className={
-                  "btn " +
-                  (downloadType === "txt"
-                    ? "text-white"
-                    : "btn-outline-light text-dark")
-                }
+                className={"btn " + (downloadType === "txt" ? "text-white" : "btn-outline-light text-dark")}
                 style={{
-                  background:
-                    downloadType === "txt"
-                      ? "#ff9f68"
-                      : "rgba(255,255,255,0.9)",
+                  background: downloadType === "txt" ? "#ff9f68" : "rgba(255,255,255,0.9)",
                   borderColor: "#ff9f68",
                 }}
                 onClick={() => setDownloadType("txt")}
@@ -961,8 +968,7 @@ export default function Addfevlist() {
               type="button"
               className="btn btn-sm text-white ms-1 shadow-sm"
               style={{
-                background:
-                  "linear-gradient(90deg, #20c997 0%, #12a4d9 100%)",
+                background: "linear-gradient(90deg, #20c997 0%, #12a4d9 100%)",
                 border: "none",
               }}
               onClick={handleDownload}
@@ -974,23 +980,18 @@ export default function Addfevlist() {
           <div className="small" style={{ color: "#555" }}>
             Showing{" "}
             <strong>
-              {list.length === 0 ? 0 : start + 1}-
-              {Math.min(start + PAGE_SIZE, list.length)}
+              {list.length === 0 ? 0 : start + 1}-{Math.min(start + PAGE_SIZE, list.length)}
             </strong>{" "}
             of <strong>{list.length}</strong>
           </div>
         </div>
 
         {/* list card */}
-        <div
-          className="card shadow border-0"
-          style={{ borderRadius: 18, overflow: "hidden" }}
-        >
+        <div className="card shadow border-0" style={{ borderRadius: 18, overflow: "hidden" }}>
           <div
             className="card-header border-0 py-2"
             style={{
-              background:
-                "linear-gradient(90deg, #20c997 0%, #12a4d9 100%)",
+              background: "linear-gradient(90deg, #20c997 0%, #12a4d9 100%)",
               color: "#fff",
             }}
           >
@@ -1001,23 +1002,14 @@ export default function Addfevlist() {
               </span>
             </div>
           </div>
-          <div
-            className="card-body p-0"
-            style={{ background: "rgba(255,255,255,0.97)" }}
-          >
+          <div className="card-body p-0" style={{ background: "rgba(255,255,255,0.97)" }}>
             {loadingList ? (
               <div className="py-4 text-center text-muted">
-                <div
-                  className="spinner-border spinner-border-sm me-2"
-                  role="status"
-                  style={{ color: "#ff4c6a" }}
-                />
+                <div className="spinner-border spinner-border-sm me-2" role="status" style={{ color: "#ff4c6a" }} />
                 Loading list…
               </div>
             ) : current.length === 0 ? (
-              <div className="py-4 text-center text-muted">
-                No actresses added yet.
-              </div>
+              <div className="py-4 text-center text-muted">No actresses added yet.</div>
             ) : (
               <div className="list-group list-group-flush">
                 {current.map((row) => {
@@ -1038,8 +1030,7 @@ export default function Addfevlist() {
                         <div
                           className="rounded-pill px-3 py-1 small fw-bold text-white"
                           style={{
-                            background:
-                              "linear-gradient(135deg, #ff9f68 0%, #ff4c6a 100%)",
+                            background: "linear-gradient(135deg, #ff9f68 0%, #ff4c6a 100%)",
                           }}
                         >
                           {row.seq ?? "-"}
@@ -1057,9 +1048,7 @@ export default function Addfevlist() {
                               background: "#f9fafb",
                               cursor: "pointer",
                             }}
-                            onClick={() =>
-                              openImageModal(imgUrl, row.actress_name)
-                            }
+                            onClick={() => openImageModal(imgUrl, row.actress_name)}
                           >
                             <img
                               src={imgUrl}
@@ -1071,57 +1060,29 @@ export default function Addfevlist() {
                         )}
 
                         <div style={{ maxWidth: 480 }}>
-                          <div
-                            className="fw-semibold"
-                            style={{ color: "#111827", fontSize: 16 }}
-                          >
+                          <div className="fw-semibold" style={{ color: "#111827", fontSize: 16 }}>
                             {row.actress_name || "Unknown"}
                           </div>
                           <div className="small" style={{ color: "#6b7280" }}>
-                            {row.country_name && (
-                              <span className="me-2">
-                                🌎 {row.country_name}
-                              </span>
-                            )}
+                            {row.country_name && <span className="me-2">🌎 {row.country_name}</span>}
                             {row.dob && <span>🎂 {row.dob}</span>}
                           </div>
 
                           {row.best_movie && (
                             <div className="small mt-2">
-                              <span
-                                className="badge rounded-pill me-1"
-                                style={{
-                                  backgroundColor: "#fff4d5",
-                                  color: "#92400e",
-                                }}
-                              >
+                              <span className="badge rounded-pill me-1" style={{ backgroundColor: "#fff4d5", color: "#92400e" }}>
                                 Best Movie / Series
                               </span>
-                              <span style={{ color: "#374151" }}>
-                                {row.best_movie}
-                              </span>
+                              <span style={{ color: "#374151" }}>{row.best_movie}</span>
                             </div>
                           )}
 
                           {row.best_thing && (
                             <div className="small mt-2">
-                              <span
-                                className="badge rounded-pill me-1"
-                                style={{
-                                  backgroundColor: "#ffece0",
-                                  color: "#c05621",
-                                }}
-                              >
+                              <span className="badge rounded-pill me-1" style={{ backgroundColor: "#ffece0", color: "#c05621" }}>
                                 Best Thing
                               </span>
-                              <span
-                                style={{
-                                  fontWeight: 700,
-                                  color: "#f97316",
-                                }}
-                              >
-                                {row.best_thing}
-                              </span>
+                              <span style={{ fontWeight: 700, color: "#f97316" }}>{row.best_thing}</span>
                             </div>
                           )}
                         </div>
@@ -1131,8 +1092,7 @@ export default function Addfevlist() {
                             type="button"
                             className="btn btn-sm text-white px-3"
                             style={{
-                              background:
-                                "linear-gradient(135deg, #22c55e 0%, #14b8a6 100%)",
+                              background: "linear-gradient(135deg, #22c55e 0%, #14b8a6 100%)",
                               border: "none",
                               fontSize: 12,
                             }}
@@ -1144,8 +1104,7 @@ export default function Addfevlist() {
                             type="button"
                             className="btn btn-sm text-white px-3"
                             style={{
-                              background:
-                                "linear-gradient(135deg, #ef4444 0%, #f97316 100%)",
+                              background: "linear-gradient(135deg, #ef4444 0%, #f97316 100%)",
                               border: "none",
                               fontSize: 12,
                             }}
@@ -1170,8 +1129,7 @@ export default function Addfevlist() {
               type="button"
               className="btn btn-sm text-white px-3"
               style={{
-                background:
-                  "linear-gradient(135deg, #c0c0c0 0%, #9b9b9b 100%)",
+                background: "linear-gradient(135deg, #c0c0c0 0%, #9b9b9b 100%)",
                 border: "none",
                 opacity: canPrev ? 1 : 0.6,
               }}
@@ -1187,8 +1145,7 @@ export default function Addfevlist() {
               type="button"
               className="btn btn-sm text-white px-3"
               style={{
-                background:
-                  "linear-gradient(135deg, #ff9f68 0%, #ff4c6a 100%)",
+                background: "linear-gradient(135deg, #ff9f68 0%, #ff4c6a 100%)",
                 border: "none",
                 opacity: canNext ? 1 : 0.6,
               }}
@@ -1202,20 +1159,12 @@ export default function Addfevlist() {
       </div>
 
       <OverlayLoader open={overlay.open} label={overlay.label} />
-      <CenterPopup
-        open={popup.open}
-        title={popup.title}
-        message={popup.message}
-        tone={popup.tone}
-        onClose={closePopup}
-      />
+      <CenterPopup open={popup.open} title={popup.title} message={popup.message} tone={popup.tone} onClose={closePopup} />
       <ConfirmPopup
         open={!!confirmDeleteFor}
         title="Delete Actress"
         message={
-          confirmDeleteFor
-            ? `Are you sure you want to delete "${confirmDeleteFor.actress_name}" from your list?`
-            : ""
+          confirmDeleteFor ? `Are you sure you want to delete "${confirmDeleteFor.actress_name}" from your list?` : ""
         }
         onConfirm={handleConfirmDelete}
         onCancel={() => setConfirmDeleteFor(null)}
@@ -1229,12 +1178,7 @@ export default function Addfevlist() {
         onSave={handleSaveEdit}
         saving={savingEdit}
       />
-      <ImageLightbox
-        open={imageModal.open}
-        src={imageModal.src}
-        title={imageModal.title}
-        onClose={closeImageModal}
-      />
+      <ImageLightbox open={imageModal.open} src={imageModal.src} title={imageModal.title} onClose={closeImageModal} />
     </div>
   );
 }
