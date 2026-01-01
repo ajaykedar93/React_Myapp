@@ -6,6 +6,8 @@ const API = {
   countries: `${BASE}/api/act_favorite/countries`,
   // IMPORTANT: must match router: "/user-act-favorite"
   create: `${BASE}/api/act_favorite/user-act-favorite`,
+  // Assumption (common REST): list from same route
+  list: `${BASE}/api/act_favorite/user-act-favorite`,
 };
 
 // Convert selected files → Base64 strings
@@ -66,34 +68,108 @@ export default function AddFevActress() {
     type: "info",
   });
 
+  // List (below)
+  const [actressList, setActressList] = useState([]);
+  const [loadingList, setLoadingList] = useState(true);
+  const [listError, setListError] = useState("");
+
   const dzProfile = useRef(null);
   const dzGallery = useRef(null);
 
   /* ---------- Styles (once) ---------- */
   useEffect(() => {
-    const id = "addfav-final-url";
+    const id = "addfav-actress-responsive-ui";
     if (document.getElementById(id)) return;
     const s = document.createElement("style");
     s.id = id;
     s.innerHTML = `
-      body { font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:#f3f4f6; }
-      .page-wrapper { min-height:100vh; display:flex; align-items:flex-start; justify-content:center; padding-top:1.5rem; padding-bottom:1.5rem; }
-      .card-glass { background:#fff;border-radius:16px;box-shadow:0 10px 30px rgba(15,23,42,.1);border:1px solid rgba(148,163,184,.35);transition:transform .2s ease, box-shadow .2s ease }
-      .card-glass:hover{ transform: translateY(-2px); box-shadow:0 14px 40px rgba(15,23,42,.18); }
-      .dropzone { border:2px dashed #a5b4fc;background:#f8fafc;padding:16px;border-radius:12px;text-align:center;transition:all .2s ease }
-      .dropzone.dragover{ background:#eef2ff;border-color:#6366f1 }
-      .thumb { width:90px;height:90px;border-radius:10px;object-fit:cover;border:1px solid #d1d5db }
-      .thumb-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:10px }
-      .center-backdrop { position:fixed;inset:0;background:rgba(15,23,42,.65);display:grid;place-items:center;z-index:2000;animation:fadeIn .25s ease }
-      .center-card { background:#fff;border-radius:16px;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.28);animation:scaleUp .25s ease }
-      .btn-gradient { background:linear-gradient(90deg,#2563eb,#8b5cf6,#22c55e);color:#fff;border:none;font-weight:600 }
-      .btn-gradient:hover{ opacity:.9;color:#fff; }
-      .muted-hint{ font-size:.85rem;color:#6b7280 }
+      body {
+        font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background:#f3f4f6;
+      }
+      .page-wrapper { min-height:100vh; padding: 18px 0; }
+      .card-glass {
+        background:#fff;
+        border-radius:16px;
+        box-shadow:0 10px 30px rgba(15,23,42,.10);
+        border:1px solid rgba(148,163,184,.35);
+        transition:transform .2s ease, box-shadow .2s ease;
+      }
+      .card-glass:hover{
+        transform: translateY(-1px);
+        box-shadow:0 14px 40px rgba(15,23,42,.16);
+      }
+      .dropzone {
+        border:2px dashed #a5b4fc;
+        background:#f8fafc;
+        padding:16px;
+        border-radius:12px;
+        text-align:center;
+        transition:all .2s ease;
+      }
+      .dropzone.dragover{ background:#eef2ff; border-color:#6366f1; }
+
+      /* Profile preview responsive */
+      .profile-preview-img{
+        width: clamp(120px, 30vw, 190px);
+        height: clamp(120px, 30vw, 190px);
+        border-radius: 14px;
+        border: 1px solid #d1d5db;
+        object-fit: cover;
+      }
+
+      /* Gallery thumbs */
+      .thumb { width:92px; height:92px; border-radius:10px; object-fit:cover; border:1px solid #d1d5db; }
+      .thumb-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(92px,1fr)); gap:10px; }
+
+      /* List cards image responsive (not too big on mobile) */
+      .list-cover{
+        width: 100%;
+        height: clamp(140px, 22vw, 220px);
+        object-fit: cover;
+        border-radius: 14px;
+        border: 1px solid #e5e7eb;
+        background: #f3f4f6;
+      }
+
+      .btn-gradient {
+        background:linear-gradient(90deg,#2563eb,#8b5cf6,#22c55e);
+        color:#fff;
+        border:none;
+        font-weight:600;
+      }
+      .btn-gradient:hover{ opacity:.92; color:#fff; }
+      .muted-hint{ font-size:.85rem; color:#6b7280; }
+
+      .center-backdrop {
+        position:fixed; inset:0;
+        background:rgba(15,23,42,.65);
+        display:grid; place-items:center;
+        z-index:2000;
+        animation:fadeIn .25s ease;
+      }
+      .center-card {
+        background:#fff;
+        border-radius:16px;
+        max-width:440px;
+        width:92%;
+        box-shadow:0 20px 60px rgba(0,0,0,.28);
+        animation:scaleUp .25s ease;
+      }
       @keyframes fadeIn{from{opacity:0}to{opacity:1}}
-      @keyframes scaleUp{from{transform:scale(.9);opacity:0}to{transform:scale(1);opacity:1}}
+      @keyframes scaleUp{from{transform:scale(.92);opacity:0}to{transform:scale(1);opacity:1}}
     `;
     document.head.appendChild(s);
   }, []);
+
+  /* ---------- Popup helper ---------- */
+  const showPopup = (title, body, type = "info", timeout = 2200) => {
+    setCenterPopup({ show: true, title, body, type });
+    window.clearTimeout(showPopup._t);
+    showPopup._t = window.setTimeout(() => {
+      setCenterPopup({ show: false, title: "", body: "", type: "info" });
+    }, timeout);
+  };
 
   /* ---------- Fetch countries (list only) ---------- */
   useEffect(() => {
@@ -115,25 +191,16 @@ export default function AddFevActress() {
         }
 
         const j = await res.json().catch(() => null);
-        console.log("Countries response:", j);
 
         let list = [];
-        if (j && Array.isArray(j.data)) {
-          list = j.data; // { success:true, data:[...] }
-        } else if (Array.isArray(j)) {
-          list = j;
-        } else if (j && Array.isArray(j.countries)) {
-          list = j.countries;
-        }
+        if (j && Array.isArray(j.data)) list = j.data;
+        else if (Array.isArray(j)) list = j;
+        else if (j && Array.isArray(j.countries)) list = j.countries;
 
-        if (!list.length) {
-          throw new Error("No countries found in response");
-        }
-
+        if (!list.length) throw new Error("No countries found in response");
         setCountries(list);
       } catch (e) {
         if (e.name !== "AbortError") {
-          console.error("Load countries error:", e);
           setCountriesError(e.message || "Failed to load countries");
           setCountries([]);
         }
@@ -144,6 +211,44 @@ export default function AddFevActress() {
 
     loadCountries();
     return () => controller.abort();
+  }, []);
+
+  /* ---------- Fetch actress list ---------- */
+  const loadActresses = async () => {
+    try {
+      setLoadingList(true);
+      setListError("");
+
+      // Try common formats: ?limit=50&sort=desc etc. If backend ignores, it's fine.
+      const res = await fetch(`${API.list}?limit=50`, { method: "GET" });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(
+          `List request failed (${res.status}): ${txt || res.statusText}`
+        );
+      }
+
+      const j = await res.json().catch(() => null);
+
+      // Accept many shapes: {success:true,data:[...]} OR {data:[...]} OR [...]
+      let list = [];
+      if (Array.isArray(j)) list = j;
+      else if (j && Array.isArray(j.data)) list = j.data;
+      else if (j && j.success === true && Array.isArray(j.data)) list = j.data;
+      else if (j && Array.isArray(j.rows)) list = j.rows;
+
+      setActressList(list || []);
+    } catch (e) {
+      setListError(e.message || "Failed to load actress list");
+      setActressList([]);
+    } finally {
+      setLoadingList(false);
+    }
+  };
+
+  useEffect(() => {
+    loadActresses();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* ---------- Profile: drag & drop / pick ---------- */
@@ -237,17 +342,7 @@ export default function AddFevActress() {
   const removePreview = (id) => {
     const next = dropFiles.filter((p) => p.id !== id);
     setDropFiles(next);
-    // sync imagesToAdd to remain in same order as thumbnails
     setImagesToAdd(next.map((p) => p.src));
-  };
-
-  /* ---------- Popup helper ---------- */
-  const showPopup = (title, body, type = "info", timeout = 2200) => {
-    setCenterPopup({ show: true, title, body, type });
-    window.clearTimeout(showPopup._t);
-    showPopup._t = window.setTimeout(() => {
-      setCenterPopup({ show: false, title: "", body: "", type: "info" });
-    }, timeout);
   };
 
   /* ---------- Create (POST /api/act_favorite/user-act-favorite) ---------- */
@@ -305,12 +400,19 @@ export default function AddFevActress() {
         throw new Error(msg);
       }
 
-      // Your backend: { success:true, data:{...} }
       if (!json || json.success !== true) {
         throw new Error(json?.message || "Create failed (unexpected response)");
       }
 
       showPopup("Success", "Actress added successfully.", "success");
+
+      // OPTIONAL: if backend returns created row in json.data, push it on top
+      if (json?.data) {
+        setActressList((prev) => [json.data, ...prev]);
+      } else {
+        // fallback: reload list
+        loadActresses();
+      }
 
       // reset form
       setForm({
@@ -329,7 +431,6 @@ export default function AddFevActress() {
       setManualCountry("");
       setGalleryUrls("");
     } catch (e2) {
-      console.error("Create error:", e2);
       showPopup("Error", e2.message || "Save failed", "danger");
     } finally {
       setBusy(false);
@@ -354,28 +455,48 @@ export default function AddFevActress() {
     setGalleryUrls("");
   };
 
+  const getFirstImage = (a) => {
+    // Try profile_image first
+    if (a?.profile_image && isUrl(a.profile_image)) return a.profile_image;
+
+    // Try images array
+    const imgs = a?.images || a?.gallery_images || a?.extra_images;
+    if (Array.isArray(imgs) && imgs.length) {
+      const x = imgs.find((v) => isUrl(v));
+      if (x) return x;
+      // Some backends store as {url:""} etc.
+      const y = imgs.find((v) => isUrl(v?.url))?.url;
+      if (y) return y;
+    }
+    return null;
+  };
+
   return (
     <div className="page-wrapper">
-      <div className="container">
-        <div className="row justify-content-center">
-          <div className="col-12 col-lg-9 col-xl-8">
-            <div className="text-center mb-3">
-              <h3
-                style={{
-                  background: "linear-gradient(90deg,#2563eb,#8b5cf6,#22c55e)",
-                  WebkitBackgroundClip: "text",
-                  color: "transparent",
-                  fontWeight: 800,
-                }}
-              >
-                Add Favourite Actress
-              </h3>
-              <p className="text-muted mb-0">
-                Drag &amp; drop or paste URLs — works beautifully on mobile &
-                desktop.
-              </p>
-            </div>
+      <div className="container-xxl">
+        {/* Header */}
+        <div className="text-center mb-3">
+          <h3
+            style={{
+              background: "linear-gradient(90deg,#2563eb,#8b5cf6,#22c55e)",
+              WebkitBackgroundClip: "text",
+              color: "transparent",
+              fontWeight: 900,
+              letterSpacing: ".2px",
+            }}
+            className="mb-1"
+          >
+            Add Favourite Actress
+          </h3>
+          <div className="text-muted">
+            Mobile + Desktop friendly • Drag & Drop / URLs • Responsive Cards
+          </div>
+        </div>
 
+        {/* Two responsive columns: Add card + List card */}
+        <div className="row g-3 align-items-start">
+          {/* LEFT: Add form */}
+          <div className="col-12 col-lg-5">
             <div className="card card-glass p-3 p-sm-4">
               {/* Country */}
               <div className="mb-3">
@@ -424,7 +545,7 @@ export default function AddFevActress() {
               {/* Actress Info */}
               <form onSubmit={onCreate}>
                 <div className="row g-2">
-                  <div className="col-12 col-md-6">
+                  <div className="col-12">
                     <label className="form-label">Actress Name *</label>
                     <input
                       className="form-control"
@@ -438,19 +559,19 @@ export default function AddFevActress() {
                       required
                     />
                   </div>
-                  <div className="col-6 col-md-3">
+
+                  <div className="col-6">
                     <label className="form-label">Age</label>
                     <input
                       type="number"
                       className="form-control"
                       value={form.age}
-                      onChange={(e) =>
-                        setForm({ ...form, age: e.target.value })
-                      }
+                      onChange={(e) => setForm({ ...form, age: e.target.value })}
                       min={0}
                     />
                   </div>
-                  <div className="col-6 col-md-3">
+
+                  <div className="col-6">
                     <label className="form-label">DOB</label>
                     <input
                       type="date"
@@ -461,10 +582,9 @@ export default function AddFevActress() {
                       }
                     />
                   </div>
-                  <div className="col-12 col-md-6">
-                    <label className="form-label">
-                      Favorite Movie/Series *
-                    </label>
+
+                  <div className="col-12">
+                    <label className="form-label">Favorite Movie/Series *</label>
                     <input
                       className="form-control"
                       value={form.favorite_movie_series}
@@ -477,7 +597,8 @@ export default function AddFevActress() {
                       required
                     />
                   </div>
-                  <div className="col-12 col-md-6">
+
+                  <div className="col-12">
                     <label className="form-label">Notes</label>
                     <textarea
                       rows="2"
@@ -503,9 +624,7 @@ export default function AddFevActress() {
                       e.preventDefault();
                       dzProfile.current?.classList.add("dragover");
                     }}
-                    onDragLeave={() =>
-                      dzProfile.current?.classList.remove("dragover")
-                    }
+                    onDragLeave={() => dzProfile.current?.classList.remove("dragover")}
                   >
                     <div>Drag &amp; drop a profile image here, or</div>
                     <label className="btn btn-outline-primary btn-sm mt-2">
@@ -517,22 +636,18 @@ export default function AddFevActress() {
                         onChange={onProfilePick}
                       />
                     </label>
+
                     {profilePreview && (
                       <div className="text-center mt-3">
                         <img
                           src={profilePreview}
                           alt="Profile"
-                          style={{
-                            width: 150,
-                            height: 150,
-                            borderRadius: 12,
-                            border: "1px solid #ccc",
-                            objectFit: "cover",
-                          }}
+                          className="profile-preview-img"
                         />
                       </div>
                     )}
                   </div>
+
                   <div className="mt-2">
                     <input
                       className="form-control"
@@ -568,9 +683,7 @@ export default function AddFevActress() {
                       e.preventDefault();
                       dzGallery.current?.classList.add("dragover");
                     }}
-                    onDragLeave={() =>
-                      dzGallery.current?.classList.remove("dragover")
-                    }
+                    onDragLeave={() => dzGallery.current?.classList.remove("dragover")}
                   >
                     <div>Drag &amp; drop multiple images here, or</div>
                     <label className="btn btn-outline-primary btn-sm mt-2">
@@ -602,6 +715,7 @@ export default function AddFevActress() {
                                   ev.preventDefault();
                                   removePreview(p.id);
                                 }}
+                                type="button"
                               >
                                 Remove
                               </button>
@@ -635,10 +749,10 @@ export default function AddFevActress() {
                 </div>
 
                 {/* Actions */}
-                <div className="text-end mt-4">
+                <div className="d-flex gap-2 justify-content-end mt-4">
                   <button
                     type="button"
-                    className="btn btn-light me-2"
+                    className="btn btn-light"
                     onClick={resetAll}
                   >
                     Reset
@@ -652,6 +766,128 @@ export default function AddFevActress() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+
+          {/* RIGHT: List */}
+          <div className="col-12 col-lg-7">
+            <div className="card card-glass p-3 p-sm-4">
+              <div className="d-flex align-items-center justify-content-between gap-2 mb-2">
+                <div>
+                  <div className="fw-bold" style={{ fontSize: "1.05rem" }}>
+                    Actress List
+                  </div>
+                  <div className="text-muted small">
+                    Below cards are responsive on all screen sizes.
+                  </div>
+                </div>
+                <button
+                  className="btn btn-outline-primary btn-sm"
+                  onClick={loadActresses}
+                  type="button"
+                  disabled={loadingList}
+                >
+                  {loadingList ? "Refreshing…" : "Refresh"}
+                </button>
+              </div>
+
+              {loadingList ? (
+                <div className="text-muted d-flex align-items-center">
+                  <span className="spinner-border spinner-border-sm text-primary me-2" />
+                  Loading actress list…
+                </div>
+              ) : listError ? (
+                <div className="alert alert-danger py-2 mb-0">{listError}</div>
+              ) : actressList.length === 0 ? (
+                <div className="alert alert-warning py-2 mb-0">
+                  No actresses found.
+                </div>
+              ) : (
+                <div className="row g-3 mt-1">
+                  {actressList.map((a, idx) => {
+                    const cover = getFirstImage(a);
+                    const name =
+                      a?.favorite_actress_name ||
+                      a?.actress_name ||
+                      a?.name ||
+                      `Actress ${idx + 1}`;
+                    const movie =
+                      a?.favorite_movie_series ||
+                      a?.favorite_movie ||
+                      a?.movie ||
+                      "";
+                    const age = a?.age ?? "";
+                    const dob = a?.actress_dob || a?.dob || "";
+                    const notes = a?.notes || "";
+                    const country =
+                      a?.country_name ||
+                      a?.country?.country_name ||
+                      a?.country?.name ||
+                      "";
+
+                    return (
+                      <div key={a?.id ?? `${idx}`} className="col-12 col-md-6">
+                        <div className="card border-0 shadow-sm h-100">
+                          <div className="card-body">
+                            {cover ? (
+                              <img
+                                src={cover}
+                                alt={name}
+                                className="list-cover mb-3"
+                              />
+                            ) : (
+                              <div
+                                className="list-cover mb-3 d-flex align-items-center justify-content-center text-muted"
+                                style={{ background: "#f3f4f6" }}
+                              >
+                                No Image
+                              </div>
+                            )}
+
+                            <div className="d-flex align-items-start justify-content-between gap-2">
+                              <div className="fw-bold" style={{ fontSize: "1.02rem" }}>
+                                {name}
+                              </div>
+                              {country ? (
+                                <span className="badge text-bg-light border">
+                                  {country}
+                                </span>
+                              ) : null}
+                            </div>
+
+                            {movie ? (
+                              <div className="text-muted small mt-1">
+                                <span className="fw-semibold">Fav:</span>{" "}
+                                {movie}
+                              </div>
+                            ) : null}
+
+                            <div className="d-flex flex-wrap gap-2 mt-2">
+                              {age !== "" && age !== null ? (
+                                <span className="badge text-bg-secondary">
+                                  Age: {age}
+                                </span>
+                              ) : null}
+                              {dob ? (
+                                <span className="badge text-bg-secondary">
+                                  DOB: {dob}
+                                </span>
+                              ) : null}
+                            </div>
+
+                            {notes ? (
+                              <div className="mt-2 small">
+                                <div className="fw-semibold">Notes</div>
+                                <div className="text-muted">{notes}</div>
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -672,7 +908,7 @@ export default function AddFevActress() {
             onClick={(e) => e.stopPropagation()}
           >
             <h5 className="fw-bold">{centerPopup.title}</h5>
-            <p className="text-muted">{centerPopup.body}</p>
+            <p className="text-muted mb-3">{centerPopup.body}</p>
             <button
               className="btn btn-gradient w-50"
               onClick={() =>
@@ -683,6 +919,7 @@ export default function AddFevActress() {
                   type: "info",
                 })
               }
+              type="button"
             >
               OK
             </button>

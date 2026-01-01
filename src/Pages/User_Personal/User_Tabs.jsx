@@ -15,20 +15,11 @@ import Addlist from "./Addfevlist";
 /* ---------------- Tokens ---------------- */
 const COLORS = {
   text: "#0f172a",
-  textMuted: "#475569",
-  surface: "rgba(255, 255, 255, 0.90)",
-  border: "rgba(2, 6, 23, 0.10)",
-  softShadow: "0 12px 38px rgba(2, 6, 23, 0.12)",
-  accent: "#22d3ee",
-  accent2: "#a78bfa",
-  glow: "rgba(34, 211, 238, 0.35)",
   bgGradA: "rgba(56,189,248,.24)",
   bgGradB: "rgba(168,85,247,.22)",
   bgBaseTop: "#f8fbff",
   bgBaseBottom: "#f6fff9",
 };
-
-const FOOTER_H = 60;
 
 const TABS = [
   { id: "investment", label: "Investment" },
@@ -76,35 +67,9 @@ export default function UserTabs() {
     };
   }, []);
 
-  /* ==== Tabs height ==== */
-  const tabsWrapRef = useRef(null);
-  const [tabsH, setTabsH] = useState(56);
-
-  useLayoutEffect(() => {
-    const calc = () => setTabsH(tabsWrapRef.current?.offsetHeight || 56);
-    calc();
-    const ro = new ResizeObserver(calc);
-    tabsWrapRef.current && ro.observe(tabsWrapRef.current);
-    window.addEventListener("resize", calc);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener("resize", calc);
-    };
-  }, []);
-
   return (
-    <div
-      style={{
-        minHeight: "calc(var(--vh, 1vh) * 100)",
-        width: "100vw",
-        overflow: "hidden",
-        color: COLORS.text,
-        background: `radial-gradient(1400px 700px at 0% -10%, ${COLORS.bgGradA}, transparent 60%),
-        radial-gradient(1200px 600px at 100% -10%, ${COLORS.bgGradB}, transparent 60%),
-        linear-gradient(180deg, ${COLORS.bgBaseTop} 0%, ${COLORS.bgBaseBottom} 100%)`,
-      }}
-    >
-      {/* NAVBAR */}
+    <div className="ut-page">
+      {/* NAVBAR (fixed only) */}
       <nav ref={navRef} className="ut-nav">
         <div className="container-fluid d-flex justify-content-between align-items-center px-3">
           <h1 className="ut-title m-0">User Dashboard</h1>
@@ -117,91 +82,112 @@ export default function UserTabs() {
         </div>
       </nav>
 
-      <div style={{ height: navH }} />
-
-      {/* TABS */}
-      <div ref={tabsWrapRef} className="ut-tabs-wrap">
-        <div className="container">
-          <div className="ut-tablist">
-            {TABS.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setActiveTab(t.id)}
-                className={`ut-chip ${activeTab === t.id ? "is-active" : ""}`}
-              >
-                {t.label}
-              </button>
-            ))}
+      {/* Everything below navbar (scrolls normally) */}
+      <main className="ut-main" style={{ paddingTop: navH }}>
+        {/* TABS (NOT fixed) */}
+        <section className="ut-tabs-wrap">
+          <div className="container ut-container-pad">
+            <div className="ut-tablist">
+              {TABS.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setActiveTab(t.id)}
+                  className={`ut-chip ${activeTab === t.id ? "is-active" : ""}`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-      </div>
+        </section>
 
-      {/* CONTENT */}
-      <div
-        style={{
-          position: "absolute",
-          top: navH + tabsH,
-          bottom: FOOTER_H,
-          left: 0,
-          right: 0,
-          overflowY: "auto",
-        }}
-      >
-        <div className="container py-4">
-          {activeTab === "investment" && <UserInvestment />}
-          {activeTab === "password" && <PasswordManager />}
-          {activeTab === "getpassword" && <GetPassword />}
-          {activeTab === "favorite" && <Act_Favorite />}
-          {activeTab === "actresslist" && <ShowActress />}
-          {activeTab === "websites" && <WebsitesUrl />}
-          {activeTab === "notes" && <Notes />}
-          {activeTab === "addlist" && <Addlist />}
-        </div>
-      </div>
+        {/* small gap after tabs */}
+        <div className="ut-after-tabs-gap" />
+
+        {/* CONTENT */}
+        <section className="ut-content">
+          <div className="container ut-container-pad py-3">
+            {activeTab === "investment" && <UserInvestment />}
+            {activeTab === "password" && <PasswordManager />}
+            {activeTab === "getpassword" && <GetPassword />}
+            {activeTab === "favorite" && <Act_Favorite />}
+            {activeTab === "actresslist" && <ShowActress />}
+            {activeTab === "websites" && <WebsitesUrl />}
+            {activeTab === "notes" && <Notes />}
+            {activeTab === "addlist" && <Addlist />}
+          </div>
+        </section>
+      </main>
 
       {/* STYLES */}
       <style>{`
-        .ut-nav{
-          position:fixed; top:0; left:0; right:0;
-          background:linear-gradient(90deg,#2563eb,#38bdf8);
-          padding:12px; z-index:1000;
-        }
-        .ut-title{font-weight:900;color:#000}
+        /* Prevent right-side cut / horizontal scroll */
+        html, body { width: 100%; overflow-x: hidden; }
 
+        .ut-page{
+          min-height: calc(var(--vh, 1vh) * 100);
+          width: 100%;
+          color: ${COLORS.text};
+          background:
+            radial-gradient(1400px 700px at 0% -10%, ${COLORS.bgGradA}, transparent 60%),
+            radial-gradient(1200px 600px at 100% -10%, ${COLORS.bgGradB}, transparent 60%),
+            linear-gradient(180deg, ${COLORS.bgBaseTop} 0%, ${COLORS.bgBaseBottom} 100%);
+        }
+
+        .ut-nav{
+          position: fixed; top: 0; left: 0; right: 0;
+          background: linear-gradient(90deg,#2563eb,#38bdf8);
+          padding: 12px;
+          z-index: 1000;
+        }
+        .ut-title{ font-weight: 900; color: #000; }
+
+        /* keep clean spacing both sides */
+        .ut-container-pad { padding-left: 12px; padding-right: 12px; }
+
+        /* Tabs are NOT fixed now */
         .ut-tabs-wrap{
-          position:fixed; left:0; right:0;
-          background:#fff; border-bottom:1px solid #ddd;
-          z-index:999;
+          margin-top: 10px;              /* not touching navbar */
+          background: rgba(255,255,255,0.95);
+          border: 1px solid rgba(2,6,23,0.08);
+          border-radius: 14px;
+          box-shadow: 0 10px 25px rgba(2,6,23,0.08);
         }
 
         .ut-tablist{
-          display:flex;
-          gap:8px;
-          overflow-x:auto;
-          padding:10px;
+          display: flex;
+          gap: 8px;
+          overflow-x: auto;
+          padding: 10px;
+          -webkit-overflow-scrolling: touch;
         }
+        .ut-tablist::-webkit-scrollbar{ height: 6px; }
+        .ut-tablist::-webkit-scrollbar-thumb{ background: rgba(15,23,42,0.18); border-radius: 999px; }
 
         .ut-chip{
-          padding:6px 14px;
-          border-radius:999px;
-          border:1px solid #cbd5e1;
-          background:#f1f5f9;
-          white-space:nowrap;
-          font-size:14px;
+          flex: 0 0 auto;
+          padding: 8px 14px;
+          border-radius: 999px;
+          border: 1px solid #cbd5e1;
+          background: #f1f5f9;
+          white-space: nowrap;
+          font-size: 14px;
         }
-
         .ut-chip.is-active{
-          background:#22c55e;
-          color:#fff;
+          background: #22c55e;
+          color: #fff;
+          border-color: #16a34a;
         }
 
-        /* ===== MOBILE: 3 TABS AT A TIME ===== */
-        @media (max-width:576px){
+        .ut-after-tabs-gap{ height: 10px; }
+
+        /* Mobile: 3 chips visible at a time (still scrollable) */
+        @media (max-width: 576px){
           .ut-chip{
-            flex:0 0 calc(100% / 3);
-            text-align:center;
-            font-size:12px;
-            padding:6px 4px;
+            flex: 0 0 calc(100% / 3);
+            text-align: center;
+            font-size: 12px;
+            padding: 8px 6px;
           }
         }
       `}</style>

@@ -27,7 +27,7 @@ const API = {
   delActress: (id) => `${BASE}/api/act_favorite/user-act-favorite/${id}`,
 };
 
-const PAGE_SIZE_LIST = 5;
+const PAGE_SIZE_LIST = 8;
 
 /* ---------- utils ---------- */
 async function safeFetchJSON(url, options) {
@@ -152,17 +152,12 @@ function LoadingOverlay({ visible, percent, label }) {
             <div
               className="progress-bar bg-success"
               style={{
-                width: `${Math.max(
-                  1,
-                  Math.min(100, Math.round(percent))
-                )}%`,
+                width: `${Math.max(1, Math.min(100, Math.round(percent)))}%`,
                 transition: "width 0.25s ease-out",
               }}
             />
           </div>
-          <div className="mt-2 fw-bold text-center">
-            {Math.round(percent)}%
-          </div>
+          <div className="mt-2 fw-bold text-center">{Math.round(percent)}%</div>
         </div>
       </div>
     </Portal>
@@ -185,11 +180,7 @@ function CenterPopup({
       ? "border-success"
       : "border-secondary";
   const titleClass =
-    tone === "danger"
-      ? "text-danger"
-      : tone === "success"
-      ? "text-success"
-      : "";
+    tone === "danger" ? "text-danger" : tone === "success" ? "text-success" : "";
   return (
     <Portal>
       <div
@@ -294,7 +285,6 @@ function Lightbox({ images, index, onChangeIndex, onClose }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [validIndex, index, images?.length]);
 
-  // reset zoom & pan when image changes
   useEffect(() => {
     setView({
       scale: 1,
@@ -326,7 +316,6 @@ function Lightbox({ images, index, onChangeIndex, onClose }) {
     e.preventDefault();
     const x = e.clientX ?? (e.touches?.[0]?.clientX || 0);
     const y = e.clientY ?? (e.touches?.[0]?.clientY || 0);
-
     e.currentTarget.setPointerCapture?.(e.pointerId);
     setView((prev) => ({
       ...prev,
@@ -388,19 +377,15 @@ function Lightbox({ images, index, onChangeIndex, onClose }) {
           inset: 0,
           background: "rgba(0,0,0,0.92)",
           zIndex: 30000,
-          padding: 12,
-          paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)",
+          padding: 10,
+          paddingTop: "calc(env(safe-area-inset-top, 0px) + 10px)",
           WebkitOverflowScrolling: "touch",
         }}
         onClick={(e) => e.target === e.currentTarget && onClose()}
       >
-        {/* IMAGE AREA */}
         <div
           className="flex-grow-1 d-flex align-items-center justify-content-center w-100"
-          style={{
-            overflow: "hidden",
-            touchAction: "none",
-          }}
+          style={{ overflow: "hidden", touchAction: "none" }}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={endPan}
@@ -441,13 +426,12 @@ function Lightbox({ images, index, onChangeIndex, onClose }) {
           </div>
         </div>
 
-        {/* CONTROLS */}
         <div
           className="d-flex flex-wrap justify-content-center gap-1 w-100"
           style={{
             paddingTop: 6,
             paddingBottom: 8,
-            marginBottom: "calc(env(safe-area-inset-bottom, 16px))",
+            marginBottom: "calc(env(safe-area-inset-bottom, 12px))",
             pointerEvents: "auto",
           }}
         >
@@ -553,6 +537,7 @@ export default function ActressesPage() {
     const idQ = searchParams.get("id");
     return isFiniteNum(idQ) ? Number(idQ) : null;
   }, [searchParams]);
+
   const progress = useProgress();
 
   const listApiRef = useRef({
@@ -562,60 +547,62 @@ export default function ActressesPage() {
   });
 
   return (
-    <div
-      className="container-fluid"
-      style={{ paddingTop: 12, paddingBottom: 24 }}
-    >
-      {/* LIST VIEW is always mounted, just hidden when detail open */}
-      <ListView
-        hidden={!!selectedId}
-        registerListApi={(api) => (listApiRef.current = api)}
-        onOpen={(id) => {
-          const next = new URL(window.location.href);
-          next.searchParams.set("id", String(id));
-          window.history.pushState({}, "", next.toString());
-          setSearchParams((prev) => {
-            const p = new URLSearchParams(prev);
-            p.set("id", String(id));
-            return p;
-          });
-          progress.start("Opening details…", 12);
-        }}
-        progress={progress}
-      />
-
-      {/* Detail sits on top only when selected */}
-      {selectedId && (
-        <DetailView
-          key={selectedId}
-          id={selectedId}
-          onClose={() => {
+    <div className="ap-page">
+      <div className="ap-shell">
+        {/* LIST VIEW (always mounted, hidden when detail open) */}
+        <ListView
+          hidden={!!selectedId}
+          registerListApi={(api) => (listApiRef.current = api)}
+          onOpen={(id) => {
             const next = new URL(window.location.href);
-            next.searchParams.delete("id");
+            next.searchParams.set("id", String(id));
             window.history.pushState({}, "", next.toString());
             setSearchParams((prev) => {
               const p = new URLSearchParams(prev);
-              p.delete("id");
+              p.set("id", String(id));
               return p;
             });
+            progress.start("Opening details…", 12);
           }}
           progress={progress}
-          onImagesDelta={(delta) =>
-            listApiRef.current.updateItem?.(selectedId, (prev) => ({
-              images_count: Math.max(0, (prev?.images_count ?? 0) + delta),
-            }))
-          }
-          onDeleteActress={() => {
-            listApiRef.current.removeItem?.(selectedId);
-          }}
         />
-      )}
+
+        {/* Detail */}
+        {selectedId && (
+          <DetailView
+            key={selectedId}
+            id={selectedId}
+            onClose={() => {
+              const next = new URL(window.location.href);
+              next.searchParams.delete("id");
+              window.history.pushState({}, "", next.toString());
+              setSearchParams((prev) => {
+                const p = new URLSearchParams(prev);
+                p.delete("id");
+                return p;
+              });
+            }}
+            progress={progress}
+            onImagesDelta={(delta) =>
+              listApiRef.current.updateItem?.(selectedId, (prev) => ({
+                images_count: Math.max(0, (prev?.images_count ?? 0) + delta),
+              }))
+            }
+            onDeleteActress={() => {
+              listApiRef.current.removeItem?.(selectedId);
+            }}
+          />
+        )}
+      </div>
 
       <LoadingOverlay
         visible={progress.state.visible}
         percent={progress.state.percent}
         label={progress.state.label}
       />
+
+      {/* Professional responsive layout CSS */}
+      <style>{AP_CSS}</style>
     </div>
   );
 }
@@ -647,6 +634,7 @@ function ListView({ onOpen, progress, registerListApi, hidden }) {
       setLoading(false);
     }
   }
+
   useEffect(() => {
     load();
     // eslint-disable-next-line
@@ -705,17 +693,16 @@ function ListView({ onOpen, progress, registerListApi, hidden }) {
 
   return (
     <div style={hidden ? { display: "none" } : undefined}>
-      <div className="row g-2 align-items-center mb-3">
-        <div className="col-12 col-md-6 col-lg-4">
+      {/* Search bar (full width, no extra outside padding) */}
+      <div className="ap-top">
+        <div className="ap-search">
           <input
-            className="form-control"
+            className="form-control ap-input"
             placeholder="Search name / series / country..."
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
-        </div>
-        <div className="col-auto">
-          <button className="btn btn-primary" onClick={load}>
+          <button className="btn btn-primary ap-btn" onClick={load}>
             Search
           </button>
         </div>
@@ -736,79 +723,54 @@ function ListView({ onOpen, progress, registerListApi, hidden }) {
       )}
 
       {!loading && !err && total === 0 && (
-        <div className="text-center text-secondary my-3">
-          No actresses found.
-        </div>
+        <div className="text-center text-secondary my-3">No actresses found.</div>
       )}
 
       {!loading && !err && total > 0 && (
         <>
-          <div className="row g-2">
+          {/* Professional auto-fit grid */}
+          <div className="ap-grid">
             {slice.map((r) => (
-              <div className="col-12 col-md-6 col-lg-4" key={r.id}>
-                <button
-                  className="w-100 btn btn-light text-start p-2 border rounded-3 shadow-sm h-100"
-                  onClick={() => onOpen(r.id)}
-                >
-                  <div
-                    className="d-grid"
-                    style={{
-                      gridTemplateColumns: "84px 1fr",
-                      gap: 10,
-                      alignItems: "center",
-                    }}
-                  >
-                    <div
-                      className="rounded-3 bg-black overflow-hidden d-flex align-items-center justify-content-center"
-                      style={{ width: 84, height: 84 }}
-                    >
-                      {r.profile_image ? (
-                        <img
-                          src={r.profile_image}
-                          alt={r.favorite_actress_name}
-                          style={{
-                            maxWidth: "100%",
-                            maxHeight: "100%",
-                            objectFit: "contain",
-                            display: "block",
-                          }}
-                          loading="lazy"
-                        />
-                      ) : (
-                        <div
-                          className="d-flex align-items-center justify-content-center text-muted"
-                          style={{
-                            width: "100%",
-                            height: "100%",
-                            fontSize: 12,
-                          }}
-                        >
-                          No Image
-                        </div>
-                      )}
+              <button
+                key={r.id}
+                className="ap-card"
+                onClick={() => onOpen(r.id)}
+                type="button"
+              >
+                <div className="ap-card-inner">
+                  <div className="ap-thumb">
+                    {r.profile_image ? (
+                      <img
+                        src={r.profile_image}
+                        alt={r.favorite_actress_name}
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="ap-noimg">No Image</div>
+                    )}
+                  </div>
+
+                  <div className="ap-info">
+                    <div className="ap-name text-truncate">
+                      {r.favorite_actress_name}
                     </div>
-                    <div>
-                      <div className="fw-bold">
-                        {r.favorite_actress_name}
-                      </div>
-                      <div className="small">
-                        <b>Series:</b> {r.favorite_movie_series || "—"}
-                      </div>
-                      <div className="small">
-                        <b>Country:</b>{" "}
-                        {r.country_name || r.country_id || "—"}
-                      </div>
-                      <div className="small">
-                        <b>Images:</b> {r.images_count ?? 0}
-                      </div>
+                    <div className="ap-line text-truncate">
+                      <b>Series:</b> {r.favorite_movie_series || "—"}
+                    </div>
+                    <div className="ap-line text-truncate">
+                      <b>Country:</b> {r.country_name || r.country_id || "—"}
+                    </div>
+                    <div className="ap-line">
+                      <b>Images:</b> {r.images_count ?? 0}
                     </div>
                   </div>
-                </button>
-              </div>
+                </div>
+              </button>
             ))}
           </div>
 
-          <div className="d-flex align-items-center justify-content-center gap-2 mt-3">
+          {/* Pagination */}
+          <div className="ap-pager">
             <button
               className="btn btn-light"
               disabled={!canPrev}
@@ -841,10 +803,7 @@ function DetailView({ id, onClose, progress, onImagesDelta, onDeleteActress }) {
   const [images, setImages] = useState([]);
   const [lightboxIndex, setLightboxIndex] = useState(null);
   const [confirmDeleteActress, setConfirmDeleteActress] = useState(false);
-  const [errorPopup, setErrorPopup] = useState({
-    open: false,
-    message: "",
-  });
+  const [errorPopup, setErrorPopup] = useState({ open: false, message: "" });
 
   useEffect(() => {
     setLightboxIndex(null);
@@ -870,10 +829,9 @@ function DetailView({ id, onClose, progress, onImagesDelta, onDeleteActress }) {
       const data = await safeFetchJSON(API.one(id));
 
       const mergedImages = uniqueImages(
-        [
-          data.profile_image,
-          ...(Array.isArray(data.images) ? data.images : []),
-        ].filter(Boolean)
+        [data.profile_image, ...(Array.isArray(data.images) ? data.images : [])].filter(
+          Boolean
+        )
       );
 
       setActress(data);
@@ -897,10 +855,9 @@ function DetailView({ id, onClose, progress, onImagesDelta, onDeleteActress }) {
       progress.start("Refreshing images…", 12);
       const data = await safeFetchJSON(API.one(id));
       const merged = uniqueImages(
-        [
-          data.profile_image,
-          ...(Array.isArray(data.images) ? data.images : []),
-        ].filter(Boolean)
+        [data.profile_image, ...(Array.isArray(data.images) ? data.images : [])].filter(
+          Boolean
+        )
       );
       setActress(data);
       setImages(merged);
@@ -930,8 +887,7 @@ function DetailView({ id, onClose, progress, onImagesDelta, onDeleteActress }) {
     }
   };
 
-  if (loading)
-    return <div className="text-center text-secondary my-3">Loading…</div>;
+  if (loading) return <div className="text-center text-secondary my-3">Loading…</div>;
   if (err) {
     return (
       <div className="text-center my-3">
@@ -947,47 +903,32 @@ function DetailView({ id, onClose, progress, onImagesDelta, onDeleteActress }) {
       </div>
     );
   }
-  if (!actress)
-    return <div className="text-center text-secondary my-3">No data</div>;
+  if (!actress) return <div className="text-center text-secondary my-3">No data</div>;
 
   return (
-    <>
-      <div className="mb-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div className="ap-detail">
+      <div className="ap-detail-top">
         <button className="btn btn-light btn-sm" onClick={onClose}>
-          ← Back to list
+          ← Back
         </button>
         <div className="fw-bold small text-muted">
           ID: {actress.id} · Images: {images.length ?? 0}
         </div>
       </div>
 
-      {/* HERO SECTION – Profile + Info */}
-      <div className="row g-3 align-items-stretch mb-3">
+      {/* HERO */}
+      <div className="row g-2 g-md-3 align-items-stretch">
         <div className="col-12 col-md-5 col-lg-4">
-          <div
-            className="rounded-3 bg-black shadow-sm h-100 d-flex align-items-center justify-content-center"
-            style={{ minHeight: 260 }}
-          >
+          <div className="ap-hero-img">
             {!actress.profile_image ? (
-              <div className="d-flex align-items-center justify-content-center text-secondary w-100 h-100">
-                No profile image
-              </div>
+              <div className="text-secondary">No profile image</div>
             ) : (
               <img
                 src={actress.profile_image}
                 alt={actress.favorite_actress_name}
-                style={{
-                  maxWidth: "100%",
-                  maxHeight: "100%",
-                  objectFit: "contain",
-                  cursor: "zoom-in",
-                  display: "block",
-                }}
                 onClick={() => {
                   const idx = images.findIndex(
-                    (u) =>
-                      normalizeUrl(u) ===
-                      normalizeUrl(actress.profile_image)
+                    (u) => normalizeUrl(u) === normalizeUrl(actress.profile_image)
                   );
                   openLightboxAt(idx >= 0 ? idx : 0);
                 }}
@@ -999,7 +940,7 @@ function DetailView({ id, onClose, progress, onImagesDelta, onDeleteActress }) {
 
         <div className="col-12 col-md-7 col-lg-8">
           <div className="card border-0 shadow-sm h-100">
-            <div className="card-body">
+            <div className="card-body ap-cardbody-tight">
               <h4 className="fw-bold mb-1">
                 {actress.favorite_actress_name || "Unknown"}
               </h4>
@@ -1040,16 +981,12 @@ function DetailView({ id, onClose, progress, onImagesDelta, onDeleteActress }) {
               {actress.notes && (
                 <div className="mt-2">
                   <div className="text-muted small mb-1">Notes</div>
-                  <div
-                    className="border rounded-3 p-2 small"
-                    style={{ maxHeight: 120, overflowY: "auto" }}
-                  >
+                  <div className="border rounded-3 p-2 small ap-notesbox">
                     {actress.notes}
                   </div>
                 </div>
               )}
 
-              {/* Actions – exactly 3 buttons, mobile-friendly */}
               <div className="mt-3">
                 <div className="d-grid d-md-flex flex-wrap gap-2">
                   <DeleteImagesButton
@@ -1064,14 +1001,11 @@ function DetailView({ id, onClose, progress, onImagesDelta, onDeleteActress }) {
                     actressId={actress.id}
                     progress={progress}
                     onImagesAdded={(updatedImages) => {
-                      // updatedImages = full list from server
                       setImages((prev) => {
                         const prevLen = prev.length;
                         const newLen = updatedImages.length;
                         const addedCount = Math.max(0, newLen - prevLen);
-                        if (addedCount > 0) {
-                          onImagesDelta?.(addedCount);
-                        }
+                        if (addedCount > 0) onImagesDelta?.(addedCount);
                         return updatedImages;
                       });
                     }}
@@ -1089,65 +1023,38 @@ function DetailView({ id, onClose, progress, onImagesDelta, onDeleteActress }) {
         </div>
       </div>
 
-      {/* ALL IMAGES – scrollable gallery section only */}
-      <div className="card border-0 shadow-sm mb-3">
-        <div className="card-body">
+      {/* GALLERY */}
+      <div className="card border-0 shadow-sm mt-2">
+        <div className="card-body ap-cardbody-tight">
           <div className="d-flex justify-content-between align-items-center mb-2">
             <h5 className="mb-0">All Images</h5>
             <small className="text-muted">
-              Tap to open · {images.length} image
-              {images.length === 1 ? "" : "s"}
+              Tap to open · {images.length} image{images.length === 1 ? "" : "s"}
             </small>
           </div>
+
           {images.length === 0 ? (
             <div className="text-center text-secondary py-3">
               No extra images yet.
             </div>
           ) : (
-            <div
-              style={{
-                maxHeight: "60vh",
-                overflowY: "auto",
-                WebkitOverflowScrolling: "touch",
-                paddingRight: 4,
-              }}
-            >
-              <div className="row g-2">
-                {images.map((url, i) => (
-                  <div
-                    className="col-4 col-sm-3 col-md-2 col-lg-2"
-                    key={normalizeUrl(url) + "-" + i}
-                  >
-                    <button
-                      className="btn p-0 w-100 border-0 d-flex align-items-center justify-content-center"
-                      style={{
-                        aspectRatio: "1/1",
-                        background: "#000",
-                      }}
-                      onClick={() => openLightboxAt(i)}
-                      aria-label="Open image"
-                    >
-                      <img
-                        src={url}
-                        alt={`img-${i}`}
-                        style={{
-                          maxWidth: "100%",
-                          maxHeight: "100%",
-                          objectFit: "contain",
-                          display: "block",
-                        }}
-                        loading="lazy"
-                      />
-                    </button>
-                  </div>
-                ))}
-              </div>
+            <div className="ap-gallery">
+              {images.map((url, i) => (
+                <button
+                  key={normalizeUrl(url) + "-" + i}
+                  className="ap-gitem"
+                  onClick={() => openLightboxAt(i)}
+                  aria-label="Open image"
+                  type="button"
+                >
+                  <img src={url} alt={`img-${i}`} loading="lazy" />
+                </button>
+              ))}
             </div>
           )}
         </div>
       </div>
 
-      {/* Lightbox gallery with zoom + drag/pan */}
       <Lightbox
         images={images}
         index={lightboxIndex}
@@ -1155,7 +1062,6 @@ function DetailView({ id, onClose, progress, onImagesDelta, onDeleteActress }) {
         onClose={() => setLightboxIndex(null)}
       />
 
-      {/* Delete actress confirm + errors */}
       <ConfirmCenter
         open={confirmDeleteActress}
         title="Delete Actress"
@@ -1170,7 +1076,7 @@ function DetailView({ id, onClose, progress, onImagesDelta, onDeleteActress }) {
         message={errorPopup.message}
         onClose={() => setErrorPopup({ open: false, message: "" })}
       />
-    </>
+    </div>
   );
 }
 
@@ -1181,10 +1087,7 @@ function AddImagesButton({ actressId, progress, onImagesAdded }) {
 
   return (
     <>
-      <button
-        className="btn btn-primary w-100 w-md-auto"
-        onClick={() => setOpen(true)}
-      >
+      <button className="btn btn-primary w-100 w-md-auto" onClick={() => setOpen(true)}>
         Add Extra Image
       </button>
       {open && (
@@ -1193,7 +1096,6 @@ function AddImagesButton({ actressId, progress, onImagesAdded }) {
             actressId={actressId}
             onClose={() => setOpen(false)}
             onUploaded={(updatedImages) => {
-              // updatedImages is full list from server
               setOpen(false);
               setSuccessOpen(true);
               onImagesAdded?.(updatedImages);
@@ -1206,23 +1108,20 @@ function AddImagesButton({ actressId, progress, onImagesAdded }) {
         open={successOpen}
         title="Success"
         tone="success"
-        message={`Images added successfully.`}
-        onClose={() => {
-          setSuccessOpen(false);
-        }}
+        message="Images added successfully."
+        onClose={() => setSuccessOpen(false)}
       />
     </>
   );
 }
+
 function DeleteImagesButton({ actressId, progress, onImagesDeleted }) {
   const [open, setOpen] = useState(false);
   const [deletedCount, setDeletedCount] = useState(0);
+
   return (
     <>
-      <button
-        className="btn btn-warning w-100 w-md-auto"
-        onClick={() => setOpen(true)}
-      >
+      <button className="btn btn-warning w-100 w-md-auto" onClick={() => setOpen(true)}>
         Delete Images
       </button>
       {open && (
@@ -1255,34 +1154,27 @@ function AddImages({ actressId, onClose, onUploaded, progress }) {
       setBusy(true);
       progress.start("Uploading…", 12);
 
-      // REAL upload with multipart/form-data
       const formData = new FormData();
       Array.from(filesList).forEach((file) => {
-        formData.append("files", file); // backend: upload.array("files")
+        formData.append("files", file);
       });
 
-      // EXPECT: backend returns full updated row with images[]
       const updated = await safeFetchJSON(API.images(actressId), {
         method: "PATCH",
         body: formData,
       });
 
-      // Build full images list from response
       const allImages = uniqueImages(
-        [
-          updated.profile_image,
-          ...(Array.isArray(updated.images) ? updated.images : []),
-        ].filter(Boolean)
+        [updated.profile_image, ...(Array.isArray(updated.images) ? updated.images : [])].filter(
+          Boolean
+        )
       );
 
       progress.done();
       onUploaded && onUploaded(allImages);
     } catch (e) {
       progress.done();
-      setErrorPopup({
-        open: true,
-        message: e.message || "Failed to upload",
-      });
+      setErrorPopup({ open: true, message: e.message || "Failed to upload" });
     } finally {
       setBusy(false);
     }
@@ -1343,15 +1235,13 @@ function DeleteImages({ actressId, onClose, progress, onDeleted }) {
       const imgs = uniqueImages(data.images || []);
       setList(imgs);
     } catch (e) {
-      setErrorPopup({
-        open: true,
-        message: e.message || "Failed to load images",
-      });
+      setErrorPopup({ open: true, message: e.message || "Failed to load images" });
     } finally {
       setLoading(false);
       progress.done();
     }
   };
+
   useEffect(() => {
     loadAll();
     // eslint-disable-next-line
@@ -1383,61 +1273,32 @@ function DeleteImages({ actressId, onClose, progress, onDeleted }) {
       onClose?.();
     } catch (e) {
       progress.done();
-      setErrorPopup({
-        open: true,
-        message: e.message || "Failed to delete images",
-      });
+      setErrorPopup({ open: true, message: e.message || "Failed to delete images" });
     }
   };
 
   return (
     <>
-      {loading && (
-        <div className="text-center text-secondary my-2">Loading…</div>
-      )}
+      {loading && <div className="text-center text-secondary my-2">Loading…</div>}
+
       {!loading && (
         <>
-          <div className="row g-2">
+          <div className="ap-delgrid">
             {list.map((url, i) => (
-              <div
-                className="col-3 col-sm-2 col-md-2"
-                key={normalizeUrl(url) + "-" + i}
-              >
-                <div
-                  className="position-relative d-flex align-items-center justify-content-center"
-                  style={{
-                    aspectRatio: "1/1",
-                    background: "#000",
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    className="form-check-input position-absolute"
-                    style={{ top: 6, left: 6, zIndex: 2 }}
-                    checked={selected.has(url)}
-                    onChange={() => toggle(url)}
-                  />
-                  <img
-                    src={url}
-                    alt={`img-${i}`}
-                    style={{
-                      maxWidth: "100%",
-                      maxHeight: "100%",
-                      objectFit: "contain",
-                      display: "block",
-                    }}
-                    loading="lazy"
-                  />
-                </div>
+              <div className="ap-delitem" key={normalizeUrl(url) + "-" + i}>
+                <input
+                  type="checkbox"
+                  className="form-check-input ap-delcheck"
+                  checked={selected.has(url)}
+                  onChange={() => toggle(url)}
+                />
+                <img src={url} alt={`img-${i}`} loading="lazy" />
               </div>
             ))}
           </div>
 
           <div className="d-grid gap-2 mt-3">
-            <button
-              className="btn btn-warning"
-              onClick={() => setConfirmOpen(true)}
-            >
+            <button className="btn btn-warning" onClick={() => setConfirmOpen(true)}>
               Delete Selected ({selected.size})
             </button>
             <button className="btn btn-secondary" onClick={onClose}>
@@ -1470,11 +1331,205 @@ function DeleteImages({ actressId, onClose, progress, onDeleted }) {
   );
 }
 
+/* ---------- CSS (edge-to-edge + responsive grid) ---------- */
+const AP_CSS = `
+  html, body { width: 100%; overflow-x: hidden; }
+  *, *::before, *::after { box-sizing: border-box; }
+
+  .ap-page{
+    width: 100%;
+    min-height: 100dvh;
+    margin: 0;
+    padding: 0;
+  }
+  .ap-shell{
+    width: 100%;
+    margin: 0;
+    padding: 0; /* ✅ outside padding removed */
+  }
+
+  /* Search bar full width */
+  .ap-top{ width: 100%; padding: 8px; }
+  .ap-search{
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+  }
+  .ap-input{ width: 100%; }
+  .ap-btn{ white-space: nowrap; }
+
+  /* ✅ Professional auto-fit grid cards */
+  .ap-grid{
+    width: 100%;
+    padding: 8px; /* tiny, not emptyspace; just to avoid edge-touch */
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 8px;
+  }
+  @media (max-width: 576px){
+    .ap-top{ padding: 6px; }
+    .ap-grid{ padding: 6px; grid-template-columns: 1fr; gap: 6px; }
+  }
+
+  .ap-card{
+    width: 100%;
+    border: 1px solid rgba(2,6,23,.10);
+    background: rgba(255,255,255,.95);
+    border-radius: 14px;
+    box-shadow: 0 10px 28px rgba(2,6,23,.06);
+    padding: 10px; /* ✅ inside card tight */
+    text-align: left;
+    transition: transform .12s ease, box-shadow .12s ease;
+  }
+  .ap-card:hover{ box-shadow: 0 14px 40px rgba(2,6,23,.10); }
+  .ap-card:active{ transform: scale(0.995); }
+
+  .ap-card-inner{
+    display: grid;
+    grid-template-columns: 84px 1fr;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .ap-thumb{
+    width: 84px;
+    height: 84px;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .ap-thumb img{
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+  .ap-noimg{
+    color: rgba(255,255,255,.65);
+    font-size: 12px;
+  }
+
+  .ap-info{ min-width: 0; }
+  .ap-name{
+    font-weight: 900;
+    font-size: 15px;
+    color: #0f172a;
+  }
+  .ap-line{
+    font-size: 12px;
+    color: rgba(15,23,42,.78);
+    margin-top: 2px;
+  }
+
+  .ap-pager{
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 10px 8px 14px 8px;
+  }
+
+  /* Detail area edge-to-edge */
+  .ap-detail{ width: 100%; padding: 8px; }
+  @media (max-width: 576px){ .ap-detail{ padding: 6px; } }
+
+  .ap-detail-top{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+
+  .ap-hero-img{
+    border-radius: 14px;
+    background: #000;
+    box-shadow: 0 10px 28px rgba(2,6,23,.08);
+    min-height: 260px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .ap-hero-img img{
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    cursor: zoom-in;
+    display: block;
+  }
+
+  /* Tighten Bootstrap card body a bit */
+  .ap-cardbody-tight{ padding: 12px; }
+  .ap-notesbox{ max-height: 120px; overflow-y: auto; }
+
+  /* Gallery grid */
+  .ap-gallery{
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 8px;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding-right: 2px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .ap-gitem{
+    border: 0;
+    border-radius: 12px;
+    background: #000;
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+  .ap-gitem img{
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+
+  /* Delete images grid */
+  .ap-delgrid{
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+    gap: 8px;
+  }
+  .ap-delitem{
+    position: relative;
+    background: #000;
+    border-radius: 12px;
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .ap-delitem img{
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+  .ap-delcheck{
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 2;
+  }
+`;
+
 /* one-time keyframes placeholder */
-if (
-  typeof document !== "undefined" &&
-  !document.getElementById("actressespage-kf")
-) {
+if (typeof document !== "undefined" && !document.getElementById("actressespage-kf")) {
   const st = document.createElement("style");
   st.id = "actressespage-kf";
   st.innerHTML = `@keyframes shimmer { 100% { transform: translateX(100%); } }`;
