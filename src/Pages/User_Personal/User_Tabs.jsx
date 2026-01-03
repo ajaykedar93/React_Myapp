@@ -10,7 +10,7 @@ import ShowActress from "./ActressesPage";
 import GetPassword from "./GetPassword";
 import Notes from "./Notes";
 import WebsitesUrl from "./WebsitesUrl";
-import Addlist from "./Addfevlist";
+import Addlist from "./FevActListNew";
 
 /* ---------------- Tokens ---------------- */
 const COLORS = {

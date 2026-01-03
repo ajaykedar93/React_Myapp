@@ -4,9 +4,7 @@ import "bootstrap/dist/css/bootstrap.min.css";
 const BASE = "https://express-backend-myapp.onrender.com";
 const API = {
   countries: `${BASE}/api/act_favorite/countries`,
-  // IMPORTANT: must match router: "/user-act-favorite"
   create: `${BASE}/api/act_favorite/user-act-favorite`,
-  // Assumption (common REST): list from same route
   list: `${BASE}/api/act_favorite/user-act-favorite`,
 };
 
@@ -24,7 +22,6 @@ const toDataUrls = async (files) => {
   return Promise.all(tasks);
 };
 
-// quick URL sanity check (https/http or data:image)
 const isUrl = (s) => /^https?:\/\/|^data:image\//i.test(s || "");
 
 const safeUUID = () => {
@@ -68,96 +65,268 @@ export default function AddFevActress() {
     type: "info",
   });
 
-  // List (below)
-  const [actressList, setActressList] = useState([]);
-  const [loadingList, setLoadingList] = useState(true);
-  const [listError, setListError] = useState("");
-
   const dzProfile = useRef(null);
   const dzGallery = useRef(null);
 
   /* ---------- Styles (once) ---------- */
   useEffect(() => {
-    const id = "addfav-actress-responsive-ui";
+    const id = "addfav-actress-bright-pro-v1";
+    if (typeof document === "undefined") return;
     if (document.getElementById(id)) return;
+
     const s = document.createElement("style");
     s.id = id;
     s.innerHTML = `
-      body {
-        font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        background:#f3f4f6;
+      :root{
+        --bg: #F6F9FF;
+        --paper: #FFFFFF;
+        --ink: #0B1220;
+        --muted: rgba(11,18,32,.70);
+        --line: rgba(11,18,32,.10);
+
+        --accent1:#2563EB;
+        --accent2:#7C3AED;
+        --accent3:#06B6D4;
+        --accent4:#22C55E;
+
+        --danger:#EF4444;
       }
-      .page-wrapper { min-height:100vh; padding: 18px 0; }
-      .card-glass {
-        background:#fff;
+
+      html, body { width:100%; max-width:100%; overflow-x:hidden; }
+      body{
+        margin:0;
+        font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+        background:
+          radial-gradient(900px 420px at 15% -10%, rgba(37,99,235,.18), transparent 60%),
+          radial-gradient(900px 520px at 85% 0%, rgba(124,58,237,.16), transparent 60%),
+          radial-gradient(900px 520px at 55% 120%, rgba(6,182,212,.14), transparent 60%),
+          linear-gradient(180deg, var(--bg), #fff);
+        color: var(--ink);
+      }
+
+      *{ min-width:0; }
+      .wrap-anywhere{ overflow-wrap:anywhere; word-break:break-word; }
+
+      .page{
+        min-height: 100dvh;
+        display:flex;
+        align-items:center;
+        padding: 18px 0;
+      }
+      .shell{
+        width: min(980px, calc(100vw - 18px));
+        margin: 0 auto;
+      }
+
+      /* Header */
+      .hero{
+        display:flex;
+        justify-content:space-between;
+        align-items:flex-start;
+        gap:12px;
+        margin-bottom: 14px;
+      }
+      .brand{
+        display:flex;
+        align-items:center;
+        gap:12px;
+      }
+      .logo{
+        width:46px; height:46px;
         border-radius:16px;
-        box-shadow:0 10px 30px rgba(15,23,42,.10);
-        border:1px solid rgba(148,163,184,.35);
-        transition:transform .2s ease, box-shadow .2s ease;
-      }
-      .card-glass:hover{
-        transform: translateY(-1px);
-        box-shadow:0 14px 40px rgba(15,23,42,.16);
-      }
-      .dropzone {
-        border:2px dashed #a5b4fc;
-        background:#f8fafc;
-        padding:16px;
-        border-radius:12px;
-        text-align:center;
-        transition:all .2s ease;
-      }
-      .dropzone.dragover{ background:#eef2ff; border-color:#6366f1; }
-
-      /* Profile preview responsive */
-      .profile-preview-img{
-        width: clamp(120px, 30vw, 190px);
-        height: clamp(120px, 30vw, 190px);
-        border-radius: 14px;
-        border: 1px solid #d1d5db;
-        object-fit: cover;
-      }
-
-      /* Gallery thumbs */
-      .thumb { width:92px; height:92px; border-radius:10px; object-fit:cover; border:1px solid #d1d5db; }
-      .thumb-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(92px,1fr)); gap:10px; }
-
-      /* List cards image responsive (not too big on mobile) */
-      .list-cover{
-        width: 100%;
-        height: clamp(140px, 22vw, 220px);
-        object-fit: cover;
-        border-radius: 14px;
-        border: 1px solid #e5e7eb;
-        background: #f3f4f6;
-      }
-
-      .btn-gradient {
-        background:linear-gradient(90deg,#2563eb,#8b5cf6,#22c55e);
+        background: linear-gradient(135deg, var(--accent1), var(--accent2), var(--accent3));
         color:#fff;
-        border:none;
-        font-weight:600;
+        display:grid;
+        place-items:center;
+        font-weight:900;
+        letter-spacing:.5px;
+        box-shadow: 0 20px 45px rgba(0,0,0,.14);
       }
-      .btn-gradient:hover{ opacity:.92; color:#fff; }
-      .muted-hint{ font-size:.85rem; color:#6b7280; }
+      .title{
+        margin:0;
+        font-weight:900;
+        font-size: clamp(20px, 3.8vw, 32px);
+        line-height: 1.1;
+        color: var(--ink);
+      }
+      .subtitle{
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: .95rem;
+        font-weight: 700;
+      }
+      .badge-soft{
+        border:1px solid var(--line);
+        color: rgba(11,18,32,.75);
+        padding: .42rem .7rem;
+        border-radius: 999px;
+        background: rgba(255,255,255,.70);
+        font-weight: 800;
+        font-size: .80rem;
+        backdrop-filter: blur(6px);
+      }
 
-      .center-backdrop {
+      /* Card */
+      .card-pro{
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        box-shadow: 0 28px 70px rgba(2, 8, 23, .10);
+        overflow:hidden;
+      }
+      .card-body-pro{
+        padding: 14px;
+      }
+      @media (min-width: 768px){
+        .card-body-pro{ padding: 18px; }
+      }
+
+      .divider{
+        height:1px;
+        background: var(--line);
+        margin: 12px 0;
+      }
+
+      .form-label{
+        color: rgba(11,18,32,.78);
+        font-weight: 900;
+        font-size: .92rem;
+        letter-spacing: .2px;
+      }
+
+      /* Inputs (black text bold) */
+      .form-control, .form-select, textarea.form-control{
+        background: #fff !important;
+        border: 1px solid rgba(11,18,32,.16) !important;
+        color: var(--ink) !important;
+        border-radius: 12px !important;
+        box-shadow: none !important;
+        font-weight: 800 !important;
+      }
+      .form-control::placeholder, textarea::placeholder{
+        color: rgba(11,18,32,.45) !important;
+        font-weight: 700 !important;
+      }
+      .form-control:focus, .form-select:focus, textarea.form-control:focus{
+        border-color: rgba(37,99,235,.60) !important;
+        box-shadow: 0 0 0 .22rem rgba(37,99,235,.18) !important;
+      }
+
+      /* Dropzone */
+      .dropzone{
+        border: 2px dashed rgba(37,99,235,.55);
+        background: linear-gradient(180deg, rgba(37,99,235,.06), rgba(124,58,237,.04));
+        padding: 14px;
+        border-radius: 14px;
+        text-align:center;
+        transition: all .18s ease;
+      }
+      .dropzone.dragover{
+        background: rgba(34,197,94,.10);
+        border-color: rgba(34,197,94,.65);
+        box-shadow: 0 0 0 4px rgba(34,197,94,.10);
+      }
+
+      .muted-hint{
+        color: rgba(11,18,32,.65);
+        font-size: .86rem;
+        margin-top: 6px;
+        font-weight: 700;
+      }
+
+      /* Buttons */
+      .btn-pro{
+        border-radius: 12px !important;
+        font-weight: 900 !important;
+        letter-spacing: .2px;
+      }
+      .btn-ghost{
+        background: #fff !important;
+        border: 1px solid rgba(11,18,32,.18) !important;
+        color: var(--ink) !important;
+      }
+      .btn-ghost:hover{
+        background: rgba(37,99,235,.06) !important;
+        border-color: rgba(37,99,235,.30) !important;
+      }
+
+      .btn-primary-grad{
+        background: linear-gradient(90deg, var(--accent1), var(--accent2), var(--accent3)) !important;
+        border: none !important;
+        color: #fff !important;
+        box-shadow: 0 18px 45px rgba(37,99,235,.18);
+      }
+      .btn-primary-grad:hover{ opacity:.95; }
+
+      .btn-danger-soft{
+        background: rgba(239,68,68,.10) !important;
+        border: 1px solid rgba(239,68,68,.30) !important;
+        color: #991B1B !important;
+        font-weight: 900 !important;
+      }
+      .btn-danger-soft:hover{ background: rgba(239,68,68,.14) !important; }
+
+      /* Preview images */
+      .profile-preview{
+        width: clamp(120px, 26vw, 190px);
+        height: clamp(120px, 26vw, 190px);
+        border-radius: 14px;
+        border: 1px solid rgba(11,18,32,.12);
+        object-fit: cover;
+        background: rgba(11,18,32,.03);
+      }
+
+      .thumb{
+        width: 92px;
+        height: 92px;
+        border-radius: 12px;
+        border: 1px solid rgba(11,18,32,.12);
+        object-fit: cover;
+        background: rgba(11,18,32,.03);
+      }
+      .thumb-grid{
+        display:grid;
+        grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+        gap: 10px;
+      }
+
+      /* Popup */
+      .center-backdrop{
         position:fixed; inset:0;
-        background:rgba(15,23,42,.65);
+        background: rgba(2, 8, 23, .35);
         display:grid; place-items:center;
-        z-index:2000;
-        animation:fadeIn .25s ease;
+        z-index: 2200;
+        padding: 14px;
       }
-      .center-card {
-        background:#fff;
-        border-radius:16px;
-        max-width:440px;
-        width:92%;
-        box-shadow:0 20px 60px rgba(0,0,0,.28);
-        animation:scaleUp .25s ease;
+      .center-card{
+        width: min(460px, calc(100vw - 22px));
+        background: #fff;
+        border: 1px solid rgba(11,18,32,.12);
+        border-radius: 16px;
+        box-shadow: 0 26px 70px rgba(2, 8, 23, .20);
+        color: var(--ink);
       }
-      @keyframes fadeIn{from{opacity:0}to{opacity:1}}
-      @keyframes scaleUp{from{transform:scale(.92);opacity:0}to{transform:scale(1);opacity:1}}
+
+      /* Busy overlay */
+      .busy{
+        position:fixed; inset:0;
+        background: rgba(2, 8, 23, .20);
+        z-index: 9999;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        padding: 18px;
+      }
+      .busy-card{
+        background: #fff;
+        border:1px solid rgba(11,18,32,.12);
+        border-radius: 16px;
+        padding: 14px 16px;
+        display:flex;
+        align-items:center;
+        gap: 10px;
+        box-shadow: 0 26px 70px rgba(2, 8, 23, .20);
+      }
     `;
     document.head.appendChild(s);
   }, []);
@@ -171,7 +340,7 @@ export default function AddFevActress() {
     }, timeout);
   };
 
-  /* ---------- Fetch countries (list only) ---------- */
+  /* ---------- Fetch countries ---------- */
   useEffect(() => {
     const controller = new AbortController();
 
@@ -185,9 +354,7 @@ export default function AddFevActress() {
 
         if (!res.ok) {
           const txt = await res.text().catch(() => "");
-          throw new Error(
-            `Countries request failed (${res.status}): ${txt || res.statusText}`
-          );
+          throw new Error(`Countries request failed (${res.status}): ${txt || res.statusText}`);
         }
 
         const j = await res.json().catch(() => null);
@@ -213,44 +380,6 @@ export default function AddFevActress() {
     return () => controller.abort();
   }, []);
 
-  /* ---------- Fetch actress list ---------- */
-  const loadActresses = async () => {
-    try {
-      setLoadingList(true);
-      setListError("");
-
-      // Try common formats: ?limit=50&sort=desc etc. If backend ignores, it's fine.
-      const res = await fetch(`${API.list}?limit=50`, { method: "GET" });
-      if (!res.ok) {
-        const txt = await res.text().catch(() => "");
-        throw new Error(
-          `List request failed (${res.status}): ${txt || res.statusText}`
-        );
-      }
-
-      const j = await res.json().catch(() => null);
-
-      // Accept many shapes: {success:true,data:[...]} OR {data:[...]} OR [...]
-      let list = [];
-      if (Array.isArray(j)) list = j;
-      else if (j && Array.isArray(j.data)) list = j.data;
-      else if (j && j.success === true && Array.isArray(j.data)) list = j.data;
-      else if (j && Array.isArray(j.rows)) list = j.rows;
-
-      setActressList(list || []);
-    } catch (e) {
-      setListError(e.message || "Failed to load actress list");
-      setActressList([]);
-    } finally {
-      setLoadingList(false);
-    }
-  };
-
-  useEffect(() => {
-    loadActresses();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   /* ---------- Profile: drag & drop / pick ---------- */
   const onProfileDrop = async (e) => {
     e.preventDefault();
@@ -273,20 +402,14 @@ export default function AddFevActress() {
     e.target.value = "";
   };
 
-  // Use URL for profile preview
   const applyProfileUrl = (e) => {
     e?.preventDefault?.();
     const clean = (profileUrl || "").trim();
     if (!isUrl(clean)) {
-      return setCenterPopup({
-        show: true,
-        title: "Invalid URL",
-        body: "Please enter a valid image URL.",
-        type: "danger",
-      });
+      return showPopup("Invalid URL", "Please enter a valid image URL.", "danger");
     }
     setProfilePreview(clean);
-    setProfileBase64(null); // prefer URL when set
+    setProfileBase64(null);
   };
 
   /* ---------- Gallery: drag & drop / pick ---------- */
@@ -297,10 +420,7 @@ export default function AddFevActress() {
     const files = e.dataTransfer.files;
     if (!files?.length) return;
     const previews = await toDataUrls(files);
-    setDropFiles((prev) => [
-      ...prev,
-      ...previews.map((src) => ({ id: safeUUID(), src })),
-    ]);
+    setDropFiles((prev) => [...prev, ...previews.map((src) => ({ id: safeUUID(), src }))]);
     setImagesToAdd((prev) => [...prev, ...previews]);
   };
 
@@ -308,15 +428,11 @@ export default function AddFevActress() {
     const files = e.target.files;
     if (!files?.length) return;
     const previews = await toDataUrls(files);
-    setDropFiles((prev) => [
-      ...prev,
-      ...previews.map((src) => ({ id: safeUUID(), src })),
-    ]);
+    setDropFiles((prev) => [...prev, ...previews.map((src) => ({ id: safeUUID(), src }))]);
     setImagesToAdd((prev) => [...prev, ...previews]);
     e.target.value = "";
   };
 
-  // Add gallery URLs (one per line)
   const addGalleryUrls = (e) => {
     e?.preventDefault?.();
     const lines = (galleryUrls || "")
@@ -325,12 +441,7 @@ export default function AddFevActress() {
       .filter((l) => l.length && isUrl(l));
 
     if (!lines.length) {
-      return setCenterPopup({
-        show: true,
-        title: "No valid URLs",
-        body: "Paste one image URL per line.",
-        type: "danger",
-      });
+      return showPopup("No valid URLs", "Paste one image URL per line.", "danger");
     }
 
     const newThumbs = lines.map((src) => ({ id: safeUUID(), src }));
@@ -345,18 +456,15 @@ export default function AddFevActress() {
     setImagesToAdd(next.map((p) => p.src));
   };
 
-  /* ---------- Create (POST /api/act_favorite/user-act-favorite) ---------- */
+  /* ---------- Create ---------- */
   const onCreate = async (e) => {
     e?.preventDefault?.();
+
     const favorite_actress_name = (form.favorite_actress_name || "").trim();
     const favorite_movie_series = (form.favorite_movie_series || "").trim();
 
     if (!favorite_actress_name || !favorite_movie_series) {
-      return showPopup(
-        "Missing Fields",
-        "Actress name & movie/series are required.",
-        "danger"
-      );
+      return showPopup("Missing Fields", "Actress name & movie/series are required.", "danger");
     }
 
     const payload = {
@@ -364,17 +472,14 @@ export default function AddFevActress() {
       favorite_movie_series,
       age: form.age ? Number(form.age) : null,
       actress_dob: form.actress_dob || null,
-      profile_image:
-        profileBase64 ||
-        (profileUrl && isUrl(profileUrl) ? profileUrl.trim() : null),
+      profile_image: profileBase64 || (profileUrl && isUrl(profileUrl) ? profileUrl.trim() : null),
       notes: form.notes || null,
     };
 
     if (imagesToAdd.length) payload.images = imagesToAdd;
 
     if (selectedCountryId) payload.country_id = Number(selectedCountryId);
-    else if ((manualCountry || "").trim())
-      payload.country_name = manualCountry.trim();
+    else if ((manualCountry || "").trim()) payload.country_name = manualCountry.trim();
 
     try {
       setBusy(true);
@@ -393,10 +498,7 @@ export default function AddFevActress() {
       }
 
       if (!res.ok) {
-        const msg =
-          (json && (json.message || json.error)) ||
-          text ||
-          `Request failed (${res.status})`;
+        const msg = (json && (json.message || json.error)) || text || `Request failed (${res.status})`;
         throw new Error(msg);
       }
 
@@ -405,14 +507,6 @@ export default function AddFevActress() {
       }
 
       showPopup("Success", "Actress added successfully.", "success");
-
-      // OPTIONAL: if backend returns created row in json.data, push it on top
-      if (json?.data) {
-        setActressList((prev) => [json.data, ...prev]);
-      } else {
-        // fallback: reload list
-        loadActresses();
-      }
 
       // reset form
       setForm({
@@ -455,66 +549,49 @@ export default function AddFevActress() {
     setGalleryUrls("");
   };
 
-  const getFirstImage = (a) => {
-    // Try profile_image first
-    if (a?.profile_image && isUrl(a.profile_image)) return a.profile_image;
-
-    // Try images array
-    const imgs = a?.images || a?.gallery_images || a?.extra_images;
-    if (Array.isArray(imgs) && imgs.length) {
-      const x = imgs.find((v) => isUrl(v));
-      if (x) return x;
-      // Some backends store as {url:""} etc.
-      const y = imgs.find((v) => isUrl(v?.url))?.url;
-      if (y) return y;
-    }
-    return null;
-  };
-
   return (
-    <div className="page-wrapper">
-      <div className="container-xxl">
+    <div className="page">
+      <div className="shell">
         {/* Header */}
-        <div className="text-center mb-3">
-          <h3
-            style={{
-              background: "linear-gradient(90deg,#2563eb,#8b5cf6,#22c55e)",
-              WebkitBackgroundClip: "text",
-              color: "transparent",
-              fontWeight: 900,
-              letterSpacing: ".2px",
-            }}
-            className="mb-1"
-          >
-            Add Favourite Actress
-          </h3>
-          <div className="text-muted">
-            Mobile + Desktop friendly • Drag & Drop / URLs • Responsive Cards
+        <div className="hero">
+          <div className="brand">
+            <div className="logo">AF</div>
+            <div>
+              <h1 className="title">Add Favourite Actress</h1>
+              <div className="subtitle wrap-anywhere">
+                Bright UI • Bold Black Text • Fully responsive • No cut text
+              </div>
+            </div>
+          </div>
+
+          <div className="d-none d-sm-block">
+            <span className="badge-soft">Professional Form</span>
           </div>
         </div>
 
-        {/* Two responsive columns: Add card + List card */}
-        <div className="row g-3 align-items-start">
-          {/* LEFT: Add form */}
-          <div className="col-12 col-lg-5">
-            <div className="card card-glass p-3 p-sm-4">
-              {/* Country */}
-              <div className="mb-3">
-                <label className="form-label fw-semibold">Country</label>
+        {/* Form Card */}
+        <div className="card-pro">
+          <div className="card-body-pro">
+            {countriesError ? (
+              <div className="alert alert-danger py-2 mb-3">
+                <strong>Error:</strong> {countriesError}
+              </div>
+            ) : null}
+
+            {/* Country */}
+            <div className="row g-2">
+              <div className="col-12">
+                <label className="form-label">Country</label>
 
                 {loadingCountries ? (
-                  <div className="text-muted mb-2 d-flex align-items-center">
-                    <span className="spinner-border spinner-border-sm text-primary me-2" />
+                  <div className="d-flex align-items-center gap-2" style={{ color: "rgba(11,18,32,.75)", fontWeight: 800 }}>
+                    <span className="spinner-border spinner-border-sm" />
                     Loading countries…
-                  </div>
-                ) : countriesError ? (
-                  <div className="alert alert-danger py-2 mb-2">
-                    {countriesError}
                   </div>
                 ) : (
                   <>
                     <select
-                      className="form-select mb-2"
+                      className="form-select"
                       value={selectedCountryId}
                       onChange={(e) => {
                         setSelectedCountryId(e.target.value);
@@ -528,94 +605,87 @@ export default function AddFevActress() {
                         </option>
                       ))}
                     </select>
+
                     {!selectedCountryId && (
-                      <input
-                        className="form-control"
-                        placeholder="Or type a new country name"
-                        value={manualCountry}
-                        onChange={(e) => setManualCountry(e.target.value)}
-                      />
+                      <div className="mt-2">
+                        <input
+                          className="form-control"
+                          placeholder="Or type a new country name"
+                          value={manualCountry}
+                          onChange={(e) => setManualCountry(e.target.value)}
+                        />
+                      </div>
                     )}
                   </>
                 )}
               </div>
+            </div>
 
-              <hr className="my-3" />
+            <div className="divider" />
 
-              {/* Actress Info */}
-              <form onSubmit={onCreate}>
-                <div className="row g-2">
-                  <div className="col-12">
-                    <label className="form-label">Actress Name *</label>
-                    <input
-                      className="form-control"
-                      value={form.favorite_actress_name}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          favorite_actress_name: e.target.value,
-                        })
-                      }
-                      required
-                    />
-                  </div>
-
-                  <div className="col-6">
-                    <label className="form-label">Age</label>
-                    <input
-                      type="number"
-                      className="form-control"
-                      value={form.age}
-                      onChange={(e) => setForm({ ...form, age: e.target.value })}
-                      min={0}
-                    />
-                  </div>
-
-                  <div className="col-6">
-                    <label className="form-label">DOB</label>
-                    <input
-                      type="date"
-                      className="form-control"
-                      value={form.actress_dob}
-                      onChange={(e) =>
-                        setForm({ ...form, actress_dob: e.target.value })
-                      }
-                    />
-                  </div>
-
-                  <div className="col-12">
-                    <label className="form-label">Favorite Movie/Series *</label>
-                    <input
-                      className="form-control"
-                      value={form.favorite_movie_series}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          favorite_movie_series: e.target.value,
-                        })
-                      }
-                      required
-                    />
-                  </div>
-
-                  <div className="col-12">
-                    <label className="form-label">Notes</label>
-                    <textarea
-                      rows="2"
-                      className="form-control"
-                      value={form.notes}
-                      onChange={(e) =>
-                        setForm({ ...form, notes: e.target.value })
-                      }
-                    />
-                  </div>
+            {/* Actress Info */}
+            <form onSubmit={onCreate}>
+              <div className="row g-2">
+                <div className="col-12">
+                  <label className="form-label">Actress Name *</label>
+                  <input
+                    className="form-control"
+                    value={form.favorite_actress_name}
+                    onChange={(e) => setForm({ ...form, favorite_actress_name: e.target.value })}
+                    required
+                  />
                 </div>
 
-                {/* Profile: drag/drop OR URL */}
-                <div className="mt-3">
-                  <label className="form-label fw-semibold">
-                    Profile Image (optional)
-                  </label>
+                <div className="col-12 col-sm-6">
+                  <label className="form-label">Age</label>
+                  <input
+                    type="number"
+                    className="form-control"
+                    value={form.age}
+                    onChange={(e) => setForm({ ...form, age: e.target.value })}
+                    min={0}
+                  />
+                </div>
+
+                <div className="col-12 col-sm-6">
+                  <label className="form-label">DOB</label>
+                  <input
+                    type="date"
+                    className="form-control"
+                    value={form.actress_dob}
+                    onChange={(e) => setForm({ ...form, actress_dob: e.target.value })}
+                  />
+                </div>
+
+                <div className="col-12">
+                  <label className="form-label">Favorite Movie/Series *</label>
+                  <input
+                    className="form-control"
+                    value={form.favorite_movie_series}
+                    onChange={(e) => setForm({ ...form, favorite_movie_series: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="col-12">
+                  <label className="form-label">Notes</label>
+                  <textarea
+                    rows="2"
+                    className="form-control"
+                    value={form.notes}
+                    onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                    placeholder="Optional notes…"
+                  />
+                </div>
+              </div>
+
+              <div className="divider" />
+
+              {/* Profile */}
+              <div className="row g-3 align-items-start">
+                <div className="col-12 col-md-7">
+                  <label className="form-label">Profile Image (optional)</label>
+
                   <div
                     ref={dzProfile}
                     className="dropzone"
@@ -626,26 +696,15 @@ export default function AddFevActress() {
                     }}
                     onDragLeave={() => dzProfile.current?.classList.remove("dragover")}
                   >
-                    <div>Drag &amp; drop a profile image here, or</div>
-                    <label className="btn btn-outline-primary btn-sm mt-2">
-                      Select File
-                      <input
-                        type="file"
-                        accept="image/*"
-                        hidden
-                        onChange={onProfilePick}
-                      />
-                    </label>
+                    <div className="wrap-anywhere" style={{ fontWeight: 900, color: "#0B1220" }}>
+                      Drag &amp; drop image here
+                    </div>
+                    <div className="muted-hint">or select a file</div>
 
-                    {profilePreview && (
-                      <div className="text-center mt-3">
-                        <img
-                          src={profilePreview}
-                          alt="Profile"
-                          className="profile-preview-img"
-                        />
-                      </div>
-                    )}
+                    <label className="btn btn-pro btn-ghost mt-2">
+                      Select File
+                      <input type="file" accept="image/*" hidden onChange={onProfilePick} />
+                    </label>
                   </div>
 
                   <div className="mt-2">
@@ -656,239 +715,103 @@ export default function AddFevActress() {
                       onChange={(e) => setProfileUrl(e.target.value)}
                     />
                     <div className="d-flex justify-content-end mt-2">
-                      <button
-                        className="btn btn-sm btn-secondary"
-                        onClick={applyProfileUrl}
-                        type="button"
-                      >
+                      <button className="btn btn-pro btn-ghost" onClick={applyProfileUrl} type="button">
                         Use URL
                       </button>
                     </div>
-                    <div className="muted-hint">
-                      If both are provided, last action wins (URL vs drop).
+                    <div className="muted-hint">Last action wins (URL vs file).</div>
+                  </div>
+                </div>
+
+                <div className="col-12 col-md-5 d-flex justify-content-md-end">
+                  {profilePreview ? (
+                    <img src={profilePreview} alt="Profile" className="profile-preview" />
+                  ) : (
+                    <div
+                      className="profile-preview d-flex align-items-center justify-content-center"
+                      style={{ color: "rgba(11,18,32,.55)", fontWeight: 900 }}
+                    >
+                      No Preview
                     </div>
-                  </div>
+                  )}
                 </div>
-
-                {/* Gallery: drag/drop OR multiple URLs */}
-                <div className="mt-4">
-                  <label className="form-label fw-semibold">
-                    Extra Images (optional)
-                  </label>
-                  <div
-                    ref={dzGallery}
-                    className="dropzone"
-                    onDrop={onGalleryDrop}
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      dzGallery.current?.classList.add("dragover");
-                    }}
-                    onDragLeave={() => dzGallery.current?.classList.remove("dragover")}
-                  >
-                    <div>Drag &amp; drop multiple images here, or</div>
-                    <label className="btn btn-outline-primary btn-sm mt-2">
-                      Select Files
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        hidden
-                        onChange={onGalleryPick}
-                      />
-                    </label>
-
-                    {dropFiles.length > 0 && (
-                      <>
-                        <div className="text-muted small mt-2">
-                          {dropFiles.length} image(s) selected
-                        </div>
-                        <div className="thumb-grid mt-2">
-                          {dropFiles.map((p) => (
-                            <div
-                              key={p.id}
-                              className="d-flex flex-column align-items-center gap-1"
-                            >
-                              <img className="thumb" src={p.src} alt="" />
-                              <button
-                                className="btn btn-sm btn-outline-danger"
-                                onClick={(ev) => {
-                                  ev.preventDefault();
-                                  removePreview(p.id);
-                                }}
-                                type="button"
-                              >
-                                Remove
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </>
-                    )}
-                  </div>
-
-                  <div className="mt-2">
-                    <textarea
-                      rows={3}
-                      className="form-control"
-                      placeholder={
-                        "…or paste image URLs (one per line)\nhttps://example.com/a.jpg\nhttps://example.com/b.png"
-                      }
-                      value={galleryUrls}
-                      onChange={(e) => setGalleryUrls(e.target.value)}
-                    />
-                    <div className="d-flex justify-content-end mt-2">
-                      <button
-                        className="btn btn-sm btn-secondary"
-                        onClick={addGalleryUrls}
-                        type="button"
-                      >
-                        Add URLs
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="d-flex gap-2 justify-content-end mt-4">
-                  <button
-                    type="button"
-                    className="btn btn-light"
-                    onClick={resetAll}
-                  >
-                    Reset
-                  </button>
-                  <button
-                    type="submit"
-                    className="btn btn-gradient"
-                    disabled={busy}
-                  >
-                    {busy ? "Saving…" : "Save"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-
-          {/* RIGHT: List */}
-          <div className="col-12 col-lg-7">
-            <div className="card card-glass p-3 p-sm-4">
-              <div className="d-flex align-items-center justify-content-between gap-2 mb-2">
-                <div>
-                  <div className="fw-bold" style={{ fontSize: "1.05rem" }}>
-                    Actress List
-                  </div>
-                  <div className="text-muted small">
-                    Below cards are responsive on all screen sizes.
-                  </div>
-                </div>
-                <button
-                  className="btn btn-outline-primary btn-sm"
-                  onClick={loadActresses}
-                  type="button"
-                  disabled={loadingList}
-                >
-                  {loadingList ? "Refreshing…" : "Refresh"}
-                </button>
               </div>
 
-              {loadingList ? (
-                <div className="text-muted d-flex align-items-center">
-                  <span className="spinner-border spinner-border-sm text-primary me-2" />
-                  Loading actress list…
-                </div>
-              ) : listError ? (
-                <div className="alert alert-danger py-2 mb-0">{listError}</div>
-              ) : actressList.length === 0 ? (
-                <div className="alert alert-warning py-2 mb-0">
-                  No actresses found.
-                </div>
-              ) : (
-                <div className="row g-3 mt-1">
-                  {actressList.map((a, idx) => {
-                    const cover = getFirstImage(a);
-                    const name =
-                      a?.favorite_actress_name ||
-                      a?.actress_name ||
-                      a?.name ||
-                      `Actress ${idx + 1}`;
-                    const movie =
-                      a?.favorite_movie_series ||
-                      a?.favorite_movie ||
-                      a?.movie ||
-                      "";
-                    const age = a?.age ?? "";
-                    const dob = a?.actress_dob || a?.dob || "";
-                    const notes = a?.notes || "";
-                    const country =
-                      a?.country_name ||
-                      a?.country?.country_name ||
-                      a?.country?.name ||
-                      "";
+              <div className="divider" />
 
-                    return (
-                      <div key={a?.id ?? `${idx}`} className="col-12 col-md-6">
-                        <div className="card border-0 shadow-sm h-100">
-                          <div className="card-body">
-                            {cover ? (
-                              <img
-                                src={cover}
-                                alt={name}
-                                className="list-cover mb-3"
-                              />
-                            ) : (
-                              <div
-                                className="list-cover mb-3 d-flex align-items-center justify-content-center text-muted"
-                                style={{ background: "#f3f4f6" }}
-                              >
-                                No Image
-                              </div>
-                            )}
+              {/* Gallery */}
+              <div className="mt-1">
+                <label className="form-label">Extra Images (optional)</label>
 
-                            <div className="d-flex align-items-start justify-content-between gap-2">
-                              <div className="fw-bold" style={{ fontSize: "1.02rem" }}>
-                                {name}
-                              </div>
-                              {country ? (
-                                <span className="badge text-bg-light border">
-                                  {country}
-                                </span>
-                              ) : null}
-                            </div>
+                <div
+                  ref={dzGallery}
+                  className="dropzone"
+                  onDrop={onGalleryDrop}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    dzGallery.current?.classList.add("dragover");
+                  }}
+                  onDragLeave={() => dzGallery.current?.classList.remove("dragover")}
+                >
+                  <div className="wrap-anywhere" style={{ fontWeight: 900, color: "#0B1220" }}>
+                    Drag &amp; drop multiple images here
+                  </div>
 
-                            {movie ? (
-                              <div className="text-muted small mt-1">
-                                <span className="fw-semibold">Fav:</span>{" "}
-                                {movie}
-                              </div>
-                            ) : null}
+                  <label className="btn btn-pro btn-ghost mt-2">
+                    Select Files
+                    <input type="file" accept="image/*" multiple hidden onChange={onGalleryPick} />
+                  </label>
 
-                            <div className="d-flex flex-wrap gap-2 mt-2">
-                              {age !== "" && age !== null ? (
-                                <span className="badge text-bg-secondary">
-                                  Age: {age}
-                                </span>
-                              ) : null}
-                              {dob ? (
-                                <span className="badge text-bg-secondary">
-                                  DOB: {dob}
-                                </span>
-                              ) : null}
-                            </div>
-
-                            {notes ? (
-                              <div className="mt-2 small">
-                                <div className="fw-semibold">Notes</div>
-                                <div className="text-muted">{notes}</div>
-                              </div>
-                            ) : null}
+                  {dropFiles.length > 0 && (
+                    <>
+                      <div className="muted-hint mt-2">{dropFiles.length} image(s) selected</div>
+                      <div className="thumb-grid mt-2">
+                        {dropFiles.map((p) => (
+                          <div key={p.id} className="d-flex flex-column align-items-center gap-2">
+                            <img className="thumb" src={p.src} alt="" />
+                            <button
+                              className="btn btn-pro btn-danger-soft btn-sm"
+                              onClick={(ev) => {
+                                ev.preventDefault();
+                                removePreview(p.id);
+                              }}
+                              type="button"
+                            >
+                              Remove
+                            </button>
                           </div>
-                        </div>
+                        ))}
                       </div>
-                    );
-                  })}
+                    </>
+                  )}
                 </div>
-              )}
-            </div>
+
+                <div className="mt-2">
+                  <textarea
+                    rows={3}
+                    className="form-control"
+                    placeholder={"…or paste image URLs (one per line)\nhttps://example.com/a.jpg\nhttps://example.com/b.png"}
+                    value={galleryUrls}
+                    onChange={(e) => setGalleryUrls(e.target.value)}
+                  />
+                  <div className="d-flex justify-content-end mt-2">
+                    <button className="btn btn-pro btn-ghost" onClick={addGalleryUrls} type="button">
+                      Add URLs
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="d-flex flex-wrap gap-2 justify-content-end mt-4">
+                <button type="button" className="btn btn-pro btn-ghost" onClick={resetAll}>
+                  Reset
+                </button>
+                <button type="submit" className="btn btn-pro btn-primary-grad px-4" disabled={busy}>
+                  {busy ? "Saving…" : "Save Actress"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       </div>
@@ -899,26 +822,18 @@ export default function AddFevActress() {
           className="center-backdrop"
           role="dialog"
           aria-modal="true"
-          onClick={() =>
-            setCenterPopup({ show: false, title: "", body: "", type: "info" })
-          }
+          onClick={() => setCenterPopup({ show: false, title: "", body: "", type: "info" })}
         >
-          <div
-            className="center-card p-3 text-center"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h5 className="fw-bold">{centerPopup.title}</h5>
-            <p className="text-muted mb-3">{centerPopup.body}</p>
+          <div className="center-card p-3 text-center" onClick={(e) => e.stopPropagation()}>
+            <h5 className="fw-bold mb-1" style={{ color: "#0B1220" }}>
+              {centerPopup.title}
+            </h5>
+            <p className="mb-3" style={{ color: "rgba(11,18,32,.75)", fontWeight: 700 }}>
+              {centerPopup.body}
+            </p>
             <button
-              className="btn btn-gradient w-50"
-              onClick={() =>
-                setCenterPopup({
-                  show: false,
-                  title: "",
-                  body: "",
-                  type: "info",
-                })
-              }
+              className="btn btn-pro btn-primary-grad w-50"
+              onClick={() => setCenterPopup({ show: false, title: "", body: "", type: "info" })}
               type="button"
             >
               OK
@@ -929,16 +844,11 @@ export default function AddFevActress() {
 
       {/* Busy overlay */}
       {busy && (
-        <div
-          className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
-          style={{ background: "rgba(255,255,255,.7)", zIndex: 9999 }}
-        >
-          <div
-            className="spinner-border text-primary me-2"
-            role="status"
-            aria-label="saving"
-          />
-          <div className="fw-semibold">Processing…</div>
+        <div className="busy">
+          <div className="busy-card">
+            <span className="spinner-border spinner-border-sm" />
+            <div className="fw-bold">Processing…</div>
+          </div>
         </div>
       )}
     </div>

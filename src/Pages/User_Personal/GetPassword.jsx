@@ -44,9 +44,9 @@ export default function GetPassword() {
     }, ms);
   };
 
-  // Global styles
+  // Global styles (ONLY CSS + Bootstrap)
   useEffect(() => {
-    const id = "pm-style-v6";
+    const id = "pm-style-v7";
     if (typeof document === "undefined") return;
     if (document.getElementById(id)) return;
 
@@ -58,19 +58,31 @@ export default function GetPassword() {
         --brand2:#1e3a8a;
         --brand3:#0ea5e9;
         --card-blue:#1e3a8a;
-        --nav-h: 0px; /* dynamically set */
+        --nav-h: 0px;
       }
-      body{ font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
 
-      .glass{ background:#ffffff; border:1px solid rgba(15,23,42,.10);
-        box-shadow:0 12px 32px rgba(0,0,0,.07); border-radius:16px; }
+      /* Prevent horizontal cut everywhere */
+      html, body { width: 100%; max-width: 100%; overflow-x: hidden; }
+      * { min-width: 0; }
+
+      body{
+        font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+        background: linear-gradient(180deg,#ffffff,#f7fbff);
+      }
+
+      .glass{
+        background:#ffffff;
+        border:1px solid rgba(15,23,42,.10);
+        box-shadow:0 12px 32px rgba(0,0,0,.07);
+        border-radius:16px;
+      }
 
       .brand-title{
         background:linear-gradient(90deg,var(--brand1),var(--brand2),var(--brand3));
         -webkit-background-clip:text; background-clip:text; color:transparent;
       }
 
-      .btn-xs{ padding:.28rem .55rem; font-size:.76rem; border-radius:.55rem; }
+      .btn-xs{ padding:.28rem .55rem; font-size:.78rem; border-radius:.55rem; }
       .btn-skin{ background:#f8fafc; border:1px solid #e2e8f0; }
       .btn-skin:hover{ background:#f1f5f9; }
       .btn-outline-darkblue{ color:var(--card-blue); border:1px solid var(--card-blue); background:#fff; }
@@ -78,28 +90,38 @@ export default function GetPassword() {
 
       .pw-card{
         border:2px solid var(--card-blue);
-        border-radius:16px; padding:12px 12px;
+        border-radius:16px;
+        padding:12px;
         box-shadow:0 8px 20px rgba(14,31,76,.08);
-        transition:transform .12s ease, box-shadow .12s ease;
         background:#fff;
       }
-      .pw-card:active{ transform:translateY(1px); }
       .pw-card + .pw-card{ margin-top:14px; }
 
-      .pw-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+      .pw-head{
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        gap:10px;
+        margin-bottom:8px;
+      }
+
       .round-badge{
         width:30px; height:30px; border-radius:999px;
         display:grid; place-items:center;
         background:linear-gradient(180deg,#172554,#1e3a8a);
         color:#fff; font-weight:800; font-size:.85rem;
         border:2px solid #93c5fd;
+        flex: 0 0 auto;
       }
 
-      .pill{ border-radius:999px; }
-
       .pw-row{ display:flex; gap:10px; align-items:flex-start; justify-content:space-between; }
-      .pw-label{ font-weight:700; color:#334155; min-width:92px; font-size:.86rem; }
-      .pw-value{ word-break:break-word; overflow-wrap:anywhere; }
+      .pw-label{ font-weight:700; color:#334155; min-width:92px; font-size:.86rem; flex:0 0 auto; }
+      .pw-value{
+        flex: 1 1 auto;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+        white-space: normal;
+      }
 
       .pw-actions-inline{ display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
 
@@ -108,18 +130,36 @@ export default function GetPassword() {
       .action-grid{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:8px; }
       @media (min-width:576px){ .action-grid{ grid-template-columns:repeat(4, minmax(0,1fr)); } }
 
-      .table thead th{ position:sticky; top:0; background:#f8fafc; z-index:1; }
-      .table-hover tbody tr:hover{ transform:translateY(-1px); transition:transform .15s, box-shadow .15s; box-shadow:0 2px 12px rgba(0,0,0,.04); }
+      /* TABLE: ensure no cut, always wrap */
+      .table-responsive{ overflow-x:auto; }
+      table{ width:100%; }
+      .table td, .table th{
+        white-space: normal !important;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+        vertical-align: middle;
+      }
 
-      @media (min-width:768px){
-        .table .btn{ padding:.32rem .55rem; font-size:.78rem; border-radius:.45rem; }
+      .table thead th{
+        position: sticky;
+        top: 0;
+        background: #f8fafc;
+        z-index: 1;
       }
 
       .toast-center{
-        position:fixed; left:50%; top:50%; transform:translate(-50%,-50%);
-        z-index:4001; background:#fff; border-radius:12px; padding:.65rem .9rem;
-        border-left:6px solid #22c55e; box-shadow:0 14px 40px rgba(0,0,0,.18);
-        min-width:220px; text-align:center; font-weight:700;
+        position:fixed; left:50%; top:50%;
+        transform:translate(-50%,-50%);
+        z-index:4001;
+        background:#fff;
+        border-radius:12px;
+        padding:.65rem .9rem;
+        border-left:6px solid #22c55e;
+        box-shadow:0 14px 40px rgba(0,0,0,.18);
+        min-width:220px;
+        max-width: calc(100vw - 24px);
+        text-align:center;
+        font-weight:700;
       }
       .toast-center.error{ border-left-color:#ef4444; }
 
@@ -127,8 +167,11 @@ export default function GetPassword() {
         position:fixed; inset:0;
         background:rgba(0,0,0,.55);
         z-index:4000;
-        display:flex; align-items:flex-start; justify-content:center;
+        display:flex;
+        align-items:flex-start;
+        justify-content:center;
       }
+
       .sheet{
         width:100%;
         height: calc(100dvh - var(--nav-h, 0px));
@@ -136,7 +179,8 @@ export default function GetPassword() {
         max-width:100%;
         background:#fff;
         border-radius:0;
-        display:flex; flex-direction:column;
+        display:flex;
+        flex-direction:column;
         box-shadow:0 -8px 26px rgba(0,0,0,.25);
         animation: slideIn .18s ease-out;
       }
@@ -144,38 +188,60 @@ export default function GetPassword() {
         from{ transform: translateY(10px); opacity:.95; }
         to{ transform: translateY(0); opacity:1; }
       }
+
       .sheet-head{
         position:sticky; top:0; z-index:1;
         background:#fff;
         border-bottom:1px solid #e5e7eb;
-        padding:.9rem .9rem;
-        display:flex; align-items:center; justify-content:space-between; gap:.5rem;
+        padding:.9rem;
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:.5rem;
       }
       .sheet-title{ margin:0; font-weight:800; }
+
       .sheet-body{
         padding: .9rem .9rem 1.1rem;
         overflow:auto;
         -webkit-overflow-scrolling: touch;
         flex: 1 1 auto;
       }
+
       .sheet-foot{
         position:sticky; bottom:0; z-index:1;
-        background:#fff; border-top:1px solid #e5e7eb;
+        background:#fff;
+        border-top:1px solid #e5e7eb;
         padding:.75rem .9rem;
-        display:flex; justify-content:flex-end; gap:.5rem;
+        display:flex;
+        justify-content:flex-end;
+        gap:.5rem;
+        flex-wrap: wrap;
       }
 
       @media (min-width:768px){
         .modal-scrim{ align-items:center; }
         .sheet{
-          width:96%; max-width:640px; height:auto; max-height:90vh;
-          margin-top:0; border-radius:16px; overflow:hidden;
+          width:96%;
+          max-width:720px;
+          height:auto;
+          max-height:90vh;
+          margin-top:0;
+          border-radius:16px;
+          overflow:hidden;
         }
-        .sheet-head{ position:static; }
-        .sheet-foot{ position:static; }
+        .sheet-head, .sheet-foot{ position:static; }
       }
 
-      .inert-blur{ filter: blur(0px); }
+      /* Responsive header spacing */
+      .pm-logo{
+        width:44px;height:44px;border-radius:12px;
+        background:linear-gradient(180deg,#172554,#1e3a8a);
+        display:grid;place-items:center;
+        color:#eaf2ff;font-weight:800;
+        border:2px solid #93c5fd;
+        flex: 0 0 auto;
+      }
     `;
     document.head.appendChild(s);
   }, []);
@@ -208,9 +274,7 @@ export default function GetPassword() {
     }
 
     return () => {
-      if (typeof document !== "undefined") {
-        document.body.style.overflow = "";
-      }
+      if (typeof document !== "undefined") document.body.style.overflow = "";
       if (typeof window !== "undefined") {
         window.removeEventListener("resize", setNavHeightVar);
         window.removeEventListener("orientationchange", setNavHeightVar);
@@ -231,7 +295,7 @@ export default function GetPassword() {
       let json = {};
       try {
         json = await res.json();
-      } catch (err) {
+      } catch {
         json = {};
       }
 
@@ -250,13 +314,7 @@ export default function GetPassword() {
           const password = (it.password || "").toLowerCase();
           const typeVal = (it.type || "").toLowerCase();
           const ai = it.additional_info ? JSON.stringify(it.additional_info).toLowerCase() : "";
-          return (
-            name.includes(qq) ||
-            username.includes(qq) ||
-            password.includes(qq) ||
-            typeVal.includes(qq) ||
-            ai.includes(qq)
-          );
+          return name.includes(qq) || username.includes(qq) || password.includes(qq) || typeVal.includes(qq) || ai.includes(qq);
         });
       }
 
@@ -270,14 +328,12 @@ export default function GetPassword() {
     }
   };
 
-  // Initial load
   useEffect(() => {
     const ctl = new AbortController();
     fetchList(ctl.signal);
     return () => ctl.abort();
   }, []);
 
-  // Refetch on filters/search (debounced)
   useEffect(() => {
     if (abortRef.current) abortRef.current.abort();
     const ctl = new AbortController();
@@ -295,17 +351,15 @@ export default function GetPassword() {
     };
   }, [type, q]);
 
-  const showCopied = (msg) => showCenterMsg("success", msg);
-
   const copyToClipboard = async (text, label = "Copied") => {
     try {
       if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(text || "");
-        showCopied(label);
+        showCenterMsg("success", label);
       } else {
         throw new Error("Clipboard not supported");
       }
-    } catch (err) {
+    } catch {
       showCenterMsg("error", "Copy failed");
     }
   };
@@ -360,7 +414,7 @@ export default function GetPassword() {
       if (s && (s[0] === "{" || s[0] === "[")) {
         try {
           payload.additional_info = JSON.parse(s);
-        } catch (err) {
+        } catch {
           // keep as string if JSON parse fails
         }
       }
@@ -380,7 +434,7 @@ export default function GetPassword() {
       let j = {};
       try {
         j = await res.json();
-      } catch (err) {
+      } catch {
         j = {};
       }
 
@@ -390,9 +444,7 @@ export default function GetPassword() {
       }
 
       const updated = j && j.data ? j.data : payload;
-      setItems((prev) =>
-        prev.map((x) => ((x.id || x._id) === id ? updated : x))
-      );
+      setItems((prev) => prev.map((x) => ((x.id || x._id) === id ? updated : x)));
 
       showCenterMsg("success", "Updated");
       setEditItem(null);
@@ -415,7 +467,7 @@ export default function GetPassword() {
     if (typeof ai === "string") return ai || "-";
     try {
       return JSON.stringify(ai);
-    } catch (err) {
+    } catch {
       return String(ai);
     }
   };
@@ -428,66 +480,54 @@ export default function GetPassword() {
   };
 
   return (
-    <div
-      className={"container-xxl py-3 " + (editItem ? "inert-blur" : "")}
-      style={{ background: "linear-gradient(180deg,#ffffff,#f7fbff)", minHeight: "100dvh" }}
-      aria-hidden={!!editItem}
-    >
+    <div className="container-fluid px-2 px-md-3 py-3" style={{ minHeight: "100dvh" }} aria-hidden={!!editItem}>
       {/* Header */}
-      <div className="glass p-3 p-md-4 mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div className="d-flex align-items-center gap-3">
-          <div
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 12,
-              background: "linear-gradient(180deg,#172554,#1e3a8a)",
-              display: "grid",
-              placeItems: "center",
-              color: "#eaf2ff",
-              fontWeight: 800,
-              border: "2px solid #93c5fd",
-            }}
-          >
-            PW
+      <div className="glass p-3 p-md-4 mb-3">
+        <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
+          <div className="d-flex align-items-center gap-3">
+            <div className="pm-logo">PW</div>
+            <div>
+              <h4 className="m-0 brand-title">Saved Passwords</h4>
+              <div className="text-muted small">Search, edit, copy, and manage securely</div>
+            </div>
           </div>
-          <div>
-            <h4 className="m-0 brand-title">Saved Passwords</h4>
-            <div className="text-muted small">Search, edit, copy, and manage securely</div>
+
+          <div className="text-md-end">
+            <div className="text-muted small">Total</div>
+            <div className="fw-bold">{activeCount}</div>
           </div>
-        </div>
-        <div className="text-end mt-1 mt-md-0">
-          <div className="text-muted small">Total</div>
-          <div className="fw-bold">{activeCount}</div>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="glass p-2 p-md-3 mb-3 d-flex flex-wrap align-items-center gap-2">
-        <div className="d-flex align-items-center gap-2">
-          <span className="text-muted">Type</span>
-          <select
-            className="form-select form-select-sm"
-            style={{ width: 220, maxWidth: "60vw" }}
-            value={type}
-            onChange={(e) => setType(e.target.value)}
-            aria-label="Filter by type"
-          >
-            {TYPES.map((t) => (
-              <option key={t || "all"} value={t}>
-                {t || "All"}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="ms-auto w-100 w-sm-auto" style={{ minWidth: 240 }}>
-          <input
-            className="form-control form-control-sm"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search by name, user, notes…"
-            aria-label="Search passwords"
-          />
+      <div className="glass p-3 mb-3">
+        <div className="row g-2 align-items-center">
+          <div className="col-12 col-md-4">
+            <label className="form-label mb-1 text-muted small">Type</label>
+            <select
+              className="form-select form-select-sm"
+              value={type}
+              onChange={(e) => setType(e.target.value)}
+              aria-label="Filter by type"
+            >
+              {TYPES.map((t) => (
+                <option key={t || "all"} value={t}>
+                  {t || "All"}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="col-12 col-md-8">
+            <label className="form-label mb-1 text-muted small">Search</label>
+            <input
+              className="form-control form-control-sm"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search by name, user, notes…"
+              aria-label="Search passwords"
+            />
+          </div>
         </div>
       </div>
 
@@ -516,12 +556,7 @@ export default function GetPassword() {
                       <div className="pw-card">
                         <div className="pw-head">
                           <span className="round-badge">{i + 1}</span>
-                          <span
-                            className={
-                              "badge " +
-                              (TYPE_COLORS[r.type] || "bg-secondary-subtle")
-                            }
-                          >
+                          <span className={"badge " + (TYPE_COLORS[r.type] || "bg-secondary-subtle")}>
                             {r.type || "other"}
                           </span>
                         </div>
@@ -534,20 +569,12 @@ export default function GetPassword() {
                         <div className="pw-row">
                           <div className="pw-label">Username</div>
                           <div className="pw-value">
-                            <span className="font-monospace">
-                              {r.username || "-"}
-                            </span>
+                            <span className="font-monospace">{r.username || "-"}</span>
                             <div className="pw-actions-inline">
                               {r.username && (
                                 <button
                                   className="btn btn-outline-darkblue btn-xs"
-                                  onClick={() =>
-                                    copyToClipboard(
-                                      r.username,
-                                      "Username Copied"
-                                    )
-                                  }
-                                  aria-label="Copy username"
+                                  onClick={() => copyToClipboard(r.username, "Username Copied")}
                                 >
                                   Copy Username
                                 </button>
@@ -560,13 +587,7 @@ export default function GetPassword() {
                           <div className="pw-label">Password</div>
                           <div className="pw-value">
                             <span className="font-monospace">
-                              {visible ? (
-                                r.password || "-"
-                              ) : (
-                                <span className="pw-dots">
-                                  {dotsOf(r.password)}
-                                </span>
-                              )}
+                              {visible ? r.password || "-" : <span className="pw-dots">{dotsOf(r.password)}</span>}
                             </span>
                             <div className="pw-actions-inline">
                               {r.password && (
@@ -579,25 +600,12 @@ export default function GetPassword() {
                                         [rowId]: !visible,
                                       }))
                                     }
-                                    aria-label={
-                                      visible
-                                        ? "Hide password"
-                                        : "Show password"
-                                    }
                                   >
-                                    {visible
-                                      ? "Hide Password"
-                                      : "Show Password"}
+                                    {visible ? "Hide Password" : "Show Password"}
                                   </button>
                                   <button
                                     className="btn btn-outline-darkblue btn-xs"
-                                    onClick={() =>
-                                      copyToClipboard(
-                                        r.password,
-                                        "Password Copied"
-                                      )
-                                    }
-                                    aria-label="Copy password"
+                                    onClick={() => copyToClipboard(r.password, "Password Copied")}
                                   >
                                     Copy Password
                                   </button>
@@ -613,41 +621,19 @@ export default function GetPassword() {
                         </div>
 
                         <div className="action-grid mt-3">
-                          <button
-                            className="btn btn-outline-darkblue btn-xs"
-                            onClick={() => setEditItem({ ...r })}
-                          >
+                          <button className="btn btn-outline-darkblue btn-xs" onClick={() => setEditItem({ ...r })}>
                             Edit
                           </button>
-                          <button
-                            className="btn btn-outline-danger btn-xs"
-                            onClick={() => deleteRecord(rowId)}
-                          >
+                          <button className="btn btn-outline-danger btn-xs" onClick={() => deleteRecord(rowId)}>
                             Delete
                           </button>
                           {r.username && (
-                            <button
-                              className="btn btn-outline-secondary btn-xs"
-                              onClick={() =>
-                                copyToClipboard(
-                                  r.username,
-                                  "Username Copied"
-                                )
-                              }
-                            >
+                            <button className="btn btn-outline-secondary btn-xs" onClick={() => copyToClipboard(r.username, "Username Copied")}>
                               Copy U
                             </button>
                           )}
                           {r.password && (
-                            <button
-                              className="btn btn-outline-secondary btn-xs"
-                              onClick={() =>
-                                copyToClipboard(
-                                  r.password,
-                                  "Password Copied"
-                                )
-                              }
-                            >
+                            <button className="btn btn-outline-secondary btn-xs" onClick={() => copyToClipboard(r.password, "Password Copied")}>
                               Copy P
                             </button>
                           )}
@@ -671,21 +657,16 @@ export default function GetPassword() {
                     <th style={{ width: 56 }}>#</th>
                     <th style={{ minWidth: 110 }}>Type</th>
                     <th style={{ minWidth: 160 }}>Name</th>
-                    <th style={{ minWidth: 160 }}>Username</th>
-                    <th style={{ minWidth: 220 }}>Password</th>
-                    <th style={{ minWidth: 220 }}>Notes</th>
-                    <th className="text-end" style={{ width: 230 }}>
-                      Actions
-                    </th>
+                    <th style={{ minWidth: 180 }}>Username</th>
+                    <th style={{ minWidth: 240 }}>Password</th>
+                    <th style={{ minWidth: 260 }}>Notes</th>
+                    <th className="text-end" style={{ minWidth: 240 }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {pageItems.length === 0 ? (
                     <tr>
-                      <td
-                        colSpan="7"
-                        className="text-center py-5 text-muted"
-                      >
+                      <td colSpan="7" className="text-center py-5 text-muted">
                         No data found
                       </td>
                     </tr>
@@ -699,121 +680,67 @@ export default function GetPassword() {
                         <tr key={rowId || i}>
                           <td>{i + 1}</td>
                           <td>
-                            <span
-                              className={
-                                "badge " +
-                                (TYPE_COLORS[r.type] ||
-                                  "bg-secondary-subtle")
-                              }
-                            >
+                            <span className={"badge " + (TYPE_COLORS[r.type] || "bg-secondary-subtle")}>
                               {r.type || "other"}
                             </span>
                           </td>
+
+                          <td>{r.name}</td>
+
                           <td>
-                            <span title={r.name}>{r.name}</span>
-                          </td>
-                          <td>
-                            <span
-                              className="font-monospace"
-                              title={r.username || "-"}
-                            >
-                              {r.username || "-"}
-                            </span>
-                            {r.username && (
-                              <button
-                                className="btn btn-outline-darkblue btn-xs ms-2"
-                                onClick={() =>
-                                  copyToClipboard(
-                                    r.username,
-                                    "Username Copied"
-                                  )
-                                }
-                              >
-                                Copy Username
-                              </button>
-                            )}
-                          </td>
-                          <td>
-                            <span className="font-monospace">
-                              {visible ? (
-                                r.password || "-"
-                              ) : (
-                                <span className="pw-dots">
-                                  {dotsOf(r.password)}
-                                </span>
+                            <div className="d-flex flex-wrap align-items-center gap-2">
+                              <span className="font-monospace">{r.username || "-"}</span>
+                              {r.username && (
+                                <button className="btn btn-outline-darkblue btn-xs" onClick={() => copyToClipboard(r.username, "Username Copied")}>
+                                  Copy Username
+                                </button>
                               )}
-                            </span>
-                            {r.password && (
-                              <>
-                                <button
-                                  className="btn btn-skin btn-xs ms-2"
-                                  onClick={() =>
-                                    setShowPwRow((s) => ({
-                                      ...s,
-                                      [rowId]: !visible,
-                                    }))
-                                  }
-                                >
-                                  {visible
-                                    ? "Hide Password"
-                                    : "Show Password"}
-                                </button>
-                                <button
-                                  className="btn btn-outline-darkblue btn-xs ms-1"
-                                  onClick={() =>
-                                    copyToClipboard(
-                                      r.password,
-                                      "Password Copied"
-                                    )
-                                  }
-                                >
-                                  Copy Password
-                                </button>
-                              </>
-                            )}
+                            </div>
                           </td>
+
                           <td>
-                            <span title={renderAI(r.additional_info)}>
-                              {renderAI(r.additional_info)}
-                            </span>
+                            <div className="d-flex flex-wrap align-items-center gap-2">
+                              <span className="font-monospace">
+                                {visible ? r.password || "-" : <span className="pw-dots">{dotsOf(r.password)}</span>}
+                              </span>
+                              {r.password && (
+                                <>
+                                  <button
+                                    className="btn btn-skin btn-xs"
+                                    onClick={() =>
+                                      setShowPwRow((s) => ({
+                                        ...s,
+                                        [rowId]: !visible,
+                                      }))
+                                    }
+                                  >
+                                    {visible ? "Hide Password" : "Show Password"}
+                                  </button>
+                                  <button className="btn btn-outline-darkblue btn-xs" onClick={() => copyToClipboard(r.password, "Password Copied")}>
+                                    Copy Password
+                                  </button>
+                                </>
+                              )}
+                            </div>
                           </td>
+
+                          <td>{renderAI(r.additional_info)}</td>
+
                           <td className="text-end">
-                            <div className="d-inline-flex flex-wrap gap-2">
-                              <button
-                                className="btn btn-outline-darkblue btn-xs"
-                                onClick={() => setEditItem({ ...r })}
-                              >
+                            <div className="d-inline-flex flex-wrap justify-content-end gap-2">
+                              <button className="btn btn-outline-darkblue btn-xs" onClick={() => setEditItem({ ...r })}>
                                 Edit
                               </button>
-                              <button
-                                className="btn btn-outline-danger btn-xs"
-                                onClick={() => deleteRecord(rowId)}
-                              >
+                              <button className="btn btn-outline-danger btn-xs" onClick={() => deleteRecord(rowId)}>
                                 Delete
                               </button>
                               {r.username && (
-                                <button
-                                  className="btn btn-outline-secondary btn-xs"
-                                  onClick={() =>
-                                    copyToClipboard(
-                                      r.username,
-                                      "Username Copied"
-                                    )
-                                  }
-                                >
+                                <button className="btn btn-outline-secondary btn-xs" onClick={() => copyToClipboard(r.username, "Username Copied")}>
                                   Copy U
                                 </button>
                               )}
                               {r.password && (
-                                <button
-                                  className="btn btn-outline-secondary btn-xs"
-                                  onClick={() =>
-                                    copyToClipboard(
-                                      r.password,
-                                      "Password Copied"
-                                    )
-                                  }
-                                >
+                                <button className="btn btn-outline-secondary btn-xs" onClick={() => copyToClipboard(r.password, "Password Copied")}>
                                   Copy P
                                 </button>
                               )}
@@ -833,27 +760,18 @@ export default function GetPassword() {
         {!loadingTable && items.length > 0 && (
           <div className="d-flex align-items-center justify-content-between p-2 p-sm-3 flex-wrap gap-2">
             <div className="text-muted small">
-              Showing{" "}
-              <b>{(page - 1) * PAGE_SIZE + 1}</b>–
-              <b>{Math.min(page * PAGE_SIZE, items.length)}</b> of{" "}
+              Showing <b>{(page - 1) * PAGE_SIZE + 1}</b>–<b>{Math.min(page * PAGE_SIZE, items.length)}</b> of{" "}
               <b>{items.length}</b>
             </div>
+
             <div className="btn-group">
-              <button
-                className="btn btn-outline-secondary btn-xs"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
+              <button className="btn btn-outline-secondary btn-xs" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
                 Prev
               </button>
               <span className="btn btn-light btn-xs disabled">
                 {page} / {totalPages}
               </span>
-              <button
-                className="btn btn-outline-secondary btn-xs"
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              >
+              <button className="btn btn-outline-secondary btn-xs" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>
                 Next
               </button>
             </div>
@@ -875,11 +793,7 @@ export default function GetPassword() {
           <div className="sheet">
             <div className="sheet-head">
               <h5 className="sheet-title brand-title">Edit Password</h5>
-              <button
-                className="btn btn-light btn-xs"
-                onClick={() => setEditItem(null)}
-                aria-label="Close"
-              >
+              <button className="btn btn-light btn-xs" onClick={() => setEditItem(null)}>
                 Close
               </button>
             </div>
@@ -887,13 +801,7 @@ export default function GetPassword() {
             <div className="sheet-body">
               <div className="mb-3">
                 <label className="form-label">Type</label>
-                <select
-                  className="form-select"
-                  value={editItem.type || ""}
-                  onChange={(e) =>
-                    setEditItem({ ...editItem, type: e.target.value })
-                  }
-                >
+                <select className="form-select" value={editItem.type || ""} onChange={(e) => setEditItem({ ...editItem, type: e.target.value })}>
                   {TYPES.map((t) => (
                     <option key={t || "sel"} value={t}>
                       {t || "Select type"}
@@ -903,41 +811,27 @@ export default function GetPassword() {
               </div>
 
               <div className="row g-2">
-                <div className="col-sm-6">
+                <div className="col-12 col-sm-6">
                   <label className="form-label">Name</label>
-                  <input
-                    className="form-control"
-                    value={editItem.name || ""}
-                    onChange={(e) =>
-                      setEditItem({ ...editItem, name: e.target.value })
-                    }
-                  />
+                  <input className="form-control" value={editItem.name || ""} onChange={(e) => setEditItem({ ...editItem, name: e.target.value })} />
                 </div>
-                <div className="col-sm-6">
+                <div className="col-12 col-sm-6">
                   <label className="form-label">Username</label>
-                  <input
-                    className="form-control"
-                    value={editItem.username || ""}
-                    onChange={(e) =>
-                      setEditItem({ ...editItem, username: e.target.value })
-                    }
-                  />
+                  <input className="form-control" value={editItem.username || ""} onChange={(e) => setEditItem({ ...editItem, username: e.target.value })} />
                 </div>
               </div>
 
               <div className="row g-2 mt-1">
-                <div className="col-sm-6">
+                <div className="col-12 col-sm-6">
                   <label className="form-label">Password</label>
                   <input
                     type="text"
                     className="form-control"
                     value={editItem.password || ""}
-                    onChange={(e) =>
-                      setEditItem({ ...editItem, password: e.target.value })
-                    }
+                    onChange={(e) => setEditItem({ ...editItem, password: e.target.value })}
                   />
                 </div>
-                <div className="col-sm-6">
+                <div className="col-12 col-sm-6">
                   <label className="form-label">Additional Info</label>
                   <textarea
                     className="form-control"
@@ -949,28 +843,17 @@ export default function GetPassword() {
                         ? JSON.stringify(editItem.additional_info)
                         : ""
                     }
-                    onChange={(e) =>
-                      setEditItem({
-                        ...editItem,
-                        additional_info: e.target.value,
-                      })
-                    }
+                    onChange={(e) => setEditItem({ ...editItem, additional_info: e.target.value })}
                   />
                 </div>
               </div>
             </div>
 
             <div className="sheet-foot">
-              <button
-                className="btn btn-light btn-xs me-2"
-                onClick={() => setEditItem(null)}
-              >
+              <button className="btn btn-light btn-xs" onClick={() => setEditItem(null)}>
                 Cancel
               </button>
-              <button
-                className="btn btn-outline-darkblue btn-xs px-3"
-                onClick={handleUpdate}
-              >
+              <button className="btn btn-outline-darkblue btn-xs px-3" onClick={handleUpdate}>
                 Update
               </button>
             </div>
@@ -980,10 +863,7 @@ export default function GetPassword() {
 
       {/* Busy overlay */}
       {busy && (
-        <div
-          className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
-          style={{ background: "rgba(255,255,255,.72)", zIndex: 3999 }}
-        >
+        <div className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style={{ background: "rgba(255,255,255,.72)", zIndex: 3999 }}>
           <div className="bg-white rounded-4 shadow p-3 text-center d-flex flex-column align-items-center">
             <LoadingSpiner />
             <div className="text-muted mt-2">Working…</div>
@@ -993,12 +873,7 @@ export default function GetPassword() {
 
       {/* Centered Toast */}
       {overlayMsg.show && (
-        <div
-          className={
-            "toast-center " +
-            (overlayMsg.type === "error" ? "error" : "")
-          }
-        >
+        <div className={"toast-center " + (overlayMsg.type === "error" ? "error" : "")}>
           {overlayMsg.text}
         </div>
       )}
