@@ -22,10 +22,9 @@ export default function Worknewtab() {
   const [activeKey, setActiveKey] = useState(tabs[0].key);
   const [loading, setLoading] = useState(true);
 
-  // loader on tab change
   useEffect(() => {
     setLoading(true);
-    const t = setTimeout(() => setLoading(false), 400);
+    const t = setTimeout(() => setLoading(false), 350);
     return () => clearTimeout(t);
   }, [activeKey]);
 
@@ -33,42 +32,57 @@ export default function Worknewtab() {
 
   return (
     <div style={styles.page}>
-      {/* ================= NAVBAR ================= */}
-      <div style={styles.navbar}>
-        <div style={styles.navLeft}>
-          <div style={styles.title}>Work Details</div>
-          <div style={styles.subtitle}>Expenses & Reports</div>
+      {/* ✅ Hard reset for mobile spacing issues */}
+      <style>{`
+        html, body { margin: 0; padding: 0; height: 100%; }
+        * { box-sizing: border-box; }
+      `}</style>
+
+      {/* ✅ Fixed header (navbar + gap + tabs + gap) */}
+      <div style={styles.headerFixed}>
+        {/* NAVBAR */}
+        <div style={styles.navbar}>
+          <div style={styles.navLeft}>
+            <div style={styles.title}>Work Details</div>
+            <div style={styles.subtitle}>Expenses & Reports</div>
+          </div>
+
+          <button style={styles.dashboardBtn} onClick={() => navigate("/dashboard")}>
+            Dashboard →
+          </button>
         </div>
 
-        <button style={styles.dashboardBtn} onClick={() => navigate("/dashboard")}>
-          Dashboard →
-        </button>
-      </div>
+        {/* ✅ Small space BELOW navbar (so it won't touch tabs) */}
+        <div style={styles.gapBetweenNavbarAndTabs} />
 
-      {/* ================= TABS ================= */}
-      <div style={styles.tabsBar}>
-        <div style={styles.tabsRow}>
-          {tabs.map((tab) => {
-            const active = tab.key === activeKey;
-            return (
-              <button
-                key={tab.key}
-                onClick={() => setActiveKey(tab.key)}
-                style={{
-                  ...styles.tabBtn,
-                  ...(active ? styles.tabActive : {}),
-                }}
-              >
-                {tab.label}
-                {active && <motion.div layoutId="underline" style={styles.underline} />}
-              </button>
-            );
-          })}
+        {/* TABS */}
+        <div style={styles.tabsBar}>
+          <div style={styles.tabsRow} className="worknewtab-tabs-row">
+            {tabs.map((tab) => {
+              const active = tab.key === activeKey;
+              return (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveKey(tab.key)}
+                  style={{
+                    ...styles.tabBtn,
+                    ...(active ? styles.tabActive : {}),
+                  }}
+                >
+                  {tab.label}
+                  {active && <motion.div layoutId="underline" style={styles.underline} />}
+                </button>
+              );
+            })}
+          </div>
         </div>
+
+        {/* ✅ Small space BELOW tabs (so it won't touch page content) */}
+        <div style={styles.gapBelowTabs} />
       </div>
 
-      {/* ================= CONTENT ================= */}
-      <div style={styles.contentArea}>
+      {/* ✅ Only this area scrolls */}
+      <div style={styles.scrollArea}>
         <AnimatePresence>
           {loading && (
             <motion.div
@@ -97,26 +111,54 @@ export default function Worknewtab() {
           </motion.div>
         )}
       </div>
+
+      {/* scrollbar style */}
+      <style>{`
+        .worknewtab-tabs-row::-webkit-scrollbar { height: 8px; }
+        .worknewtab-tabs-row::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 999px; }
+        .worknewtab-tabs-row::-webkit-scrollbar-track { background: rgba(0,0,0,0.05); border-radius: 999px; }
+      `}</style>
+
+      {/* spinner animation */}
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 }
 
 /* ================= STYLES ================= */
 
+const NAV_H = 85;          // ✅ navbar little taller (more top space)
+const GAP_1 = 6;           // ✅ gap between navbar and tabs
+const TABS_H = 53;         // tabs height
+const GAP_2 = 10;          // ✅ gap below tabs before page content
+
+const HEADER_TOTAL = NAV_H + GAP_1 + TABS_H + GAP_2;
+
 const styles = {
   page: {
-    minHeight: "100vh",
+    height: "100vh",
     width: "100%",
     background: "#F8FAFF",
-    overflowX: "hidden",
+    overflow: "hidden", // ✅ stop page scroll, only scrollArea scrolls
+  },
+
+  headerFixed: {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1000,
+    background: "#F8FAFF",
   },
 
   /* Navbar */
   navbar: {
-    position: "sticky",
-    top: 0,
-    zIndex: 100,
-    height: 70, // 👈 small height (mobile friendly)
+    height: NAV_H,
     background: "linear-gradient(90deg, #2563EB, #06B6D4)",
     display: "flex",
     alignItems: "center",
@@ -128,56 +170,68 @@ const styles = {
   navLeft: {
     display: "flex",
     flexDirection: "column",
-    lineHeight: 1.1,
+    lineHeight: 1.05,
   },
 
   title: {
-    fontSize: 18,
-    fontWeight: 800,
+    fontSize: 16.5,
+    fontWeight: 900,
   },
 
   subtitle: {
-    fontSize: 11,
-    opacity: 0.9,
-    fontWeight: 600,
+    fontSize: 10.8,
+    opacity: 0.95,
+    fontWeight: 700,
+    marginTop: 2,
   },
 
   dashboardBtn: {
     background: "#ffffff",
     color: "#2563EB",
     border: "none",
-    padding: "6px 12px",
+    padding: "7px 12px",
     borderRadius: 999,
-    fontWeight: 800,
+    fontWeight: 900,
     cursor: "pointer",
+    fontSize: 12.5,
+  },
+
+  gapBetweenNavbarAndTabs: {
+    height: GAP_1,
+    background: "#F8FAFF",
   },
 
   /* Tabs */
   tabsBar: {
-    position: "sticky",
-    top: 6, // 👈 exactly navbar height
-    zIndex: 90,
+    height: TABS_H,
     background: "#ffffff",
+    borderTop: "1px solid #EAF0FF",
     borderBottom: "1px solid #E5E7EB",
+    display: "flex",
+    alignItems: "center",
   },
 
   tabsRow: {
+    width: "100%",
     display: "flex",
     gap: 8,
-    padding: "8px",
+    padding: "8px 8px",
     overflowX: "auto",
+    overflowY: "hidden",
+    WebkitOverflowScrolling: "touch",
   },
 
   tabBtn: {
     position: "relative",
     border: "1px solid #E5E7EB",
     background: "#F1F5F9",
-    padding: "8px 14px",
+    padding: "8px 12px",
     borderRadius: 999,
-    fontSize: 13,
-    fontWeight: 800,
+    fontSize: 12.5,
+    fontWeight: 900,
     whiteSpace: "nowrap",
     cursor: "pointer",
+    flex: "0 0 auto",
   },
 
   tabActive: {
@@ -189,42 +243,57 @@ const styles = {
   underline: {
     position: "absolute",
     bottom: -6,
-    left: "20%",
-    right: "20%",
+    left: "22%",
+    right: "22%",
     height: 3,
     borderRadius: 999,
     background: "#22C55E",
   },
 
-  /* Content */
-  contentArea: {
-    position: "relative",
-    width: "100%",
-    minHeight: "calc(100vh - 112px)",
+  gapBelowTabs: {
+    height: GAP_2,
+    background: "#F8FAFF",
+  },
+
+  /* Scroll only below header */
+  scrollArea: {
+    position: "absolute",
+    top: HEADER_TOTAL,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    overflowY: "auto",
+    overflowX: "hidden",
+    WebkitOverflowScrolling: "touch",
+    padding: 0,
+    margin: 0,
+    background: "#F8FAFF",
   },
 
   content: {
     width: "100%",
-    padding: 0, // 👈 full width
+    padding: 0,
+    margin: 0,
   },
 
   /* Loader */
   loaderOverlay: {
-    position: "fixed",
+    position: "absolute",
     inset: 0,
-    background: "rgba(255,255,255,0.7)",
+    background: "rgba(255,255,255,0.75)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    zIndex: 200,
+    zIndex: 2000,
   },
 
   loaderBox: {
     background: "#fff",
-    padding: 20,
+    padding: 18,
     borderRadius: 14,
     boxShadow: "0 10px 40px rgba(0,0,0,0.15)",
     textAlign: "center",
+    minWidth: 160,
   },
 
   spinner: {
@@ -239,19 +308,8 @@ const styles = {
 
   loadingText: {
     marginTop: 10,
-    fontWeight: 800,
+    fontWeight: 900,
     fontSize: 14,
+    color: "#0F172A",
   },
 };
-
-/* Spinner animation */
-if (typeof document !== "undefined") {
-  const style = document.createElement("style");
-  style.innerHTML = `
-    @keyframes spin {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
-    }
-  `;
-  document.head.appendChild(style);
-}
