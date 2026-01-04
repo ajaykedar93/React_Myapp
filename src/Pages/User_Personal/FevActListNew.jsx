@@ -6,7 +6,6 @@ const BASE = "https://express-backend-myapp.onrender.com";
 const API = {
   LIST: `${BASE}/api/add-list-actress`,
   CREATE: `${BASE}/api/add-list-actress`,
-  UPDATE: (id) => `${BASE}/api/add-list-actress/${id}`,
   DELETE: (id) => `${BASE}/api/add-list-actress/${id}`,
   EXPORT_PDF: `${BASE}/api/add-list-actress/export/pdf`,
   EXPORT_TXT: `${BASE}/api/add-list-actress/export/txt`,
@@ -29,7 +28,6 @@ const toDataUrls = async (files) => {
 
 const safeText = (v) => (v == null ? "" : String(v).trim());
 
-/** ✅ Same image logic as old page */
 const getProfileImageUrlLikeOldPage = (row) => {
   const p =
     row?.profile_image_path ||
@@ -59,7 +57,6 @@ const normalizeImage = (val) => {
     if (/^https?:\/\//i.test(s)) return s;
     if (s.startsWith("/")) return `${BASE}${s}`;
 
-    // raw base64 (fallback)
     const base64ish = s.length > 80 && /^[A-Za-z0-9+/=\s]+$/.test(s.replace(/\s/g, ""));
     if (base64ish) return `data:image/jpeg;base64,${s.replace(/\s/g, "")}`;
   }
@@ -97,8 +94,6 @@ export default function FevActListNew() {
 
   const [q, setQ] = useState("");
 
-  const [editingId, setEditingId] = useState(null);
-
   const [form, setForm] = useState({
     actress_name: "",
     dob: "",
@@ -108,7 +103,6 @@ export default function FevActListNew() {
   });
 
   const [profileBase64, setProfileBase64] = useState("");
-
   const dzProfile = useRef(null);
 
   const [imgModal, setImgModal] = useState({ open: false, src: "", name: "" });
@@ -120,7 +114,7 @@ export default function FevActListNew() {
 
   /** inject CSS */
   useEffect(() => {
-    const id = "fev-act-list-new-css-edit-fixed-card-popup-big";
+    const id = "fev-act-list-new-edge-to-edge-and-fullscreen-modal";
     if (typeof document === "undefined") return;
     if (document.getElementById(id)) return;
 
@@ -132,9 +126,16 @@ export default function FevActListNew() {
         --line:rgba(11,18,32,.10); --accent1:#2563EB; --accent2:#7C3AED; --accent3:#06B6D4;
         --danger:#EF4444; --orange:#f97316; --blueDark:#0B3A8A;
       }
-      html, body{ width:100%; max-width:100%; overflow-x:hidden; }
+
+      /* ✅ Hard reset */
+      html, body, #root{
+        width:100%;
+        max-width:100%;
+        margin:0 !important;
+        padding:0 !important;
+        overflow-x:hidden !important;
+      }
       body{
-        margin:0;
         font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
         background:
           radial-gradient(900px 420px at 15% -10%, rgba(37,99,235,.18), transparent 60%),
@@ -143,13 +144,41 @@ export default function FevActListNew() {
           linear-gradient(180deg, var(--bg), #fff);
         color: var(--ink);
       }
-      *{ min-width:0; }
+      *{ min-width:0; box-sizing:border-box; }
       .wrap-anywhere{ overflow-wrap:anywhere; word-break:break-word; }
 
-      .page{ min-height:100dvh; padding: 14px 0 26px; }
-      .shell{ width:min(1200px, calc(100vw - 18px)); margin:0 auto; }
+      .page{ min-height:100dvh; width:100%; padding: 12px 0 22px; }
+      .shell{ width:100%; margin:0; padding:0; }
 
-      .hero{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom: 12px; }
+      /* Desktop container */
+      .inner{
+        width:100%;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 0 12px;
+      }
+
+      /* ✅ Mobile true edge-to-edge */
+      @media (max-width: 575.98px){
+        .page{ padding: 0 0 16px; }
+        .inner{ max-width:100%; padding-left:0 !important; padding-right:0 !important; }
+
+        /* ✅ Bootstrap gutters remove (THIS fixes left gap + right touch issue) */
+        .row{
+          --bs-gutter-x: 0 !important;
+          --bs-gutter-y: 0 !important;
+          margin-left: 0 !important;
+          margin-right: 0 !important;
+        }
+        .row > *{
+          padding-left: 0 !important;
+          padding-right: 0 !important;
+        }
+      }
+
+      .hero{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin: 12px 0; padding: 0 12px; }
+      @media (max-width:575.98px){ .hero{ margin: 12px 0 0; padding: 12px 12px 0; } }
+
       .brand{ display:flex; align-items:center; gap:12px; }
       .logo{
         width:46px; height:46px; border-radius:16px;
@@ -160,11 +189,21 @@ export default function FevActListNew() {
       .title{ margin:0; font-weight:900; font-size: clamp(20px, 3.6vw, 32px); line-height:1.1; }
       .subtitle{ margin:6px 0 0; color: var(--muted); font-weight:800; font-size:.95rem; }
 
-      .card-pro{ background: var(--paper); border: 1px solid var(--line); border-radius: 18px;
-        box-shadow: 0 28px 70px rgba(2, 8, 23, .10); overflow:hidden;
+      .card-pro{
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        box-shadow: 0 28px 70px rgba(2, 8, 23, .10);
+        overflow:hidden;
       }
       .card-body-pro{ padding: 14px; }
       @media (min-width: 768px){ .card-body-pro{ padding: 18px; } }
+
+      /* ✅ On mobile cards full width (no rounded corners on edges) */
+      @media (max-width:575.98px){
+        .card-pro{ border-radius: 0; border-left: 0; border-right: 0; }
+        .card-body-pro{ padding: 12px; }
+      }
 
       .divider{ height:1px; background: var(--line); margin: 12px 0; }
 
@@ -173,14 +212,22 @@ export default function FevActListNew() {
         background:#fff !important; border:1px solid rgba(11,18,32,.16) !important; color: var(--ink) !important;
         border-radius:12px !important; font-weight:800 !important; box-shadow:none !important;
       }
-      .form-control::placeholder{ color: rgba(11,18,32,.45) !important; font-weight:700 !important; }
       .form-control:focus{
         border-color: rgba(37,99,235,.60) !important; box-shadow: 0 0 0 .22rem rgba(37,99,235,.18) !important;
       }
 
-      .btn-pro{ border-radius:12px !important; font-weight:900 !important; letter-spacing:.2px; white-space: normal !important; }
+      .btn-pro{
+        border-radius:12px !important;
+        font-weight:900 !important;
+        letter-spacing:.2px;
+        white-space: normal !important;
+        cursor:pointer;
+        transition: transform .12s ease, filter .12s ease;
+      }
+      .btn-pro:active{ transform: scale(.98); }
+      .btn-pro:hover{ filter: brightness(1.02); }
+
       .btn-ghost{ background:#fff !important; border:1px solid rgba(11,18,32,.18) !important; color: var(--ink) !important; }
-      .btn-ghost:hover{ background: rgba(37,99,235,.06) !important; border-color: rgba(37,99,235,.30) !important; }
       .btn-primary-grad{
         background: linear-gradient(90deg, var(--accent1), var(--accent2), var(--accent3)) !important;
         border:none !important; color:#fff !important; box-shadow: 0 18px 45px rgba(37,99,235,.16);
@@ -188,12 +235,6 @@ export default function FevActListNew() {
       .btn-danger-soft{
         background: rgba(239,68,68,.10) !important; border: 1px solid rgba(239,68,68,.30) !important;
         color: #991B1B !important; font-weight: 900 !important;
-      }
-      .btn-edit-soft{
-        background: rgba(37,99,235,.10) !important;
-        border: 1px solid rgba(37,99,235,.35) !important;
-        color: #1E3A8A !important;
-        font-weight: 900 !important;
       }
 
       .dropzone{
@@ -205,8 +246,20 @@ export default function FevActListNew() {
       .hint{ color: rgba(11,18,32,.65); font-weight: 800; font-size: .86rem; margin-top: 6px; }
 
       .img-card{
-        background:#fff; border:1px solid rgba(11,18,32,.10); border-radius:16px; overflow:hidden;
-        box-shadow: 0 18px 40px rgba(2,8,23,.08); height:100%;
+        background:#fff;
+        border:1px solid rgba(11,18,32,.10);
+        border-radius:16px;
+        overflow:hidden;
+        box-shadow: 0 18px 40px rgba(2,8,23,.08);
+        height:100%;
+        transition: transform .18s ease, box-shadow .18s ease;
+      }
+      .img-card:hover{ transform: translateY(-3px); box-shadow: 0 26px 60px rgba(2,8,23,.14); }
+      .img-card:active{ transform: translateY(-1px) scale(.995); }
+
+      /* ✅ Mobile full width cards (no side gap) */
+      @media (max-width:575.98px){
+        .img-card{ border-radius: 0; border-left:0; border-right:0; }
       }
 
       .card-head-name{
@@ -217,22 +270,23 @@ export default function FevActListNew() {
         font-size: 1.05rem;
       }
 
-      /* ✅ LIST: little increase image size */
       .img-wrap{
         width:100%;
-        height: clamp(240px, 34vw, 360px); /* ✅ little bigger */
+        height: clamp(240px, 34vw, 360px);
         background: rgba(11,18,32,.03);
         display:flex; align-items:center; justify-content:center;
         overflow:hidden;
         cursor:pointer;
-        padding: 10px;
+        padding: 8px;
       }
       .img-fit{
         width:100%;
         height:100%;
         object-fit: contain;
         display:block;
+        transition: transform .22s ease;
       }
+      .img-wrap:hover .img-fit{ transform: scale(1.04); }
 
       .img-thumb{
         width: 72px; height: 72px; border-radius: 12px; border: 1px solid rgba(11,18,32,.10);
@@ -242,43 +296,53 @@ export default function FevActListNew() {
       .best-thing{ color: var(--orange); font-weight: 900; }
       .best-movie{ color: var(--blueDark); font-weight: 900; }
 
-      /* ✅ POPUP: image bigger + actress name only after image end */
+      /* ✅ FULL SCREEN MODAL (only image + name, almost no padding) */
       .modal-backdrop-pro{
-        position:fixed; inset:0; background: rgba(2, 8, 23, .38); z-index: 3000;
-        display:flex; align-items:center; justify-content:center; padding: 14px;
+        position:fixed; inset:0;
+        background: rgba(2, 8, 23, .70);
+        z-index: 3000;
+        display:flex; align-items:stretch; justify-content:stretch;
       }
-      .modal-card-pro{
-        width: min(980px, calc(100vw - 20px));  /* ✅ bigger */
-        background:#fff; border-radius: 18px;
-        border: 1px solid rgba(11,18,32,.12);
-        box-shadow: 0 28px 80px rgba(2,8,23,.28);
-        overflow:hidden; position:relative;
+      .modal-fullscreen{
+        width:100%;
+        height:100%;
+        background: #0b1220; /* dark like gallery */
+        display:flex;
+        flex-direction: column;
+        position: relative;
       }
       .modal-close{
-        position:absolute; top: 10px; right: 10px; width: 36px; height: 36px; border-radius: 999px;
-        border: 1px solid rgba(11,18,32,.14); background: rgba(255,255,255,.92);
-        display:grid; place-items:center; cursor:pointer; font-weight: 900; line-height: 1; z-index: 2;
+        position:absolute; top: 12px; right: 12px;
+        width: 40px; height: 40px; border-radius: 999px;
+        border: 1px solid rgba(255,255,255,.18);
+        background: rgba(255,255,255,.12);
+        color:#fff;
+        display:grid; place-items:center;
+        cursor:pointer;
+        font-weight: 900;
+        z-index: 2;
+        backdrop-filter: blur(6px);
       }
-      .modal-img-area{
-        width: 100%;
-        height: min(78vh, 640px);              /* ✅ fixed bigger height */
-        background: rgba(11,18,32,.03);
-        display:flex; align-items:center; justify-content:center;
-        padding: 14px;
+      .modal-image-zone{
+        flex: 1;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        padding: 0; /* ✅ no big padding */
       }
       .modal-img{
         max-width: 100%;
         max-height: 100%;
-        object-fit: contain;                   /* ✅ full image show */
+        object-fit: contain;
         display:block;
       }
-      .modal-name{
-        padding: 12px 14px 14px;              /* ✅ always AFTER image */
-        font-weight: 900;
-        color: var(--ink);
+      .modal-name-bar{
+        padding: 10px 12px;
         text-align:center;
-        border-top: 1px solid rgba(11,18,32,.10);
-        background: #fff;
+        font-weight: 900;
+        color: #fff;
+        background: rgba(255,255,255,.06);
+        border-top: 1px solid rgba(255,255,255,.10);
       }
 
       .busy{
@@ -305,10 +369,7 @@ export default function FevActListNew() {
   const showToast = (text, type = "ok", ms = 1600) => {
     setToast({ show: true, text, type });
     if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(
-      () => setToast({ show: false, text: "", type: "ok" }),
-      ms
-    );
+    toastTimer.current = setTimeout(() => setToast({ show: false, text: "", type: "ok" }), ms);
   };
 
   const loadList = async () => {
@@ -339,9 +400,7 @@ export default function FevActListNew() {
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
     if (!qq) return items;
-    return items.filter((it) =>
-      JSON.stringify(it || {}).toLowerCase().includes(qq)
-    );
+    return items.filter((it) => JSON.stringify(it || {}).toLowerCase().includes(qq));
   }, [items, q]);
 
   const onProfileDrop = async (e) => {
@@ -368,7 +427,6 @@ export default function FevActListNew() {
   };
 
   const resetForm = () => {
-    setEditingId(null);
     setForm({
       actress_name: "",
       dob: "",
@@ -381,7 +439,6 @@ export default function FevActListNew() {
 
   const onSubmit = async (e) => {
     e.preventDefault();
-
     const actress_name = safeText(form.actress_name);
     if (!actress_name) return showToast("Actress name required", "err");
 
@@ -396,12 +453,8 @@ export default function FevActListNew() {
 
     setBusy(true);
     try {
-      const isEdit = !!editingId;
-      const url = isEdit ? API.UPDATE(editingId) : API.CREATE;
-      const method = isEdit ? "PATCH" : "POST";
-
-      const res = await fetch(url, {
-        method,
+      const res = await fetch(API.CREATE, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
@@ -413,16 +466,18 @@ export default function FevActListNew() {
       } catch {
         json = null;
       }
-      if (!res.ok)
-        throw new Error(
-          json?.message ||
-            text ||
-            `${isEdit ? "Update" : "Create"} failed (${res.status})`
-        );
+      if (!res.ok) throw new Error(json?.message || text || `Create failed (${res.status})`);
 
-      showToast(isEdit ? "Updated ✅" : "Actress Added ✅", "ok");
+      const maybeNew =
+        json?.data?.row || json?.data || json?.row || json?.created || (Array.isArray(json) ? json[0] : null);
+
+      if (maybeNew && typeof maybeNew === "object") {
+        setItems((prev) => [maybeNew, ...prev]);
+      }
+
+      showToast("Actress Added ✅", "ok");
       resetForm();
-      await loadList();
+      loadList().catch(() => {});
     } catch (e2) {
       showToast(e2.message || "Save failed", "err");
     } finally {
@@ -434,6 +489,8 @@ export default function FevActListNew() {
     const id = it?.id || it?._id;
     if (!id) return showToast("Missing id", "err");
 
+    setItems((prev) => prev.filter((x) => String(x?.id || x?._id) !== String(id)));
+
     setBusy(true);
     try {
       const res = await fetch(API.DELETE(id), { method: "DELETE" });
@@ -444,34 +501,16 @@ export default function FevActListNew() {
       } catch {
         json = null;
       }
-      if (!res.ok)
-        throw new Error(json?.message || text || `Delete failed (${res.status})`);
+      if (!res.ok) throw new Error(json?.message || text || `Delete failed (${res.status})`);
 
       showToast("Deleted ✅", "ok");
-      await loadList();
-
-      if (editingId && String(editingId) === String(id)) resetForm();
+      loadList().catch(() => {});
     } catch (e) {
       showToast(e.message || "Delete failed", "err");
+      loadList().catch(() => {});
     } finally {
       setBusy(false);
     }
-  };
-
-  const onEdit = (it) => {
-    const id = it?.id || it?._id;
-    if (!id) return showToast("Missing id", "err");
-
-    setEditingId(id);
-    setForm({
-      actress_name: it?.actress_name || it?.name || "",
-      dob: it?.dob || it?.actress_dob || "",
-      best_movie: it?.best_movie || it?.favorite_movie_series || "",
-      best_thing: it?.best_thing || "",
-      country_name: it?.country_name || "",
-    });
-    setProfileBase64("");
-    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const openExport = (url) => window.open(url, "_blank");
@@ -479,8 +518,7 @@ export default function FevActListNew() {
   const Field = ({ label, value, kind }) => {
     const v = safeText(value);
     if (!v) return null;
-    const cls =
-      kind === "thing" ? "best-thing" : kind === "movie" ? "best-movie" : "";
+    const cls = kind === "thing" ? "best-thing" : kind === "movie" ? "best-movie" : "";
     return (
       <div className="wrap-anywhere" style={{ color: "rgba(11,18,32,.78)", fontWeight: 800 }}>
         <b>{label}:</b> <span className={cls}>{v}</span>
@@ -491,368 +529,272 @@ export default function FevActListNew() {
   return (
     <div className="page">
       <div className="shell">
-        <div className="hero">
-          <div className="brand">
-            <div className="logo">FA</div>
-            <div className="wrap-anywhere">
-              <h1 className="title">Fev Actress List (New)</h1>
-              <div className="subtitle">✅ Popup image bigger • Name shows only below image</div>
-            </div>
-          </div>
-
-          <div className="d-none d-sm-block">
-            <span
-              className="badge rounded-pill"
-              style={{
-                border: "1px solid rgba(11,18,32,.12)",
-                fontWeight: 900,
-                background: "rgba(255,255,255,.7)",
-              }}
-            >
-              Professional UI
-            </span>
-          </div>
-        </div>
-
-        {/* ADD / EDIT FORM */}
-        <div className="card-pro mb-3">
-          <div className="card-body-pro">
-            <div className="d-flex flex-wrap align-items-center justify-content-between gap-2">
-              <h5 className="m-0" style={{ fontWeight: 900 }}>
-                {editingId ? "Edit Actress Details" : "Add Actress Details"}
-              </h5>
-
-              <div className="d-flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className="btn btn-pro btn-ghost"
-                  onClick={() => openExport(API.EXPORT_PDF)}
-                >
-                  Download PDF
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-pro btn-ghost"
-                  onClick={() => openExport(API.EXPORT_TXT)}
-                >
-                  Download TXT
-                </button>
+        <div className="inner">
+          <div className="hero">
+            <div className="brand">
+              <div className="logo">FA</div>
+              <div className="wrap-anywhere">
+                <h1 className="title">Fev Actress List</h1>
+                <div className="subtitle">✅ Edge-to-edge mobile • Fullscreen image popup</div>
               </div>
             </div>
 
-            <div className="divider" />
+            <div className="d-none d-sm-block">
+              <span
+                className="badge rounded-pill"
+                style={{
+                  border: "1px solid rgba(11,18,32,.12)",
+                  fontWeight: 900,
+                  background: "rgba(255,255,255,.7)",
+                }}
+              >
+                Professional UI
+              </span>
+            </div>
+          </div>
+        </div>
 
-            <form onSubmit={onSubmit}>
-              <div className="row g-2">
-                <div className="col-12 col-md-6">
-                  <label className="form-label">Actress Name *</label>
-                  <input
-                    className="form-control"
-                    value={form.actress_name}
-                    onChange={(e) =>
-                      setForm((p) => ({ ...p, actress_name: e.target.value }))
-                    }
-                    placeholder="Enter actress name"
-                    required
-                  />
-                </div>
+        {/* ADD FORM */}
+        <div className="inner">
+          <div className="card-pro mb-3">
+            <div className="card-body-pro">
+              <div className="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <h5 className="m-0" style={{ fontWeight: 900 }}>
+                  Add Actress Details
+                </h5>
 
-                <div className="col-12 col-md-3">
-                  <label className="form-label">DOB</label>
-                  <input
-                    type="date"
-                    className="form-control"
-                    value={form.dob}
-                    onChange={(e) => setForm((p) => ({ ...p, dob: e.target.value }))}
-                  />
-                </div>
-
-                <div className="col-12 col-md-3">
-                  <label className="form-label">Country</label>
-                  <input
-                    className="form-control"
-                    value={form.country_name}
-                    onChange={(e) =>
-                      setForm((p) => ({ ...p, country_name: e.target.value }))
-                    }
-                    placeholder="Country name"
-                  />
-                </div>
-
-                <div className="col-12 col-md-6">
-                  <label className="form-label">Best Movie / Series</label>
-                  <input
-                    className="form-control"
-                    value={form.best_movie}
-                    onChange={(e) =>
-                      setForm((p) => ({ ...p, best_movie: e.target.value }))
-                    }
-                    placeholder="Movie or series"
-                  />
-                </div>
-
-                <div className="col-12 col-md-6">
-                  <label className="form-label">Best Thing</label>
-                  <input
-                    className="form-control"
-                    value={form.best_thing}
-                    onChange={(e) =>
-                      setForm((p) => ({ ...p, best_thing: e.target.value }))
-                    }
-                    placeholder="Your best thing"
-                  />
+                <div className="d-flex flex-wrap gap-2">
+                  <button type="button" className="btn btn-pro btn-ghost" onClick={() => openExport(API.EXPORT_PDF)}>
+                    Download PDF
+                  </button>
+                  <button type="button" className="btn btn-pro btn-ghost" onClick={() => openExport(API.EXPORT_TXT)}>
+                    Download TXT
+                  </button>
                 </div>
               </div>
 
               <div className="divider" />
 
-              {/* Only Profile Image */}
-              <div className="row g-3 align-items-start">
-                <div className="col-12 col-lg-6">
-                  <label className="form-label">
-                    Profile Image (Drag & Drop)
-                    {editingId ? " - optional (pick only if you want change)" : ""}
-                  </label>
+              <form onSubmit={onSubmit}>
+                <div className="row g-2">
+                  <div className="col-12 col-md-6">
+                    <label className="form-label">Actress Name *</label>
+                    <input
+                      className="form-control"
+                      value={form.actress_name}
+                      onChange={(e) => setForm((p) => ({ ...p, actress_name: e.target.value }))}
+                      placeholder="Enter actress name"
+                      required
+                    />
+                  </div>
 
-                  <div
-                    ref={dzProfile}
-                    className="dropzone"
-                    onDrop={onProfileDrop}
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      dzProfile.current?.classList.add("dragover");
-                    }}
-                    onDragLeave={() => dzProfile.current?.classList.remove("dragover")}
-                  >
-                    <div style={{ fontWeight: 900 }} className="wrap-anywhere">
-                      Drag & drop profile image here
-                    </div>
-                    <div className="hint">or select file</div>
+                  <div className="col-12 col-md-3">
+                    <label className="form-label">DOB</label>
+                    <input
+                      type="date"
+                      className="form-control"
+                      value={form.dob}
+                      onChange={(e) => setForm((p) => ({ ...p, dob: e.target.value }))}
+                    />
+                  </div>
 
-                    <label className="btn btn-pro btn-ghost mt-2">
-                      Select Profile
-                      <input
-                        type="file"
-                        accept="image/*"
-                        hidden
-                        onChange={onProfilePick}
-                      />
-                    </label>
+                  <div className="col-12 col-md-3">
+                    <label className="form-label">Country</label>
+                    <input
+                      className="form-control"
+                      value={form.country_name}
+                      onChange={(e) => setForm((p) => ({ ...p, country_name: e.target.value }))}
+                      placeholder="Country name"
+                    />
+                  </div>
 
-                    {profileBase64 ? (
-                      <div className="mt-3 d-flex align-items-center gap-2">
-                        <img
-                          src={normalizeImage(profileBase64)}
-                          alt="profile"
-                          className="img-thumb"
-                          onClick={() =>
-                            openImg(profileBase64, form.actress_name || "Actress")
-                          }
-                          style={{ cursor: "pointer" }}
-                        />
-                        <div
-                          className="wrap-anywhere"
-                          style={{ fontWeight: 900, color: "rgba(11,18,32,.8)" }}
-                        >
-                          Click image to view
-                        </div>
-                        <button
-                          type="button"
-                          className="btn btn-pro btn-danger-soft btn-sm ms-auto"
-                          onClick={() => setProfileBase64("")}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ) : editingId ? (
-                      <div className="hint mt-2">
-                        (Edit mode) Image remains same if you don’t select new.
-                      </div>
-                    ) : null}
+                  <div className="col-12 col-md-6">
+                    <label className="form-label">Best Movie / Series</label>
+                    <input
+                      className="form-control"
+                      value={form.best_movie}
+                      onChange={(e) => setForm((p) => ({ ...p, best_movie: e.target.value }))}
+                      placeholder="Movie or series"
+                    />
+                  </div>
+
+                  <div className="col-12 col-md-6">
+                    <label className="form-label">Best Thing</label>
+                    <input
+                      className="form-control"
+                      value={form.best_thing}
+                      onChange={(e) => setForm((p) => ({ ...p, best_thing: e.target.value }))}
+                      placeholder="Your best thing"
+                    />
                   </div>
                 </div>
-              </div>
 
-              <div className="d-flex flex-wrap justify-content-end gap-2 mt-4">
-                <button
-                  type="button"
-                  className="btn btn-pro btn-ghost"
-                  onClick={() => {
-                    setEditingId(null);
-                    setForm({
-                      actress_name: "",
-                      dob: "",
-                      best_movie: "",
-                      best_thing: "",
-                      country_name: "",
-                    });
-                    setProfileBase64("");
-                  }}
-                >
-                  {editingId ? "Cancel Edit" : "Reset"}
-                </button>
+                <div className="divider" />
 
-                <button
-                  type="submit"
-                  className="btn btn-pro btn-primary-grad px-4"
-                  disabled={busy}
-                >
-                  {busy ? "Saving..." : editingId ? "Update Actress" : "Save Actress"}
-                </button>
-              </div>
-            </form>
+                <div className="row g-3 align-items-start">
+                  <div className="col-12 col-lg-6">
+                    <label className="form-label">Profile Image (Drag & Drop)</label>
+
+                    <div
+                      ref={dzProfile}
+                      className="dropzone"
+                      onDrop={onProfileDrop}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        dzProfile.current?.classList.add("dragover");
+                      }}
+                      onDragLeave={() => dzProfile.current?.classList.remove("dragover")}
+                    >
+                      <div style={{ fontWeight: 900 }} className="wrap-anywhere">
+                        Drag & drop profile image here
+                      </div>
+                      <div className="hint">or select file</div>
+
+                      <label className="btn btn-pro btn-ghost mt-2">
+                        Select Profile
+                        <input type="file" accept="image/*" hidden onChange={onProfilePick} />
+                      </label>
+
+                      {profileBase64 ? (
+                        <div className="mt-3 d-flex align-items-center gap-2">
+                          <img
+                            src={normalizeImage(profileBase64)}
+                            alt="profile"
+                            className="img-thumb"
+                            onClick={() => openImg(profileBase64, form.actress_name || "Actress")}
+                            style={{ cursor: "pointer" }}
+                          />
+                          <div className="wrap-anywhere" style={{ fontWeight: 900, color: "rgba(11,18,32,.8)" }}>
+                            Tap to view
+                          </div>
+                          <button
+                            type="button"
+                            className="btn btn-pro btn-danger-soft btn-sm ms-auto"
+                            onClick={() => setProfileBase64("")}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="d-flex flex-wrap justify-content-end gap-2 mt-4">
+                  <button type="button" className="btn btn-pro btn-ghost" onClick={resetForm}>
+                    Reset
+                  </button>
+
+                  <button type="submit" className="btn btn-pro btn-primary-grad px-4" disabled={busy}>
+                    {busy ? "Saving..." : "Save Actress"}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
 
         {/* LIST */}
-        <div className="card-pro">
-          <div className="card-body-pro">
-            <div className="d-flex flex-wrap align-items-center justify-content-between gap-2">
-              <h5 className="m-0" style={{ fontWeight: 900 }}>
-                Actress List
-              </h5>
+        <div className="inner">
+          <div className="card-pro">
+            <div className="card-body-pro">
+              <div className="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <h5 className="m-0" style={{ fontWeight: 900 }}>
+                  Actress List
+                </h5>
 
-              <div
-                className="d-flex flex-wrap gap-2"
-                style={{ minWidth: "min(520px, 100%)" }}
-              >
-                <input
-                  className="form-control"
-                  placeholder="Search anything…"
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                />
-                <button
-                  className="btn btn-pro btn-ghost"
-                  type="button"
-                  onClick={loadList}
-                >
-                  Refresh
-                </button>
+                <div className="d-flex flex-wrap gap-2" style={{ minWidth: "min(520px, 100%)" }}>
+                  <input
+                    className="form-control"
+                    placeholder="Search anything…"
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                  />
+                  <button className="btn btn-pro btn-ghost" type="button" onClick={loadList}>
+                    Refresh
+                  </button>
+                </div>
               </div>
-            </div>
 
-            <div className="divider" />
+              <div className="divider" />
 
-            {loading ? (
-              <div
-                className="text-center py-4"
-                style={{ fontWeight: 900, color: "rgba(11,18,32,.75)" }}
-              >
-                <span className="spinner-border spinner-border-sm me-2" />
-                Loading list…
-              </div>
-            ) : filtered.length === 0 ? (
-              <div
-                className="text-center py-4"
-                style={{ fontWeight: 900, color: "rgba(11,18,32,.65)" }}
-              >
-                No records found
-              </div>
-            ) : (
-              <div className="row g-3">
-                {filtered.map((it, idx) => {
-                  const id = it?.id || it?._id || idx;
-                  const name = it?.actress_name || it?.name || "Actress";
+              {loading ? (
+                <div className="text-center py-4" style={{ fontWeight: 900, color: "rgba(11,18,32,.75)" }}>
+                  <span className="spinner-border spinner-border-sm me-2" />
+                  Loading list…
+                </div>
+              ) : filtered.length === 0 ? (
+                <div className="text-center py-4" style={{ fontWeight: 900, color: "rgba(11,18,32,.65)" }}>
+                  No records found
+                </div>
+              ) : (
+                <div className="row g-0 g-sm-3">
+                  {filtered.map((it, idx) => {
+                    const id = it?.id || it?._id || idx;
+                    const name = it?.actress_name || it?.name || "Actress";
 
-                  const profile =
-                    getProfileImageUrlLikeOldPage(it) ||
-                    normalizeImage(it?.profile_image_base64) ||
-                    normalizeImage(it?.profile_image_raw) ||
-                    "";
+                    const profile =
+                      getProfileImageUrlLikeOldPage(it) ||
+                      normalizeImage(it?.profile_image_base64) ||
+                      normalizeImage(it?.profile_image_raw) ||
+                      "";
 
-                  return (
-                    <div key={id} className="col-12 col-md-6 col-xl-4">
-                      <div className="img-card">
-                        <div className="card-head-name wrap-anywhere">
-                          {idx + 1}. {name}
-                        </div>
-
-                        <div
-                          className="img-wrap"
-                          onClick={() => profile && openImg(profile, name)}
-                          title={profile ? "Click to open" : ""}
-                        >
-                          {profile ? (
-                            <img src={profile} alt={name} className="img-fit" />
-                          ) : (
-                            <div
-                              className="wrap-anywhere"
-                              style={{
-                                fontWeight: 900,
-                                color: "rgba(11,18,32,.55)",
-                              }}
-                            >
-                              No Image
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="p-3">
-                          <div className="small">
-                            {it?.dob || it?.actress_dob ? (
-                              <Field label="DOB" value={it?.dob || it?.actress_dob} />
-                            ) : null}
-                            {it?.country_name ? (
-                              <Field label="Country" value={it?.country_name} />
-                            ) : null}
-                            {it?.best_movie || it?.favorite_movie_series ? (
-                              <Field
-                                label="Best Movie / Series"
-                                value={it?.best_movie || it?.favorite_movie_series}
-                                kind="movie"
-                              />
-                            ) : null}
-                            {it?.best_thing ? (
-                              <Field label="Best Thing" value={it?.best_thing} kind="thing" />
-                            ) : null}
+                    return (
+                      <div key={id} className="col-12 col-md-6 col-xl-4">
+                        <div className="img-card">
+                          <div className="card-head-name wrap-anywhere">
+                            {idx + 1}. {name}
                           </div>
 
-                          <div className="divider" />
+                          <div className="img-wrap" onClick={() => profile && openImg(profile, name)}>
+                            {profile ? (
+                              <img src={profile} alt={name} className="img-fit" />
+                            ) : (
+                              <div className="wrap-anywhere" style={{ fontWeight: 900, color: "rgba(11,18,32,.55)" }}>
+                                No Image
+                              </div>
+                            )}
+                          </div>
 
-                          <div className="d-flex flex-wrap gap-2 justify-content-end">
-                            <button
-                              type="button"
-                              className="btn btn-pro btn-edit-soft"
-                              onClick={() => {
-                                const editId = it?.id || it?._id;
-                                if (!editId) return showToast("Missing id", "err");
-                                setEditingId(editId);
-                                setForm({
-                                  actress_name: it?.actress_name || it?.name || "",
-                                  dob: it?.dob || it?.actress_dob || "",
-                                  best_movie: it?.best_movie || it?.favorite_movie_series || "",
-                                  best_thing: it?.best_thing || "",
-                                  country_name: it?.country_name || "",
-                                });
-                                setProfileBase64("");
-                                window.scrollTo({ top: 0, behavior: "smooth" });
-                              }}
-                              disabled={busy}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-pro btn-danger-soft"
-                              onClick={() => onDelete(it)}
-                              disabled={busy}
-                            >
-                              Delete
-                            </button>
+                          <div className="p-3">
+                            <div className="small">
+                              {it?.dob || it?.actress_dob ? <Field label="DOB" value={it?.dob || it?.actress_dob} /> : null}
+                              {it?.country_name ? <Field label="Country" value={it?.country_name} /> : null}
+                              {it?.best_movie || it?.favorite_movie_series ? (
+                                <Field
+                                  label="Best Movie / Series"
+                                  value={it?.best_movie || it?.favorite_movie_series}
+                                  kind="movie"
+                                />
+                              ) : null}
+                              {it?.best_thing ? <Field label="Best Thing" value={it?.best_thing} kind="thing" /> : null}
+                            </div>
+
+                            <div className="divider" />
+
+                            <div className="d-flex flex-wrap gap-2 justify-content-end">
+                              <button
+                                type="button"
+                                className="btn btn-pro btn-danger-soft"
+                                onClick={() => onDelete(it)}
+                                disabled={busy}
+                              >
+                                Delete
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Image Modal */}
+      {/* ✅ FULLSCREEN Image Modal: only image + name */}
       {imgModal.open && (
         <div
           className="modal-backdrop-pro"
@@ -860,22 +802,16 @@ export default function FevActListNew() {
           aria-modal="true"
           onClick={() => setImgModal({ open: false, src: "", name: "" })}
         >
-          <div className="modal-card-pro" onClick={(e) => e.stopPropagation()}>
-            <div
-              className="modal-close"
-              title="Close"
-              onClick={() => setImgModal({ open: false, src: "", name: "" })}
-            >
+          <div className="modal-fullscreen" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-close" title="Close" onClick={() => setImgModal({ open: false, src: "", name: "" })}>
               ✕
             </div>
 
-            {/* ✅ image first */}
-            <div className="modal-img-area">
+            <div className="modal-image-zone">
               <img className="modal-img" src={imgModal.src} alt={imgModal.name} />
             </div>
 
-            {/* ✅ name ONLY after image end (below) */}
-            <div className="modal-name wrap-anywhere">{imgModal.name}</div>
+            <div className="modal-name-bar wrap-anywhere">{imgModal.name}</div>
           </div>
         </div>
       )}
@@ -890,9 +826,7 @@ export default function FevActListNew() {
       )}
 
       {toast.show && (
-        <div className={`toast-center ${toast.type === "err" ? "toast-err" : "toast-ok"}`}>
-          {toast.text}
-        </div>
+        <div className={`toast-center ${toast.type === "err" ? "toast-err" : "toast-ok"}`}>{toast.text}</div>
       )}
     </div>
   );

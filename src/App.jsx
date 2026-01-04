@@ -28,7 +28,7 @@ import TransactionDashboard from "./Pages/Transaction/TransactionDashboard";
 import DocumentTab from "./Pages/Document/DocumentTab.jsx";
 
 // Work Details pages
-import WorkDetails from "./Pages/WorkDetails/WorkDetails.jsx";
+import WorkDetails from "./Pages/WorkDetails/Worknewtab.jsx";
 
 // Investment pages
 import InvestmentTabs from "./Pages/Investment/InvestmentTabs.jsx";
