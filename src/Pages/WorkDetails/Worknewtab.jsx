@@ -24,7 +24,7 @@ export default function Worknewtab() {
 
   useEffect(() => {
     setLoading(true);
-    const t = setTimeout(() => setLoading(false), 350);
+    const t = setTimeout(() => setLoading(false), 300);
     return () => clearTimeout(t);
   }, [activeKey]);
 
@@ -32,27 +32,43 @@ export default function Worknewtab() {
 
   return (
     <div style={styles.page}>
-      {/* ✅ Hard reset for mobile spacing issues */}
+      {/* GLOBAL RESET */}
       <style>{`
-        html, body { margin: 0; padding: 0; height: 100%; }
-        * { box-sizing: border-box; }
+        html, body {
+          margin: 0;
+          padding: 0;
+          height: 100%;
+        }
+        * {
+          box-sizing: border-box;
+        }
+
+        /* ✅ Safe area only for mobile notch */
+        @media (max-width: 768px) {
+          .safe-navbar {
+            padding-top: env(safe-area-inset-top);
+          }
+        }
       `}</style>
 
-      {/* ✅ Fixed header (navbar + gap + tabs + gap) */}
+      {/* FIXED HEADER */}
       <div style={styles.headerFixed}>
         {/* NAVBAR */}
-        <div style={styles.navbar}>
+        <div style={styles.navbar} className="safe-navbar">
           <div style={styles.navLeft}>
             <div style={styles.title}>Work Details</div>
             <div style={styles.subtitle}>Expenses & Reports</div>
           </div>
 
-          <button style={styles.dashboardBtn} onClick={() => navigate("/dashboard")}>
+          <button
+            style={styles.dashboardBtn}
+            onClick={() => navigate("/dashboard")}
+          >
             Dashboard →
           </button>
         </div>
 
-        {/* ✅ Small space BELOW navbar (so it won't touch tabs) */}
+        {/* GAP BELOW NAVBAR */}
         <div style={styles.gapBetweenNavbarAndTabs} />
 
         {/* TABS */}
@@ -70,18 +86,23 @@ export default function Worknewtab() {
                   }}
                 >
                   {tab.label}
-                  {active && <motion.div layoutId="underline" style={styles.underline} />}
+                  {active && (
+                    <motion.div
+                      layoutId="underline"
+                      style={styles.underline}
+                    />
+                  )}
                 </button>
               );
             })}
           </div>
         </div>
 
-        {/* ✅ Small space BELOW tabs (so it won't touch page content) */}
+        {/* GAP BELOW TABS */}
         <div style={styles.gapBelowTabs} />
       </div>
 
-      {/* ✅ Only this area scrolls */}
+      {/* SCROLL AREA */}
       <div style={styles.scrollArea}>
         <AnimatePresence>
           {loading && (
@@ -112,14 +133,18 @@ export default function Worknewtab() {
         )}
       </div>
 
-      {/* scrollbar style */}
+      {/* SCROLLBAR */}
       <style>{`
-        .worknewtab-tabs-row::-webkit-scrollbar { height: 8px; }
-        .worknewtab-tabs-row::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 999px; }
-        .worknewtab-tabs-row::-webkit-scrollbar-track { background: rgba(0,0,0,0.05); border-radius: 999px; }
+        .worknewtab-tabs-row::-webkit-scrollbar {
+          height: 6px;
+        }
+        .worknewtab-tabs-row::-webkit-scrollbar-thumb {
+          background: rgba(0,0,0,0.2);
+          border-radius: 999px;
+        }
       `}</style>
 
-      {/* spinner animation */}
+      {/* SPINNER */}
       <style>{`
         @keyframes spin {
           from { transform: rotate(0deg); }
@@ -130,21 +155,25 @@ export default function Worknewtab() {
   );
 }
 
-/* ================= STYLES ================= */
+/* ================= CONSTANTS ================= */
 
-const NAV_H = 85;          // ✅ navbar little taller (more top space)
-const GAP_1 = 6;           // ✅ gap between navbar and tabs
-const TABS_H = 53;         // tabs height
-const GAP_2 = 10;          // ✅ gap below tabs before page content
+const isMobile = window.innerWidth <= 768;
+
+const NAV_H = isMobile ? 95 : 85; // ✅ mobile extra top space
+const GAP_1 = 6;
+const TABS_H = 53;
+const GAP_2 = 10;
 
 const HEADER_TOTAL = NAV_H + GAP_1 + TABS_H + GAP_2;
+
+/* ================= STYLES ================= */
 
 const styles = {
   page: {
     height: "100vh",
     width: "100%",
     background: "#F8FAFF",
-    overflow: "hidden", // ✅ stop page scroll, only scrollArea scrolls
+    overflow: "hidden",
   },
 
   headerFixed: {
@@ -156,7 +185,6 @@ const styles = {
     background: "#F8FAFF",
   },
 
-  /* Navbar */
   navbar: {
     height: NAV_H,
     background: "linear-gradient(90deg, #2563EB, #06B6D4)",
@@ -170,42 +198,37 @@ const styles = {
   navLeft: {
     display: "flex",
     flexDirection: "column",
-    lineHeight: 1.05,
   },
 
   title: {
-    fontSize: 16.5,
+    fontSize: 16,
     fontWeight: 900,
   },
 
   subtitle: {
-    fontSize: 10.8,
-    opacity: 0.95,
+    fontSize: 11,
     fontWeight: 700,
-    marginTop: 2,
+    opacity: 0.95,
   },
 
   dashboardBtn: {
-    background: "#ffffff",
+    background: "#fff",
     color: "#2563EB",
     border: "none",
     padding: "7px 12px",
     borderRadius: 999,
     fontWeight: 900,
+    fontSize: 12,
     cursor: "pointer",
-    fontSize: 12.5,
   },
 
   gapBetweenNavbarAndTabs: {
     height: GAP_1,
-    background: "#F8FAFF",
   },
 
-  /* Tabs */
   tabsBar: {
     height: TABS_H,
-    background: "#ffffff",
-    borderTop: "1px solid #EAF0FF",
+    background: "#fff",
     borderBottom: "1px solid #E5E7EB",
     display: "flex",
     alignItems: "center",
@@ -215,23 +238,21 @@ const styles = {
     width: "100%",
     display: "flex",
     gap: 8,
-    padding: "8px 8px",
+    padding: "8px",
     overflowX: "auto",
-    overflowY: "hidden",
     WebkitOverflowScrolling: "touch",
   },
 
   tabBtn: {
-    position: "relative",
     border: "1px solid #E5E7EB",
     background: "#F1F5F9",
     padding: "8px 12px",
     borderRadius: 999,
-    fontSize: 12.5,
+    fontSize: 12,
     fontWeight: 900,
     whiteSpace: "nowrap",
     cursor: "pointer",
-    flex: "0 0 auto",
+    position: "relative",
   },
 
   tabActive: {
@@ -243,19 +264,17 @@ const styles = {
   underline: {
     position: "absolute",
     bottom: -6,
-    left: "22%",
-    right: "22%",
+    left: "25%",
+    right: "25%",
     height: 3,
-    borderRadius: 999,
     background: "#22C55E",
+    borderRadius: 999,
   },
 
   gapBelowTabs: {
     height: GAP_2,
-    background: "#F8FAFF",
   },
 
-  /* Scroll only below header */
   scrollArea: {
     position: "absolute",
     top: HEADER_TOTAL,
@@ -263,24 +282,17 @@ const styles = {
     right: 0,
     bottom: 0,
     overflowY: "auto",
-    overflowX: "hidden",
-    WebkitOverflowScrolling: "touch",
-    padding: 0,
-    margin: 0,
     background: "#F8FAFF",
   },
 
   content: {
     width: "100%",
-    padding: 0,
-    margin: 0,
   },
 
-  /* Loader */
   loaderOverlay: {
     position: "absolute",
     inset: 0,
-    background: "rgba(255,255,255,0.75)",
+    background: "rgba(255,255,255,0.7)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -289,11 +301,10 @@ const styles = {
 
   loaderBox: {
     background: "#fff",
-    padding: 18,
+    padding: 20,
     borderRadius: 14,
-    boxShadow: "0 10px 40px rgba(0,0,0,0.15)",
     textAlign: "center",
-    minWidth: 160,
+    boxShadow: "0 10px 40px rgba(0,0,0,0.15)",
   },
 
   spinner: {
@@ -310,6 +321,5 @@ const styles = {
     marginTop: 10,
     fontWeight: 900,
     fontSize: 14,
-    color: "#0F172A",
   },
 };
