@@ -6,7 +6,7 @@ const API = "https://express-backend-myapp.onrender.com/api";
 // ---------- HTTP (longer timeout for cold starts) ----------
 const http = axios.create({
   baseURL: API,
-  timeout: 45000, // was 10000
+  timeout: 45000,
 });
 
 // ---------- Cache helpers ----------
@@ -39,20 +39,17 @@ async function retry(fn, { tries = 4, delay = 600 }) {
       return await fn();
     } catch (e) {
       lastErr = e;
-      if (i < tries - 1) await sleep(delay * (i + 1)); // backoff
+      if (i < tries - 1) await sleep(delay * (i + 1));
     }
   }
   throw lastErr;
 }
 
-// ---------- Warm-up (wake the free dyno) ----------
+// ---------- Warm-up ----------
 async function warmUp() {
-  // try health first, then a cheap list
   try {
     await retry(() => http.get(`/health`, { params: { t: Date.now() } }), { tries: 2, delay: 500 });
-  } catch {
-    // ignore
-  }
+  } catch {}
 }
 
 export default function DailyTransactionPage() {
@@ -189,13 +186,10 @@ export default function DailyTransactionPage() {
     let bootCap;
     (async () => {
       try {
-        // warmup quickly to reduce cold start errors
         await warmUp();
-        // Cap the boot overlay: hide after 2500ms even if a call is still pending
         bootCap = setTimeout(() => setBooting(false), 2500);
 
         const results = await Promise.allSettled([fetchLookups(), fetchTransactions(), fetchSummary()]);
-
         const lookupsRes = results[0];
         const txRes = results[1];
         const sumRes = results[2];
@@ -216,7 +210,6 @@ export default function DailyTransactionPage() {
           anySuccess = true;
         }
 
-        // Cache whatever we successfully got (merge with current state to avoid wiping)
         saveCache({
           categories: lookupsRes.status === "fulfilled" ? lookupsRes.value.categories : categories,
           subcategories: lookupsRes.status === "fulfilled" ? lookupsRes.value.subcategories : subcategories,
@@ -229,7 +222,7 @@ export default function DailyTransactionPage() {
         }
       } finally {
         setPage(1);
-        setBooting(false); // ensure it closes even if some calls failed
+        setBooting(false);
       }
     })();
 
@@ -245,12 +238,8 @@ export default function DailyTransactionPage() {
             setCategories(lookupsRes.value.categories);
             setSubcategories(lookupsRes.value.subcategories);
           }
-          if (txRes.status === "fulfilled") {
-            setTransactions(txRes.value);
-          }
-          if (sumRes.status === "fulfilled") {
-            setSummary(sumRes.value);
-          }
+          if (txRes.status === "fulfilled") setTransactions(txRes.value);
+          if (sumRes.status === "fulfilled") setSummary(sumRes.value);
 
           saveCache({
             categories: lookupsRes.status === "fulfilled" ? lookupsRes.value.categories : categories,
@@ -258,9 +247,7 @@ export default function DailyTransactionPage() {
             transactions: txRes.status === "fulfilled" ? txRes.value : transactions,
             summary: sumRes.status === "fulfilled" ? sumRes.value : summary,
           });
-        } catch {
-          // ignore silent refresh errors
-        }
+        } catch {}
       })();
     };
     window.addEventListener("online", onBackOnline);
@@ -345,7 +332,7 @@ export default function DailyTransactionPage() {
         categories,
         subcategories,
         transactions: tx,
-        summary, // keep server summary (local daySummary used for the card)
+        summary,
       });
 
       setHighlightId(id);
@@ -421,8 +408,8 @@ export default function DailyTransactionPage() {
   };
 
   return (
-    <div className="container-fluid py-3" style={{ background: "var(--bg)" }}>
-      {/* Global styles (includes loader) */}
+    <div className="dtp-root" style={{ background: "var(--bg)" }}>
+      {/* ✅ GLOBAL styles + EDGE TO EDGE */}
       <style>{`
         :root{
           --ink-900:#0f172a; --ink-700:#334155; --ink-600:#475569; --ink-500:#64748b;
@@ -430,49 +417,119 @@ export default function DailyTransactionPage() {
           --brand-grad: linear-gradient(90deg,#5f4bb6 0%, #1f5f78 100%);
           --accent:#2b7a8b; --success:#0f8a5f; --danger:#b33a3a;
           --rad:14px;
-          --px: clamp(12px, 4vw, 20px);
+
+          /* ✅ padding vars */
+          --px-desktop: clamp(12px, 3.5vw, 20px);
+          --px-mobile: 0px;
           --fs: clamp(14px, 3.6vw, 16px);
           --fs-sm: clamp(12px, 3.2vw, 14px);
           --fs-lg: clamp(16px, 4.2vw, 18px);
         }
-        .page-wrap{ max-width: 980px; margin: 0 auto; padding: 0 var(--px); }
+
+        /* ✅ FULL EDGE-TO-EDGE BASE RESET */
+        html, body{
+          width:100%;
+          max-width:100%;
+          margin:0 !important;
+          padding:0 !important;
+          overflow-x:hidden !important;
+          background: var(--bg);
+        }
+        .dtp-root{
+          width:100%;
+          margin:0;
+          padding:0;
+        }
+
+        /* ✅ Page container: desktop center, mobile full edge */
+        .page-wrap{
+          width:100%;
+          max-width: 980px;
+          margin: 0 auto;
+          padding: 0 var(--px-desktop);
+        }
+        @media (max-width: 767.98px){
+          .page-wrap{
+            max-width: 100%;
+            padding: 0 var(--px-mobile);  /* ✅ 0 padding on mobile */
+          }
+        }
+
+        /* Title */
         .title{
           font-size: clamp(18px, 5.2vw, 24px);
           background: var(--brand-grad);
           -webkit-background-clip: text; -webkit-text-fill-color: transparent;
           font-weight: 800; letter-spacing:.35px; text-align:center;
+          padding: 12px 0; /* only vertical spacing, no side padding */
+          margin: 0 0 8px;
         }
+
         .kpi-grid{ display:grid; gap:12px; grid-template-columns: 1fr; margin-bottom: 10px; }
         @media (min-width:576px){ .kpi-grid{ grid-template-columns: repeat(3,1fr); } }
+
         .card-ui{
           background: var(--surface);
           border:1px solid var(--border);
-          border-radius: var(--rad); padding: 12px;
+          border-radius: var(--rad);
+          padding: 12px;
           box-shadow: 0 8px 24px rgba(2,6,23,.06);
         }
+        /* ✅ on mobile: cards edge-to-edge */
+        @media (max-width: 767.98px){
+          .card-ui{
+            border-left: 0;
+            border-right: 0;
+            border-radius: 0;
+          }
+        }
+
         .kpi-card h6{ font-size: var(--fs-sm); color: var(--ink-600); margin: 0 0 4px; }
         .kpi-card h5{ font-size: clamp(18px, 5vw, 22px); font-weight:800; margin:0; }
 
         .form-card .form-label{ font-size: var(--fs-sm); margin-bottom: 4px; color: var(--ink-700); }
         .form-card .form-select, .form-card .form-control{
-          font-size: var(--fs); padding: .6rem .75rem; border-radius: 12px; border:1px solid var(--border);
+          font-size: var(--fs);
+          padding: .6rem .75rem;
+          border-radius: 12px;
+          border:1px solid var(--border);
         }
         .btn-solid{
-          background: var(--accent); color:#fff; border:none; border-radius:12px; padding:.6rem 1rem; font-weight:700;
-          font-size: var(--fs);
+          background: var(--accent); color:#fff; border:none; border-radius:12px;
+          padding:.6rem 1rem; font-weight:700; font-size: var(--fs);
         }
         .btn-ghost{
           background:#f5f7fb; border:1px dashed #cfd6e4; color:var(--ink-700);
           border-radius:12px; padding:.6rem 1rem; font-weight:700; font-size: var(--fs);
         }
 
-        .tbl-wrap{ border:1px solid var(--border); border-radius: var(--rad); background:#fff; box-shadow: 0 8px 24px rgba(0,0,0,.06); padding: 8px; }
+        .tbl-wrap{
+          border:1px solid var(--border);
+          border-radius: var(--rad);
+          background:#fff;
+          box-shadow: 0 8px 24px rgba(0,0,0,.06);
+          padding: 8px;
+        }
+        @media (max-width: 767.98px){
+          .tbl-wrap{ border-left:0; border-right:0; border-radius:0; padding: 8px 8px; }
+        }
+
         .table thead th{ position: sticky; top: 0; background:#0f172a; color:#fff; z-index: 1; }
         .table-striped>tbody>tr:nth-of-type(odd)>*{ background-color: #fafcff; }
         .table-success{ transition: background .4s ease; }
 
         .mobile-list{ display: grid; gap: 10px; }
-        .tx-card{ background: #fff; border:1px solid var(--border); border-radius: var(--rad); padding: 10px 12px; box-shadow: 0 6px 16px rgba(0,0,0,.05); }
+        .tx-card{
+          background: #fff;
+          border:1px solid var(--border);
+          border-radius: var(--rad);
+          padding: 10px 12px;
+          box-shadow: 0 6px 16px rgba(0,0,0,.05);
+        }
+        @media (max-width: 767.98px){
+          .tx-card{ border-left:0; border-right:0; border-radius:0; }
+        }
+
         .tx-top{ display:flex; align-items:flex-start; justify-content:space-between; gap: 8px; }
         .tx-title{ font-weight: 700; font-size: var(--fs); color: var(--ink-900);}
         .tx-sub{ color: var(--ink-600); font-size: var(--fs-sm); }
@@ -489,6 +546,7 @@ export default function DailyTransactionPage() {
         .toast-pro{ background: #0f172a; color:#fff; border-radius: 10px; padding: 12px 16px; box-shadow: 0 10px 24px rgba(0,0,0,.25); }
         .toast-success{ background: #0f8a5f; }
         .toast-error{ background: #b33a3a; }
+
         .modal-backdrop{ position: fixed; inset:0; background: rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; z-index: 1100; padding: 16px; }
         .modal-card{ background:#fff; border-radius:14px; border:1px solid var(--border); width:100%; max-width:420px; padding:16px; box-shadow: 0 18px 48px rgba(0,0,0,.25); }
 
@@ -508,9 +566,7 @@ export default function DailyTransactionPage() {
           padding: 22px 26px; border:1px solid #e8ecf3; background:#fff; border-radius: 18px;
           box-shadow: 0 20px 60px rgba(16,24,40,.12);
         }
-        .ring{
-          width: 48px; height: 48px; display:inline-block; position: relative;
-        }
+        .ring{ width: 48px; height: 48px; display:inline-block; position: relative; }
         .ring:before, .ring:after{
           content:""; position:absolute; inset:0; border-radius:50%;
           border:3px solid transparent; border-top-color:#5f4bb6; border-right-color:#1f5f78;
@@ -527,12 +583,7 @@ export default function DailyTransactionPage() {
           -webkit-background-clip: text; -webkit-text-fill-color: transparent;
           letter-spacing: .3px;
         }
-        .subtle{
-          font-size: 13px; color: var(--ink-600);
-        }
-        @media (prefers-reduced-motion: reduce){
-          .ring:before, .ring:after{ animation: none; border-top-color:#5f4bb6; border-right-color:#1f5f78; }
-        }
+        .subtle{ font-size: 13px; color: var(--ink-600); }
       `}</style>
 
       {/* FIRST-LOAD OVERLAY */}
@@ -553,7 +604,7 @@ export default function DailyTransactionPage() {
 
       <div className="page-wrap" aria-busy={booting ? "true" : "false"} aria-hidden={booting ? "true" : "false"}>
         {/* Title */}
-        <h3 className="title mb-3">Daily Transactions</h3>
+        <h3 className="title">Daily Transactions</h3>
 
         {/* Popup */}
         {popup.show && (
@@ -567,7 +618,7 @@ export default function DailyTransactionPage() {
           </div>
         )}
 
-        {/* KPI (for selected date) */}
+        {/* KPI */}
         <div className="kpi-grid">
           <div className="card-ui kpi-card text-center">
             <h6>Total Debit</h6>
@@ -597,6 +648,7 @@ export default function DailyTransactionPage() {
                 onChange={handleChange}
               />
             </div>
+
             <div className="col-6 col-md-2">
               <label className="form-label">Qty (opt)</label>
               <input
@@ -610,6 +662,7 @@ export default function DailyTransactionPage() {
                 step="1"
               />
             </div>
+
             <div className="col-6 col-md-2">
               <label className="form-label">Type</label>
               <select className="form-select" name="type" value={form.type} onChange={handleChange}>
@@ -617,6 +670,7 @@ export default function DailyTransactionPage() {
                 <option value="credit">Credit</option>
               </select>
             </div>
+
             <div className="col-6 col-md-2">
               <label className="form-label">Category</label>
               <select className="form-select" name="category_id" value={form.category_id} onChange={handleChange}>
@@ -628,6 +682,7 @@ export default function DailyTransactionPage() {
                 ))}
               </select>
             </div>
+
             <div className="col-6 col-md-2">
               <label className="form-label">Subcategory</label>
               <select
@@ -645,6 +700,7 @@ export default function DailyTransactionPage() {
                 ))}
               </select>
             </div>
+
             <div className="col-12 col-md-2">
               <label className="form-label">Purpose (opt)</label>
               <input
@@ -656,6 +712,7 @@ export default function DailyTransactionPage() {
                 onChange={handleChange}
               />
             </div>
+
             <div className="col-12 col-md-2">
               <label className="form-label">Date</label>
               <input
@@ -828,8 +885,8 @@ export default function DailyTransactionPage() {
                       <td className={t.type === "debit" ? "text-danger" : "text-success"}>{t.type}</td>
                       <td>{categories.find((c) => String(c.category_id) === String(t.category_id))?.category_name || "-"}</td>
                       <td>
-                        {subcategories.find((s) => String(s.subcategory_id) === String(t.subcategory_id))
-                          ?.subcategory_name || "-"}
+                        {subcategories.find((s) => String(s.subcategory_id) === String(t.subcategory_id))?.subcategory_name ||
+                          "-"}
                       </td>
                       <td>{t.quantity ?? 0}</td>
                       <td>{t.purpose || "-"}</td>
@@ -838,10 +895,7 @@ export default function DailyTransactionPage() {
                           <button className="btn btn-outline-primary btn-sm" onClick={() => editTransaction(t)}>
                             Update
                           </button>
-                          <button
-                            className="btn btn-outline-danger btn-sm"
-                            onClick={() => askDelete(t.daily_transaction_id)}
-                          >
+                          <button className="btn btn-outline-danger btn-sm" onClick={() => askDelete(t.daily_transaction_id)}>
                             Delete
                           </button>
                         </div>
