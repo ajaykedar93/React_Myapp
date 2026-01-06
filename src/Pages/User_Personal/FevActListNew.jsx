@@ -296,24 +296,35 @@ export default function FevActListNew() {
       .best-thing{ color: var(--orange); font-weight: 900; }
       .best-movie{ color: var(--blueDark); font-weight: 900; }
 
-      /* ✅ FULL SCREEN MODAL (only image + name, almost no padding) */
+      /* ✅ FULL SCREEN MODAL (mobile-safe: name below image, NOT at bottom) */
       .modal-backdrop-pro{
         position:fixed; inset:0;
         background: rgba(2, 8, 23, .70);
         z-index: 3000;
         display:flex; align-items:stretch; justify-content:stretch;
       }
+
       .modal-fullscreen{
         width:100%;
-        height:100%;
-        background: #0b1220; /* dark like gallery */
-        display:flex;
-        flex-direction: column;
+        height:100dvh; /* ✅ dynamic viewport height */
+        background: #0b1220;
         position: relative;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        padding:
+          calc(env(safe-area-inset-top) + 10px)
+          12px
+          calc(env(safe-area-inset-bottom) + 18px)
+          12px; /* ✅ prevents bottom nav hiding name */
       }
+
       .modal-close{
-        position:absolute; top: 12px; right: 12px;
-        width: 40px; height: 40px; border-radius: 999px;
+        position:absolute;
+        top: calc(env(safe-area-inset-top) + 12px);
+        right: 12px;
+        width: 40px; height: 40px;
+        border-radius: 999px;
         border: 1px solid rgba(255,255,255,.18);
         background: rgba(255,255,255,.12);
         color:#fff;
@@ -323,26 +334,42 @@ export default function FevActListNew() {
         z-index: 2;
         backdrop-filter: blur(6px);
       }
+
+      .modal-stage{
+        width: 100%;
+        max-width: 980px;
+        display:flex;
+        flex-direction: column;
+        align-items:center;
+        justify-content:center;
+        gap: 10px;
+      }
+
       .modal-image-zone{
-        flex: 1;
+        width: 100%;
         display:flex;
         align-items:center;
         justify-content:center;
-        padding: 0; /* ✅ no big padding */
+        max-height: calc(100dvh - 140px); /* ✅ room for close + name */
       }
+
       .modal-img{
         max-width: 100%;
         max-height: 100%;
-        object-fit: contain;
+        object-fit: contain; /* ✅ no cut, no zoom */
         display:block;
       }
+
       .modal-name-bar{
+        width: 100%;
+        max-width: 720px;
         padding: 10px 12px;
         text-align:center;
         font-weight: 900;
         color: #fff;
-        background: rgba(255,255,255,.06);
-        border-top: 1px solid rgba(255,255,255,.10);
+        background: rgba(255,255,255,.08);
+        border: 1px solid rgba(255,255,255,.12);
+        border-radius: 12px;
       }
 
       .busy{
@@ -794,7 +821,7 @@ export default function FevActListNew() {
         </div>
       </div>
 
-      {/* ✅ FULLSCREEN Image Modal: only image + name */}
+      {/* ✅ FULLSCREEN Image Modal: image center + name just below */}
       {imgModal.open && (
         <div
           className="modal-backdrop-pro"
@@ -807,11 +834,13 @@ export default function FevActListNew() {
               ✕
             </div>
 
-            <div className="modal-image-zone">
-              <img className="modal-img" src={imgModal.src} alt={imgModal.name} />
-            </div>
+            <div className="modal-stage">
+              <div className="modal-image-zone">
+                <img className="modal-img" src={imgModal.src} alt={imgModal.name} />
+              </div>
 
-            <div className="modal-name-bar wrap-anywhere">{imgModal.name}</div>
+              <div className="modal-name-bar wrap-anywhere">{imgModal.name}</div>
+            </div>
           </div>
         </div>
       )}
