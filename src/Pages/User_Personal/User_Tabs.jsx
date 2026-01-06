@@ -78,21 +78,15 @@ export default function UserTabs() {
             </div>
           </div>
 
-          <button
-            className="btn ut-dash-btn"
-            onClick={() => navigate("/dashboard")}
-          >
+          <button className="btn ut-dash-btn" onClick={() => navigate("/dashboard")}>
             Dashboard
           </button>
         </div>
       </nav>
 
       {/* MAIN */}
-      <main
-        className="ut-main"
-        style={{ paddingTop: `calc(${navH}px + var(--safeTop, 0px))` }}
-      >
-        {/* Tabs bar: keep little padding only here */}
+      <main className="ut-main" style={{ paddingTop: `calc(${navH}px + var(--safeTop, 0px))` }}>
+        {/* Tabs bar */}
         <section className="ut-tabs-wrap">
           <div className="container-fluid px-2 px-sm-3">
             <div className="ut-tablist">
@@ -112,7 +106,7 @@ export default function UserTabs() {
 
         <div className="ut-after-tabs-gap" />
 
-        {/* CONTENT: FULL WIDTH, NO LEFT/RIGHT PADDING */}
+        {/* CONTENT */}
         <section className="ut-content-full">
           {activeTab === "investment" && <UserInvestment />}
           {activeTab === "password" && <PasswordManager />}
@@ -121,7 +115,13 @@ export default function UserTabs() {
           {activeTab === "actresslist" && <ShowActress />}
           {activeTab === "websites" && <WebsitesUrl />}
           {activeTab === "notes" && <Notes />}
-          {activeTab === "addlist" && <Addlist />}
+
+          {/* ✅ IMPORTANT: Scope wrapper so FevActListNew CSS won't break other pages */}
+          {activeTab === "addlist" && (
+            <div className="fev-scope">
+              <Addlist />
+            </div>
+          )}
         </section>
       </main>
 
@@ -144,12 +144,12 @@ export default function UserTabs() {
             linear-gradient(180deg, ${COLORS.bgBaseTop} 0%, ${COLORS.bgBaseBottom} 100%);
         }
 
-        /* NAVBAR: add little top space */
+        /* NAVBAR */
         .ut-nav{
           position: fixed; top: 0; left: 0; right: 0;
           z-index: 1000;
           background: linear-gradient(90deg,#2563eb,#38bdf8);
-          padding-top: calc(var(--safeTop) + 14px);  /* little more top space */
+          padding-top: calc(var(--safeTop) + 14px);
           padding-bottom: 10px;
         }
 
@@ -198,21 +198,16 @@ export default function UserTabs() {
           flex: 0 0 auto;
           min-width: 140px;
           max-width: 220px;
-
           border-radius: 14px;
           border: 1px solid #cbd5e1;
           background: #f1f5f9;
-
           padding: 10px 12px;
           font-size: 14px;
           font-weight: 700;
           line-height: 1.15;
-
-          /* show full text (no cut) */
           white-space: normal;
           overflow: visible;
           text-overflow: unset;
-          word-break: keep-all;
           overflow-wrap: break-word;
           text-align: center;
         }
@@ -225,10 +220,9 @@ export default function UserTabs() {
 
         .ut-after-tabs-gap{ height: 10px; }
 
-        /* FULL SCREEN CONTENT */
         .ut-content-full{
           width: 100%;
-          padding: 0;       /* no left/right padding */
+          padding: 0;
           margin: 0;
         }
 
@@ -239,7 +233,6 @@ export default function UserTabs() {
             padding: 6px 10px;
             font-size: 12px;
           }
-
           .ut-chip{
             min-width: 46vw;
             max-width: 46vw;

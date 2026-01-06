@@ -31,39 +31,54 @@ export default function Worknewtab() {
   const activeTab = tabs.find((t) => t.key === activeKey);
 
   return (
-    <div style={styles.page}>
-      {/* GLOBAL RESET */}
+    <div style={styles.page} className="worknewtab-page">
+      {/* ✅ GLOBAL RESET + SAFE AREA (NAVBAR TOP SPACE FIX) */}
       <style>{`
-        html, body {
-          margin: 0;
-          padding: 0;
-          height: 100%;
-        }
-        * {
-          box-sizing: border-box;
+        html, body { margin: 0; padding: 0; height: 100%; }
+        * { box-sizing: border-box; }
+
+        :root{
+          --safeTop: env(safe-area-inset-top, 0px);
+          --safeBottom: env(safe-area-inset-bottom, 0px);
+
+          /* ✅ Navbar TOP space (this is what you want) */
+          --navTopGap: 10px;      /* ⭐ increase if you want more space */
+
+          /* Heights */
+          --navHDesktop: 85px;
+          --navHMobile: 85px;     /* visible navbar height (without safe padding) */
         }
 
-        /* ✅ Safe area only for mobile notch */
-        @media (max-width: 768px) {
-          .safe-navbar {
-            padding-top: env(safe-area-inset-top);
+        @media (max-width: 768px){
+          :root{
+            --navTopGap: 48px;    /* ⭐ mobile वर थोडा जास्त space */
+            --navHMobile: 80px;   /* visible bar height (content area) */
           }
+        }
+
+        /* Tabs scrollbar */
+        .worknewtab-tabs-row::-webkit-scrollbar { height: 6px; }
+        .worknewtab-tabs-row::-webkit-scrollbar-thumb {
+          background: rgba(0,0,0,0.2);
+          border-radius: 999px;
+        }
+
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
         }
       `}</style>
 
       {/* FIXED HEADER */}
       <div style={styles.headerFixed}>
         {/* NAVBAR */}
-        <div style={styles.navbar} className="safe-navbar">
+        <div style={styles.navbar} className="worknewtab-navbar">
           <div style={styles.navLeft}>
             <div style={styles.title}>Work Details</div>
             <div style={styles.subtitle}>Expenses & Reports</div>
           </div>
 
-          <button
-            style={styles.dashboardBtn}
-            onClick={() => navigate("/dashboard")}
-          >
+          <button style={styles.dashboardBtn} onClick={() => navigate("/dashboard")}>
             Dashboard →
           </button>
         </div>
@@ -80,18 +95,11 @@ export default function Worknewtab() {
                 <button
                   key={tab.key}
                   onClick={() => setActiveKey(tab.key)}
-                  style={{
-                    ...styles.tabBtn,
-                    ...(active ? styles.tabActive : {}),
-                  }}
+                  style={{ ...styles.tabBtn, ...(active ? styles.tabActive : {}) }}
+                  type="button"
                 >
                   {tab.label}
-                  {active && (
-                    <motion.div
-                      layoutId="underline"
-                      style={styles.underline}
-                    />
-                  )}
+                  {active && <motion.div layoutId="underline" style={styles.underline} />}
                 </button>
               );
             })}
@@ -103,7 +111,7 @@ export default function Worknewtab() {
       </div>
 
       {/* SCROLL AREA */}
-      <div style={styles.scrollArea}>
+      <div style={styles.scrollArea} className="worknewtab-scroll">
         <AnimatePresence>
           {loading && (
             <motion.div
@@ -133,22 +141,51 @@ export default function Worknewtab() {
         )}
       </div>
 
-      {/* SCROLLBAR */}
+      {/* ✅ ACTUAL LAYOUT CALC: navbar वर space + safe area */}
       <style>{`
-        .worknewtab-tabs-row::-webkit-scrollbar {
-          height: 6px;
-        }
-        .worknewtab-tabs-row::-webkit-scrollbar-thumb {
-          background: rgba(0,0,0,0.2);
-          border-radius: 999px;
-        }
-      `}</style>
+        .worknewtab-navbar{
+          /* ✅ navbar वर SPACE (touch nahi) */
+          padding-top: calc(var(--safeTop) + var(--navTopGap));
 
-      {/* SPINNER */}
-      <style>{`
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
+          /* keep same side padding */
+          padding-left: 12px;
+          padding-right: 12px;
+
+          /* ✅ total height includes safeTop + gap + visible height */
+          height: calc(
+            (max-width: 768px) ? (var(--navHMobile)) : (var(--navHDesktop))
+          );
+        }
+
+        /* NOTE: CSS cannot do conditional like above,
+           so we set heights with media queries below */
+        .worknewtab-navbar{ height: calc(var(--navHDesktop) + var(--safeTop) + var(--navTopGap)); }
+        @media (max-width: 768px){
+          .worknewtab-navbar{ height: calc(var(--navHMobile) + var(--safeTop) + var(--navTopGap)); }
+        }
+
+        /* ✅ scroll area starts AFTER full header total */
+        .worknewtab-scroll{
+          top: calc(
+            var(--safeTop) + var(--navTopGap) +
+            (var(--navHDesktop)) +
+            ${GAP_1}px +
+            ${TABS_H}px +
+            ${GAP_2}px
+          );
+          padding-bottom: var(--safeBottom);
+        }
+
+        @media (max-width: 768px){
+          .worknewtab-scroll{
+            top: calc(
+              var(--safeTop) + var(--navTopGap) +
+              (var(--navHMobile)) +
+              ${GAP_1}px +
+              ${TABS_H}px +
+              ${GAP_2}px
+            );
+          }
         }
       `}</style>
     </div>
@@ -156,18 +193,11 @@ export default function Worknewtab() {
 }
 
 /* ================= CONSTANTS ================= */
-
-const isMobile = window.innerWidth <= 768;
-
-const NAV_H = isMobile ? 95 : 85; // ✅ mobile extra top space
 const GAP_1 = 6;
 const TABS_H = 53;
 const GAP_2 = 10;
 
-const HEADER_TOTAL = NAV_H + GAP_1 + TABS_H + GAP_2;
-
 /* ================= STYLES ================= */
-
 const styles = {
   page: {
     height: "100vh",
@@ -186,12 +216,10 @@ const styles = {
   },
 
   navbar: {
-    height: NAV_H,
     background: "linear-gradient(90deg, #2563EB, #06B6D4)",
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: "0 12px",
     color: "#fff",
   },
 
@@ -277,7 +305,6 @@ const styles = {
 
   scrollArea: {
     position: "absolute",
-    top: HEADER_TOTAL,
     left: 0,
     right: 0,
     bottom: 0,
