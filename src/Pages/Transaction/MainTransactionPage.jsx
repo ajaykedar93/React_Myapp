@@ -190,6 +190,7 @@ export default function MainTransactionPage() {
       },
     });
   };
+
   const closeEdit = () =>
     setEditModal((m) => ({
       ...m,
@@ -197,6 +198,7 @@ export default function MainTransactionPage() {
       busy: false,
       id: null,
     }));
+
   const handleEditChange = (e) => {
     const { name, value } = e.target;
     setEditModal((m) => ({
@@ -208,6 +210,7 @@ export default function MainTransactionPage() {
       },
     }));
   };
+
   const saveEdit = async () => {
     if (!editModal.id) return;
     const f = editModal.form;
@@ -235,6 +238,7 @@ export default function MainTransactionPage() {
 
   const askDeleteDaily = (id) => setDeleteDaily({ show: true, id, busy: false });
   const cancelDeleteDaily = () => setDeleteDaily({ show: false, id: null, busy: false });
+
   const confirmDeleteDaily = async () => {
     if (!deleteDaily.id) return;
     try {
@@ -256,7 +260,8 @@ export default function MainTransactionPage() {
   }, [subcategories, editModal.form.category_id]);
 
   return (
-    <div className="container-fluid py-3" style={{ background: "var(--bg)" }}>
+    /* ✅ ONLY CHANGE: remove outside padding */
+    <div className="container-fluid p-0" style={{ background: "var(--bg)" }}>
       {/* mobile-first styles */}
       <style>{`
         :root{
@@ -273,11 +278,13 @@ export default function MainTransactionPage() {
           --fs-sm: clamp(11.5px, 3.3vw, 14px);
           --fs-lg: clamp(14.5px, 3.8vw, 18px);
         }
+
         .page-wrap{
           max-width: 1100px;
           margin: 0 auto;
-          padding: 0 var(--px);
+          padding: 0 var(--px); /* desktop/tablet */
         }
+
         .title{
           font-size: clamp(1.15rem, 5vw, 1.6rem);
           font-weight: 800;
@@ -285,6 +292,7 @@ export default function MainTransactionPage() {
           -webkit-background-clip:text;
           -webkit-text-fill-color:transparent;
         }
+
         .card-ui{
           background:var(--surface);
           border:1px solid var(--border);
@@ -292,6 +300,7 @@ export default function MainTransactionPage() {
           box-shadow:0 8px 24px rgba(2,6,23,.06);
           padding:12px;
         }
+
         .btn-solid{
           background:#1f2937;
           color:#fff;
@@ -301,6 +310,7 @@ export default function MainTransactionPage() {
           font-weight:700;
           font-size:clamp(.7rem, 3vw, .85rem);
         }
+
         .btn-outline{
           background:#f5f7fb;
           border:1px dashed #cfd6e4;
@@ -311,11 +321,12 @@ export default function MainTransactionPage() {
           font-size:clamp(.7rem, 3vw, .85rem);
         }
 
-        /* mobile cards on <768px */
+        /* ✅ ONLY CHANGE: mobile edge-to-edge (remove inside padding) */
         @media (max-width: 767.98px){
           .table-view{ display:none; }
-          .page-wrap{ padding: 0 .4rem; }
+          .page-wrap{ padding: 0; } /* full width on mobile */
         }
+
         @media (min-width: 768px){
           .mobile-view{ display:none; }
         }
@@ -327,20 +338,24 @@ export default function MainTransactionPage() {
           padding:10px 12px;
           box-shadow:0 6px 16px rgba(0,0,0,.05);
         }
+
         .tx-top{
           display:flex;
           justify-content:space-between;
           gap:8px;
         }
+
         .tx-title{
           font-weight:800;
           font-size:clamp(.72rem, 3vw, .9rem);
           color:var(--ink-900);
         }
+
         .tx-sub{
           color:var(--ink-600);
           font-size:clamp(.62rem, 2.6vw, .78rem);
         }
+
         .badge{
           padding:3px 8px;
           border-radius:999px;
@@ -349,12 +364,14 @@ export default function MainTransactionPage() {
         }
         .badge-debit{ background:#fee2e2; color:#b33a3a; }
         .badge-credit{ background:#dcfce7; color:#0f8a5f; }
+
         .tx-row{
           display:flex;
           justify-content:space-between;
           margin-top:6px;
           font-size:clamp(.65rem, 2.6vw, .8rem);
         }
+
         .tx-amt{
           font-weight:800;
           font-size:clamp(.8rem, 3vw, 1rem);
@@ -393,6 +410,15 @@ export default function MainTransactionPage() {
         @media (max-width: 520px){
           .modal-sheet{
             width: 93vw !important;
+          }
+        }
+
+        /* ✅ ONLY CHANGE: mobile cards edge-to-edge (remove side borders/radius) */
+        @media (max-width: 767.98px){
+          .card-ui, .tx-card{
+            border-left: 0;
+            border-right: 0;
+            border-radius: 0;
           }
         }
       `}</style>
@@ -475,9 +501,7 @@ export default function MainTransactionPage() {
               </button>
               <button
                 className="btn btn-danger btn-sm"
-                onClick={async () => {
-                  await confirmDeleteDaily();
-                }}
+                onClick={confirmDeleteDaily}
                 disabled={deleteDaily.busy}
               >
                 {deleteDaily.busy ? "Deleting..." : "Delete"}
@@ -509,6 +533,7 @@ export default function MainTransactionPage() {
                 Close
               </button>
             </div>
+
             <div className="row g-2">
               <div className="col-6 col-md-4">
                 <label className="form-label mb-1" style={{ fontSize: "clamp(.68rem, 2.2vw, .78rem)" }}>
@@ -522,6 +547,7 @@ export default function MainTransactionPage() {
                   onChange={handleEditChange}
                 />
               </div>
+
               <div className="col-6 col-md-4">
                 <label className="form-label mb-1" style={{ fontSize: "clamp(.68rem, 2.2vw, .78rem)" }}>
                   Type
@@ -536,6 +562,7 @@ export default function MainTransactionPage() {
                   <option value="credit">Credit</option>
                 </select>
               </div>
+
               <div className="col-12 col-md-4">
                 <label className="form-label mb-1" style={{ fontSize: "clamp(.68rem, 2.2vw, .78rem)" }}>
                   Quantity (opt)
@@ -549,6 +576,7 @@ export default function MainTransactionPage() {
                   onChange={handleEditChange}
                 />
               </div>
+
               <div className="col-12 col-md-6">
                 <label className="form-label mb-1" style={{ fontSize: "clamp(.68rem, 2.2vw, .78rem)" }}>
                   Category
@@ -567,6 +595,7 @@ export default function MainTransactionPage() {
                   ))}
                 </select>
               </div>
+
               <div className="col-12 col-md-6">
                 <label className="form-label mb-1" style={{ fontSize: "clamp(.68rem, 2.2vw, .78rem)" }}>
                   Subcategory
@@ -586,6 +615,7 @@ export default function MainTransactionPage() {
                   ))}
                 </select>
               </div>
+
               <div className="col-12">
                 <label className="form-label mb-1" style={{ fontSize: "clamp(.68rem, 2.2vw, .78rem)" }}>
                   Purpose (opt)
@@ -599,6 +629,7 @@ export default function MainTransactionPage() {
                 />
               </div>
             </div>
+
             <div className="mt-3 d-flex justify-content-end gap-2">
               <button
                 className="btn btn-outline-secondary btn-sm"
@@ -649,10 +680,7 @@ export default function MainTransactionPage() {
               </button>
             </div>
             <div className="col-12 col-md-7">
-              <div
-                className="fw-semibold mt-2 mt-md-0"
-                style={{ fontSize: "clamp(.68rem, 2.4vw, .85rem)" }}
-              >
+              <div className="fw-semibold mt-2 mt-md-0" style={{ fontSize: "clamp(.68rem, 2.4vw, .85rem)" }}>
                 Totals:
                 <span className="ms-2 me-3">Debit: ₹ {totalDebit.toFixed(2)}</span>
                 <span className="me-3">Credit: ₹ {totalCredit.toFixed(2)}</span>
@@ -668,6 +696,7 @@ export default function MainTransactionPage() {
             <h5 className="mb-2" style={{ fontSize: "clamp(.8rem,3vw,1rem)" }}>
               Daily Transactions ({selectedDate})
             </h5>
+
             {pagedDailyTransactions.length === 0 ? (
               <div className="text-muted" style={{ fontSize: "clamp(.7rem, 2.6vw, .85rem)" }}>
                 No transactions found for this date.
@@ -681,9 +710,9 @@ export default function MainTransactionPage() {
                     "-";
                   const sub =
                     t.subcategory_name ||
-                    subcategories.find((s) => s.subcategory_id === t.subcategory_id)
-                      ?.subcategory_name ||
+                    subcategories.find((s) => s.subcategory_id === t.subcategory_id)?.subcategory_name ||
                     "-";
+
                   return (
                     <div key={t.daily_transaction_id} className="tx-card">
                       <div className="tx-top">
@@ -698,28 +727,25 @@ export default function MainTransactionPage() {
                             })}
                           </div>
                         </div>
-                        <span
-                          className={`badge ${
-                            t.type === "debit" ? "badge-debit" : "badge-credit"
-                          }`}
-                        >
+                        <span className={`badge ${t.type === "debit" ? "badge-debit" : "badge-credit"}`}>
                           {t.type}
                         </span>
                       </div>
+
                       <div className="tx-row">
                         <div className="tx-sub">Amount</div>
                         <div className="tx-amt">₹ {Number(t.amount).toFixed(2)}</div>
                       </div>
+
                       <div className="tx-row">
                         <div className="tx-sub">Qty</div>
                         <div className="fw-semibold">{t.quantity ?? 0}</div>
                       </div>
+
                       {t.purpose && <div className="mt-1 tx-sub">{t.purpose}</div>}
+
                       <div className="d-flex gap-2 justify-content-end mt-2">
-                        <button
-                          className="btn btn-outline-primary btn-sm"
-                          onClick={() => openEdit(t)}
-                        >
+                        <button className="btn btn-outline-primary btn-sm" onClick={() => openEdit(t)}>
                           Update
                         </button>
                         <button
@@ -764,6 +790,7 @@ export default function MainTransactionPage() {
             <h5 className="mb-2" style={{ fontSize: "clamp(.8rem,3vw,1rem)" }}>
               Unsaved Transactions
             </h5>
+
             {suggestions.length === 0 ? (
               <div className="text-muted" style={{ fontSize: "clamp(.7rem, 2.6vw, .85rem)" }}>
                 No unsaved transactions.
@@ -774,20 +801,21 @@ export default function MainTransactionPage() {
                   <div key={s.daily_transaction_id} className="tx-card">
                     <div className="tx-top">
                       <div className="tx-title">{s.category_name || s.category_id}</div>
-                      <span
-                        className={`badge ${s.type === "debit" ? "badge-debit" : "badge-credit"}`}
-                      >
+                      <span className={`badge ${s.type === "debit" ? "badge-debit" : "badge-credit"}`}>
                         {s.type}
                       </span>
                     </div>
+
                     <div className="tx-row">
                       <div className="tx-sub">Amount</div>
                       <div className="tx-amt">₹ {Number(s.amount).toFixed(2)}</div>
                     </div>
+
                     <div className="tx-row">
                       <div className="tx-sub">Qty</div>
                       <div className="fw-semibold">{s.quantity ?? 0}</div>
                     </div>
+
                     {s.purpose && <div className="mt-1 tx-sub">{s.purpose}</div>}
                   </div>
                 ))}
@@ -800,6 +828,7 @@ export default function MainTransactionPage() {
             <h5 className="mb-2" style={{ fontSize: "clamp(.8rem,3vw,1rem)" }}>
               All Main Transactions
             </h5>
+
             {mainTransactions.length === 0 ? (
               <div className="text-muted" style={{ fontSize: "clamp(.7rem, 2.6vw, .85rem)" }}>
                 No main transactions available
@@ -809,24 +838,22 @@ export default function MainTransactionPage() {
                 {mainTransactions.map((mt) => (
                   <div key={mt.transaction_id} className="tx-card">
                     <div className="tx-top">
-                      <div className="tx-title">
-                        {new Date(mt.date).toLocaleDateString()}
-                      </div>
-                      <button
-                        className="btn btn-danger btn-sm"
-                        onClick={() => confirmDelete(mt.transaction_id)}
-                      >
+                      <div className="tx-title">{new Date(mt.date).toLocaleDateString()}</div>
+                      <button className="btn btn-danger btn-sm" onClick={() => confirmDelete(mt.transaction_id)}>
                         Delete
                       </button>
                     </div>
+
                     <div className="tx-row">
                       <div className="tx-sub">Total Debit</div>
                       <div className="tx-amt">₹ {Number(mt.total_debit).toFixed(2)}</div>
                     </div>
+
                     <div className="tx-row">
                       <div className="tx-sub">Total Credit</div>
                       <div className="tx-amt">₹ {Number(mt.total_credit).toFixed(2)}</div>
                     </div>
+
                     <div className="tx-row">
                       <div className="tx-sub">Transactions</div>
                       <div className="fw-bold">{mt.total_transactions}</div>
@@ -844,6 +871,7 @@ export default function MainTransactionPage() {
             <h5 className="mb-3" style={{ fontSize: "1rem" }}>
               Daily Transactions ({selectedDate})
             </h5>
+
             {dailyTransactions.length === 0 ? (
               <div className="text-center text-muted">No transactions found for this date.</div>
             ) : (
@@ -867,19 +895,14 @@ export default function MainTransactionPage() {
                         <tr key={t.daily_transaction_id}>
                           <td>{startIdx + i + 1}</td>
                           <td>₹ {Number(t.amount).toFixed(2)}</td>
-                          <td className={t.type === "debit" ? "text-danger" : "text-success"}>
-                            {t.type}
-                          </td>
+                          <td className={t.type === "debit" ? "text-danger" : "text-success"}>{t.type}</td>
                           <td>{t.category_name || t.category_id}</td>
                           <td>{t.subcategory_name || t.subcategory_id || "-"}</td>
                           <td>{t.quantity ?? 0}</td>
                           <td>{t.purpose || "-"}</td>
                           <td>
                             <div className="d-flex gap-1">
-                              <button
-                                className="btn btn-outline-primary btn-sm"
-                                onClick={() => openEdit(t)}
-                              >
+                              <button className="btn btn-outline-primary btn-sm" onClick={() => openEdit(t)}>
                                 Update
                               </button>
                               <button
@@ -895,6 +918,7 @@ export default function MainTransactionPage() {
                     </tbody>
                   </table>
                 </div>
+
                 <div className="d-flex justify-content-between align-items-center flex-wrap">
                   <div>Page {page} of {totalPages}</div>
                   <div className="mt-2 mt-md-0">
@@ -922,6 +946,7 @@ export default function MainTransactionPage() {
             <h5 className="mb-3" style={{ fontSize: "1rem" }}>
               Unsaved Transactions
             </h5>
+
             {suggestions.length === 0 ? (
               <div className="text-muted">No unsaved transactions.</div>
             ) : (
@@ -942,9 +967,7 @@ export default function MainTransactionPage() {
                       <tr key={s.daily_transaction_id}>
                         <td>{idx + 1}</td>
                         <td>₹ {Number(s.amount).toFixed(2)}</td>
-                        <td className={s.type === "debit" ? "text-danger" : "text-success"}>
-                          {s.type}
-                        </td>
+                        <td className={s.type === "debit" ? "text-danger" : "text-success"}>{s.type}</td>
                         <td>{s.category_name || s.category_id}</td>
                         <td>{s.quantity ?? 0}</td>
                         <td>{s.purpose || "-"}</td>
@@ -986,10 +1009,7 @@ export default function MainTransactionPage() {
                         <td>₹ {Number(mt.total_credit).toFixed(2)}</td>
                         <td>{mt.total_transactions}</td>
                         <td>
-                          <button
-                            className="btn btn-danger btn-sm"
-                            onClick={() => confirmDelete(mt.transaction_id)}
-                          >
+                          <button className="btn btn-danger btn-sm" onClick={() => confirmDelete(mt.transaction_id)}>
                             Delete
                           </button>
                         </td>

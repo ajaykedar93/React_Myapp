@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import AddSitekharch from "./SiteKharch_add";
 import SitekharchGet from "../WorkDetails/SitekharchnewGet";
 import TotalSiteKharch from "./TotalSiteKharch";
+import Measure from "./Measure";
 
 export default function Worknewtab() {
   const navigate = useNavigate();
@@ -15,6 +16,8 @@ export default function Worknewtab() {
       { key: "add", label: "SITE KHARCH", component: <AddSitekharch /> },
       { key: "get", label: "SITE KHARCH GET", component: <SitekharchGet /> },
       { key: "total", label: "TOTAL KHARCH", component: <TotalSiteKharch /> },
+      // ✅ FIX: Measure tab should open Measure page
+      { key: "measure", label: "MEASURE", component: <Measure /> },
     ],
     []
   );
@@ -41,18 +44,18 @@ export default function Worknewtab() {
           --safeTop: env(safe-area-inset-top, 0px);
           --safeBottom: env(safe-area-inset-bottom, 0px);
 
-          /* ✅ Navbar TOP space (this is what you want) */
-          --navTopGap: 10px;      /* ⭐ increase if you want more space */
+          /* ✅ Navbar TOP space */
+          --navTopGap: 10px;
 
           /* Heights */
           --navHDesktop: 85px;
-          --navHMobile: 85px;     /* visible navbar height (without safe padding) */
+          --navHMobile: 85px;
         }
 
         @media (max-width: 768px){
           :root{
             --navTopGap: 48px;    /* ⭐ mobile वर थोडा जास्त space */
-            --navHMobile: 80px;   /* visible bar height (content area) */
+            --navHMobile: 80px;
           }
         }
 
@@ -144,7 +147,7 @@ export default function Worknewtab() {
       {/* ✅ ACTUAL LAYOUT CALC: navbar वर space + safe area */}
       <style>{`
         .worknewtab-navbar{
-          /* ✅ navbar वर SPACE (touch nahi) */
+          /* ✅ navbar वर SPACE */
           padding-top: calc(var(--safeTop) + var(--navTopGap));
 
           /* keep same side padding */
@@ -152,16 +155,13 @@ export default function Worknewtab() {
           padding-right: 12px;
 
           /* ✅ total height includes safeTop + gap + visible height */
-          height: calc(
-            (max-width: 768px) ? (var(--navHMobile)) : (var(--navHDesktop))
-          );
+          height: calc(var(--navHDesktop) + var(--safeTop) + var(--navTopGap));
         }
 
-        /* NOTE: CSS cannot do conditional like above,
-           so we set heights with media queries below */
-        .worknewtab-navbar{ height: calc(var(--navHDesktop) + var(--safeTop) + var(--navTopGap)); }
         @media (max-width: 768px){
-          .worknewtab-navbar{ height: calc(var(--navHMobile) + var(--safeTop) + var(--navTopGap)); }
+          .worknewtab-navbar{
+            height: calc(var(--navHMobile) + var(--safeTop) + var(--navTopGap));
+          }
         }
 
         /* ✅ scroll area starts AFTER full header total */

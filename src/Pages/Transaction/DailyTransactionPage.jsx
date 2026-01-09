@@ -584,6 +584,19 @@ export default function DailyTransactionPage() {
           letter-spacing: .3px;
         }
         .subtle{ font-size: 13px; color: var(--ink-600); }
+
+
+        /* ✅ Bottom space for mobile navigation bar */
+.dtp-root{
+  padding-bottom: calc(72px + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 768px){
+  .dtp-root{
+    padding-bottom: 24px; /* minimal space on desktop */
+  }
+}
+
       `}</style>
 
       {/* FIRST-LOAD OVERLAY */}
