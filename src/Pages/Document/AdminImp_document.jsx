@@ -100,31 +100,38 @@ const styles = {
     background: "rgba(255,255,255,0.85)",
     borderBottom: `1px solid ${theme.border}`,
   },
+
+  // ✅ card becomes edge-to-edge on mobile (no radius, no outer shadow)
   card: {
-    borderRadius: 18,
-    boxShadow: theme.shadow,
+    borderRadius: 0,
+    boxShadow: "none",
     border: `1px solid ${theme.border}`,
     background: "#fff",
     overflow: "hidden",
   },
+
+  // ✅ smaller + clean for edge-to-edge
   dropzone: {
     border: `2px dashed ${theme.primary}`,
-    borderRadius: 14,
-    padding: 18,
+    borderRadius: 12,
+    padding: 14,
     textAlign: "center",
     background: "#f1fcff",
   },
+
   gradientTitle: {
     background: `linear-gradient(90deg,${theme.primary},${theme.secondary})`,
     WebkitBackgroundClip: "text",
     color: "transparent",
     fontWeight: 800,
   },
+
   chip: {
     background: "rgba(6,182,212,.12)",
     color: "#0b5d66",
     border: "1px solid rgba(6,182,212,.25)",
   },
+
   roundExt: (bg) => ({
     display: "inline-flex",
     alignItems: "center",
@@ -141,13 +148,14 @@ const styles = {
     border: "2px solid rgba(255,255,255,0.8)",
     boxShadow: "0 4px 12px rgba(2,6,23,.18)",
   }),
+
   tagRail: {
     display: "flex",
     gap: 8,
     overflowX: "auto",
     paddingBottom: 6,
   },
-  // Extra: better iOS scrolling in Modal body
+
   modalScrollFix: {
     height: "80vh",
     WebkitOverflowScrolling: "touch",
@@ -176,48 +184,37 @@ const isOffice = (ext) => ["doc", "docx", "ppt", "pptx", "xls", "xlsx"].includes
 const officeViewerUrl = (rawUrl) =>
   `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(rawUrl)}`;
 
-/* Build best URL for inline viewing.
-   For PDF we try /view?id with ?inline=1 to avoid "attachment" disposition blocking inline preview. */
 const buildPreviewUrl = (doc) => {
-  // Use your view endpoint when possible
   const viewUrl = `${endpoint}/${doc.document_id}/view?inline=1`;
-  // Some types (image/video/audio) may stream better via /download
   const directUrl = `${endpoint}/${doc.document_id}/download`;
   return { viewUrl, directUrl };
 };
 
 export default function AdminImpDocument() {
-  /* ===== Data / State ===== */
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-
-  // fixed page size: 10
   const limit = 10;
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
-  // Filters
-  const [q, setQ] = useState("");                // debounced, sent to API
-  const [searchInput, setSearchInput] = useState(""); // immediate input
+  const [q, setQ] = useState("");
+  const [searchInput, setSearchInput] = useState("");
   const [mime, setMime] = useState("");
   const [tagsFilter, setTagsFilter] = useState([]);
   const [filterOpen, setFilterOpen] = useState(false);
 
-  // Upload
   const [uploading, setUploading] = useState(false);
   const [fileObj, setFileObj] = useState(null);
   const [label, setLabel] = useState("");
   const [description, setDescription] = useState("");
   const [tagsField, setTagsField] = useState("");
 
-  // Preview
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewDoc, setPreviewDoc] = useState(null);
-  const [previewError, setPreviewError] = useState(""); // show fallback message when embed fails
+  const [previewError, setPreviewError] = useState("");
 
-  // Edit
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState({
     document_id: null,
@@ -227,16 +224,13 @@ export default function AdminImpDocument() {
     file: null,
   });
 
-  // Multi-select delete
   const [selectedIds, setSelectedIds] = useState([]);
 
-  // Debounce search input → q
   useEffect(() => {
     const t = setTimeout(() => setQ(searchInput.trim()), 350);
     return () => clearTimeout(t);
   }, [searchInput]);
 
-  /* ===== Fetch list ===== */
   const fetchList = useCallback(async () => {
     setLoading(true);
     setLoadError("");
@@ -261,12 +255,12 @@ export default function AdminImpDocument() {
 
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
-  /* ===== Upload Handlers ===== */
   const onDrop = async (files) => {
     if (!files?.length) return;
     setFileObj(files[0]);
   };
   const handleFileInput = (e) => onDrop(Array.from(e.target.files || []));
+
   const submitUpload = async () => {
     if (!label.trim()) {
       return Swal.fire({ icon: "warning", title: "Label required", position: "center" });
@@ -297,7 +291,6 @@ export default function AdminImpDocument() {
     }
   };
 
-  /* ===== Edit Handlers ===== */
   const openEdit = (r) => {
     setEditForm({
       document_id: r.document_id,
@@ -331,7 +324,6 @@ export default function AdminImpDocument() {
     }
   };
 
-  /* ===== Delete ===== */
   const confirmDelete = async (id) => {
     const ok = await Swal.fire({
       icon: "warning",
@@ -373,14 +365,15 @@ export default function AdminImpDocument() {
     }
   };
 
-  /* ===== Select helpers ===== */
   const toggleSelected = (id) => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
+
   const allSelectedOnPage = useMemo(() => {
     const idsOnPage = rows.map((r) => r.document_id);
     return idsOnPage.length > 0 && idsOnPage.every((id) => selectedIds.includes(id));
   }, [rows, selectedIds]);
+
   const toggleAllOnPage = () => {
     const idsOnPage = rows.map((r) => r.document_id);
     if (allSelectedOnPage) {
@@ -390,14 +383,12 @@ export default function AdminImpDocument() {
     }
   };
 
-  /* ===== Preview ===== */
   const openPreview = (r) => {
     setPreviewError("");
     setPreviewDoc(r);
     setPreviewOpen(true);
   };
 
-  /* ===== Tag filters ===== */
   const addFilterTag = (t) => {
     const v = String(t || "").trim();
     if (!v) return;
@@ -410,390 +401,461 @@ export default function AdminImpDocument() {
     setTagsFilter((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
   };
 
-  // Tag rail from current page rows
   const availableTags = useMemo(() => {
     const s = new Set();
     rows.forEach((r) => (r.tags || []).forEach((t) => s.add(t)));
     return Array.from(s);
   }, [rows]);
 
-  /* ===== UI ===== */
   return (
-    <Container fluid className="py-3" style={{ minHeight: "100vh", background: theme.bg }}>
-      {/* Top Bar */}
-      <motion.div style={styles.topbar} className="px-3 py-3 mb-3" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-        <div className="d-flex flex-column gap-2">
-          <div className="d-flex flex-column flex-md-row gap-2 align-items-stretch align-items-md-center w-100">
-            <h2 className="m-0" style={{ lineHeight: 1.1 }}>
-              <span style={styles.gradientTitle}>📄 Admin Important Documents</span>
-            </h2>
+    <>
+      {/* ✅ Global “no padding” + edge-to-edge rules for this page only */}
+      <style>{`
+        .adminimp-wrap{
+          width:100%;
+          min-height: 100vh;
+          background: ${theme.bg};
+        }
+        .adminimp-wrap .container-fluid{
+          padding-left: 0 !important;
+          padding-right: 0 !important;
+        }
+        .adminimp-wrap .row{
+          --bs-gutter-x: 0 !important;
+          --bs-gutter-y: 0 !important;
+          margin-left: 0 !important;
+          margin-right: 0 !important;
+        }
 
-            {/* Search + Filters */}
-            <div className="ms-md-auto w-100" style={{ maxWidth: 560 }}>
-              <InputGroup>
-                <InputGroup.Text className="bg-white">🔎</InputGroup.Text>
-                <Form.Control
-                  placeholder="Search label/description…"
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                />
-                {!!searchInput && (
-                  <Button variant="outline-secondary" onClick={() => setSearchInput("")}>
-                    Clear
+        /* Remove card body padding on mobile; keep a clean small padding on desktop */
+        .adminimp-wrap .card-body{
+          padding: 12px !important;
+        }
+        .adminimp-wrap .card-header{
+          padding: 10px 12px !important;
+        }
+
+        /* Edge-to-edge cards on mobile */
+        @media (max-width: 991.98px){
+          .adminimp-wrap .card{
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            border-left: 0 !important;
+            border-right: 0 !important;
+          }
+        }
+
+        /* Professional desktop: centered with radius + shadow */
+        @media (min-width: 992px){
+          .adminimp-wrap .adminimp-inner{
+            width: min(1200px, 100%);
+            margin: 0 auto;
+            padding: 12px;
+          }
+          .adminimp-wrap .card{
+            border-radius: 18px !important;
+            box-shadow: ${theme.shadow} !important;
+            border: 1px solid ${theme.border} !important;
+          }
+          .adminimp-wrap .card-body{ padding: 16px !important; }
+          .adminimp-wrap .card-header{ padding: 12px 16px !important; }
+        }
+
+        /* Make buttons look medium and consistent */
+        .adminimp-wrap .btn{
+          border-radius: 12px;
+          font-weight: 700;
+        }
+        .adminimp-wrap .btn.btn-sm{
+          border-radius: 10px;
+          font-weight: 700;
+        }
+
+        /* Tighten the grid buttons in each doc card */
+        .adminimp-wrap .doc-actions .btn{
+          padding: 10px 12px;
+          font-size: .95rem;
+        }
+        @media (max-width: 575.98px){
+          .adminimp-wrap .doc-actions .btn{
+            padding: 10px 12px;
+            font-size: .95rem;
+          }
+        }
+      `}</style>
+
+      <div className="adminimp-wrap">
+        <div className="adminimp-inner">
+          <Container fluid className="py-0" style={{ minHeight: "100vh" }}>
+            {/* Top Bar */}
+            <motion.div style={styles.topbar} className="px-3 py-3 mb-2" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
+              <div className="d-flex flex-column gap-2">
+                <div className="d-flex flex-column flex-md-row gap-2 align-items-stretch align-items-md-center w-100">
+                  <h2 className="m-0" style={{ lineHeight: 1.1 }}>
+                    <span style={styles.gradientTitle}>📄 Admin Important Documents</span>
+                  </h2>
+
+                  <div className="ms-md-auto w-100" style={{ maxWidth: 560 }}>
+                    <InputGroup>
+                      <InputGroup.Text className="bg-white">🔎</InputGroup.Text>
+                      <Form.Control
+                        placeholder="Search label/description…"
+                        value={searchInput}
+                        onChange={(e) => setSearchInput(e.target.value)}
+                      />
+                      {!!searchInput && (
+                        <Button variant="outline-secondary" onClick={() => setSearchInput("")}>
+                          Clear
+                        </Button>
+                      )}
+                      <Button variant="outline-info" onClick={() => setFilterOpen(true)}>Filters</Button>
+                    </InputGroup>
+                  </div>
+                </div>
+
+                <div style={styles.tagRail} className="pt-1">
+                  {availableTags.length === 0 ? (
+                    <span className="text-muted small">— no tags on this page —</span>
+                  ) : (
+                    availableTags.map((t) => {
+                      const active = tagsFilter.includes(t);
+                      return (
+                        <Badge
+                          key={t}
+                          pill
+                          bg={active ? "info" : "light"}
+                          text="dark"
+                          className="border"
+                          style={{ cursor: "pointer", whiteSpace: "nowrap" }}
+                          onClick={() => toggleTagFilter(t)}
+                        >
+                          #{t}
+                        </Badge>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Upload Card */}
+            <Row>
+              <Col xs={12} className="mb-2">
+                <motion.div {...fadeUp}>
+                  <Card style={styles.card}>
+                    <Card.Body>
+                      <Row className="g-3">
+                        <Col xs={12} md={4}>
+                          <div
+                            style={styles.dropzone}
+                            onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; }}
+                            onDrop={(e) => { e.preventDefault(); onDrop(Array.from(e.dataTransfer.files || [])); }}
+                          >
+                            <div className="mb-2"><b>Drag & drop</b> a file here, or</div>
+                            <Form.Label className="btn btn-outline-primary m-0">
+                              Choose File
+                              <Form.Control type="file" hidden onChange={handleFileInput} />
+                            </Form.Label>
+                            {fileObj && (
+                              <div className="mt-2 small text-muted">
+                                Selected: <b>{fileObj.name}</b>
+                              </div>
+                            )}
+                          </div>
+                        </Col>
+
+                        <Col xs={12} md={8}>
+                          <Row className="g-2">
+                            <Col xs={12}>
+                              <Form.Group>
+                                <Form.Label>Label *</Form.Label>
+                                <Form.Control value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Title for the document" />
+                              </Form.Group>
+                            </Col>
+                            <Col xs={12}>
+                              <Form.Group>
+                                <Form.Label>Description</Form.Label>
+                                <Form.Control as="textarea" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
+                              </Form.Group>
+                            </Col>
+                            <Col xs={12}>
+                              <Form.Group>
+                                <Form.Label>Tags (CSV or JSON array)</Form.Label>
+                                <Form.Control value={tagsField} onChange={(e) => setTagsField(e.target.value)} placeholder='e.g. finance, 2025 or ["finance","2025"]' />
+                              </Form.Group>
+                            </Col>
+
+                            <Col xs={12} className="d-grid d-sm-flex gap-2">
+                              <Button variant="success" onClick={submitUpload} disabled={uploading}>
+                                {uploading ? "Uploading…" : "⬆ Upload"}
+                              </Button>
+                              <Button
+                                variant="outline-secondary"
+                                onClick={() => { setFileObj(null); setLabel(""); setDescription(""); setTagsField(""); }}
+                              >
+                                Reset
+                              </Button>
+                            </Col>
+                          </Row>
+                        </Col>
+                      </Row>
+                    </Card.Body>
+                  </Card>
+                </motion.div>
+              </Col>
+            </Row>
+
+            {/* List Card */}
+            <Row>
+              <Col xs={12}>
+                <motion.div {...fadeUp}>
+                  <Card style={styles.card}>
+                    <Card.Header className="d-flex flex-column flex-md-row gap-2 align-items-start align-items-md-center">
+                      <div className="fw-bold">Documents</div>
+                      <div className="text-muted small ms-md-2">{total} total</div>
+                      <div className="ms-md-auto d-flex gap-2 align-items-center flex-wrap">
+                        <span className="small text-muted">10 / page</span>
+                        <div className="btn-group">
+                          <Button size="sm" variant="outline-secondary" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>‹ Prev</Button>
+                          <Button size="sm" variant="light" disabled>{page} / {totalPages}</Button>
+                          <Button size="sm" variant="outline-secondary" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>Next ›</Button>
+                        </div>
+                        <Button size="sm" variant="outline-danger" disabled={!selectedIds.length} onClick={bulkDelete}>
+                          🗑 Delete Selected ({selectedIds.length})
+                        </Button>
+                      </div>
+                    </Card.Header>
+
+                    <Card.Body>
+                      {loadError ? (
+                        <div className="text-danger">{loadError}</div>
+                      ) : loading ? (
+                        <div className="text-muted">Loading…</div>
+                      ) : rows.length === 0 ? (
+                        <div className="text-muted text-center py-4" style={{ fontWeight: 700 }}>
+                          No Doc Message
+                        </div>
+                      ) : (
+                        <Row className="g-3">
+                          <Col xs={12}>
+                            <Form.Check
+                              type="checkbox"
+                              id="select-all-page"
+                              label="Select all on this page"
+                              checked={allSelectedOnPage}
+                              onChange={toggleAllOnPage}
+                            />
+                          </Col>
+
+                          {rows.map((r) => {
+                            const ext = getExt(r.mime_type, r.original_name) || "";
+                            const extText = (ext || "").slice(0, 4).toUpperCase();
+                            const circleBg = colorForExt(ext);
+                            const icon = iconForExt(ext);
+
+                            return (
+                              <Col key={r.document_id} xs={12} sm={6} lg={4} xl={3}>
+                                <motion.div {...fadeUp}>
+                                  <Card className="h-100" style={{ ...styles.card, boxShadow: "none" }}>
+                                    <Card.Body className="d-flex flex-column">
+                                      <div className="d-flex align-items-start justify-content-between mb-2">
+                                        <Form.Check
+                                          type="checkbox"
+                                          checked={selectedIds.includes(r.document_id)}
+                                          onChange={() => toggleSelected(r.document_id)}
+                                        />
+                                        <div className="d-flex align-items-center gap-2">
+                                          <div style={styles.roundExt(circleBg)} title={extText}>
+                                            {extText || "FILE"}
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      <div className="d-flex align-items-center gap-2">
+                                        <span style={{ fontSize: 18 }}>{icon}</span>
+                                        <div className="fw-bold flex-grow-1" style={{ color: theme.deep, wordBreak: "break-word" }}>
+                                          {r.label}
+                                        </div>
+                                      </div>
+
+                                      {r.description && (
+                                        <div className="text-muted small mt-1" title={r.description} style={{ minHeight: 36 }}>
+                                          {r.description.length > 60 ? r.description.slice(0, 60) + "…" : r.description}
+                                        </div>
+                                      )}
+
+                                      <div className="mt-2 small">
+                                        <div><span className="text-muted">Name:</span> {r.original_name}</div>
+                                        <div><span className="text-muted">Type:</span> {r.mime_type}</div>
+                                        <div><span className="text-muted">Size:</span> {formatBytes(r.file_size)}</div>
+                                        <div className="mt-1 d-flex flex-wrap gap-1">
+                                          {(r.tags || []).map((t, i) => (
+                                            <Badge
+                                              key={i}
+                                              pill
+                                              style={styles.chip}
+                                              onClick={() => toggleTagFilter(t)}
+                                            >
+                                              {t}
+                                            </Badge>
+                                          ))}
+                                        </div>
+                                      </div>
+
+                                      <div className="d-grid gap-2 mt-3 doc-actions">
+                                        <Button variant="outline-primary" onClick={() => openPreview(r)}>👁 Preview</Button>
+                                        <Button variant="outline-success" onClick={() => window.open(`${endpoint}/${r.document_id}/download`, "_blank")}>⬇ Download</Button>
+                                        <Button variant="outline-dark" onClick={() => openEdit(r)}>✏️ Edit</Button>
+                                        <Button variant="outline-danger" onClick={() => confirmDelete(r.document_id)}>🗑 Delete</Button>
+                                      </div>
+                                    </Card.Body>
+                                    <Card.Footer className="text-muted small">
+                                      {new Date(r.created_at).toLocaleString()}
+                                    </Card.Footer>
+                                  </Card>
+                                </motion.div>
+                              </Col>
+                            );
+                          })}
+                        </Row>
+                      )}
+                    </Card.Body>
+                  </Card>
+                </motion.div>
+              </Col>
+            </Row>
+
+            {/* Filters Offcanvas */}
+            <Offcanvas show={filterOpen} onHide={() => setFilterOpen(false)} placement="end">
+              <Offcanvas.Header closeButton>
+                <Offcanvas.Title>Filters</Offcanvas.Title>
+              </Offcanvas.Header>
+              <Offcanvas.Body>
+                <Form.Group className="mb-3">
+                  <Form.Label>Mime type (exact or prefix like image/)</Form.Label>
+                  <Form.Control value={mime} onChange={(e) => setMime(e.target.value)} placeholder="application/pdf or image/" />
+                </Form.Group>
+                <Form.Group className="mb-2">
+                  <Form.Label>Add Tag Filter</Form.Label>
+                  <InputGroup>
+                    <Form.Control id="tagFilterInput" placeholder="e.g. finance" />
+                    <Button onClick={() => {
+                      const el = document.getElementById("tagFilterInput");
+                      if (el) { addFilterTag(el.value); el.value = ""; }
+                    }}>Add</Button>
+                  </InputGroup>
+                </Form.Group>
+                <div className="mb-3 d-flex flex-wrap gap-2">
+                  {tagsFilter.map((t) => (
+                    <Badge key={t} pill bg="secondary">
+                      {t} <span role="button" className="ms-1" onClick={() => removeFilterTag(t)}>✕</span>
+                    </Badge>
+                  ))}
+                </div>
+
+                <div className="d-grid gap-2">
+                  <Button variant="primary" onClick={() => { fetchList(); setFilterOpen(false); }}>Apply</Button>
+                  <Button variant="outline-secondary" onClick={() => { setMime(""); setTagsFilter([]); }}>Reset</Button>
+                </div>
+              </Offcanvas.Body>
+            </Offcanvas>
+
+            {/* Preview Modal */}
+            <Modal show={previewOpen} onHide={() => setPreviewOpen(false)} centered size="xl" fullscreen="md-down">
+              <Modal.Header closeButton>
+                <Modal.Title>Preview — {previewDoc?.original_name}</Modal.Title>
+              </Modal.Header>
+              <Modal.Body style={{ padding: 0 }}>
+                <div style={styles.modalScrollFix}>
+                  {!previewDoc ? (
+                    <div className="p-4 text-muted">No preview.</div>
+                  ) : (
+                    <PreviewContent
+                      doc={previewDoc}
+                      onError={(msg) => setPreviewError(msg || "Preview failed")}
+                    />
+                  )}
+
+                  {previewError && (
+                    <div className="p-3 text-center">
+                      <div className="text-danger mb-2">{previewError}</div>
+                      <Button
+                        variant="primary"
+                        onClick={() => window.open(`${endpoint}/${previewDoc.document_id}/download`, "_blank")}
+                      >
+                        Open in new tab
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </Modal.Body>
+              <Modal.Footer>
+                {previewDoc && (
+                  <Button variant="success" onClick={() => window.open(`${endpoint}/${previewDoc.document_id}/download`, "_blank")}>
+                    Download
                   </Button>
                 )}
-                <Button variant="outline-info" onClick={() => setFilterOpen(true)}>Filters</Button>
-              </InputGroup>
-            </div>
-          </div>
+                <Button variant="secondary" onClick={() => setPreviewOpen(false)}>Close</Button>
+              </Modal.Footer>
+            </Modal>
 
-          {/* Tag rail */}
-          <div style={styles.tagRail} className="pt-1">
-            {availableTags.length === 0 ? (
-              <span className="text-muted small">— no tags on this page —</span>
-            ) : (
-              availableTags.map((t) => {
-                const active = tagsFilter.includes(t);
-                return (
-                  <Badge
-                    key={t}
-                    pill
-                    bg={active ? "info" : "light"}
-                    text={active ? "dark" : "dark"}
-                    className="border"
-                    style={{ cursor: "pointer", whiteSpace: "nowrap" }}
-                    onClick={() => toggleTagFilter(t)}
-                  >
-                    #{t}
-                  </Badge>
-                );
-              })
-            )}
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Upload Card */}
-      <Row className="px-3">
-        <Col xs={12} className="mb-3">
-          <motion.div {...fadeUp}>
-            <Card style={styles.card}>
-              <Card.Body>
+            {/* Edit Modal */}
+            <Modal show={editOpen} onHide={() => setEditOpen(false)} centered size="lg">
+              <Modal.Header closeButton>
+                <Modal.Title>Edit Document</Modal.Title>
+              </Modal.Header>
+              <Modal.Body>
                 <Row className="g-3">
-                  <Col xs={12} md={4}>
-                    <div
-                      style={styles.dropzone}
-                      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; }}
-                      onDrop={(e) => { e.preventDefault(); onDrop(Array.from(e.dataTransfer.files || [])); }}
-                    >
-                      <div className="mb-2"><b>Drag & drop</b> a file here, or</div>
-                      <Form.Label className="btn btn-outline-primary m-0">
-                        Choose File
-                        <Form.Control type="file" hidden onChange={handleFileInput} />
-                      </Form.Label>
-                      {fileObj && (
-                        <div className="mt-2 small text-muted">
-                          Selected: <b>{fileObj.name}</b>
-                        </div>
-                      )}
-                    </div>
+                  <Col xs={12} md={6}>
+                    <Form.Group>
+                      <Form.Label>Label *</Form.Label>
+                      <Form.Control
+                        value={editForm.label}
+                        onChange={(e) => setEditForm({ ...editForm, label: e.target.value })}
+                      />
+                    </Form.Group>
                   </Col>
-
-                  <Col xs={12} md={8}>
-                    <Row className="g-2">
-                      <Col xs={12}>
-                        <Form.Group>
-                          <Form.Label>Label *</Form.Label>
-                          <Form.Control value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Title for the document" />
-                        </Form.Group>
-                      </Col>
-                      <Col xs={12}>
-                        <Form.Group>
-                          <Form.Label>Description</Form.Label>
-                          <Form.Control as="textarea" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
-                        </Form.Group>
-                      </Col>
-                      <Col xs={12}>
-                        <Form.Group>
-                          <Form.Label>Tags (CSV or JSON array)</Form.Label>
-                          <Form.Control value={tagsField} onChange={(e) => setTagsField(e.target.value)} placeholder='e.g. finance, 2025 or ["finance","2025"]' />
-                        </Form.Group>
-                      </Col>
-
-                      <Col xs={12} className="d-grid d-sm-flex gap-2">
-                        <Button
-                          variant="success"
-                          onClick={submitUpload}
-                          disabled={uploading}
-                        >
-                          {uploading ? "Uploading…" : "⬆ Upload"}
-                        </Button>
-                        <Button
-                          variant="outline-secondary"
-                          onClick={() => { setFileObj(null); setLabel(""); setDescription(""); setTagsField(""); }}
-                        >
-                          Reset
-                        </Button>
-                      </Col>
-                    </Row>
+                  <Col xs={12} md={6}>
+                    <Form.Group>
+                      <Form.Label>Replace File (optional)</Form.Label>
+                      <Form.Control
+                        type="file"
+                        onChange={(e) => setEditForm({ ...editForm, file: e.target.files?.[0] || null })}
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col xs={12}>
+                    <Form.Group>
+                      <Form.Label>Description</Form.Label>
+                      <Form.Control
+                        as="textarea"
+                        rows={3}
+                        value={editForm.description}
+                        onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col xs={12}>
+                    <Form.Group>
+                      <Form.Label>Tags (CSV or JSON array)</Form.Label>
+                      <Form.Control
+                        value={editForm.tags}
+                        onChange={(e) => setEditForm({ ...editForm, tags: e.target.value })}
+                      />
+                    </Form.Group>
                   </Col>
                 </Row>
-              </Card.Body>
-            </Card>
-          </motion.div>
-        </Col>
-      </Row>
-
-      {/* List Card */}
-      <Row className="px-3">
-        <Col xs={12}>
-          <motion.div {...fadeUp}>
-            <Card style={styles.card}>
-              <Card.Header className="d-flex flex-column flex-md-row gap-2 align-items-start align-items-md-center">
-                <div className="fw-bold">Documents</div>
-                <div className="text-muted small ms-md-2">{total} total</div>
-                <div className="ms-md-auto d-flex gap-2 align-items-center">
-                  {/* Fixed page size: show indicator only */}
-                  <span className="small text-muted">10 / page</span>
-                  <div className="btn-group">
-                    <Button size="sm" variant="outline-secondary" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>‹ Prev</Button>
-                    <Button size="sm" variant="light" disabled>{page} / {totalPages}</Button>
-                    <Button size="sm" variant="outline-secondary" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>Next ›</Button>
-                  </div>
-                  <Button size="sm" variant="outline-danger" disabled={!selectedIds.length} onClick={bulkDelete}>
-                    🗑 Delete Selected ({selectedIds.length})
-                  </Button>
-                </div>
-              </Card.Header>
-
-              <Card.Body>
-                {loadError ? (
-                  <div className="text-danger">{loadError}</div>
-                ) : loading ? (
-                  <div className="text-muted">Loading…</div>
-                ) : rows.length === 0 ? (
-                  <div className="text-muted text-center py-5" style={{ fontWeight: 700 }}>
-                    No Doc Message
-                  </div>
-                ) : (
-                  <Row className="g-3">
-                    {/* Select All on page */}
-                    <Col xs={12}>
-                      <Form.Check
-                        type="checkbox"
-                        id="select-all-page"
-                        label="Select all on this page"
-                        checked={allSelectedOnPage}
-                        onChange={toggleAllOnPage}
-                      />
-                    </Col>
-
-                    {rows.map((r) => {
-                      const ext = getExt(r.mime_type, r.original_name) || "";
-                      const extText = (ext || "").slice(0, 4).toUpperCase();
-                      const circleBg = colorForExt(ext);
-                      const icon = iconForExt(ext);
-                      return (
-                        <Col key={r.document_id} xs={12} sm={6} lg={4} xl={3}>
-                          <motion.div {...fadeUp}>
-                            <Card className="h-100" style={{ ...styles.card, boxShadow: "none" }}>
-                              <Card.Body className="d-flex flex-column">
-                                <div className="d-flex align-items-start justify-content-between mb-2">
-                                  <Form.Check
-                                    type="checkbox"
-                                    checked={selectedIds.includes(r.document_id)}
-                                    onChange={() => toggleSelected(r.document_id)}
-                                  />
-                                  <div className="d-flex align-items-center gap-2">
-                                    <div style={styles.roundExt(circleBg)} title={extText}>
-                                      {extText || "FILE"}
-                                    </div>
-                                  </div>
-                                </div>
-
-                                <div className="d-flex align-items-center gap-2">
-                                  <span style={{ fontSize: 18 }}>{icon}</span>
-                                  <div className="fw-bold flex-grow-1" style={{ color: theme.deep, wordBreak: "break-word" }}>
-                                    {r.label}
-                                  </div>
-                                </div>
-
-                                {r.description && (
-                                  <div className="text-muted small mt-1" title={r.description} style={{ minHeight: 36 }}>
-                                    {r.description.length > 60 ? r.description.slice(0, 60) + "…" : r.description}
-                                  </div>
-                                )}
-
-                                <div className="mt-2 small">
-                                  <div><span className="text-muted">Name:</span> {r.original_name}</div>
-                                  <div><span className="text-muted">Type:</span> {r.mime_type}</div>
-                                  <div><span className="text-muted">Size:</span> {formatBytes(r.file_size)}</div>
-                                  <div className="mt-1 d-flex flex-wrap gap-1">
-                                    {(r.tags || []).map((t, i) => (
-                                      <Badge
-                                        key={i}
-                                        pill
-                                        style={styles.chip}
-                                        onClick={() => toggleTagFilter(t)}
-                                      >
-                                        {t}
-                                      </Badge>
-                                    ))}
-                                  </div>
-                                </div>
-
-                                <div className="d-grid gap-2 mt-3">
-                                  <Button variant="outline-primary" onClick={() => openPreview(r)}>👁 Preview</Button>
-                                  <Button variant="outline-success" onClick={() => window.open(`${endpoint}/${r.document_id}/download`, "_blank")}>⬇ Download</Button>
-                                  <Button variant="outline-dark" onClick={() => openEdit(r)}>✏️ Edit</Button>
-                                  <Button variant="outline-danger" onClick={() => confirmDelete(r.document_id)}>🗑 Delete</Button>
-                                </div>
-                              </Card.Body>
-                              <Card.Footer className="text-muted small">
-                                {new Date(r.created_at).toLocaleString()}
-                              </Card.Footer>
-                            </Card>
-                          </motion.div>
-                        </Col>
-                      );
-                    })}
-                  </Row>
-                )}
-              </Card.Body>
-            </Card>
-          </motion.div>
-        </Col>
-      </Row>
-
-      {/* Filters Offcanvas */}
-      <Offcanvas show={filterOpen} onHide={() => setFilterOpen(false)} placement="end">
-        <Offcanvas.Header closeButton>
-          <Offcanvas.Title>Filters</Offcanvas.Title>
-        </Offcanvas.Header>
-        <Offcanvas.Body>
-          <Form.Group className="mb-3">
-            <Form.Label>Mime type (exact or prefix like image/)</Form.Label>
-            <Form.Control value={mime} onChange={(e) => setMime(e.target.value)} placeholder="application/pdf or image/" />
-          </Form.Group>
-          <Form.Group className="mb-2">
-            <Form.Label>Add Tag Filter</Form.Label>
-            <InputGroup>
-              <Form.Control id="tagFilterInput" placeholder="e.g. finance" />
-              <Button onClick={() => {
-                const el = document.getElementById("tagFilterInput");
-                if (el) { addFilterTag(el.value); el.value = ""; }
-              }}>Add</Button>
-            </InputGroup>
-          </Form.Group>
-          <div className="mb-3 d-flex flex-wrap gap-2">
-            {tagsFilter.map((t) => (
-              <Badge key={t} pill bg="secondary">
-                {t} <span role="button" className="ms-1" onClick={() => removeFilterTag(t)}>✕</span>
-              </Badge>
-            ))}
-          </div>
-
-          <div className="d-grid gap-2">
-            <Button variant="primary" onClick={() => { fetchList(); setFilterOpen(false); }}>Apply</Button>
-            <Button variant="outline-secondary" onClick={() => { setMime(""); setTagsFilter([]); }}>Reset</Button>
-          </div>
-        </Offcanvas.Body>
-      </Offcanvas>
-
-      {/* Preview Modal (mobile-friendly) */}
-      <Modal show={previewOpen} onHide={() => setPreviewOpen(false)} centered size="xl" fullscreen="md-down">
-        <Modal.Header closeButton>
-          <Modal.Title>Preview — {previewDoc?.original_name}</Modal.Title>
-        </Modal.Header>
-        <Modal.Body style={{ padding: 0 }}>
-          {/* scroll fix wrapper */}
-          <div style={styles.modalScrollFix}>
-            {!previewDoc ? (
-              <div className="p-4 text-muted">No preview.</div>
-            ) : (
-              <PreviewContent
-                doc={previewDoc}
-                onError={(msg) => setPreviewError(msg || "Preview failed")}
-              />
-            )}
-
-            {previewError && (
-              <div className="p-3 text-center">
-                <div className="text-danger mb-2">{previewError}</div>
-                <Button
-                  variant="primary"
-                  onClick={() => window.open(`${endpoint}/${previewDoc.document_id}/download`, "_blank")}
-                >
-                  Open in new tab
-                </Button>
-              </div>
-            )}
-          </div>
-        </Modal.Body>
-        <Modal.Footer>
-          {previewDoc && (
-            <Button variant="success" onClick={() => window.open(`${endpoint}/${previewDoc.document_id}/download`, "_blank")}>
-              Download
-            </Button>
-          )}
-          <Button variant="secondary" onClick={() => setPreviewOpen(false)}>Close</Button>
-        </Modal.Footer>
-      </Modal>
-
-      {/* Edit Modal */}
-      <Modal show={editOpen} onHide={() => setEditOpen(false)} centered size="lg">
-        <Modal.Header closeButton>
-          <Modal.Title>Edit Document</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <Row className="g-3">
-            <Col xs={12} md={6}>
-              <Form.Group>
-                <Form.Label>Label *</Form.Label>
-                <Form.Control
-                  value={editForm.label}
-                  onChange={(e) => setEditForm({ ...editForm, label: e.target.value })}
-                />
-              </Form.Group>
-            </Col>
-            <Col xs={12} md={6}>
-              <Form.Group>
-                <Form.Label>Replace File (optional)</Form.Label>
-                <Form.Control
-                  type="file"
-                  onChange={(e) => setEditForm({ ...editForm, file: e.target.files?.[0] || null })}
-                />
-              </Form.Group>
-            </Col>
-            <Col xs={12}>
-              <Form.Group>
-                <Form.Label>Description</Form.Label>
-                <Form.Control
-                  as="textarea"
-                  rows={3}
-                  value={editForm.description}
-                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                />
-              </Form.Group>
-            </Col>
-            <Col xs={12}>
-              <Form.Group>
-                <Form.Label>Tags (CSV or JSON array)</Form.Label>
-                <Form.Control
-                  value={editForm.tags}
-                  onChange={(e) => setEditForm({ ...editForm, tags: e.target.value })}
-                />
-              </Form.Group>
-            </Col>
-          </Row>
-          <div className="small text-muted mt-3">PATCH {endpoint}/:id</div>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={() => setEditOpen(false)}>Cancel</Button>
-          <Button variant="primary" onClick={submitEdit}>Save Changes</Button>
-        </Modal.Footer>
-      </Modal>
-    </Container>
+                <div className="small text-muted mt-3">PATCH {endpoint}/:id</div>
+              </Modal.Body>
+              <Modal.Footer>
+                <Button variant="secondary" onClick={() => setEditOpen(false)}>Cancel</Button>
+                <Button variant="primary" onClick={submitEdit}>Save Changes</Button>
+              </Modal.Footer>
+            </Modal>
+          </Container>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -803,7 +865,6 @@ function PreviewContent({ doc, onError }) {
   const { viewUrl, directUrl } = buildPreviewUrl(doc);
   const mime = doc?.mime_type || "";
 
-  // PDF (use <object>/<embed> for iOS reliability)
   if (isPdf(ext, mime)) {
     return (
       <object
@@ -822,7 +883,6 @@ function PreviewContent({ doc, onError }) {
     );
   }
 
-  // Images: native <img>
   if (isImage(ext, mime)) {
     return (
       <img
@@ -834,7 +894,6 @@ function PreviewContent({ doc, onError }) {
     );
   }
 
-  // Videos: native <video controls>
   if (isVideo(ext, mime)) {
     return (
       <video
@@ -847,7 +906,6 @@ function PreviewContent({ doc, onError }) {
     );
   }
 
-  // Audio: native <audio controls>
   if (isAudio(ext, mime)) {
     return (
       <div className="p-3">
@@ -861,7 +919,6 @@ function PreviewContent({ doc, onError }) {
     );
   }
 
-  // Office docs: use Microsoft Office Web Viewer
   if (isOffice(ext)) {
     const url = officeViewerUrl(directUrl);
     return (
@@ -876,7 +933,6 @@ function PreviewContent({ doc, onError }) {
     );
   }
 
-  // Fallback: try your /view endpoint inside an iframe; if it fails, show error and open button
   return (
     <iframe
       title="preview"

@@ -78,11 +78,10 @@ function ActiveUnderlineInsideUL({ activeKey, c1, c2 }) {
       const btn = ul.querySelector(`#tab-${activeKey}`);
       if (!btn) return;
       const left = btn.offsetLeft;
-      const top = btn.offsetTop + btn.offsetHeight - 4; // underline height
+      const top = btn.offsetTop + btn.offsetHeight - 4;
       const width = btn.offsetWidth;
       setPos({ left, top, width, visible: true });
 
-      // Keep the active button visible
       btn.scrollIntoView({ inline: "center", behavior: "smooth", block: "nearest" });
     };
 
@@ -129,10 +128,10 @@ export default function Movies_SeriesTab() {
 
   const tabs = useMemo(
     () => [
-      { key: "movies",    label: "Movies",          icon: "🎬", component: <AddMovies />,     c1: "#ff6b6b", c2: "#f06595" },
-      { key: "series",    label: "Series",          icon: "📺", component: <AddSeries />,     c1: "#51cf66", c2: "#0ca678" },
-      { key: "manage",    label: "Manage",          icon: "⚙️", component: <Manage />,        c1: "#339af0", c2: "#845ef7" },
-      { key: "category",  label: "Categories",      icon: "🏷",  component: <Allcategories />, c1: "#fcc419", c2: "#f08c00" },
+      { key: "movies",    label: "Movies",          icon: "🎬", component: <AddMovies />,      c1: "#ff6b6b", c2: "#f06595" },
+      { key: "series",    label: "Series",          icon: "📺", component: <AddSeries />,      c1: "#51cf66", c2: "#0ca678" },
+      { key: "manage",    label: "Manage",          icon: "⚙️", component: <Manage />,         c1: "#339af0", c2: "#845ef7" },
+      { key: "category",  label: "Categories",      icon: "🏷", component: <Allcategories />,  c1: "#fcc419", c2: "#f08c00" },
       { key: "fevarate",  label: "Favorites",       icon: "❤️", component: <Fevarate />,      c1: "#f06595", c2: "#d6336c" },
       { key: "download",  label: "Download",        icon: "⬇️", component: <Download />,      c1: "#4dabf7", c2: "#15aabf" },
       { key: "all-list",  label: "Movies & Series", icon: "🎞️", component: <AllList />,       c1: "#ddce34", c2: "#fc3d80" },
@@ -142,7 +141,6 @@ export default function Movies_SeriesTab() {
 
   const active = tabs.find((t) => t.key === activeTab) ?? tabs[0];
 
-  // Arrow/Home/End keyboard nav
   const handleKeyNav = (idx) => (e) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
     e.preventDefault();
@@ -174,7 +172,6 @@ export default function Movies_SeriesTab() {
     if (listEl) listEl.style.setProperty("--tab-count", tabs.length);
   }, [tabs.length]);
 
-  // also scroll active pill into view when changed by click
   useEffect(() => {
     const listEl = tablistRef.current;
     if (!listEl) return;
@@ -182,7 +179,6 @@ export default function Movies_SeriesTab() {
     btn?.scrollIntoView({ inline: "center", behavior: "smooth", block: "nearest" });
   }, [active.key]);
 
-  // enable wheel horizontal scroll for the tab strip (desktop convenience)
   useEffect(() => {
     const el = tablistRef.current;
     if (!el) return;
@@ -238,14 +234,14 @@ export default function Movies_SeriesTab() {
         </div>
       </header>
 
-      {/* Body */}
-      <div className="container my-4">
+      {/* Body (EDGE-TO-EDGE) */}
+      <div className="ent-page">
         {/* Sticky tab bar below any fixed navbar */}
         <div
           className="position-sticky bg-white pt-2 tabbar-sticky"
           style={{ zIndex: 1020, top: "var(--fixed-top, 0px)", boxShadow: "0 8px 18px rgba(2,6,23,.06)" }}
         >
-          <div className="position-relative">
+          <div className="position-relative ent-shell">
             <ul
               ref={tablistRef}
               className="nav nav-pills eh-tabs"
@@ -278,16 +274,18 @@ export default function Movies_SeriesTab() {
           </div>
         </div>
 
-        {/* Active tab content (SCOPED to avoid Fevarate changing base sizes) */}
-        <div className="tab-content mt-3 ent-scope">
+        {/* Active tab content (EDGE-TO-EDGE) */}
+        <div className="tab-content ent-shell ent-scope">
           <div
             id={`panel-${active.key}`}
             role="tabpanel"
             aria-labelledby={`tab-${active.key}`}
             className="tab-pane fade show active"
           >
-            <div className="card border-0 shadow-sm">
-              <div className="card-body p-3 p-md-4">
+            <div className="card border-0 shadow-sm ent-card">
+              {/* ✅ removed inside padding */}
+              <div className="card-body">
+                {/* keep heading but no extra padding */}
                 <h2 className="h5 mb-3">{active.icon} {active.label}</h2>
                 {active.component}
               </div>
@@ -302,6 +300,48 @@ export default function Movies_SeriesTab() {
           --tab-min: 110px;
           --tab-max: 340px;
           --tap: 44px;
+        }
+
+        /* ✅ page: edge-to-edge on mobile, centered on desktop */
+        .ent-page{
+          width: 100%;
+          margin: 0;
+          padding: 0;
+        }
+        .ent-shell{
+          width: 100%;
+          margin: 0;
+          padding: 0;
+          max-width: 980px;
+          margin-inline: auto;
+        }
+        @media (max-width: 768px){
+          .ent-shell{
+            max-width: 100%;
+          }
+        }
+
+        /* ✅ remove extra spacing around content area */
+        .tab-content.ent-shell{
+          margin-top: 0 !important;
+          padding: 0 !important;
+        }
+
+        /* ✅ card should touch edges on mobile, keep nice radius on desktop */
+        .ent-card{
+          border-radius: 0;
+        }
+        @media (min-width: 992px){
+          .ent-card{
+            border-radius: 16px;
+            margin-top: 12px;
+            margin-bottom: 12px;
+          }
+        }
+
+        /* ✅ remove bootstrap card-body padding completely */
+        .ent-card > .card-body{
+          padding: 0 !important;
         }
 
         /* --------- TAB STRIP (responsive) ---------- */
@@ -321,7 +361,6 @@ export default function Movies_SeriesTab() {
           .eh-tabs .nav-item{ flex: 1 1 0; min-width: 128px; }
         }
 
-        /* Tab button content sizing (auto-small on phones, bigger on desktop) */
         .nav-pills .nav-link.pill {
           position: relative;
           --bg1: color-mix(in oklab, var(--c1) 12%, #fff);
@@ -340,7 +379,6 @@ export default function Movies_SeriesTab() {
           isolation: isolate;
           min-height: var(--tap);
 
-          /* responsive font + padding */
           font-size: clamp(12px, 2.8vw, 15px);
           padding: clamp(6px, 1.8vw, 10px) clamp(10px, 3vw, 16px);
           line-height: 1.2;
@@ -379,7 +417,6 @@ export default function Movies_SeriesTab() {
           filter: saturate(1.02);
         }
 
-        /* Press ripple */
         .pill .pill-ripple {
           position: absolute; inset: 0; pointer-events: none; opacity: 0;
           background:
@@ -390,7 +427,6 @@ export default function Movies_SeriesTab() {
         }
         .pill:active .pill-ripple { opacity: .55; transition: opacity .2s ease; }
 
-        /* Magnetic underline */
         .tab-underline {
           position: absolute;
           height: 4px; border-radius: 8px;
@@ -406,11 +442,8 @@ export default function Movies_SeriesTab() {
             left .28s cubic-bezier(.2,.8,.2,1);
         }
 
-        /* Sticky bar soft divider */
         .tabbar-sticky { border-bottom: 1px solid #eef2f6; }
 
-        /* ----------------- TYPOGRAPHY SANDBOX -----------------
-           This prevents Fevarate tab (or any subpage) from changing global sizes */
         .ent-scope {
           font-size: 1rem;
           line-height: 1.5;
@@ -427,7 +460,6 @@ export default function Movies_SeriesTab() {
           .ent-scope h3 { font-size: 1.2rem; }
         }
 
-        /* Improve small-screen feel a bit more */
         @media (max-width: 720px) {
           .eh-tabs { padding: .35rem .4rem; gap: .4rem; }
         }

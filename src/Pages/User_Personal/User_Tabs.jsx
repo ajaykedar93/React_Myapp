@@ -68,45 +68,51 @@ export default function UserTabs() {
 
   return (
     <div className="ut-page">
-      {/* NAVBAR */}
+      {/* NAVBAR (FULL WIDTH, PROFESSIONAL, NO CUT) */}
       <nav ref={navRef} className="ut-nav">
-        <div className="container-fluid d-flex align-items-center justify-content-between gap-2 px-3">
-          <div className="d-flex flex-column">
-            <div className="ut-title">Professional Dashboard</div>
+        <div className="ut-nav-inner">
+          <div className="ut-head">
+            <div className="ut-title" title="Professional Dashboard">
+              Professional Dashboard
+            </div>
             <div className="ut-subtitle d-none d-sm-block">
               Manage your data securely
             </div>
           </div>
 
-          <button className="btn ut-dash-btn" onClick={() => navigate("/dashboard")}>
+          <button
+            className="ut-dash-btn"
+            onClick={() => navigate("/dashboard")}
+            type="button"
+          >
             Dashboard
           </button>
         </div>
       </nav>
 
       {/* MAIN */}
-      <main className="ut-main" style={{ paddingTop: `calc(${navH}px + var(--safeTop, 0px))` }}>
-        {/* Tabs bar */}
-        <section className="ut-tabs-wrap">
-          <div className="container-fluid px-2 px-sm-3">
-            <div className="ut-tablist">
-              {TABS.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => setActiveTab(t.id)}
-                  className={`ut-chip ${activeTab === t.id ? "is-active" : ""}`}
-                  type="button"
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
+      <main
+        className="ut-main"
+        style={{ paddingTop: `calc(${navH}px + var(--safeTop, 0px))` }}
+      >
+        {/* Tabs bar (EDGE TO EDGE, NO OUTSIDE/INSIDE PADDING) */}
+        <section className="ut-tabs-wrap" onKeyDown={() => {}}>
+          <div className="ut-tablist">
+            {TABS.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setActiveTab(t.id)}
+                className={`ut-chip ${activeTab === t.id ? "is-active" : ""}`}
+                type="button"
+              >
+                {t.label}
+              </button>
+            ))}
           </div>
+          <div className="ut-tab-divider" />
         </section>
 
-        <div className="ut-after-tabs-gap" />
-
-        {/* CONTENT */}
+        {/* CONTENT (FULL WIDTH, NO EXTRA PADDING) */}
         <section className="ut-content-full">
           {activeTab === "investment" && <UserInvestment />}
           {activeTab === "password" && <PasswordManager />}
@@ -116,7 +122,7 @@ export default function UserTabs() {
           {activeTab === "websites" && <WebsitesUrl />}
           {activeTab === "notes" && <Notes />}
 
-          {/* ✅ IMPORTANT: Scope wrapper so FevActListNew CSS won't break other pages */}
+          {/* Scope wrapper so FevActListNew CSS won't break other pages */}
           {activeTab === "addlist" && (
             <div className="fev-scope">
               <Addlist />
@@ -144,13 +150,32 @@ export default function UserTabs() {
             linear-gradient(180deg, ${COLORS.bgBaseTop} 0%, ${COLORS.bgBaseBottom} 100%);
         }
 
-        /* NAVBAR */
+        /* NAVBAR (EDGE TO EDGE) */
         .ut-nav{
           position: fixed; top: 0; left: 0; right: 0;
           z-index: 1000;
           background: linear-gradient(90deg,#2563eb,#38bdf8);
-          padding-top: calc(var(--safeTop) + 14px);
+          padding-top: calc(var(--safeTop) + 10px);
           padding-bottom: 10px;
+          border-bottom: 1px solid rgba(2,6,23,0.08);
+          box-shadow: 0 10px 25px rgba(2,6,23,0.10);
+        }
+
+        /* ✅ Removed container padding completely */
+        .ut-nav-inner{
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          gap:10px;
+          width:100%;
+          padding: 0 12px; /* minimal safe padding only */
+        }
+
+        .ut-head{
+          display:flex;
+          flex-direction:column;
+          min-width:0;
+          flex: 1 1 auto;
         }
 
         .ut-title{
@@ -158,6 +183,12 @@ export default function UserTabs() {
           color: #0b1220;
           letter-spacing: .2px;
           line-height: 1.1;
+
+          /* ✅ no cut */
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          font-size: clamp(16px, 2.2vw, 22px);
         }
 
         .ut-subtitle{
@@ -166,50 +197,73 @@ export default function UserTabs() {
           margin-top: 2px;
         }
 
+        /* ✅ Professional button, never cuts */
         .ut-dash-btn{
+          flex: 0 0 auto;
           background: #fbbf24;
           border: 1px solid rgba(0,0,0,0.12);
           font-weight: 800;
           border-radius: 999px;
-          padding: 10px 16px;
+          padding: 10px 14px;
           white-space: nowrap;
+          line-height: 1;
+          font-size: 0.95rem;
+          box-shadow: 0 6px 14px rgba(2,6,23,.12), inset 0 1px 0 rgba(255,255,255,.4);
+          transition: transform .12s ease, filter .12s ease;
+        }
+        .ut-dash-btn:hover{ transform: translateY(-1px); filter: brightness(.98); }
+        .ut-dash-btn:active{ transform: translateY(0); }
+
+        /* MAIN */
+        .ut-main{
+          width: 100%;
+          padding-left: 0;
+          padding-right: 0;
         }
 
+        /* ✅ Tabs: Edge-to-edge (no outer card / no padding) */
         .ut-tabs-wrap{
-          margin-top: 12px;
-          background: rgba(255,255,255,0.95);
-          border: 1px solid rgba(2,6,23,0.08);
-          border-radius: 14px;
-          box-shadow: 0 10px 25px rgba(2,6,23,0.08);
+          width: 100%;
+          margin: 0;
+          padding: 0;
+          background: rgba(255,255,255,0.92);
+          backdrop-filter: blur(6px);
         }
 
         .ut-tablist{
-          display: flex;
+          display:flex;
           gap: 10px;
-          overflow-x: auto;
-          padding: 10px;
+          overflow-x:auto;
+          padding: 10px 10px; /* minimal safe padding only */
           -webkit-overflow-scrolling: touch;
+          scrollbar-width: thin;
         }
-
         .ut-tablist::-webkit-scrollbar{ height: 6px; }
         .ut-tablist::-webkit-scrollbar-thumb{ background: rgba(15,23,42,0.18); border-radius: 999px; }
 
+        .ut-tab-divider{
+          height: 1px;
+          background: rgba(2,6,23,0.08);
+          width: 100%;
+        }
+
+        /* ✅ Chips medium professional */
         .ut-chip{
           flex: 0 0 auto;
-          min-width: 140px;
-          max-width: 220px;
+          min-width: 160px;
+          max-width: 240px;
           border-radius: 14px;
           border: 1px solid #cbd5e1;
           background: #f1f5f9;
           padding: 10px 12px;
           font-size: 14px;
-          font-weight: 700;
+          font-weight: 800;
           line-height: 1.15;
-          white-space: normal;
-          overflow: visible;
-          text-overflow: unset;
-          overflow-wrap: break-word;
           text-align: center;
+
+          /* wrap nicely */
+          white-space: normal;
+          overflow-wrap: break-word;
         }
 
         .ut-chip.is-active{
@@ -218,8 +272,7 @@ export default function UserTabs() {
           border-color: #16a34a;
         }
 
-        .ut-after-tabs-gap{ height: 10px; }
-
+        /* CONTENT */
         .ut-content-full{
           width: 100%;
           padding: 0;
@@ -228,27 +281,27 @@ export default function UserTabs() {
 
         /* MOBILE */
         @media (max-width: 576px){
-          .ut-title{ font-size: 16px; }
+          .ut-nav-inner{ padding: 0 10px; }
           .ut-dash-btn{
-            padding: 6px 10px;
-            font-size: 12px;
+            padding: 8px 10px;
+            font-size: 0.85rem;
           }
           .ut-chip{
-            min-width: 46vw;
-            max-width: 46vw;
-            font-size: 12px;
-            padding: 10px 8px;
+            min-width: 52vw;
+            max-width: 52vw;
+            font-size: 12.5px;
+            padding: 10px 10px;
           }
         }
 
-        /* TABLET */
-        @media (min-width: 577px) and (max-width: 992px){
-          .ut-title{ font-size: 20px; }
+        /* VERY SMALL */
+        @media (max-width: 360px){
+          .ut-chip{ min-width: 62vw; max-width: 62vw; }
         }
 
-        /* DESKTOP */
-        @media (min-width: 993px){
-          .ut-title{ font-size: 22px; }
+        /* Reduce motion */
+        @media (prefers-reduced-motion: reduce){
+          * { transition-duration: 0.001ms !important; animation-duration: 0.001ms !important; }
         }
       `}</style>
     </div>

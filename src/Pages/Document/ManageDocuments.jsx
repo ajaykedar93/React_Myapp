@@ -299,7 +299,6 @@ const ManageDocuments = () => {
           --ink-900:#0b1220; --ink-700:#2a3242; --ink-600:#415067; --ink-500:#657289; --muted:#eef2f6;
           --border:#e6ecf5;
           --brand-grad: linear-gradient(90deg,#6f42c1,#d6336c);
-          --ok:#12b981; --err:#ef4444;
           --chip:#f5f0ff; --chip-text:#5b3dbf; --chip-border:#e3d9ff;
           --sticky:#f8fafc;
           --btn1:#5b3dbf; --btn1h:#4c2fb3;
@@ -309,14 +308,23 @@ const ManageDocuments = () => {
           --accent: linear-gradient(90deg,#ff7a59,#ffba42);
         }
 
+        /* ✅ FULL WIDTH: removed outside padding/centering */
         .manage-docs-page{
-          min-height:100vh; background:var(--bg);
+          min-height:100vh;
+          background:var(--bg);
           font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-          padding: 28px 16px 40px;
-          display:flex; flex-direction:column; align-items:center;
+          padding: 0;               /* removed outside padding */
+          margin: 0;
+          width: 100%;
         }
 
-        .header{ width:100%; max-width:1200px; text-align:center; margin-bottom:14px; }
+        /* ✅ FULL WIDTH header (no max width, no margin) */
+        .header{
+          width:100%;
+          text-align:center;
+          margin: 0;               /* removed outside space */
+          padding: 10px 12px;      /* tiny safe padding so text not stick to edge */
+        }
         .title{
           font-weight:900; letter-spacing:.3px;
           background: var(--brand-grad);
@@ -325,22 +333,36 @@ const ManageDocuments = () => {
         }
         .sub{ color:var(--ink-600); font-size:14.5px; }
 
+        /* ✅ FULL WIDTH card + remove inside padding */
         .card{
-          width:100%; max-width:1200px; background:var(--card);
-          border:1px solid var(--border); border-radius:18px;
-          box-shadow: 0 10px 34px rgba(22,34,66,.08);
-          padding: 16px;
+          width:100%;
+          background:var(--card);
+          border:0;               /* no border to keep full clean */
+          border-radius:0;        /* edge-to-edge */
+          box-shadow:none;        /* no outer shadow gap feel */
+          padding: 0;             /* removed inside padding */
         }
 
-        .table-wrap{ width:100%; overflow:auto; border-radius:12px; }
+        .table-wrap{
+          width:100%;
+          overflow:auto;
+          border-radius:0;
+        }
         .doc-table{ width:100%; border-collapse:separate; border-spacing:0; }
+
         .doc-table thead th{
           position:sticky; top:0; z-index:1; background:var(--sticky);
-          border-bottom:1px solid var(--border); padding:12px 14px; font-weight:800;
-          color:var(--ink-700); text-align:left; white-space:nowrap;
+          border-bottom:1px solid var(--border);
+          padding:12px 14px;
+          font-weight:800;
+          color:var(--ink-700);
+          text-align:left;
+          white-space:nowrap;
         }
         .doc-table tbody td{
-          padding:12px 14px; border-bottom:1px solid var(--border); color:var(--ink-700);
+          padding:12px 14px;
+          border-bottom:1px solid var(--border);
+          color:var(--ink-700);
         }
         .doc-table tbody tr:hover{ background:#fafbff; }
 
@@ -349,18 +371,31 @@ const ManageDocuments = () => {
           width:34px; height:34px; display:grid; place-items:center;
           background:var(--muted); border-radius:10px; color:#4b5563; font-size:16px;
         }
-        .file-name{ max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink-900); font-weight:600; }
+        .file-name{
+          max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+          color:var(--ink-900); font-weight:600;
+        }
 
         .inp, .sel{
-          width:100%; padding:9px 10px; border:1px solid var(--border); border-radius:10px;
-          outline:none; font-size:14px; color:var(--ink-700);
-          background:#fff; transition: box-shadow .15s ease, border-color .15s ease;
+          width:100%;
+          padding:9px 10px;
+          border:1px solid var(--border);
+          border-radius:10px;
+          outline:none;
+          font-size:14px;
+          color:var(--ink-700);
+          background:#fff;
+          transition: box-shadow .15s ease, border-color .15s ease;
         }
-        .inp:focus, .sel:focus{ border-color:#c7d2fe; box-shadow:0 0 0 3px rgba(99,102,241,.18); }
+        .inp:focus, .sel:focus{
+          border-color:#c7d2fe;
+          box-shadow:0 0 0 3px rgba(99,102,241,.18);
+        }
 
         .chip{
           display:inline-block; padding:6px 10px; border-radius:999px;
-          background:var(--chip); color:var(--chip-text); border:1px solid var(--chip-border);
+          background:var(--chip); color:var(--chip-text);
+          border:1px solid var(--chip-border);
           font-weight:700; font-size:12.5px;
         }
         .text-ink{ color:var(--ink-900); font-weight:600; }
@@ -374,7 +409,9 @@ const ManageDocuments = () => {
         .status.pending{ background:#fef3c7; color:#92400e; border-color:#fde68a; }
         .status.archived{ background:#f1f5f9; color:#334155; border-color:#e2e8f0; }
 
-        .actions .stack{ display:flex; gap:10px; flex-wrap:wrap; }
+        .actions .stack{
+          display:flex; gap:10px; flex-wrap:wrap;
+        }
 
         .btn-edit{ background:var(--btn1); }
         .btn-edit:hover{ background:var(--btn1h); }
@@ -387,10 +424,12 @@ const ManageDocuments = () => {
         .btn-download{ background: var(--accent); }
 
         .btn-edit, .btn-delete, .btn-save, .btn-cancel, .btn-download{
-          color:#fff; border:none; border-radius:12px; padding:8px 14px; font-weight:800; cursor:pointer;
-          transform: translateZ(0); transition: transform .12s ease, filter .12s ease, box-shadow .12s ease;
+          color:#fff; border:none; border-radius:12px;
+          padding:8px 14px; font-weight:800; cursor:pointer;
+          transition: transform .12s ease, filter .12s ease, box-shadow .12s ease;
           box-shadow: 0 4px 12px rgba(28,39,64,.12);
           text-decoration:none; display:inline-flex; align-items:center; justify-content:center;
+          white-space:nowrap;
         }
         .btn-edit:hover, .btn-delete:hover, .btn-save:hover, .btn-cancel:hover, .btn-download:hover{
           transform: translateY(-1px);
@@ -398,6 +437,19 @@ const ManageDocuments = () => {
         }
 
         .empty{ text-align:center; padding:20px 0; color:var(--ink-500); }
+
+        /* ✅ MOBILE: buttons full width & nice spacing */
+        @media (max-width: 576px){
+          .actions .stack{
+            flex-direction: column;
+            gap: 8px;
+          }
+          .btn-edit, .btn-delete, .btn-save, .btn-cancel, .btn-download{
+            width: 100%;
+            padding: 10px 14px;
+          }
+          .file-name{ max-width: 160px; }
+        }
 
         /* Popup */
         .popup{

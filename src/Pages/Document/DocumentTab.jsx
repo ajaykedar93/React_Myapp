@@ -87,8 +87,9 @@ const DocumentTab = () => {
           initial={{ opacity: 0, y: -12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45 }}
+          title="Document Manager"
         >
-          Document Manager
+          Documents
         </motion.h2>
 
         <motion.button
@@ -98,7 +99,7 @@ const DocumentTab = () => {
           onClick={() => navigate("/dashboard")}
           type="button"
         >
-          Dashboard
+          <span className="btn-text">Dashboard</span>
           <span className="btn-glint" />
         </motion.button>
       </nav>
@@ -106,14 +107,9 @@ const DocumentTab = () => {
       {/* Spacer so content never hides under navbar */}
       <div className="nav-spacer" />
 
-      {/* Tabs (NOT fixed) */}
+      {/* Tabs (FULL WIDTH) */}
       <div className="tabs-container" onKeyDown={onKeyDownTabs}>
-        <div
-          className="tabs-rail"
-          ref={railRef}
-          role="tablist"
-          aria-label="Document sections"
-        >
+        <div className="tabs-rail" ref={railRef} role="tablist" aria-label="Document sections">
           {tabs.map((t) => {
             const active = activeTab === t.key;
             return (
@@ -165,7 +161,7 @@ const DocumentTab = () => {
         </div>
       </div>
 
-      {/* Content (normal flow; page scrolls — navbar stays fixed) */}
+      {/* Content (FULL WIDTH + NO INSIDE PADDING) */}
       <motion.div
         id={`panel-${activeTab}`}
         className="tab-content"
@@ -182,8 +178,8 @@ const DocumentTab = () => {
       <style>{`
         :root{
           --nav-h: 64px;
-          --gap-top: 8px;          /* small space ABOVE navbar on mobile */
-          --gap-between: 8px;      /* small space BETWEEN navbar and tabs */
+          --gap-top: 8px;
+          --gap-between: 8px;
           --bg-grad: linear-gradient(135deg, #f6f8fc 0%, #e9eff7 100%);
           --nav-grad: linear-gradient(90deg, #fde68a 0%, #facc15 55%, #f59e0b 100%);
           --ink-900:#0f172a; --ink-700:#334155;
@@ -201,11 +197,10 @@ const DocumentTab = () => {
           background: var(--bg-grad);
           min-height: 100dvh;
           font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-          /* allow page to scroll naturally under fixed navbar */
           overflow: auto;
         }
 
-        /* NAVBAR (fixed only) */
+        /* ✅ NAVBAR professional + no cut */
         .navbar-fixed {
           position: fixed;
           left: 0; right: 0;
@@ -214,14 +209,20 @@ const DocumentTab = () => {
           z-index: 1000;
           background: var(--nav-grad);
           color: #111827;
-          display: flex; align-items: center; justify-content: space-between;
-          padding: 12px 28px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+
+          /* responsive padding */
+          padding: 10px clamp(12px, 3vw, 28px);
+
           border-bottom: 1px solid rgba(0,0,0,.08);
           box-shadow: 0 12px 30px rgba(0,0,0,.12), inset 0 -1px 0 rgba(255,255,255,.22);
           backdrop-filter: saturate(140%) blur(6px);
         }
 
-        /* MOBILE: inset the navbar slightly and add a top gap */
+        /* MOBILE: inset */
         @media (max-width: 575.98px){
           .navbar-fixed {
             top: calc(env(safe-area-inset-top, 0px) + var(--gap-top));
@@ -230,7 +231,7 @@ const DocumentTab = () => {
           }
         }
 
-        /* Spacer so content starts below navbar (and keeps a small gap on mobile) */
+        /* Spacer */
         .nav-spacer {
           height: calc(var(--nav-h) + env(safe-area-inset-top, 0px));
         }
@@ -240,27 +241,66 @@ const DocumentTab = () => {
           }
         }
 
+        /* ✅ Title never hides */
         .navbar-title {
           margin: 0;
-          font-size: clamp(20px, 2.4vw, 28px);
-          font-weight: 900; letter-spacing: .3px;
-          color: #0b0b0b; text-shadow: none;
+          font-size: clamp(18px, 2.2vw, 28px);
+          font-weight: 900;
+          letter-spacing: .3px;
+          color: #0b0b0b;
+
+          /* allow shrink + prevent cut */
+          flex: 1 1 auto;
+          min-width: 0;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
+
+        /* ✅ Dashboard button never cuts */
         .btn-dashboard {
-          position: relative; overflow: hidden;
+          flex: 0 0 auto;
+          position: relative;
+          overflow: hidden;
           background: linear-gradient(180deg, var(--gold), #f0b33c);
-          color: #1b1b1b; font-weight: 800;
-          padding: 10px 18px; border-radius: 26px;
-          border: none; cursor: pointer; font-size: 0.95rem;
+          color: #1b1b1b;
+          font-weight: 800;
+          border: none;
+          cursor: pointer;
+
+          /* responsive size */
+          padding: 10px 16px;
+          border-radius: 999px;
+          font-size: 0.95rem;
+          line-height: 1;
+
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          white-space: nowrap;
+
           transition: transform .15s ease, filter .15s ease, box-shadow .15s ease;
           box-shadow: 0 8px 18px rgba(0,0,0,.15), inset 0 1px 0 rgba(255,255,255,.45);
         }
+
+        .btn-text{
+          display:inline-block;
+          white-space:nowrap;
+          overflow:visible;
+        }
+
+        /* If super small screen, reduce padding slightly so it still fits */
+        @media (max-width: 360px){
+          .btn-dashboard{ padding: 9px 12px; font-size: .9rem; }
+        }
+
         .btn-dashboard:hover { transform: translateY(-1px); filter: brightness(.98); }
         .btn-dashboard:active {
           transform: translateY(0);
           background: linear-gradient(180deg, var(--gold-press), #d89425);
           box-shadow: 0 6px 14px rgba(0,0,0,.16), inset 0 1px 0 rgba(255,255,255,.35);
         }
+
         .btn-dashboard:focus-visible{
           outline: 0;
           box-shadow:
@@ -268,6 +308,7 @@ const DocumentTab = () => {
             0 0 0 6px rgba(31,95,120,.45),
             0 10px 22px rgba(0,0,0,.18);
         }
+
         .btn-glint{
           position:absolute; top:-150%; left:-50%; width:50%; height:400%;
           background: linear-gradient(120deg, transparent 45%, rgba(255,255,255,.25) 50%, transparent 55%);
@@ -279,20 +320,20 @@ const DocumentTab = () => {
           100% { transform: translateX(420%) rotate(18deg); }
         }
 
-        /* TABS (not fixed; normal flow) */
+        /* TABS FULL WIDTH */
         .tabs-container {
-          width: min(1200px, 92%);
-          margin: 6px auto 14px;
-          z-index: 1; /* below navbar */
+          width: 100%;
+          margin: 0;
+          padding: 0;
         }
         .tabs-rail{
           position: relative;
           display: flex; gap: 8px; flex-wrap: wrap;
           background: var(--surface);
-          border: 1px solid var(--border);
-          border-radius: 16px;
-          padding: 6px;
-          box-shadow: 0 10px 28px rgba(2,6,23,.06);
+          border: 0;
+          border-radius: 0;
+          padding: 0;
+          box-shadow: none;
           overflow-x: auto;
           -webkit-overflow-scrolling: touch;
           scrollbar-width: thin;
@@ -351,31 +392,29 @@ const DocumentTab = () => {
           pointer-events:none;
         }
 
-        /* CONTENT (normal flow; page scrolls) */
+        /* CONTENT FULL WIDTH */
         .tab-content {
-          width: min(1200px, 92%);
-          min-height: 520px;
+          width: 100%;
+          margin: 0;
+          border: 0;
+          border-radius: 0;
+          padding: 0;
+          box-shadow: none;
           background: var(--surface);
-          border: 1px solid var(--border);
-          border-radius: 18px;
-          padding: 14px;
-          box-shadow: 0 12px 34px rgba(2,6,23,.06);
           position: relative;
           isolation: isolate;
-          margin: 0 auto 12px;
+          min-height: 520px;
         }
         .tab-content::before{
-          content:""; position:absolute; inset:0; border-radius:18px; pointer-events:none;
+          content:""; position:absolute; inset:0; pointer-events:none;
           background: radial-gradient(1200px 1200px at 0% 0%, rgba(245,158,11,.08), transparent 60%);
           z-index:-1;
         }
 
         @media (max-width: 768px) {
-          .navbar-title { font-size: 1.35rem; }
-          .btn-dashboard { padding: 9px 16px; font-size: 0.9rem; }
           .tab-item{ padding: 10px 14px; font-size: .95rem; }
-          .tab-content{ padding: 12px; }
         }
+
         @media (prefers-reduced-motion: reduce){
           .tab-item, .btn-dashboard{ transition: none !important; }
           .btn-glint{ display:none; }

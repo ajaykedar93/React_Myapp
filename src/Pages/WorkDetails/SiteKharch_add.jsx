@@ -12,12 +12,6 @@ export default function SiteKharch_add() {
   });
   const [kharchAmount, setKharchAmount] = useState("");
   const [kharchDetails, setKharchDetails] = useState("");
-  const [extraVisible, setExtraVisible] = useState(false);
-
-  // shared for legacy + dynamic
-  const [extraAmount, setExtraAmount] = useState("");
-  const [extraDetails, setExtraDetails] = useState("");
-  const [dynExtras, setDynExtras] = useState([]); // [{amount, details}]
 
   // ---------- RECEIVED STATE ----------
   const [recvDate, setRecvDate] = useState(() => {
@@ -42,27 +36,15 @@ export default function SiteKharch_add() {
     }, 2000);
   };
 
-  // add dynamic extra
-  const handleAddDynExtra = () => {
-    if (!extraAmount && !extraDetails) return;
-    setDynExtras((prev) => [
-      ...prev,
-      { amount: Number(extraAmount || 0), details: extraDetails || "" },
-    ]);
-    setExtraAmount("");
-    setExtraDetails("");
-  };
-
   // submit site kharch
   const handleSubmitKharch = async (e) => {
     e.preventDefault();
+
+    // ✅ ONLY date, amount, details
     const payload = {
       kharch_date: kharchDate,
       amount: Number(kharchAmount || 0),
       details: kharchDetails,
-      extra_amount: extraVisible && extraAmount ? Number(extraAmount) : null,
-      extra_details: extraVisible ? extraDetails : null,
-      extra_items: dynExtras,
     };
 
     try {
@@ -80,10 +62,6 @@ export default function SiteKharch_add() {
       // reset
       setKharchAmount("");
       setKharchDetails("");
-      setExtraVisible(false);
-      setExtraAmount("");
-      setExtraDetails("");
-      setDynExtras([]);
       showPopup("success", "✅ Site kharch added successfully!");
     } catch (err) {
       console.error(err);
@@ -239,7 +217,7 @@ export default function SiteKharch_add() {
                   <div className="d-flex justify-content-between align-items-start mb-3 gap-2">
                     <div>
                       <h6 className="mb-1">Add Site Kharch</h6>
-                      <small className="text-muted">Amount · details · extras</small>
+                      <small className="text-muted">Amount · details</small>
                     </div>
                     <span className="badge bg-warning-subtle text-warning-emphasis px-3 py-2 rounded-pill">
                       Expense
@@ -285,121 +263,6 @@ export default function SiteKharch_add() {
                     ></textarea>
                   </div>
 
-                  {/* extra toggle */}
-                  <div className="d-flex justify-content-between align-items-center mt-3">
-                    <small className="text-muted">
-                      Add old-style extra amount/details?
-                    </small>
-                    <button
-                      type="button"
-                      onClick={() => setExtraVisible((v) => !v)}
-                      className="btn btn-soft btn-sm"
-                      style={{
-                        background: extraVisible
-                          ? "linear-gradient(140deg,#f97316,#fb7185)"
-                          : "rgba(249,115,22,0.12)",
-                        color: extraVisible ? "#fff" : "#f97316",
-                      }}
-                    >
-                      {extraVisible ? "Hide extra" : "Add extra"}
-                    </button>
-                  </div>
-
-                  {/* extra block */}
-                  {extraVisible && (
-                    <div className="mt-3 p-3 rounded-3" style={{ background: "#fff7ed" }}>
-                      <div className="row g-3">
-                        <div className="col-12 col-sm-6">
-                          <label className="form-label small mb-1">Extra amount (₹)</label>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={extraAmount}
-                            onChange={(e) => setExtraAmount(e.target.value)}
-                            className="form-control"
-                          />
-                        </div>
-                        <div className="col-12 col-sm-6">
-                          <label className="form-label small mb-1">Extra details</label>
-                          <input
-                            type="text"
-                            value={extraDetails}
-                            onChange={(e) => setExtraDetails(e.target.value)}
-                            className="form-control"
-                          />
-                        </div>
-                      </div>
-                      <small className="d-block mt-2 text-muted" style={{ fontSize: "0.65rem" }}>
-                        Stored in <code>extra_amount</code> and <code>extra_details</code>.
-                      </small>
-                    </div>
-                  )}
-
-                  {/* dynamic extra */}
-                  <div className="mt-3">
-                    <p className="small mb-2">Dynamic extra items (JSON style)</p>
-                    <div className="row g-2">
-                      <div className="col-12 col-sm-4">
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={extraAmount}
-                          onChange={(e) => setExtraAmount(e.target.value)}
-                          placeholder="Ex. 200"
-                          className="form-control"
-                        />
-                      </div>
-                      <div className="col-12 col-sm-5">
-                        <input
-                          type="text"
-                          value={extraDetails}
-                          onChange={(e) => setExtraDetails(e.target.value)}
-                          placeholder="Ex. stone transport"
-                          className="form-control"
-                        />
-                      </div>
-                      <div className="col-12 col-sm-3 d-grid">
-                        <button
-                          type="button"
-                          onClick={handleAddDynExtra}
-                          className="btn btn-primary-grad"
-                        >
-                          + Add
-                        </button>
-                      </div>
-                    </div>
-
-                    {dynExtras.length > 0 && (
-                      <div
-                        className="mt-2 p-2 rounded-3 border"
-                        style={{ maxHeight: "110px", overflowY: "auto", background: "#fff1f2" }}
-                      >
-                        {dynExtras.map((x, i) => (
-                          <div
-                            key={i}
-                            className="d-flex justify-content-between align-items-center py-1"
-                            style={{ fontSize: "0.72rem" }}
-                          >
-                            <span>
-                              ₹{x.amount} — {x.details || "no details"}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setDynExtras((prev) => prev.filter((_, j) => j !== i))
-                              }
-                              className="btn btn-link btn-sm text-danger p-0"
-                            >
-                              remove
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
                   <div className="mt-3 d-grid">
                     <button type="submit" className="btn btn-green-grad text-white py-2">
                       Save Site Kharch
@@ -408,7 +271,7 @@ export default function SiteKharch_add() {
                 </div>
               </form>
 
-              {/* RECEIVED FORM */}
+              {/* RECEIVED FORM (NO CHANGE) */}
               <form onSubmit={handleSubmitReceived} className="card kharch-card mb-5">
                 <div className="card-body">
                   <div className="d-flex justify-content-between align-items-start mb-3">

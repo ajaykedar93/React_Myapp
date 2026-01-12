@@ -88,7 +88,6 @@ const DocCategory = () => {
     );
   };
 
-  // Allow Enter key to submit "Add Category" from any input
   const handleKeyDown = (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
@@ -260,63 +259,82 @@ const DocCategory = () => {
           --shadow: 0 10px 30px rgba(0,0,0,0.08);
           --shadow-strong: 0 12px 28px rgba(0,0,0,0.12);
           --radius: 12px;
+
+          --padX: 12px; /* small safe padding so it doesn't stick to edges */
         }
 
+        /* ✅ FULL PAGE EDGE-TO-EDGE */
         .category-page{
-          padding: clamp(16px,2.5vw,30px) clamp(12px,2vw,20px);
-          padding-top: calc(env(safe-area-inset-top,0px) + clamp(12px,1.5vw,20px));
-          padding-bottom: calc(env(safe-area-inset-bottom,0px) + clamp(12px,1.5vw,20px));
-          font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+          padding: 0;                 /* removed outside padding */
+          margin: 0;
+          width: 100%;
           background: var(--neutral-50);
           min-height: 100vh;
           min-height: 100dvh;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
+          font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
           box-sizing: border-box;
         }
 
+        /* title with small safe padding */
         .page-title{
-          font-size: clamp(1.4rem, 2.2vw, 2rem);
+          font-size: clamp(1.35rem, 2.2vw, 2rem);
           font-weight: 800;
-          margin: 0 0 clamp(18px, 2.5vw, 25px);
+          margin: 0;
+          padding: 14px var(--padX) 10px;
           color: var(--green-900);
           text-align: center;
           width: 100%;
         }
 
+        /* ✅ Cards edge-to-edge (no max width, no big inside padding) */
         .add-category-card, .category-table-card{
           background: #fff;
-          padding: clamp(18px, 2.2vw, 25px);
-          border-radius: var(--radius);
-          width: min(100%, 1000px);
-          margin-bottom: clamp(18px, 2.2vw, 25px);
-          box-shadow: var(--shadow);
+          padding: 10px var(--padX);    /* reduced + professional */
+          border-radius: 0;             /* full width look */
+          width: 100%;
+          margin: 0;
+          box-shadow: none;
+          border-top: 1px solid #eaeef2;
+          border-bottom: 1px solid #eaeef2;
         }
-        .add-category-card:hover, .category-table-card:hover{ box-shadow: var(--shadow-strong); }
+
+        /* On desktop: add nicer radius + shadow + centered feel (still full width ok) */
+        @media (min-width: 992px){
+          .category-page{
+            background: var(--neutral-50);
+          }
+          .add-category-card, .category-table-card{
+            width: min(1100px, 100%);
+            margin: 12px auto;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            border: 1px solid #eaeef2;
+            padding: 14px 16px;
+          }
+          .add-category-card:hover, .category-table-card:hover{ box-shadow: var(--shadow-strong); }
+        }
 
         .card-title{
-          margin: 0 0 12px;
+          margin: 0 0 10px;
           color: #333;
           font-weight: 700;
-          font-size: clamp(1.05rem, 1.5vw, 1.2rem);
+          font-size: 1.05rem;
         }
 
-        /* Responsive grid for the add form */
         .form-grid{
           display: grid;
-          gap: clamp(10px, 1.2vw, 14px);
+          gap: 10px;
           grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
           align-items: start;
         }
 
         .input{
           width: 100%;
-          padding: 10px 14px;
+          padding: 10px 12px;
           border-radius: 10px;
           border: 1px solid #d8dee6;
           background: #fff;
-          font-size: 0.98rem;
+          font-size: 0.95rem;
           transition: box-shadow .15s, border-color .15s;
           min-width: 0;
           box-sizing: border-box;
@@ -334,25 +352,27 @@ const DocCategory = () => {
           padding: 6px;
           border: 1px dashed #d8dee6;
           border-radius: 10px;
-          min-height: 44px;
+          min-height: 42px;
         }
         .color{
-          width: 52px;
-          height: 36px;
+          width: 46px;
+          height: 34px;
           border: none;
           padding: 0;
           background: transparent;
           cursor: pointer;
         }
 
+        /* ✅ medium professional button */
         .btn-add{
-          padding: 12px 16px;
+          padding: 10px 14px;
           border-radius: 10px;
           background: var(--blue-600);
           color: #fff;
           border: none;
           cursor: pointer;
           font-weight: 700;
+          font-size: 0.95rem;
           justify-self: end;
           transition: transform .12s, box-shadow .12s, background .12s;
         }
@@ -361,11 +381,10 @@ const DocCategory = () => {
           .btn-add{ justify-self: stretch; }
         }
 
-        /* Table wrapper for horizontal scroll on small screens */
         .table-wrap{
           overflow-x: auto;
           -webkit-overflow-scrolling: touch;
-          border-radius: var(--radius);
+          border-radius: 0;
         }
         .category-table{
           width: 100%;
@@ -398,6 +417,7 @@ const DocCategory = () => {
           display: inline-block;
         }
 
+        /* ✅ medium delete button */
         .btn-delete{
           padding: 8px 12px;
           border-radius: 10px;
@@ -406,11 +426,12 @@ const DocCategory = () => {
           border: none;
           cursor: pointer;
           font-weight: 700;
+          font-size: 0.9rem;
           transition: background .12s, transform .12s;
         }
         .btn-delete:hover{ background: var(--red-700); transform: translateY(-1px); }
 
-        /* App-like popup (toast / confirm) pinned under notch */
+        /* popup */
         .popup-message{
           position: fixed;
           top: calc(env(safe-area-inset-top, 0px) + 12px);
@@ -422,7 +443,7 @@ const DocCategory = () => {
           z-index: 9999;
           text-align: center;
           color: #fff;
-          font-size: clamp(0.9rem, 1vw, 1rem);
+          font-size: 0.95rem;
           max-width: min(92vw, 520px);
           box-shadow: 0 8px 24px rgba(0,0,0,0.25);
           word-break: break-word;
@@ -442,48 +463,12 @@ const DocCategory = () => {
           border: none;
           cursor: pointer;
           font-weight: 700;
+          font-size: 0.9rem;
         }
         .btn-popup-ok{ background: var(--blue-600); color:#fff; }
         .btn-popup-ok:hover{ background: var(--blue-700); }
         .btn-popup-cancel{ background: #9e9e9e; color: #fff; }
         .btn-popup-cancel:hover{ background: #616161; }
-
-        /* Mobile stacked table (optional alternative)
-           If you prefer true "cards" on phones, uncomment this block and remove min-width on table.
-        */
-        /* 
-        @media (max-width: 560px){
-          .category-table, .category-table thead, .category-table tbody, .category-table th, .category-table td, .category-table tr{
-            display: block;
-          }
-          .category-table thead{ display: none; }
-          .category-table tr{
-            background: #fff;
-            margin-bottom: 10px;
-            border-radius: 10px;
-            border: 1px solid #eef2f7;
-            overflow: hidden;
-          }
-          .category-table td{
-            border: none;
-            padding: 10px 14px;
-            position: relative;
-            display: grid;
-            grid-template-columns: 40% 1fr;
-            gap: 8px;
-          }
-          .category-table td::before{
-            content: attr(data-label);
-            font-weight: 700;
-            color: #334155;
-          }
-        }
-        */
-
-        /* Reduce motion */
-        @media (prefers-reduced-motion: reduce){
-          * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
-        }
       `}</style>
     </div>
   );

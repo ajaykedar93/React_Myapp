@@ -4,12 +4,12 @@ import axios from "axios";
 import { useDropzone } from "react-dropzone";
 import { motion } from "framer-motion";
 import LoadingSpinner from "../Entertainment/LoadingSpiner";
-import { useAuth } from "../../context/AuthContext"; // <-- useAuth only
+import { useAuth } from "../../context/AuthContext";
 
 const API_BASE = "https://express-backend-myapp.onrender.com/api";
 
 const Document = () => {
-  const { user } = useAuth(); // expects { user_id, token, ... }
+  const { user } = useAuth();
   const userId = user?.id ?? user?.user_id ?? null;
 
   const [categories, setCategories] = useState([]);
@@ -23,7 +23,6 @@ const Document = () => {
   const [loading, setLoading] = useState(false);
   const [popup, setPopup] = useState({ visible: false, message: "", success: true });
 
-  // Optional: attach auth token globally when available
   useEffect(() => {
     if (user?.token) {
       axios.defaults.headers.common["Authorization"] = `Bearer ${user.token}`;
@@ -53,7 +52,6 @@ const Document = () => {
     fetchDocuments();
   }, []);
 
-  // Fetch subcategories when category changes
   useEffect(() => {
     const fetchSubcategories = async () => {
       if (!selectedCategory) {
@@ -95,7 +93,7 @@ const Document = () => {
     formData.append("purpose", purpose);
     formData.append("category_id", selectedCategory);
     formData.append("subcategory_id", selectedSubcategory || "");
-    formData.append("user_id", userId); // <-- from AuthContext
+    formData.append("user_id", userId);
 
     try {
       setLoading(true);
@@ -133,6 +131,7 @@ const Document = () => {
   return (
     <div className="doc-page">
       {loading && <LoadingSpinner />}
+
       {popup.visible && (
         <motion.div
           className={`popup-message ${popup.success ? "success" : "error"}`}
@@ -151,7 +150,7 @@ const Document = () => {
         initial={{ opacity: 0, y: -16 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        📁 Document Upload & Management
+        📁 Document Upload &amp; Management
       </motion.h2>
 
       {/* Upload Card */}
@@ -194,7 +193,6 @@ const Document = () => {
             onChange={(e) => setPurpose(e.target.value)}
           />
 
-          {/* Category Dropdown */}
           <select
             className="form-input"
             value={selectedCategory}
@@ -208,7 +206,6 @@ const Document = () => {
             ))}
           </select>
 
-          {/* Subcategory Dropdown (optional) */}
           {subcategories.length > 0 && (
             <select
               className="form-input"
@@ -239,15 +236,13 @@ const Document = () => {
           >
             Reset
           </button>
+
           <button className="btn-upload" onClick={handleUpload} disabled={loading} type="button">
             {loading ? "Uploading..." : "Upload Document"}
           </button>
         </div>
       </motion.div>
 
-      {/* (Optional) Documents list/table can be rendered here) */}
-
-      {/* Styles */}
       <style>{`
         :root{
           --orange-900:#e65100;
@@ -257,63 +252,65 @@ const Document = () => {
           --orange-300:#ffcc80;
           --orange-200:#ffe0b2;
           --orange-100:#fff3e0;
-          --shadow: 0 10px 30px rgba(0,0,0,0.1);
-          --shadow-hover: 0 15px 35px rgba(0,0,0,0.15);
-          --radius: 16px;
+          --radius: 14px;
+
+          --safeX: 12px; /* tiny safe padding so it doesn't touch edges */
         }
 
-        /* Full-height app layout with safe-area padding for iOS notches */
+        /* ✅ full edge-to-edge (remove outside padding) */
         .doc-page{
           background: linear-gradient(135deg, #fff8e1, var(--orange-200));
           min-height: 100vh;
           min-height: 100dvh;
           width: 100%;
-          padding: clamp(16px, 2.5vw, 30px) clamp(12px, 2vw, 20px);
-          padding-top: calc(env(safe-area-inset-top, 0px) + clamp(12px,1.5vw,20px));
-          padding-bottom: calc(env(safe-area-inset-bottom, 0px) + clamp(12px,1.5vw,20px));
+          padding: 0;              /* removed outside padding */
+          margin: 0;
           font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
           box-sizing: border-box;
         }
 
+        /* title edge-to-edge but with small safe padding */
         .page-title{
           text-align:center;
-          font-size: clamp(1.4rem, 2.2vw, 2.2rem);
+          font-size: clamp(1.35rem, 2.2vw, 2rem);
           line-height:1.2;
           font-weight: 800;
-          margin: 0 0 clamp(20px, 3vw, 40px);
+          margin: 0;
+          padding: 14px var(--safeX) 10px;
           color: var(--orange-900);
           width: 100%;
           word-break: break-word;
         }
 
-        .upload-card, .table-card{
+        /* ✅ upload card edge-to-edge + remove inside padding */
+        .upload-card{
           background: #fff;
-          border-radius: var(--radius);
-          padding: clamp(18px, 2.2vw, 30px);
-          margin-bottom: clamp(18px, 2.2vw, 30px);
-          box-shadow: var(--shadow);
-          transition: transform 0.3s ease, box-shadow 0.3s ease;
-          width: min(100%, 1200px);
-          box-sizing: border-box;
+          width: 100%;
+          border-radius: 0;       /* edge-to-edge */
+          padding: 0;             /* removed inside padding */
+          margin: 0;
+          box-shadow: none;
+          border-top: 1px solid rgba(0,0,0,0.06);
+          border-bottom: 1px solid rgba(0,0,0,0.06);
         }
-        .upload-card:hover, .table-card:hover{ transform: translateY(-4px); box-shadow: var(--shadow-hover); }
 
+        /* content area inside card needs minimal safe padding */
         .dropzone{
+          margin: 0;
           border: 2px dashed var(--orange-700);
-          border-radius: 12px;
-          padding: clamp(22px, 4vw, 50px);
+          border-radius: 0;       /* edge-to-edge look */
+          padding: 18px var(--safeX);   /* medium, not big */
           text-align: center;
           font-weight: 700;
           color: var(--orange-700);
-          font-size: clamp(0.95rem, 1.1vw, 1rem);
-          transition: all 0.3s ease;
+          font-size: 0.98rem;
+          transition: all 0.25s ease;
           cursor: pointer;
           overflow: hidden;
+          background: transparent;
         }
         .dropzone-active{ background-color: var(--orange-100); }
+
         .mb-0{ margin-bottom:0; }
         .text-truncate{
           white-space: nowrap;
@@ -321,65 +318,95 @@ const Document = () => {
           text-overflow: ellipsis;
         }
 
-        /* Responsive grid for inputs: auto-fit columns with a sensible min */
+        /* inputs area with minimal padding */
         .form-row{
           display: grid;
-          gap: clamp(10px, 1.2vw, 15px);
+          gap: 10px;
           grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-          margin-top: clamp(16px, 2vw, 25px);
+          margin: 0;
+          padding: 12px var(--safeX);   /* small safe padding */
+          box-sizing: border-box;
         }
 
         .form-input{
           width: 100%;
-          padding: 12px 16px;
+          padding: 10px 12px;           /* medium */
           border-radius: 10px;
           border: 1px solid var(--orange-300);
-          font-size: 1rem;
+          font-size: 0.95rem;
           transition: all 0.2s ease;
-          min-width: 0; /* prevents overflow in grid cells on tiny screens */
+          min-width: 0;
           box-sizing: border-box;
           background: #fff;
         }
         .form-input:focus{
           outline: none;
           border-color: var(--orange-400);
-          box-shadow: 0 0 0 4px rgba(255, 183, 77, 0.25);
+          box-shadow: 0 0 0 4px rgba(255, 183, 77, 0.22);
         }
 
+        /* ✅ actions edge-to-edge with small padding */
         .actions{
           display: flex;
           gap: 10px;
           justify-content: flex-end;
-          margin-top: 16px;
           flex-wrap: wrap;
+          margin: 0;
+          padding: 0 var(--safeX) 14px;
+          box-sizing: border-box;
         }
+
+        /* medium buttons */
         .btn-upload{
           background: linear-gradient(90deg, var(--orange-500), #ff7043);
           color: #fff;
-          padding: 12px 20px;
+          padding: 10px 16px;
           border: none;
           border-radius: 12px;
           font-weight: 800;
+          font-size: 0.95rem;
           cursor: pointer;
           transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.2s;
           touch-action: manipulation;
         }
         .btn-upload:disabled{ opacity: 0.7; cursor: not-allowed; }
-        .btn-upload:hover{ transform: translateY(-1px); box-shadow: 0 8px 20px rgba(255, 112, 67, 0.35); }
+        .btn-upload:hover{ transform: translateY(-1px); box-shadow: 0 8px 18px rgba(255, 112, 67, 0.28); }
 
         .btn-ghost{
           background: #fff7ed;
           color: #9a5a22;
           border: 1px dashed #f5c38a;
           border-radius: 12px;
-          padding: 12px 16px;
+          padding: 10px 14px;
           font-weight: 800;
+          font-size: 0.95rem;
           cursor: pointer;
           transition: background-color 0.2s ease;
         }
         .btn-ghost:hover{ background: #ffedd5; }
 
-        /* App-like toast pinned under the notch area with max-width */
+        /* ✅ mobile: actions buttons full width */
+        @media (max-width: 560px){
+          .actions{ flex-direction: column; }
+          .btn-ghost, .btn-upload{ width: 100%; }
+        }
+
+        /* Desktop: keep it clean (optional center card without big padding) */
+        @media (min-width: 992px){
+          .upload-card{
+            width: min(1100px, 100%);
+            margin: 12px auto;
+            border-radius: var(--radius);
+            border: 1px solid rgba(0,0,0,0.06);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+            overflow: hidden;
+          }
+          .dropzone{ border-radius: 12px; margin: 14px; }
+          .form-row{ padding: 0 14px 12px; }
+          .actions{ padding: 0 14px 14px; }
+        }
+
+        /* toast */
         .popup-message{
           position: fixed;
           top: calc(env(safe-area-inset-top, 0px) + 12px);
@@ -391,7 +418,7 @@ const Document = () => {
           z-index: 9999;
           text-align: center;
           color: #fff;
-          font-size: clamp(0.9rem, 1vw, 1rem);
+          font-size: 0.95rem;
           max-width: min(92vw, 520px);
           box-shadow: 0 8px 24px rgba(0,0,0,0.25);
           word-break: break-word;
@@ -399,12 +426,6 @@ const Document = () => {
         .popup-message.success{ background:#2e7d32; }
         .popup-message.error{ background:#c62828; }
 
-        /* Ultra-small phones tweaks */
-        @media (max-width: 360px){
-          .form-row{ grid-template-columns: 1fr; }
-        }
-
-        /* Reduce motion if user prefers */
         @media (prefers-reduced-motion: reduce){
           * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; }
         }
