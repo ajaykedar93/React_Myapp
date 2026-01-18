@@ -18,7 +18,7 @@ export default function AddInward() {
     material: "",
     quantity: "",
     quantity_type: "",
-    material_use: "",
+    material_use: "", // ✅ optional
   });
 
   const [workDate, setWorkDate] = useState(todayISO());
@@ -44,7 +44,8 @@ export default function AddInward() {
   const closeModal = () => setModal((m) => ({ ...m, open: false }));
 
   const addItemRow = () => setItems((prev) => [...prev, emptyItem()]);
-  const removeItemRow = (idx) => setItems((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx)));
+  const removeItemRow = (idx) =>
+    setItems((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx)));
 
   const updateItem = (idx, patch) => {
     setItems((prev) => {
@@ -74,23 +75,23 @@ export default function AddInward() {
       material: (it.material || "").trim(),
       quantity: it.quantity === "" ? null : Number(it.quantity),
       quantity_type: (it.quantity_type || "").trim() || null,
-      material_use: (it.material_use || "").trim(),
+      material_use: (it.material_use || "").trim() || null, // ✅ optional (send null if empty)
     }));
 
     if (!clean.length) errs.push("At least 1 material is required.");
 
     clean.forEach((it, i) => {
       if (!it.material) errs.push(`Row ${i + 1}: Material is required.`);
-      if (!it.material_use) errs.push(`Row ${i + 1}: Material Use is required.`);
+      // ✅ Material Use is optional, so no validation here
       if (it.quantity !== null && Number.isNaN(it.quantity)) errs.push(`Row ${i + 1}: Quantity must be a number.`);
     });
 
-    // ✅ prevent duplicate inside same form
+    // ✅ prevent duplicate inside same form (Date + Store + Material)
     const seen = new Set();
     for (let i = 0; i < clean.length; i++) {
-      const k = `${workDate}||${s.toLowerCase()}||${clean[i].material.toLowerCase()}||${clean[i].material_use.toLowerCase()}`;
+      const k = `${workDate}||${s.toLowerCase()}||${clean[i].material.toLowerCase()}`;
       if (seen.has(k)) {
-        errs.push(`Duplicate inside form not allowed (Row ${i + 1}). Same Date + Store + Material + Material Use.`);
+        errs.push(`Duplicate inside form not allowed (Row ${i + 1}). Same Date + Store + Material.`);
         break;
       }
       seen.add(k);
@@ -130,12 +131,6 @@ export default function AddInward() {
       fd.append("store", v.store);
       fd.append("items", JSON.stringify(v.clean));
 
-      /**
-       * ✅ IMPORTANT (backend should support this)
-       * Send SINGLE file for whole inward:
-       * - key name: "bill" (recommended)
-       * If your backend expects another key, change here (example: "file" or "files").
-       */
       if (billFile) fd.append("bill", billFile);
 
       const r = await fetch(ADD_API_URL, { method: "POST", body: fd });
@@ -154,12 +149,16 @@ export default function AddInward() {
         openModal(
           "error",
           "Duplicate Not Allowed",
-          "Same Date + Store + Material + Material Use already exists. Please change data and try again."
+          "Same Date + Store + Material already exists. Please change data and try again."
         );
         return;
       }
 
-      openModal("error", "Failed to Save", data?.message ? String(data.message) : "Something went wrong. Please try again.");
+      openModal(
+        "error",
+        "Failed to Save",
+        data?.message ? String(data.message) : "Something went wrong. Please try again."
+      );
     } catch (err) {
       setOverlay({ open: false, text: "Please wait..." });
       openModal("error", "Network Error", "Server not reachable. Please check backend and try again.");
@@ -333,13 +332,13 @@ export default function AddInward() {
                     </div>
 
                     <div className="ai-field ai-spanAll">
-                      <label>Material Use</label>
+                      <label>Material Use (Optional)</label>
                       <textarea
                         rows={3}
-                        placeholder="Write full usage details."
+                        placeholder="Write full usage details (optional)."
                         value={it.material_use}
                         onChange={(e) => updateItem(idx, { material_use: e.target.value })}
-                        required
+                        // ✅ removed required
                       />
                     </div>
 
@@ -414,7 +413,12 @@ export default function AddInward() {
                   <pre className="ai-modalMsg">{modal.message}</pre>
                 </div>
                 <div className="ai-modalActions">
-                  <button className="ai-btn ai-btn--primary ai-ripple" onPointerDown={setRipplePoint} type="button" onClick={closeModal}>
+                  <button
+                    className="ai-btn ai-btn--primary ai-ripple"
+                    onPointerDown={setRipplePoint}
+                    type="button"
+                    onClick={closeModal}
+                  >
                     OK
                   </button>
                 </div>
