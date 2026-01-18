@@ -68,7 +68,6 @@ export default function InwardGet() {
     items: [],
   });
 
-  // ✅ Build correct preview URL (absolute)
   const computeFileUrl = (it) => {
     if (it?.file_url) return it.file_url;
     if (it?.upload_id) return `${API_BASE}/api/inward/upload/${it.upload_id}/view`;
@@ -236,7 +235,8 @@ export default function InwardGet() {
     edit.items.forEach((it, i) => {
       if (!String(it.material || "").trim()) errs.push(`Row ${i + 1}: Material required`);
       if (!String(it.material_use || "").trim()) errs.push(`Row ${i + 1}: Material Use required`);
-      if (it.quantity !== "" && it.quantity !== null && Number.isNaN(Number(it.quantity))) errs.push(`Row ${i + 1}: Quantity invalid`);
+      if (it.quantity !== "" && it.quantity !== null && Number.isNaN(Number(it.quantity)))
+        errs.push(`Row ${i + 1}: Quantity invalid`);
     });
 
     if (errs.length) {
@@ -349,7 +349,6 @@ export default function InwardGet() {
     setTimeout(() => fetchList(), 0);
   };
 
-  // ✅ ripple point
   const setRipplePoint = (e) => {
     const el = e.currentTarget;
     const r = el.getBoundingClientRect();
@@ -367,20 +366,10 @@ export default function InwardGet() {
         </div>
 
         <div className="igTopbarActions">
-          <button
-            type="button"
-            className="igBtn igBtn--outline igRipple"
-            onPointerDown={setRipplePoint}
-            onClick={fetchList}
-          >
+          <button type="button" className="igBtn igBtn--outline igRipple" onPointerDown={setRipplePoint} onClick={fetchList}>
             Refresh
           </button>
-          <button
-            type="button"
-            className="igBtn igBtn--primary igRipple"
-            onPointerDown={setRipplePoint}
-            onClick={downloadPdf}
-          >
+          <button type="button" className="igBtn igBtn--primary igRipple" onPointerDown={setRipplePoint} onClick={downloadPdf}>
             Download PDF
           </button>
         </div>
@@ -398,12 +387,7 @@ export default function InwardGet() {
         </div>
 
         <div className="igFilterBtns">
-          <button
-            type="button"
-            className="igBtn igBtn--dark igRipple"
-            onPointerDown={setRipplePoint}
-            onClick={fetchList}
-          >
+          <button type="button" className="igBtn igBtn--dark igRipple" onPointerDown={setRipplePoint} onClick={fetchList}>
             Apply
           </button>
 
@@ -431,20 +415,10 @@ export default function InwardGet() {
             <div className="igEmptyTitle">No inward records</div>
             <div className="igEmptySub">Try changing filter dates or clear filters.</div>
             <div className="igEmptyActions">
-              <button
-                type="button"
-                className="igBtn igBtn--dark igRipple"
-                onPointerDown={setRipplePoint}
-                onClick={fetchList}
-              >
+              <button type="button" className="igBtn igBtn--dark igRipple" onPointerDown={setRipplePoint} onClick={fetchList}>
                 Apply / Refresh
               </button>
-              <button
-                type="button"
-                className="igBtn igBtn--ghost igRipple"
-                onPointerDown={setRipplePoint}
-                onClick={clearFilters}
-              >
+              <button type="button" className="igBtn igBtn--ghost igRipple" onPointerDown={setRipplePoint} onClick={clearFilters}>
                 Clear Filters
               </button>
             </div>
@@ -470,20 +444,10 @@ export default function InwardGet() {
                 </div>
 
                 <div className="igHeadRight">
-                  <button
-                    type="button"
-                    className="igBtn igBtn--outline igRipple"
-                    onPointerDown={setRipplePoint}
-                    onClick={() => openUpdate(g.inward_id)}
-                  >
+                  <button type="button" className="igBtn igBtn--outline igRipple" onPointerDown={setRipplePoint} onClick={() => openUpdate(g.inward_id)}>
                     Update
                   </button>
-                  <button
-                    type="button"
-                    className="igBtn igBtn--danger igRipple"
-                    onPointerDown={setRipplePoint}
-                    onClick={() => confirmDelete(g.inward_id, g.seq_no)}
-                  >
+                  <button type="button" className="igBtn igBtn--danger igRipple" onPointerDown={setRipplePoint} onClick={() => confirmDelete(g.inward_id, g.seq_no)}>
                     Delete
                   </button>
                 </div>
@@ -528,12 +492,7 @@ export default function InwardGet() {
                           </td>
 
                           <td className="igBillCell">
-                            <button
-                              type="button"
-                              className="igBtn igBtn--small igRipple"
-                              onPointerDown={setRipplePoint}
-                              onClick={() => openImage(r)}
-                            >
+                            <button type="button" className="igBtn igBtn--small igBtn--sky igRipple" onPointerDown={setRipplePoint} onClick={() => openImage(r)}>
                               View
                             </button>
                           </td>
@@ -544,20 +503,10 @@ export default function InwardGet() {
               </div>
 
               <div className="igMobileActions">
-                <button
-                  type="button"
-                  className="igBtn igBtn--outline igBtnTiny igRipple"
-                  onPointerDown={setRipplePoint}
-                  onClick={() => openUpdate(g.inward_id)}
-                >
+                <button type="button" className="igBtn igBtn--outline igBtnTiny igRipple" onPointerDown={setRipplePoint} onClick={() => openUpdate(g.inward_id)}>
                   Update
                 </button>
-                <button
-                  type="button"
-                  className="igBtn igBtn--danger igBtnTiny igRipple"
-                  onPointerDown={setRipplePoint}
-                  onClick={() => confirmDelete(g.inward_id, g.seq_no)}
-                >
+                <button type="button" className="igBtn igBtn--danger igBtnTiny igRipple" onPointerDown={setRipplePoint} onClick={() => confirmDelete(g.inward_id, g.seq_no)}>
                   Delete
                 </button>
               </div>
@@ -566,7 +515,6 @@ export default function InwardGet() {
         </div>
       )}
 
-      {/* =============== PORTAL MODALS =============== */}
       <Portal>
         {overlay.open && (
           <div className="igOverlay" role="status" aria-live="polite">
@@ -591,12 +539,7 @@ export default function InwardGet() {
 
               <div className="igDlgActions">
                 {dlg.showCancel && (
-                  <button
-                    className="igBtn igBtn--outline igRipple"
-                    onPointerDown={setRipplePoint}
-                    onClick={dlg.onCancel || closeDlg}
-                    type="button"
-                  >
+                  <button className="igBtn igBtn--outline igRipple" onPointerDown={setRipplePoint} onClick={dlg.onCancel || closeDlg} type="button">
                     {dlg.cancelText}
                   </button>
                 )}
@@ -616,35 +559,23 @@ export default function InwardGet() {
           </div>
         )}
 
-        {/* viewer */}
         {imageViewer.open && (
           <div className="igImgOverlay" onClick={closeImage} role="dialog" aria-modal="true">
             <div className="igImgModal igImgModalSafe" onClick={(e) => e.stopPropagation()}>
               <div className="igImgTop">
                 <div className="igImgTitle">{imageViewer.title}</div>
-                <button
-                  type="button"
-                  className="igXBtn igRipple"
-                  onPointerDown={setRipplePoint}
-                  onClick={closeImage}
-                  aria-label="Close"
-                >
+                <button type="button" className="igXBtn igRipple" onPointerDown={setRipplePoint} onClick={closeImage} aria-label="Close">
                   ✕
                 </button>
               </div>
 
               <div className="igImgBody">
-                {imageViewer.isPdf ? (
-                  <iframe title="Bill PDF" src={imageViewer.url} className="igPdfFrame" />
-                ) : (
-                  <img src={imageViewer.url} alt="Bill" className="igImgView" />
-                )}
+                {imageViewer.isPdf ? <iframe title="Bill PDF" src={imageViewer.url} className="igPdfFrame" /> : <img src={imageViewer.url} alt="Bill" className="igImgView" />}
               </div>
             </div>
           </div>
         )}
 
-        {/* edit */}
         {edit.open && (
           <div className="igDlgOverlay" role="dialog" aria-modal="true" onClick={closeUpdate}>
             <div className="igDlg igDlgWide igDlgScrollable" onClick={(e) => e.stopPropagation()}>
@@ -656,19 +587,11 @@ export default function InwardGet() {
                 <div className="igEditGrid">
                   <div className="igField" style={{ width: "100%" }}>
                     <label>Date</label>
-                    <input
-                      type="date"
-                      value={edit.work_date}
-                      onChange={(e) => setEdit((p) => ({ ...p, work_date: e.target.value }))}
-                    />
+                    <input type="date" value={edit.work_date} onChange={(e) => setEdit((p) => ({ ...p, work_date: e.target.value }))} />
                   </div>
                   <div className="igField" style={{ width: "100%" }}>
                     <label>Store</label>
-                    <input
-                      type="text"
-                      value={edit.store}
-                      onChange={(e) => setEdit((p) => ({ ...p, store: e.target.value }))}
-                    />
+                    <input type="text" value={edit.store} onChange={(e) => setEdit((p) => ({ ...p, store: e.target.value }))} />
                   </div>
                 </div>
 
@@ -692,33 +615,16 @@ export default function InwardGet() {
                       {edit.items.map((it, idx) => (
                         <tr key={it.id || idx}>
                           <td>
-                            <input
-                              className="igCellInput"
-                              value={it.material}
-                              onChange={(e) => updateEditItem(idx, { material: e.target.value })}
-                            />
+                            <input className="igCellInput" value={it.material} onChange={(e) => updateEditItem(idx, { material: e.target.value })} />
                           </td>
                           <td>
-                            <input
-                              className="igCellInput"
-                              value={it.quantity}
-                              onChange={(e) => updateEditItem(idx, { quantity: e.target.value })}
-                            />
+                            <input className="igCellInput" value={it.quantity} onChange={(e) => updateEditItem(idx, { quantity: e.target.value })} />
                           </td>
                           <td>
-                            <input
-                              className="igCellInput"
-                              value={it.quantity_type}
-                              onChange={(e) => updateEditItem(idx, { quantity_type: e.target.value })}
-                            />
+                            <input className="igCellInput" value={it.quantity_type} onChange={(e) => updateEditItem(idx, { quantity_type: e.target.value })} />
                           </td>
                           <td>
-                            <textarea
-                              className="igCellTextarea"
-                              rows={2}
-                              value={it.material_use}
-                              onChange={(e) => updateEditItem(idx, { material_use: e.target.value })}
-                            />
+                            <textarea className="igCellTextarea" rows={2} value={it.material_use} onChange={(e) => updateEditItem(idx, { material_use: e.target.value })} />
                           </td>
                         </tr>
                       ))}
@@ -732,20 +638,10 @@ export default function InwardGet() {
               </div>
 
               <div className="igDlgActions">
-                <button
-                  type="button"
-                  className="igBtn igBtn--outline igRipple"
-                  onPointerDown={setRipplePoint}
-                  onClick={closeUpdate}
-                >
+                <button type="button" className="igBtn igBtn--ghost igRipple" onPointerDown={setRipplePoint} onClick={closeUpdate}>
                   Cancel
                 </button>
-                <button
-                  type="button"
-                  className="igBtn igBtn--dark igRipple"
-                  onPointerDown={setRipplePoint}
-                  onClick={saveUpdate}
-                >
+                <button type="button" className="igBtn igBtn--emerald igRipple" onPointerDown={setRipplePoint} onClick={saveUpdate}>
                   Save Update
                 </button>
               </div>
@@ -760,7 +656,15 @@ export default function InwardGet() {
 }
 
 const css = `
-.igPage{min-height:100vh;width:100%;background:#f6f8fc;margin:0;padding:0;display:flex;flex-direction:column;}
+:root{
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --modal-pad: 16px;
+}
+
+.igPage{min-height:100svh;width:100%;background:#f6f8fc;margin:0;padding:0;display:flex;flex-direction:column;}
 
 /* topbar */
 .igTopbar{
@@ -802,38 +706,38 @@ const css = `
 }
 .igFilterBtns{display:flex;gap:10px;flex-wrap:wrap;}
 
-/* buttons */
+/* buttons (professional smaller) */
 .igBtn{
-  border:0;border-radius:12px;padding:10px 12px;font-weight:900;cursor:pointer;font-size:14px;
-  transition:transform .08s ease, filter .15s ease, opacity .2s ease;
-  user-select:none;
-  position:relative;
-  overflow:hidden;
+  border:0;border-radius:12px;
+  padding:9px 11px;
+  font-weight:900;cursor:pointer;font-size:13px;line-height:1;
+  transition:transform .08s ease, filter .15s ease, opacity .2s ease, box-shadow .15s ease;
+  user-select:none;position:relative;overflow:hidden;
+  touch-action:manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
-.igBtn:active{transform:scale(0.98);}
+.igBtn:hover{filter:brightness(0.98);}
+.igBtn:active{transform:scale(0.98);filter:brightness(0.96);}
 .igBtn:disabled{opacity:0.55;cursor:not-allowed;}
 .igBtn:focus-visible{outline:3px solid rgba(59,130,246,0.45);outline-offset:2px;}
 
-.igBtn--primary{background:#ffffff;color:#0b1220;}
-.igBtn--dark{background:#0b1220;color:#fff;}
+.igBtn--primary{background:#ffffff;color:#0b1220;border:1px solid rgba(255,255,255,0.25);}
+.igBtn--dark{background:#0b1220;color:#fff;box-shadow:0 10px 22px rgba(11,18,32,0.18);}
 .igBtn--outline{background:#fff;color:#0b1220;border:1px solid rgba(11,18,32,0.18);}
 .igBtn--danger{background:#fee2e2;color:#b91c1c;border:1px solid rgba(185,28,28,0.18);}
 .igBtn--ghost{background:rgba(11,18,32,0.08);color:#0b1220;border:1px solid rgba(11,18,32,0.06);}
+.igBtn--emerald{background:rgba(16,185,129,0.16);color:#065f46;border:1px solid rgba(16,185,129,0.20);}
+.igBtn--sky{background:rgba(37,99,235,0.12);color:#1d4ed8;border:1px solid rgba(37,99,235,0.18);}
 
-.igBtn--small{
-  padding:8px 10px;font-size:12px;border-radius:10px;
-  background:rgba(11,18,32,0.08);color:#0b1220;border:1px solid rgba(11,18,32,0.06);
-}
+.igBtn--small{padding:7px 10px;font-size:12px;border-radius:10px;}
 .igBtnTiny{padding:8px 10px;font-size:13px;border-radius:12px;}
 
 /* ripple */
 .igRipple::after{
   content:"";
-  position:absolute;
-  inset:0;
+  position:absolute;inset:0;
   background: radial-gradient(circle at var(--rx, 50%) var(--ry, 50%), rgba(255,255,255,0.45), transparent 45%);
-  opacity:0;
-  transition: opacity .25s ease;
+  opacity:0;transition: opacity .25s ease;
 }
 .igRipple:active::after{opacity:1;}
 
@@ -862,8 +766,8 @@ const css = `
 .igList{padding:0 12px 12px;display:flex;flex-direction:column;gap:12px;box-sizing:border-box;}
 .igCard{
   width:100%;
-  max-width: 1200px;         /* ✅ not stretch too wide on large screens */
-  margin:0 auto;             /* ✅ center */
+  max-width: 1200px;
+  margin:0 auto;
   background:#fff;
   border:1px solid rgba(0,0,0,0.08);
   border-radius:20px;
@@ -881,31 +785,25 @@ const css = `
 .igDateText{font-weight:900;color:#0b1220;font-size:13px;}
 .igHeadRight{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;}
 
-/* table wrap */
 .igTableWrap{width:100%;overflow-x:auto;border-top:1px solid rgba(0,0,0,0.06);}
-
-/* ✅ Auto table: content decides width, not fixed 1100 */
 .igTbl--auto{
   width:100%;
   table-layout:auto;
   border-collapse:collapse;
   font-size:13px;
-  min-width: 860px; /* keep usable on desktop; mobile will scroll */
+  min-width: 860px;
 }
 .igTbl th,.igTbl td{padding:10px 10px;border-bottom:1px solid rgba(0,0,0,0.06);vertical-align:top;}
 .igTbl th{text-align:left;font-weight:900;background:#f3f4f6;color:#0b1220;white-space:nowrap;}
 
-/* column sizing (close but not touching) */
 .col-sub{width:80px;}
 .col-qty{width:150px;}
 .col-store{width:200px;}
 .col-bill{width:120px;}
 .col-qtyType{width:160px;}
-/* material/use auto, but with minimum */
 .col-mat{min-width:200px;}
 .col-use{min-width:260px;}
 
-/* cell styles */
 .igSubNo{font-weight:900;color:#0b1220;white-space:nowrap;}
 .igMaterial{font-weight:800;color:#0b1220;min-width:200px;}
 .igCellMain{white-space:normal;word-break:break-word;line-height:1.25;}
@@ -915,35 +813,63 @@ const css = `
 .igQtyType{font-weight:800;color:#334155;}
 .igStoreCell{white-space:nowrap;font-weight:800;color:#0b1220;max-width:240px;overflow:hidden;text-overflow:ellipsis;}
 .igUse{color:#111827;line-height:1.25;}
-/* ✅ show full text, not cut: clamp 2 lines with tooltip */
 .igClamp2{
   display:-webkit-box;
-  -webkit-line-clamp: 3;  /* show more lines */
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow:hidden;
   white-space:normal;
   word-break:break-word;
 }
 
-/* mobile actions */
 .igMobileActions{display:none;padding:12px;gap:10px;background:#fff;justify-content:flex-end;border-top:1px solid rgba(0,0,0,0.06);}
 @media (max-width: 720px){
   .igHeadRight{display:none;}
   .igMobileActions{display:flex;}
+  .igField input{width:100%;}
+  .igFilters{align-items:stretch;}
 }
 
-/* overlay + dialogs */
-.igOverlay{position:fixed; inset:0;background:rgba(0,0,0,0.45);display:flex; align-items:center; justify-content:center;padding:16px;z-index:999999;}
+/* ====================== */
+/* ✅ ONLY MOBILE: center popups + notch safe */
+/* ====================== */
+.igOverlay{position:fixed; inset:0; z-index:999999; background:rgba(0,0,0,0.45); display:flex; justify-content:center; overflow:auto; -webkit-overflow-scrolling:touch;}
+.igDlgOverlay{position:fixed; inset:0; z-index:999999; background:rgba(0,0,0,0.55); display:flex; justify-content:center; overflow:auto; -webkit-overflow-scrolling:touch;}
+.igImgOverlay{position:fixed; inset:0; z-index:999999; background:rgba(0,0,0,0.72); display:flex; justify-content:center; overflow:auto; -webkit-overflow-scrolling:touch;}
+
+/* desktop default behavior (keep as you had earlier) */
+.igOverlay,.igDlgOverlay,.igImgOverlay{align-items:flex-start; padding:16px;}
+@media (min-width: 769px){
+  .igOverlay,.igDlgOverlay,.igImgOverlay{align-items:center; padding:16px;}
+}
+
+/* ✅ mobile: ALWAYS center + safe-area padding so not touch notch */
+@media (max-width: 768px){
+  .igOverlay,.igDlgOverlay,.igImgOverlay{
+    align-items:center !important;
+    padding:
+      calc(var(--modal-pad) + var(--safe-top))
+      calc(var(--modal-pad) + var(--safe-right))
+      calc(var(--modal-pad) + var(--safe-bottom))
+      calc(var(--modal-pad) + var(--safe-left)) !important;
+  }
+}
+
+/* overlay card */
 .igOverlayCard{width:100%;max-width:360px;background:#fff;border-radius:18px;box-shadow:0 20px 60px rgba(0,0,0,0.25);padding:18px;display:flex;flex-direction:column;align-items:center;gap:10px;}
 .igSpinner{width:42px;height:42px;border-radius:999px;border:4px solid rgba(11,18,32,0.18);border-top-color:#0b1220;animation:igSpin 0.9s linear infinite;}
 .igOverlayText{font-weight:900;color:#0b1220;font-size:16px;text-align:center;}
 .igOverlaySub{font-size:12px;color:#6b7280;text-align:center;}
 
-.igDlgOverlay{position:fixed; inset:0;background:rgba(0,0,0,0.55);display:flex; justify-content:center; align-items:flex-start;padding:16px;overflow:auto;-webkit-overflow-scrolling:touch;z-index:999999;}
-@media (min-width: 769px){ .igDlgOverlay{align-items:center; padding:16px;} }
+/* dialogs */
 .igDlg{width:100%;max-width:520px;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.25);}
 .igDlgWide{max-width:920px;}
-.igDlgScrollable{max-height: calc(100vh - 32px);display:flex;flex-direction:column;}
+.igDlgScrollable{max-height: calc(100svh - 32px);display:flex;flex-direction:column;}
+@media (max-width: 768px){
+  .igDlgScrollable{
+    max-height: calc(100svh - (var(--modal-pad)*2) - var(--safe-top) - var(--safe-bottom));
+  }
+}
 .igDlgTop{padding:14px 16px;}
 .igDlgTop--success{background:rgba(16,185,129,0.15);}
 .igDlgTop--error{background:rgba(239,68,68,0.15);}
@@ -955,15 +881,19 @@ const css = `
 .igDlgActions{padding:12px 16px 16px;display:flex;justify-content:flex-end;gap:10px;background:#fff;border-top:1px solid rgba(0,0,0,0.06);}
 
 /* viewer */
-.igImgOverlay{position:fixed; inset:0;background:rgba(0,0,0,0.72);display:flex; justify-content:center; align-items:center;padding:16px;overflow:auto;-webkit-overflow-scrolling:touch;z-index:999999;}
-.igImgModalSafe{max-height:calc(100vh - 32px);display:flex;flex-direction:column;}
+.igImgModalSafe{max-height:calc(100svh - 32px);display:flex;flex-direction:column;}
+@media (max-width: 768px){
+  .igImgModalSafe{
+    max-height: calc(100svh - (var(--modal-pad)*2) - var(--safe-top) - var(--safe-bottom));
+  }
+}
 .igImgModal{width:100%;max-width:900px;background:#0b1220;border-radius:18px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.35);}
 .igImgTop{display:flex;align-items:center;justify-content:space-between;padding:12px 12px;color:#fff;}
 .igImgTitle{font-weight:900;font-size:14px;opacity:0.95;}
 .igXBtn{border:0;background:rgba(255,255,255,0.14);color:#fff;border-radius:12px;padding:8px 12px;font-weight:900;cursor:pointer;}
 .igImgBody{background:#111827;overflow:auto;}
-.igImgView{width:100%;max-height:75vh;object-fit:contain;display:block;}
-.igPdfFrame{width:100%;height:75vh;border:0;display:block;background:#111827;}
+.igImgView{width:100%;max-height:70svh;object-fit:contain;display:block;}
+.igPdfFrame{width:100%;height:70svh;border:0;display:block;background:#111827;}
 
 /* edit */
 .igEditGrid{display:grid;grid-template-columns:1fr;gap:12px;}
