@@ -13,20 +13,23 @@ export default function AddInward() {
     return `${yyyy}-${mm}-${dd}`;
   };
 
+  // ✅ only material rows (NO bill per row)
   const emptyItem = () => ({
     material: "",
     quantity: "",
     quantity_type: "",
     material_use: "",
-    billFile: null,
-    billPreviewName: "",
-    _fileKey: Math.random().toString(36).slice(2),
   });
 
   const [workDate, setWorkDate] = useState(todayISO());
   const [store, setStore] = useState("");
   const [items, setItems] = useState([emptyItem()]);
   const [saving, setSaving] = useState(false);
+
+  // ✅ one bill for whole inward (store)
+  const [billFile, setBillFile] = useState(null);
+  const [billPreviewName, setBillPreviewName] = useState("");
+  const [billKey, setBillKey] = useState(Math.random().toString(36).slice(2));
 
   const [overlay, setOverlay] = useState({ open: false, text: "Please wait..." });
 
@@ -55,6 +58,9 @@ export default function AddInward() {
     setWorkDate(todayISO());
     setStore("");
     setItems([emptyItem()]);
+    setBillFile(null);
+    setBillPreviewName("");
+    setBillKey(Math.random().toString(36).slice(2));
   };
 
   const validateForSave = () => {
@@ -79,6 +85,7 @@ export default function AddInward() {
       if (it.quantity !== null && Number.isNaN(it.quantity)) errs.push(`Row ${i + 1}: Quantity must be a number.`);
     });
 
+    // ✅ prevent duplicate inside same form
     const seen = new Set();
     for (let i = 0; i < clean.length; i++) {
       const k = `${workDate}||${s.toLowerCase()}||${clean[i].material.toLowerCase()}||${clean[i].material_use.toLowerCase()}`;
@@ -92,19 +99,16 @@ export default function AddInward() {
     return { ok: errs.length === 0, errs, clean, store: s };
   };
 
-  const onFileSelected = (idx, file) => {
-    updateItem(idx, {
-      billFile: file,
-      billPreviewName: file ? file.name : "",
-    });
+  // ✅ ONE bill file select
+  const onBillSelected = (file) => {
+    setBillFile(file);
+    setBillPreviewName(file ? file.name : "");
   };
 
-  const removeSelectedFile = (idx) => {
-    updateItem(idx, {
-      billFile: null,
-      billPreviewName: "",
-      _fileKey: Math.random().toString(36).slice(2),
-    });
+  const removeBill = () => {
+    setBillFile(null);
+    setBillPreviewName("");
+    setBillKey(Math.random().toString(36).slice(2));
   };
 
   const onSubmit = async (e) => {
@@ -126,15 +130,13 @@ export default function AddInward() {
       fd.append("store", v.store);
       fd.append("items", JSON.stringify(v.clean));
 
-      // backend expects: {"0":true,"2":true}
-      const fileIndexMap = {};
-      items.forEach((it, itemIndex) => {
-        if (it.billFile) {
-          fd.append("files", it.billFile);
-          fileIndexMap[String(itemIndex)] = true;
-        }
-      });
-      fd.append("fileIndexMap", JSON.stringify(fileIndexMap));
+      /**
+       * ✅ IMPORTANT (backend should support this)
+       * Send SINGLE file for whole inward:
+       * - key name: "bill" (recommended)
+       * If your backend expects another key, change here (example: "file" or "files").
+       */
+      if (billFile) fd.append("bill", billFile);
 
       const r = await fetch(ADD_API_URL, { method: "POST", body: fd });
       const data = await r.json().catch(() => ({}));
@@ -166,7 +168,7 @@ export default function AddInward() {
     }
   };
 
-  // ✅ real ripple from click point
+  // ✅ ripple point
   const setRipplePoint = (e) => {
     const el = e.currentTarget;
     const r = el.getBoundingClientRect();
@@ -180,12 +182,11 @@ export default function AddInward() {
 
   return (
     <div className="ai-page">
-      {/* ✅ BLACK TOP: only title */}
       <div className="ai-topbar">
         <div className="ai-topbar__title">Add Inward</div>
       </div>
 
-      {/* ✅ BELOW: Date (white icon) */}
+      {/* ✅ Date (same) */}
       <div className="ai-whiteSection">
         <div className="ai-field">
           <label>Date</label>
@@ -198,7 +199,7 @@ export default function AddInward() {
               required
             />
             <span className="ai-dateIconWhite" aria-hidden="true">
-                 Ajay
+              📅
             </span>
           </div>
         </div>
@@ -216,6 +217,58 @@ export default function AddInward() {
               onChange={(e) => setStore(e.target.value)}
               required
             />
+            <div className="ai-muted" style={{ marginTop: 6 }}>
+              Note: This inward will have <b>only one Store</b> and <b>only one Bill file</b> (optional).
+            </div>
+          </div>
+        </section>
+
+        <div className="ai-divider" />
+
+        {/* ✅ ONE BILL UPLOAD for whole inward */}
+        <section className="ai-section">
+          <div className="ai-sectionHead">
+            <div>
+              <div className="ai-h2">Bill File (Optional)</div>
+              <div className="ai-muted">One image/PDF for complete inward entry (not per material).</div>
+            </div>
+          </div>
+
+          <div className="ai-fileBox">
+            <input
+              key={billKey}
+              className="ai-fileInput"
+              type="file"
+              accept="image/*,.pdf"
+              onChange={(e) => onBillSelected(e.target.files?.[0] || null)}
+            />
+
+            <div className="ai-fileMeta">
+              <div className={`ai-pill ${billFile ? "ai-pill--ok" : "ai-pill--wait"}`}>
+                {billFile ? "Selected" : "No file"}
+              </div>
+
+              <div className="ai-hint">
+                {billPreviewName ? (
+                  <>
+                    Selected: <span className="ai-mono">{billPreviewName}</span>
+                  </>
+                ) : (
+                  <>Choose a single bill file (optional).</>
+                )}
+              </div>
+
+              {billFile && (
+                <button
+                  type="button"
+                  className="ai-btn ai-btn--danger ai-btn--small ai-ripple"
+                  onPointerDown={setRipplePoint}
+                  onClick={removeBill}
+                >
+                  Remove Bill File
+                </button>
+              )}
+            </div>
           </div>
         </section>
 
@@ -226,7 +279,7 @@ export default function AddInward() {
           <div className="ai-sectionHead">
             <div>
               <div className="ai-h2">Materials</div>
-              <div className="ai-muted">Bill file optional (image/pdf).</div>
+              <div className="ai-muted">Add multiple materials. Bill is common (above).</div>
             </div>
 
             <button
@@ -288,48 +341,6 @@ export default function AddInward() {
                         onChange={(e) => updateItem(idx, { material_use: e.target.value })}
                         required
                       />
-                    </div>
-
-                    {/* ✅ Bill Upload + Remove */}
-                    <div className="ai-field ai-spanAll">
-                      <label>Bill File (Optional)</label>
-
-                      <div className="ai-fileBox">
-                        <input
-                          key={it._fileKey}
-                          className="ai-fileInput"
-                          type="file"
-                          accept="image/*,.pdf"
-                          onChange={(e) => onFileSelected(idx, e.target.files?.[0] || null)}
-                        />
-
-                        <div className="ai-fileMeta">
-                          <div className={`ai-pill ${it.billFile ? "ai-pill--ok" : "ai-pill--wait"}`}>
-                            {it.billFile ? "Selected" : "No file"}
-                          </div>
-
-                          <div className="ai-hint">
-                            {it.billPreviewName ? (
-                              <>
-                                Selected: <span className="ai-mono">{it.billPreviewName}</span>
-                              </>
-                            ) : (
-                              <>Choose an image/PDF file (optional).</>
-                            )}
-                          </div>
-
-                          {it.billFile && (
-                            <button
-                              type="button"
-                              className="ai-btn ai-btn--danger ai-btn--small ai-ripple"
-                              onPointerDown={setRipplePoint}
-                              onClick={() => removeSelectedFile(idx)}
-                            >
-                              Remove Selected File
-                            </button>
-                          )}
-                        </div>
-                      </div>
                     </div>
 
                     <div className="ai-rowActions">
@@ -421,11 +432,11 @@ export default function AddInward() {
 const css = `
 .ai-page{min-height:100vh;width:100%;background:#f5f7fb;margin:0;padding:0;display:flex;flex-direction:column;}
 
-/* ✅ BLACK TOP: title only */
+/* top */
 .ai-topbar{width:100%;background:#0b1220;color:#fff;padding:14px 14px;box-sizing:border-box;}
 .ai-topbar__title{font-size:18px;font-weight:900;}
 
-/* ✅ White section for Date */
+/* white date section */
 .ai-whiteSection{
   width:100%;
   background:#fff;
@@ -441,7 +452,6 @@ const css = `
 }
 .ai-field textarea{resize:vertical;}
 
-/* ✅ Date input (white) */
 .ai-dateWrapWhite{position:relative;display:flex;align-items:center;width:100%;}
 .ai-dateInputWhite{
   width:100%;
@@ -453,10 +463,6 @@ const css = `
   outline:none;
   background:#fff;
   color:#111827;
-}
-.ai-dateInputWhite::-webkit-calendar-picker-indicator{
-  opacity:1;
-  cursor:pointer;
 }
 .ai-dateIconWhite{
   position:absolute;
@@ -493,7 +499,7 @@ const css = `
 .ai-spanAll{grid-column:1 / -1;}
 .ai-rowActions{grid-column:1 / -1;display:flex;justify-content:flex-end;gap:10px;}
 
-/* file box */
+/* ✅ one common bill box */
 .ai-fileBox{
   width:100%;
   display:flex;
@@ -513,12 +519,11 @@ const css = `
   background:#fff;
 }
 .ai-fileMeta{display:flex;flex-direction:column;gap:8px;}
-
 .ai-pill{width:fit-content;font-size:12px;padding:6px 10px;border-radius:999px;font-weight:900;}
 .ai-pill--ok{background:rgba(16,185,129,0.15);color:#065f46;}
 .ai-pill--wait{background:rgba(234,179,8,0.15);color:#7c5d00;}
 
-/* ✅ Buttons + touch feedback */
+/* buttons */
 .ai-btn{
   border:0;border-radius:12px;padding:10px 12px;font-weight:900;
   cursor:pointer;font-size:14px;user-select:none;
@@ -551,7 +556,7 @@ const css = `
   .ai-spanAll{grid-column:1 / -1;}
 }
 
-/* Overlay + modal */
+/* overlay + modal */
 .ai-overlay{
   position:fixed;inset:0;background:rgba(0,0,0,0.45);
   display:flex;align-items:center;justify-content:center;padding:16px;

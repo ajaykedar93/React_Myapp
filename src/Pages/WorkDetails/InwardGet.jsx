@@ -17,6 +17,25 @@ export default function InwardGet() {
     return `${yyyy}-${mm}-${dd}`;
   };
 
+  // ✅ date show ALWAYS dd/MM/yyyy
+  const formatDDMMYYYY = (iso) => {
+    const s = String(iso || "").slice(0, 10);
+    if (!s || s.length !== 10) return s || "";
+    const [y, m, d] = s.split("-");
+    if (!y || !m || !d) return s;
+    return `${d}/${m}/${y}`;
+  };
+
+  // ✅ Month title (Jan 2026 etc)
+  const formatMonthTitle = (ym) => {
+    // ym = "YYYY-MM"
+    const [y, m] = String(ym || "").split("-");
+    const monthIdx = Number(m || 0) - 1;
+    const names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    if (!y || monthIdx < 0 || monthIdx > 11) return ym || "";
+    return `${names[monthIdx]} ${y}`;
+  };
+
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
@@ -63,13 +82,19 @@ export default function InwardGet() {
     open: false,
     inwardId: null,
     seq_no: null,
+    display_seq: null, // ✅ UI sequence (month-wise)
     work_date: todayISO(),
     store: "",
     items: [],
   });
 
+  // ✅ FIX: make relative file_url absolute
   const computeFileUrl = (it) => {
-    if (it?.file_url) return it.file_url;
+    const f = it?.file_url || "";
+    if (f) {
+      if (String(f).startsWith("/")) return `${API_BASE}${f}`;
+      return f;
+    }
     if (it?.upload_id) return `${API_BASE}/api/inward/upload/${it.upload_id}/view`;
     if (it?.image_path) return it.image_path;
     return "";
@@ -93,10 +118,21 @@ export default function InwardGet() {
           material_use: it.material_use || "",
           image_url: computeFileUrl(it),
           upload_id: it.upload_id || null,
+          // ✅ IMPORTANT: backend should send mime_type; else it will stay ""
+          mime_type: it.mime_type || "",
         });
       }
     }
-    out.sort((a, b) => (a.seq_no - b.seq_no) || (a.item_order - b.item_order));
+    // stable sort (date then seq then item order)
+    out.sort((a, b) => {
+      const da = String(a.work_date || "");
+      const db = String(b.work_date || "");
+      if (da !== db) return da.localeCompare(db);
+      const sa = Number(a.seq_no || 0);
+      const sb = Number(b.seq_no || 0);
+      if (sa !== sb) return sa - sb;
+      return (a.item_order || 0) - (b.item_order || 0);
+    });
     return out;
   };
 
@@ -161,27 +197,34 @@ export default function InwardGet() {
     window.open(url, "_blank");
   };
 
-  const openImage = (row) => {
+  // ✅ FIX: detect PDF using mime_type (because /view url has no .pdf)
+  // Fallback: if mime_type missing, try extension, else treat as image.
+  const openImage = (row, displaySeq) => {
     const src = row?.image_url || "";
     if (!src) {
       openDlg({ type: "info", title: "No File", message: "This row has no bill file." });
       return;
     }
 
-    const clean = String(src).toLowerCase().split("?")[0];
-    const isPdf = clean.endsWith(".pdf");
+    const mt = String(row?.mime_type || "").toLowerCase();
+    let isPdf = mt === "application/pdf";
+
+    if (!mt) {
+      const clean = String(src).toLowerCase().split("?")[0];
+      if (clean.endsWith(".pdf")) isPdf = true;
+    }
 
     setImageViewer({
       open: true,
       url: src,
       isPdf,
-      title: `Sr.No ${row.seq_no} • ${row.material}`,
+      title: `Sr.No ${displaySeq} • ${row.material}`,
     });
   };
 
   const closeImage = () => setImageViewer({ open: false, url: "", isPdf: false, title: "" });
 
-  const openUpdate = async (inwardId) => {
+  const openUpdate = async (inwardId, displaySeq) => {
     setOverlay({ open: true, text: "Loading details..." });
     try {
       const r = await fetch(ONE_API(inwardId));
@@ -197,6 +240,7 @@ export default function InwardGet() {
         open: true,
         inwardId: data.data.id,
         seq_no: data.data.seq_no,
+        display_seq: displaySeq ?? null,
         work_date: String(data.data.work_date || "").slice(0, 10),
         store: data.data.store || "",
         items: (data.data.items || []).map((it) => ({
@@ -207,6 +251,7 @@ export default function InwardGet() {
           material_use: it.material_use || "",
           image_url: computeFileUrl(it),
           upload_id: it.upload_id || null,
+          mime_type: it.mime_type || "",
         })),
       });
     } catch (e) {
@@ -216,7 +261,7 @@ export default function InwardGet() {
   };
 
   const closeUpdate = () =>
-    setEdit({ open: false, inwardId: null, seq_no: null, work_date: todayISO(), store: "", items: [] });
+    setEdit({ open: false, inwardId: null, seq_no: null, display_seq: null, work_date: todayISO(), store: "", items: [] });
 
   const updateEditItem = (idx, patch) => {
     setEdit((p) => {
@@ -235,8 +280,7 @@ export default function InwardGet() {
     edit.items.forEach((it, i) => {
       if (!String(it.material || "").trim()) errs.push(`Row ${i + 1}: Material required`);
       if (!String(it.material_use || "").trim()) errs.push(`Row ${i + 1}: Material Use required`);
-      if (it.quantity !== "" && it.quantity !== null && Number.isNaN(Number(it.quantity)))
-        errs.push(`Row ${i + 1}: Quantity invalid`);
+      if (it.quantity !== "" && it.quantity !== null && Number.isNaN(Number(it.quantity))) errs.push(`Row ${i + 1}: Quantity invalid`);
     });
 
     if (errs.length) {
@@ -289,11 +333,11 @@ export default function InwardGet() {
     }
   };
 
-  const confirmDelete = (inwardId, seqNo) => {
+  const confirmDelete = (inwardId, displaySeq) => {
     openDlg({
       type: "error",
       title: "Delete Inward",
-      message: `Are you sure you want to delete Sr.No ${seqNo}?`,
+      message: `Are you sure you want to delete Sr.No ${displaySeq}?`,
       okText: "Delete",
       showCancel: true,
       cancelText: "Cancel",
@@ -308,7 +352,7 @@ export default function InwardGet() {
 
           if (r.ok && data?.success) {
             fetchList();
-            openDlg({ type: "success", title: "Deleted", message: `Sr.No ${seqNo} deleted successfully.` });
+            openDlg({ type: "success", title: "Deleted", message: `Sr.No ${displaySeq} deleted successfully.` });
             return;
           }
 
@@ -321,11 +365,18 @@ export default function InwardGet() {
     });
   };
 
-  const grouped = useMemo(() => {
-    const map = new Map();
+  /**
+   * ✅ YOUR REQUIREMENT (FINAL)
+   * - Still show DATE cards
+   * - But Sr.No must be MONTH-WISE continuous (1..31 or 1..N)
+   * - Deleting should re-pack numbers (no gap) after refresh
+   */
+  const groupedByMonth = useMemo(() => {
+    // build headers map from flattened rows
+    const headerMap = new Map(); // inward_id -> header
     for (const r of rows) {
-      if (!map.has(r.inward_id)) {
-        map.set(r.inward_id, {
+      if (!headerMap.has(r.inward_id)) {
+        headerMap.set(r.inward_id, {
           inward_id: r.inward_id,
           seq_no: r.seq_no,
           work_date: r.work_date,
@@ -333,9 +384,56 @@ export default function InwardGet() {
           items: [],
         });
       }
-      map.get(r.inward_id).items.push(r);
+      headerMap.get(r.inward_id).items.push(r);
     }
-    return Array.from(map.values()).sort((a, b) => a.seq_no - b.seq_no);
+
+    // monthMap: YYYY-MM -> { ym, datesMap, entriesFlat }
+    const monthMap = new Map();
+
+    for (const h of headerMap.values()) {
+      const dateISO = String(h.work_date || "").slice(0, 10);
+      const ym = dateISO.slice(0, 7); // YYYY-MM
+
+      if (!monthMap.has(ym)) monthMap.set(ym, { ym, datesMap: new Map(), entriesFlat: [] });
+
+      monthMap.get(ym).entriesFlat.push(h);
+
+      if (!monthMap.get(ym).datesMap.has(dateISO)) monthMap.get(ym).datesMap.set(dateISO, { dateISO, entries: [] });
+      monthMap.get(ym).datesMap.get(dateISO).entries.push(h);
+    }
+
+    // sort months latest first
+    const months = Array.from(monthMap.values()).sort((a, b) => String(b.ym).localeCompare(String(a.ym)));
+
+    // for each month, assign Sr.No 1..N across the month
+    for (const m of months) {
+      m.entriesFlat.sort((a, b) => {
+        const da = String(a.work_date || "");
+        const db = String(b.work_date || "");
+        if (da !== db) return da.localeCompare(db);
+        return Number(a.inward_id || 0) - Number(b.inward_id || 0);
+      });
+
+      const seqMap = new Map(); // inward_id -> display_seq
+      m.entriesFlat.forEach((e, idx) => seqMap.set(e.inward_id, idx + 1));
+
+      const dateCards = Array.from(m.datesMap.values()).sort((a, b) => String(b.dateISO).localeCompare(String(a.dateISO)));
+
+      for (const d of dateCards) {
+        d.entries = d.entries
+          .map((e) => ({
+            ...e,
+            display_seq: seqMap.get(e.inward_id) || null,
+            items: [...(e.items || [])].sort((x, y) => (x.item_order || 0) - (y.item_order || 0)),
+          }))
+          .sort((a, b) => (a.display_seq || 0) - (b.display_seq || 0));
+      }
+
+      m.dateCards = dateCards;
+      m.totalRecords = m.entriesFlat.length;
+    }
+
+    return months;
   }, [rows]);
 
   const Portal = ({ children }) => {
@@ -409,7 +507,7 @@ export default function InwardGet() {
           <div className="igMiniLoader" />
           <div className="igMuted">Loading...</div>
         </div>
-      ) : grouped.length === 0 ? (
+      ) : groupedByMonth.length === 0 ? (
         <div className="igEmpty">
           <div className="igEmptyCard">
             <div className="igEmptyTitle">No inward records</div>
@@ -426,90 +524,139 @@ export default function InwardGet() {
         </div>
       ) : (
         <div className="igList">
-          {grouped.map((g) => (
-            <div className="igCard" key={g.inward_id}>
-              <div className="igCardHead">
-                <div className="igHeadLeft">
-                  <div className="igSrLine">
-                    <span className="igSrLabel">Sr.No</span>
-                    <span className="igPill">{g.seq_no}</span>
-                    <span className="igStorePill" title="Store">
-                      {g.store}
-                    </span>
-                  </div>
-                  <div className="igDateLine">
-                    <span className="igDateDot" />
-                    <span className="igDateText">{g.work_date}</span>
-                  </div>
-                </div>
-
-                <div className="igHeadRight">
-                  <button type="button" className="igBtn igBtn--outline igRipple" onPointerDown={setRipplePoint} onClick={() => openUpdate(g.inward_id)}>
-                    Update
-                  </button>
-                  <button type="button" className="igBtn igBtn--danger igRipple" onPointerDown={setRipplePoint} onClick={() => confirmDelete(g.inward_id, g.seq_no)}>
-                    Delete
-                  </button>
-                </div>
+          {groupedByMonth.map((month) => (
+            <div className="igMonthWrap" key={month.ym}>
+              <div className="igMonthHeader">
+                <div className="igMonthTitle">{formatMonthTitle(month.ym)}</div>
+                <div className="igMonthCount">{month.totalRecords} record(s)</div>
               </div>
 
-              <div className="igTableWrap">
-                <table className="igTbl igTbl--auto">
-                  <thead>
-                    <tr>
-                      <th className="col-sub">Sub No</th>
-                      <th className="col-mat">Material</th>
-                      <th className="col-qty">Quantity</th>
-                      <th className="col-store">Store</th>
-                      <th className="col-use">Material Use</th>
-                      <th className="col-bill">Bill</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {g.items
-                      .sort((a, b) => a.item_order - b.item_order)
-                      .map((r) => (
-                        <tr key={r.item_id || `${r.inward_id}-${r.item_order}`}>
-                          <td className="igSubNo">{String.fromCharCode(96 + (r.item_order || 1))})</td>
+              {month.dateCards.map((day) => (
+                <div className="igDateCard" key={day.dateISO}>
+                  {/* ✅ DATE HEADER (one per date) */}
+                  <div className="igDateHeader">
+                    <div className="igDateHeaderLeft">
+                      <div className="igDateHeaderTitle">Date</div>
+                      <div className="igDateHeaderValue">{formatDDMMYYYY(day.dateISO)}</div>
+                    </div>
+                    <div className="igDateHeaderRight">
+                      <div className="igDateHeaderCount">{day.entries.length} record(s)</div>
+                    </div>
+                  </div>
 
-                          <td className="igMaterial">
-                            <div className="igCellMain">{r.material}</div>
-                          </td>
-
-                          <td className="igQty">
-                            <span className="igQtyWrap">
-                              <span className="igQtyNum">{r.quantity ?? ""}</span>
-                              {r.quantity_type ? <span className="igQtyType">{r.quantity_type}</span> : null}
-                            </span>
-                          </td>
-
-                          <td className="igStoreCell">{g.store}</td>
-
-                          <td className="igUse">
-                            <div className="igClamp2" title={r.material_use}>
-                              {r.material_use}
+                  <div className="igDateBody">
+                    {day.entries.map((g) => (
+                      <div className="igCard" key={g.inward_id}>
+                        <div className="igCardHead">
+                          <div className="igHeadLeft">
+                            <div className="igSrLine">
+                              <span className="igSrLabel">Sr.No</span>
+                              <span className="igPill">{g.display_seq}</span>
+                              <span className="igStorePill" title="Store">
+                                {g.store}
+                              </span>
                             </div>
-                          </td>
+                            <div className="igDateLine">
+                              <span className="igDateDot" />
+                              <span className="igDateText">{formatDDMMYYYY(g.work_date)}</span>
+                            </div>
+                          </div>
 
-                          <td className="igBillCell">
-                            <button type="button" className="igBtn igBtn--small igBtn--sky igRipple" onPointerDown={setRipplePoint} onClick={() => openImage(r)}>
-                              View
+                          <div className="igHeadRight">
+                            <button
+                              type="button"
+                              className="igBtn igBtn--outline igRipple"
+                              onPointerDown={setRipplePoint}
+                              onClick={() => openUpdate(g.inward_id, g.display_seq)}
+                            >
+                              Update
                             </button>
-                          </td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
+                            <button
+                              type="button"
+                              className="igBtn igBtn--danger igRipple"
+                              onPointerDown={setRipplePoint}
+                              onClick={() => confirmDelete(g.inward_id, g.display_seq)}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
 
-              <div className="igMobileActions">
-                <button type="button" className="igBtn igBtn--outline igBtnTiny igRipple" onPointerDown={setRipplePoint} onClick={() => openUpdate(g.inward_id)}>
-                  Update
-                </button>
-                <button type="button" className="igBtn igBtn--danger igBtnTiny igRipple" onPointerDown={setRipplePoint} onClick={() => confirmDelete(g.inward_id, g.seq_no)}>
-                  Delete
-                </button>
-              </div>
+                        <div className="igTableWrap">
+                          <table className="igTbl igTbl--auto">
+                            <thead>
+                              <tr>
+                                <th className="col-sub">Sub No</th>
+                                <th className="col-mat">Material</th>
+                                <th className="col-qty">Quantity</th>
+                                <th className="col-store">Store</th>
+                                <th className="col-use">Material Use</th>
+                                <th className="col-bill">Bill</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {g.items.map((r) => (
+                                <tr key={r.item_id || `${r.inward_id}-${r.item_order}`}>
+                                  <td className="igSubNo">{String.fromCharCode(96 + (r.item_order || 1))})</td>
+
+                                  <td className="igMaterial">
+                                    <div className="igCellMain">{r.material}</div>
+                                  </td>
+
+                                  <td className="igQty">
+                                    <span className="igQtyWrap">
+                                      <span className="igQtyNum">{r.quantity ?? ""}</span>
+                                      {r.quantity_type ? <span className="igQtyType">{r.quantity_type}</span> : null}
+                                    </span>
+                                  </td>
+
+                                  <td className="igStoreCell">{g.store}</td>
+
+                                  <td className="igUse">
+                                    <div className="igClamp2" title={r.material_use}>
+                                      {r.material_use}
+                                    </div>
+                                  </td>
+
+                                  <td className="igBillCell">
+                                    <button
+                                      type="button"
+                                      className="igBtn igBtn--small igBtn--sky igRipple"
+                                      onPointerDown={setRipplePoint}
+                                      onClick={() => openImage(r, g.display_seq)}
+                                    >
+                                      View
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        <div className="igMobileActions">
+                          <button
+                            type="button"
+                            className="igBtn igBtn--outline igBtnTiny igRipple"
+                            onPointerDown={setRipplePoint}
+                            onClick={() => openUpdate(g.inward_id, g.display_seq)}
+                          >
+                            Update
+                          </button>
+                          <button
+                            type="button"
+                            className="igBtn igBtn--danger igBtnTiny igRipple"
+                            onPointerDown={setRipplePoint}
+                            onClick={() => confirmDelete(g.inward_id, g.display_seq)}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           ))}
         </div>
@@ -570,7 +717,11 @@ export default function InwardGet() {
               </div>
 
               <div className="igImgBody">
-                {imageViewer.isPdf ? <iframe title="Bill PDF" src={imageViewer.url} className="igPdfFrame" /> : <img src={imageViewer.url} alt="Bill" className="igImgView" />}
+                {imageViewer.isPdf ? (
+                  <iframe title="Bill PDF" src={imageViewer.url} className="igPdfFrame" />
+                ) : (
+                  <img src={imageViewer.url} alt="Bill" className="igImgView" />
+                )}
               </div>
             </div>
           </div>
@@ -580,7 +731,7 @@ export default function InwardGet() {
           <div className="igDlgOverlay" role="dialog" aria-modal="true" onClick={closeUpdate}>
             <div className="igDlg igDlgWide igDlgScrollable" onClick={(e) => e.stopPropagation()}>
               <div className="igDlgTop igDlgTop--info">
-                <div className="igDlgTitle">Update Inward (Sr.No {edit.seq_no})</div>
+                <div className="igDlgTitle">Update Inward (Sr.No {edit.display_seq ?? edit.seq_no ?? "-"})</div>
               </div>
 
               <div className="igDlgBody igDlgBodyScroll">
@@ -624,7 +775,12 @@ export default function InwardGet() {
                             <input className="igCellInput" value={it.quantity_type} onChange={(e) => updateEditItem(idx, { quantity_type: e.target.value })} />
                           </td>
                           <td>
-                            <textarea className="igCellTextarea" rows={2} value={it.material_use} onChange={(e) => updateEditItem(idx, { material_use: e.target.value })} />
+                            <textarea
+                              className="igCellTextarea"
+                              rows={2}
+                              value={it.material_use}
+                              onChange={(e) => updateEditItem(idx, { material_use: e.target.value })}
+                            />
                           </td>
                         </tr>
                       ))}
@@ -764,10 +920,45 @@ const css = `
 
 /* list cards */
 .igList{padding:0 12px 12px;display:flex;flex-direction:column;gap:12px;box-sizing:border-box;}
+
+/* ✅ Month wrapper */
+.igMonthWrap{width:100%;max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:12px;}
+.igMonthHeader{
+  display:flex;justify-content:space-between;align-items:center;gap:10px;
+  padding:12px 14px;
+  background:linear-gradient(135deg,#0b1220,#0f2147);
+  color:#fff;border-radius:18px;
+  box-shadow:0 14px 40px rgba(11,18,32,0.14);
+}
+.igMonthTitle{font-size:16px;font-weight:1000;letter-spacing:0.2px;}
+.igMonthCount{font-size:12px;font-weight:900;opacity:0.9;}
+
+/* ✅ Date group card */
+.igDateCard{
+  width:100%;
+  max-width:1200px;
+  margin:0 auto;
+  background:transparent;
+}
+.igDateHeader{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-end;
+  gap:10px;
+  padding:12px 14px;
+  margin-bottom:10px;
+  background:linear-gradient(135deg, rgba(37,99,235,0.14), rgba(16,185,129,0.12));
+  border:1px solid rgba(0,0,0,0.06);
+  border-radius:18px;
+  box-shadow:0 12px 34px rgba(11,18,32,0.07);
+}
+.igDateHeaderTitle{font-size:12px;font-weight:900;color:#475569;}
+.igDateHeaderValue{font-size:18px;font-weight:1000;color:#0b1220;letter-spacing:0.2px;}
+.igDateHeaderCount{font-size:12px;font-weight:900;color:#475569;}
+.igDateBody{display:flex;flex-direction:column;gap:12px;}
+
 .igCard{
   width:100%;
-  max-width: 1200px;
-  margin:0 auto;
   background:#fff;
   border:1px solid rgba(0,0,0,0.08);
   border-radius:20px;
@@ -830,20 +1021,15 @@ const css = `
   .igFilters{align-items:stretch;}
 }
 
-/* ====================== */
-/* ✅ ONLY MOBILE: center popups + notch safe */
-/* ====================== */
+/* overlays */
 .igOverlay{position:fixed; inset:0; z-index:999999; background:rgba(0,0,0,0.45); display:flex; justify-content:center; overflow:auto; -webkit-overflow-scrolling:touch;}
 .igDlgOverlay{position:fixed; inset:0; z-index:999999; background:rgba(0,0,0,0.55); display:flex; justify-content:center; overflow:auto; -webkit-overflow-scrolling:touch;}
 .igImgOverlay{position:fixed; inset:0; z-index:999999; background:rgba(0,0,0,0.72); display:flex; justify-content:center; overflow:auto; -webkit-overflow-scrolling:touch;}
 
-/* desktop default behavior (keep as you had earlier) */
 .igOverlay,.igDlgOverlay,.igImgOverlay{align-items:flex-start; padding:16px;}
 @media (min-width: 769px){
   .igOverlay,.igDlgOverlay,.igImgOverlay{align-items:center; padding:16px;}
 }
-
-/* ✅ mobile: ALWAYS center + safe-area padding so not touch notch */
 @media (max-width: 768px){
   .igOverlay,.igDlgOverlay,.igImgOverlay{
     align-items:center !important;
@@ -855,7 +1041,6 @@ const css = `
   }
 }
 
-/* overlay card */
 .igOverlayCard{width:100%;max-width:360px;background:#fff;border-radius:18px;box-shadow:0 20px 60px rgba(0,0,0,0.25);padding:18px;display:flex;flex-direction:column;align-items:center;gap:10px;}
 .igSpinner{width:42px;height:42px;border-radius:999px;border:4px solid rgba(11,18,32,0.18);border-top-color:#0b1220;animation:igSpin 0.9s linear infinite;}
 .igOverlayText{font-weight:900;color:#0b1220;font-size:16px;text-align:center;}
