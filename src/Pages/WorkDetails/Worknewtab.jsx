@@ -7,17 +7,20 @@ import AddSitekharch from "./SiteKharch_add";
 import SitekharchGet from "../WorkDetails/SitekharchnewGet";
 import TotalSiteKharch from "./TotalSiteKharch";
 import Measure from "./Measure";
+import AddInward from "./AddInward";
+import InwardGet from "./InwardGet";
 
 export default function Worknewtab() {
   const navigate = useNavigate();
 
   const tabs = useMemo(
     () => [
+      { key: "measure", label: "MEASURE", component: <Measure /> },
       { key: "add", label: "SITE KHARCH", component: <AddSitekharch /> },
       { key: "get", label: "SITE KHARCH GET", component: <SitekharchGet /> },
       { key: "total", label: "TOTAL KHARCH", component: <TotalSiteKharch /> },
-      // ✅ FIX: Measure tab should open Measure page
-      { key: "measure", label: "MEASURE", component: <Measure /> },
+      { key: "addinward", label: "ADD INWARD", component: <AddInward /> },
+      { key: "getinward", label: "GET INWARD", component: <InwardGet /> },
     ],
     []
   );
@@ -27,15 +30,15 @@ export default function Worknewtab() {
 
   useEffect(() => {
     setLoading(true);
-    const t = setTimeout(() => setLoading(false), 300);
+    const t = setTimeout(() => setLoading(false), 250);
     return () => clearTimeout(t);
   }, [activeKey]);
 
   const activeTab = tabs.find((t) => t.key === activeKey);
 
   return (
-    <div style={styles.page} className="worknewtab-page">
-      {/* ✅ GLOBAL RESET + SAFE AREA (NAVBAR TOP SPACE FIX) */}
+    <div className="worknewtab-page" style={styles.page}>
+      {/* ✅ GLOBAL CSS (FIX: make all child popups/dialogs always above navbar/tabs and never cut) */}
       <style>{`
         html, body { margin: 0; padding: 0; height: 100%; }
         * { box-sizing: border-box; }
@@ -44,19 +47,75 @@ export default function Worknewtab() {
           --safeTop: env(safe-area-inset-top, 0px);
           --safeBottom: env(safe-area-inset-bottom, 0px);
 
-          /* ✅ Navbar TOP space */
           --navTopGap: 10px;
-
-          /* Heights */
           --navHDesktop: 85px;
           --navHMobile: 85px;
+
+          /* ✅ IMPORTANT: overlay top padding = navbar + tabs + gaps (auto controlled below) */
+          --overlayTopPad: 140px;
         }
 
         @media (max-width: 768px){
           :root{
-            --navTopGap: 48px;    /* ⭐ mobile वर थोडा जास्त space */
+            --navTopGap: 48px;
             --navHMobile: 80px;
           }
+        }
+
+        /* ✅ IMPORTANT: make sure no parent creates new fixed stacking context */
+        .worknewtab-page, .worknewtab-scroll, .worknewtab-contentWrap, .worknewtab-navbar, .worknewtab-tabs-row{
+          transform: none !important;
+          filter: none !important;
+          perspective: none !important;
+          will-change: auto !important;
+          isolation: auto !important;
+        }
+
+        /* ✅ HARD FIX: if any child uses position:fixed (dialogs/modals), it must be above header */
+        .worknewtab-page{
+          position: relative;
+          z-index: 0;
+        }
+
+        /* ✅ Global helper classes for ANY child modal/overlay/dialog */
+        .globalModalOverlay{
+          position: fixed !important;
+          inset: 0 !important;
+          z-index: 999999 !important; /* above navbar/tabs */
+          display: flex !important;
+          justify-content: center !important;
+
+          /* ✅ start below header so not hide behind navbar/tabs */
+          align-items: flex-start !important;
+
+          padding:
+            calc(16px + var(--overlayTopPad)) 16px
+            calc(16px + var(--safeBottom)) 16px !important;
+
+          overflow: auto !important;
+          -webkit-overflow-scrolling: touch !important;
+        }
+
+        /* Desktop center */
+        @media (min-width: 769px){
+          .globalModalOverlay{
+            align-items: center !important;
+            padding: 16px !important;
+          }
+        }
+
+        .globalModalCard{
+          width: 100% !important;
+          max-width: 920px !important;
+          max-height: calc(100vh - 32px - var(--overlayTopPad)) !important;
+          display: flex !important;
+          flex-direction: column !important;
+          overflow: hidden !important;
+        }
+
+        .globalModalBodyScroll{
+          overflow: auto !important;
+          -webkit-overflow-scrolling: touch !important;
         }
 
         /* Tabs scrollbar */
@@ -66,39 +125,36 @@ export default function Worknewtab() {
           border-radius: 999px;
         }
 
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
+        @keyframes spin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }
       `}</style>
 
-      {/* FIXED HEADER */}
+      {/* ✅ FIXED HEADER */}
       <div style={styles.headerFixed}>
-        {/* NAVBAR */}
-        <div style={styles.navbar} className="worknewtab-navbar">
+        <div className="worknewtab-navbar" style={styles.navbar}>
           <div style={styles.navLeft}>
             <div style={styles.title}>Work Details</div>
             <div style={styles.subtitle}>Expenses & Reports</div>
           </div>
 
-          <button style={styles.dashboardBtn} onClick={() => navigate("/dashboard")}>
+          <button style={styles.dashboardBtn} onClick={() => navigate("/dashboard")} type="button">
             Dashboard →
           </button>
         </div>
 
-        {/* GAP BELOW NAVBAR */}
         <div style={styles.gapBetweenNavbarAndTabs} />
 
-        {/* TABS */}
         <div style={styles.tabsBar}>
           <div style={styles.tabsRow} className="worknewtab-tabs-row">
             {tabs.map((tab) => {
               const active = tab.key === activeKey;
+
+              const activeStyle = active ? { ...styles.tabActive, border: "1px solid #2563EB" } : {};
+
               return (
                 <button
                   key={tab.key}
                   onClick={() => setActiveKey(tab.key)}
-                  style={{ ...styles.tabBtn, ...(active ? styles.tabActive : {}) }}
+                  style={{ ...styles.tabBtn, ...activeStyle }}
                   type="button"
                 >
                   {tab.label}
@@ -109,22 +165,16 @@ export default function Worknewtab() {
           </div>
         </div>
 
-        {/* GAP BELOW TABS */}
         <div style={styles.gapBelowTabs} />
       </div>
 
-      {/* SCROLL AREA */}
-      <div style={styles.scrollArea} className="worknewtab-scroll">
+      {/* ✅ SCROLL AREA */}
+      <div className="worknewtab-scroll" style={styles.scrollArea}>
         <AnimatePresence>
           {loading && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              style={styles.loaderOverlay}
-            >
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={styles.loaderOverlay}>
               <div style={styles.loaderBox}>
-                <div style={styles.spinner}></div>
+                <div style={styles.spinner} />
                 <div style={styles.loadingText}>Loading...</div>
               </div>
             </motion.div>
@@ -134,6 +184,7 @@ export default function Worknewtab() {
         {!loading && (
           <motion.div
             key={activeKey}
+            className="worknewtab-contentWrap"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.2 }}
@@ -144,17 +195,12 @@ export default function Worknewtab() {
         )}
       </div>
 
-      {/* ✅ ACTUAL LAYOUT CALC: navbar वर space + safe area */}
+      {/* ✅ ACTUAL LAYOUT CALC (also sets overlayTopPad automatically!) */}
       <style>{`
         .worknewtab-navbar{
-          /* ✅ navbar वर SPACE */
           padding-top: calc(var(--safeTop) + var(--navTopGap));
-
-          /* keep same side padding */
           padding-left: 12px;
           padding-right: 12px;
-
-          /* ✅ total height includes safeTop + gap + visible height */
           height: calc(var(--navHDesktop) + var(--safeTop) + var(--navTopGap));
         }
 
@@ -164,27 +210,31 @@ export default function Worknewtab() {
           }
         }
 
-        /* ✅ scroll area starts AFTER full header total */
-        .worknewtab-scroll{
-          top: calc(
-            var(--safeTop) + var(--navTopGap) +
-            (var(--navHDesktop)) +
-            ${GAP_1}px +
-            ${TABS_H}px +
-            ${GAP_2}px
+        /* ✅ Header total height -> used for scroll top AND for child overlays */
+        :root{
+          --headerTotalDesktop: calc(
+            var(--safeTop) + var(--navTopGap) + var(--navHDesktop) + ${GAP_1}px + ${TABS_H}px + ${GAP_2}px
           );
-          padding-bottom: var(--safeBottom);
+          --headerTotalMobile: calc(
+            var(--safeTop) + var(--navTopGap) + var(--navHMobile) + ${GAP_1}px + ${TABS_H}px + ${GAP_2}px
+          );
+          --overlayTopPad: var(--headerTotalDesktop);
         }
 
         @media (max-width: 768px){
+          :root{
+            --overlayTopPad: var(--headerTotalMobile);
+          }
+        }
+
+        /* ✅ Scroll area starts after header */
+        .worknewtab-scroll{
+          top: var(--headerTotalDesktop);
+          padding-bottom: var(--safeBottom);
+        }
+        @media (max-width: 768px){
           .worknewtab-scroll{
-            top: calc(
-              var(--safeTop) + var(--navTopGap) +
-              (var(--navHMobile)) +
-              ${GAP_1}px +
-              ${TABS_H}px +
-              ${GAP_2}px
-            );
+            top: var(--headerTotalMobile);
           }
         }
       `}</style>
@@ -204,6 +254,7 @@ const styles = {
     width: "100%",
     background: "#F8FAFF",
     overflow: "hidden",
+    position: "relative",
   },
 
   headerFixed: {
@@ -211,7 +262,7 @@ const styles = {
     top: 0,
     left: 0,
     right: 0,
-    zIndex: 1000,
+    zIndex: 5000,
     background: "#F8FAFF",
   },
 
@@ -228,16 +279,8 @@ const styles = {
     flexDirection: "column",
   },
 
-  title: {
-    fontSize: 16,
-    fontWeight: 900,
-  },
-
-  subtitle: {
-    fontSize: 11,
-    fontWeight: 700,
-    opacity: 0.95,
-  },
+  title: { fontSize: 16, fontWeight: 900 },
+  subtitle: { fontSize: 11, fontWeight: 700, opacity: 0.95 },
 
   dashboardBtn: {
     background: "#fff",
@@ -250,9 +293,7 @@ const styles = {
     cursor: "pointer",
   },
 
-  gapBetweenNavbarAndTabs: {
-    height: GAP_1,
-  },
+  gapBetweenNavbarAndTabs: { height: GAP_1 },
 
   tabsBar: {
     height: TABS_H,
@@ -286,7 +327,6 @@ const styles = {
   tabActive: {
     background: "#2563EB",
     color: "#fff",
-    borderColor: "#2563EB",
   },
 
   underline: {
@@ -299,17 +339,16 @@ const styles = {
     borderRadius: 999,
   },
 
-  gapBelowTabs: {
-    height: GAP_2,
-  },
+  gapBelowTabs: { height: GAP_2 },
 
   scrollArea: {
-    position: "absolute",
+    position: "fixed",
     left: 0,
     right: 0,
     bottom: 0,
     overflowY: "auto",
     background: "#F8FAFF",
+    zIndex: 1,
   },
 
   content: {
@@ -323,7 +362,7 @@ const styles = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    zIndex: 2000,
+    zIndex: 6000,
   },
 
   loaderBox: {
@@ -344,9 +383,5 @@ const styles = {
     margin: "0 auto",
   },
 
-  loadingText: {
-    marginTop: 10,
-    fontWeight: 900,
-    fontSize: 14,
-  },
+  loadingText: { marginTop: 10, fontWeight: 900, fontSize: 14 },
 };

@@ -1,443 +1,596 @@
-import React, { useEffect, useMemo, useState } from "react";
-import LoadingSpiner from "../Entertainment/LoadingSpiner";
+import React, { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 
-const AddInward = () => {
-  // ============= CONFIG =============
-  const API_BASE = "https://express-backend-myapp.onrender.com/api"; // your express app
+export default function AddInward() {
+  const API_BASE = useMemo(() => "https://express-backend-myapp.onrender.com", []);
+  const ADD_API_URL = `${API_BASE}/api/inward`;
 
-  // ============= STATE =============
-  const [workDate, setWorkDate] = useState("");
-  const [workTime, setWorkTime] = useState("");
-  const [details, setDetails] = useState("");
-  const [quantity, setQuantity] = useState("");
-  const [quantityType, setQuantityType] = useState("");
-  const [extras, setExtras] = useState([]);
-  const [showExtras, setShowExtras] = useState(false);
+  const todayISO = () => {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const emptyItem = () => ({
+    material: "",
+    quantity: "",
+    quantity_type: "",
+    material_use: "",
+    billFile: null,
+    billPreviewName: "",
+    _fileKey: Math.random().toString(36).slice(2),
+  });
+
+  const [workDate, setWorkDate] = useState(todayISO());
+  const [store, setStore] = useState("");
+  const [items, setItems] = useState([emptyItem()]);
   const [saving, setSaving] = useState(false);
-  const [popup, setPopup] = useState({
+
+  const [overlay, setOverlay] = useState({ open: false, text: "Please wait..." });
+
+  const [modal, setModal] = useState({
     open: false,
     type: "success",
     title: "",
     message: "",
   });
 
-  // ============= HELPERS =============
-  const todayISO = useMemo(() => {
-    const d = new Date();
-    const pad = (v) => String(v).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  }, []);
+  const openModal = (type, title, message) => setModal({ open: true, type, title, message });
+  const closeModal = () => setModal((m) => ({ ...m, open: false }));
 
-  // set default date once
-  useEffect(() => {
-    setWorkDate((v) => v || todayISO);
-  }, [todayISO]);
+  const addItemRow = () => setItems((prev) => [...prev, emptyItem()]);
+  const removeItemRow = (idx) => setItems((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx)));
 
-  const addExtraRow = () =>
-    setExtras((prev) => [
-      ...prev,
-      { details: "", quantity: "", quantity_type: "" },
-    ]);
-
-  const updateExtraRow = (idx, field, value) =>
-    setExtras((prev) =>
-      prev.map((row, i) => (i === idx ? { ...row, [field]: value } : row))
-    );
-
-  const removeExtraRow = (idx) =>
-    setExtras((prev) => prev.filter((_, i) => i !== idx));
-
-  function showPopup(type, title, message) {
-    setPopup({ open: true, type, title, message });
-    clearTimeout(window.__popupTimer);
-    window.__popupTimer = setTimeout(() => {
-      setPopup((p) => ({ ...p, open: false }));
-    }, 2600);
-  }
-
-  const closePopup = () => {
-    clearTimeout(window.__popupTimer);
-    setPopup((p) => ({ ...p, open: false }));
+  const updateItem = (idx, patch) => {
+    setItems((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], ...patch };
+      return next;
+    });
   };
 
-  useEffect(() => {
-    const onKey = (e) => e.key === "Escape" && closePopup();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  const resetForm = () => {
+    setWorkDate(todayISO());
+    setStore("");
+    setItems([emptyItem()]);
+  };
 
-  // this is the main SAVE
-  const handleSubmit = async () => {
-    if (!details.trim()) {
-      return showPopup(
-        "error",
-        "Details Required",
-        "Please enter details of the inward."
-      );
+  const validateForSave = () => {
+    const errs = [];
+    const s = (store || "").trim();
+
+    if (!workDate) errs.push("Date is required.");
+    if (!s) errs.push("Store is required.");
+
+    const clean = items.map((it) => ({
+      material: (it.material || "").trim(),
+      quantity: it.quantity === "" ? null : Number(it.quantity),
+      quantity_type: (it.quantity_type || "").trim() || null,
+      material_use: (it.material_use || "").trim(),
+    }));
+
+    if (!clean.length) errs.push("At least 1 material is required.");
+
+    clean.forEach((it, i) => {
+      if (!it.material) errs.push(`Row ${i + 1}: Material is required.`);
+      if (!it.material_use) errs.push(`Row ${i + 1}: Material Use is required.`);
+      if (it.quantity !== null && Number.isNaN(it.quantity)) errs.push(`Row ${i + 1}: Quantity must be a number.`);
+    });
+
+    const seen = new Set();
+    for (let i = 0; i < clean.length; i++) {
+      const k = `${workDate}||${s.toLowerCase()}||${clean[i].material.toLowerCase()}||${clean[i].material_use.toLowerCase()}`;
+      if (seen.has(k)) {
+        errs.push(`Duplicate inside form not allowed (Row ${i + 1}). Same Date + Store + Material + Material Use.`);
+        break;
+      }
+      seen.add(k);
     }
 
-    // build payload exactly for /api/inward POST
-    const payload = {
-      work_date: workDate || todayISO,
-      work_time: workTime || null,
-      details,
-      quantity: quantity !== "" ? Number(quantity) : null,
-      quantity_type: quantityType || null,
-      // backend will normalize this → extra_items
-      extras_all: extras.map((e) => ({
-        details: e.details || null,
-        quantity: e.quantity !== "" ? Number(e.quantity) : null,
-        quantity_type: e.quantity_type || null,
-      })),
-    };
+    return { ok: errs.length === 0, errs, clean, store: s };
+  };
+
+  const onFileSelected = (idx, file) => {
+    updateItem(idx, {
+      billFile: file,
+      billPreviewName: file ? file.name : "",
+    });
+  };
+
+  const removeSelectedFile = (idx) => {
+    updateItem(idx, {
+      billFile: null,
+      billPreviewName: "",
+      _fileKey: Math.random().toString(36).slice(2),
+    });
+  };
+
+  const onSubmit = async (e) => {
+    e.preventDefault();
+    if (saving) return;
+
+    const v = validateForSave();
+    if (!v.ok) {
+      openModal("error", "Please fix these", v.errs.join("\n"));
+      return;
+    }
+
+    setSaving(true);
+    setOverlay({ open: true, text: "Saving inward... Please wait" });
 
     try {
-      setSaving(true);
-      const res = await fetch(`${API_BASE}/inward`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const fd = new FormData();
+      fd.append("work_date", workDate);
+      fd.append("store", v.store);
+      fd.append("items", JSON.stringify(v.clean));
 
-      const body = await res.json();
-      if (!res.ok) {
-        throw new Error(body.error || "Failed to save");
+      // backend expects: {"0":true,"2":true}
+      const fileIndexMap = {};
+      items.forEach((it, itemIndex) => {
+        if (it.billFile) {
+          fd.append("files", it.billFile);
+          fileIndexMap[String(itemIndex)] = true;
+        }
+      });
+      fd.append("fileIndexMap", JSON.stringify(fileIndexMap));
+
+      const r = await fetch(ADD_API_URL, { method: "POST", body: fd });
+      const data = await r.json().catch(() => ({}));
+
+      setOverlay({ open: false, text: "Please wait..." });
+
+      if (r.ok && data?.success) {
+        const seq = data?.data?.seq_no ? ` (Sr.No: ${data.data.seq_no})` : "";
+        openModal("success", "Saved Successfully", `Inward entry added${seq}.`);
+        resetForm();
+        return;
       }
 
-      // reset form
-      setWorkTime("");
-      setDetails("");
-      setQuantity("");
-      setQuantityType("");
-      setExtras([]);
-      setShowExtras(false);
-      setWorkDate(todayISO);
+      if (r.status === 409) {
+        openModal(
+          "error",
+          "Duplicate Not Allowed",
+          "Same Date + Store + Material + Material Use already exists. Please change data and try again."
+        );
+        return;
+      }
 
-      showPopup("success", "Saved", "Inward entry added successfully.");
+      openModal("error", "Failed to Save", data?.message ? String(data.message) : "Something went wrong. Please try again.");
     } catch (err) {
-      showPopup(
-        "error",
-        "Save Failed",
-        err?.message || "Could not add inward entry."
-      );
+      setOverlay({ open: false, text: "Please wait..." });
+      openModal("error", "Network Error", "Server not reachable. Please check backend and try again.");
     } finally {
       setSaving(false);
     }
   };
 
-  // when user clicks "Add Extra Item"
-  const handleExtrasClick = () => {
-    // first time → show + add a row
-    if (!showExtras) {
-      setShowExtras(true);
-      setExtras([{ details: "", quantity: "", quantity_type: "" }]);
-    } else {
-      // already visible → add one more row
-      addExtraRow();
-    }
+  // ✅ real ripple from click point
+  const setRipplePoint = (e) => {
+    const el = e.currentTarget;
+    const r = el.getBoundingClientRect();
+    const x = ((e.clientX - r.left) / r.width) * 100;
+    const y = ((e.clientY - r.top) / r.height) * 100;
+    el.style.setProperty("--rx", `${x}%`);
+    el.style.setProperty("--ry", `${y}%`);
   };
 
+  const portalTarget = typeof document !== "undefined" ? document.body : null;
+
   return (
-    <div className="inward-wrap">
-      <style>{`
-        :root {
-          --bg: #f9fafb;
-          --card: #fff;
-          --accent: #7c3aed;
-          --accent-light: #c4b5fd;
-          --border: #e5e7eb;
-          --text: #111827;
-          --muted: #6b7280;
-        }
+    <div className="ai-page">
+      {/* ✅ BLACK TOP: only title */}
+      <div className="ai-topbar">
+        <div className="ai-topbar__title">Add Inward</div>
+      </div>
 
-        .inward-wrap {
-          max-width: 680px;
-          margin: 0 auto;
-          padding: 16px;
-          background: var(--bg);
-          min-height: 100vh;
-          font-family: 'Inter', sans-serif;
-        }
-
-        .card {
-          background: var(--card);
-          border: 1px solid var(--border);
-          border-radius: 16px;
-          padding: 20px;
-          box-shadow: 0 6px 24px rgba(0,0,0,.05);
-          margin-bottom: 30px;
-        }
-
-        h2 {
-          text-align: center;
-          font-size: 1.8rem;
-          font-weight: 900;
-          background: linear-gradient(90deg,#7c3aed,#c084fc);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          margin-bottom: 1rem;
-        }
-
-        .grid {
-          display: grid;
-          gap: 14px;
-          grid-template-columns: 1fr;
-        }
-
-        @media (min-width: 600px) {
-          .grid-2 { grid-template-columns: 1fr 1fr; }
-        }
-
-        label {
-          font-weight: 700;
-          font-size: 0.9rem;
-          color: var(--muted);
-        }
-
-        input, textarea {
-          width: 100%;
-          padding: 11px 14px;
-          font-size: 0.95rem;
-          border: 1px solid var(--border);
-          border-radius: 10px;
-          transition: all 0.2s ease;
-        }
-
-        input:focus, textarea:focus {
-          outline: none;
-          border-color: var(--accent);
-          box-shadow: 0 0 0 3px var(--accent-light);
-        }
-
-        textarea {
-          resize: vertical;
-          min-height: 90px;
-        }
-
-        .btn {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          border-radius: 10px;
-          border: none;
-          padding: 12px;
-          font-weight: 700;
-          width: 100%;
-          transition: all 0.2s ease;
-          cursor: pointer;
-        }
-
-        .btn-primary {
-          background: linear-gradient(90deg,#7c3aed,#a855f7);
-          color: white;
-        }
-
-        .btn-primary:hover { opacity: .9; }
-
-        .btn-yellow {
-          background: linear-gradient(90deg,#facc15,#fbbf24);
-          color: #1f2937;
-          font-weight: 800;
-        }
-
-        .extra-row {
-          border: 1px dashed var(--border);
-          padding: 12px;
-          border-radius: 10px;
-          margin-top: 10px;
-          background: #fff;
-        }
-
-        .btn-danger {
-          background: linear-gradient(90deg,#ef4444,#dc2626);
-          color: white;
-          margin-top: 6px;
-        }
-
-        .popup-center {
-          position: fixed;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          z-index: 2000;
-          background: white;
-          border-radius: 14px;
-          border: 1px solid var(--border);
-          width: 90%;
-          max-width: 360px;
-          box-shadow: 0 8px 28px rgba(0,0,0,.15);
-          animation: fadeIn .2s ease;
-        }
-
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translate(-50%, -45%); }
-          to { opacity: 1; transform: translate(-50%, -50%); }
-        }
-
-        .popup-header {
-          padding: 12px 16px;
-          font-weight: 800;
-          font-size: 1rem;
-          border-bottom: 1px solid var(--border);
-          color: var(--text);
-        }
-
-        .popup-body {
-          padding: 14px 16px;
-          color: var(--muted);
-        }
-
-        .popup-footer {
-          padding: 12px 16px;
-          border-top: 1px solid var(--border);
-          display: flex;
-          justify-content: flex-end;
-        }
-
-        .busy {
-          position: fixed;
-          inset: 0;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: rgba(255,255,255,.5);
-          z-index: 3000;
-        }
-
-        @media (max-width: 480px) {
-          .card { padding: 16px; }
-          input, textarea { font-size: 0.9rem; }
-          h2 { font-size: 1.5rem; }
-        }
-      `}</style>
-
-      {saving && (
-        <div className="busy">
-          <LoadingSpiner />
-        </div>
-      )}
-
-      <div className="card">
-        <h2>Add Inward</h2>
-
-        <div className="grid grid-2">
-          <div>
-            <label>Date</label>
+      {/* ✅ BELOW: Date (white icon) */}
+      <div className="ai-whiteSection">
+        <div className="ai-field">
+          <label>Date</label>
+          <div className="ai-dateWrapWhite">
             <input
+              className="ai-dateInputWhite"
               type="date"
               value={workDate}
               onChange={(e) => setWorkDate(e.target.value)}
+              required
             />
+            <span className="ai-dateIconWhite" aria-hidden="true">
+                 Ajay
+            </span>
           </div>
+        </div>
+      </div>
 
-          <div>
-            <label>Time (optional)</label>
+      <form className="ai-card" onSubmit={onSubmit}>
+        {/* ✅ Store */}
+        <section className="ai-section">
+          <div className="ai-field">
+            <label>Store</label>
             <input
               type="text"
-              placeholder="e.g., 10:00 AM – 12:30 PM"
-              value={workTime}
-              onChange={(e) => setWorkTime(e.target.value)}
+              placeholder="e.g., Main Store"
+              value={store}
+              onChange={(e) => setStore(e.target.value)}
+              required
             />
           </div>
-        </div>
+        </section>
 
-        <div>
-          <label>Details</label>
-          <textarea
-            placeholder="Describe the inward item/work..."
-            value={details}
-            onChange={(e) => setDetails(e.target.value)}
-          />
-          <button className="btn btn-yellow" onClick={handleExtrasClick}>
-            {showExtras ? "Add One More Extra" : "Add Extra Item"}
-          </button>
-        </div>
+        <div className="ai-divider" />
 
-        <div className="grid grid-2">
-          <div>
-            <label>Quantity</label>
-            <input
-              type="number"
-              step="any"
-              placeholder="e.g., 50"
-              value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
-            />
-          </div>
-          <div>
-            <label>Quantity Type</label>
-            <input
-              type="text"
-              placeholder="e.g., bags, kg, liter"
-              value={quantityType}
-              onChange={(e) => setQuantityType(e.target.value)}
-            />
-          </div>
-        </div>
-
-        {showExtras &&
-          extras.map((ex, i) => (
-            <div key={i} className="extra-row">
-              <label>Extra Details</label>
-              <input
-                type="text"
-                value={ex.details}
-                onChange={(e) => updateExtraRow(i, "details", e.target.value)}
-                placeholder="Extra item details..."
-              />
-
-              <label>Extra Quantity</label>
-              <input
-                type="number"
-                step="any"
-                value={ex.quantity}
-                onChange={(e) => updateExtraRow(i, "quantity", e.target.value)}
-                placeholder="e.g., 2.5"
-              />
-
-              <label>Extra Quantity Type</label>
-              <input
-                type="text"
-                value={ex.quantity_type}
-                onChange={(e) =>
-                  updateExtraRow(i, "quantity_type", e.target.value)
-                }
-                placeholder="e.g., ton, bags"
-              />
-
-              <button
-                className="btn btn-danger"
-                onClick={() => removeExtraRow(i)}
-              >
-                Remove
-              </button>
+        {/* ✅ Materials */}
+        <section className="ai-section">
+          <div className="ai-sectionHead">
+            <div>
+              <div className="ai-h2">Materials</div>
+              <div className="ai-muted">Bill file optional (image/pdf).</div>
             </div>
-          ))}
 
-        <div style={{ marginTop: 20 }}>
+            <button
+              type="button"
+              className="ai-btn ai-btn--ghost ai-ripple"
+              onPointerDown={setRipplePoint}
+              onClick={addItemRow}
+            >
+              + Add Material
+            </button>
+          </div>
+
+          <div className="ai-items">
+            {items.map((it, idx) => {
+              const letter = String.fromCharCode(97 + idx);
+              return (
+                <div className="ai-itemRow" key={idx}>
+                  <div className="ai-itemBadge">{letter})</div>
+
+                  <div className="ai-itemGrid">
+                    <div className="ai-field">
+                      <label>Material</label>
+                      <input
+                        type="text"
+                        placeholder="e.g., Cement"
+                        value={it.material}
+                        onChange={(e) => updateItem(idx, { material: e.target.value })}
+                        required
+                      />
+                    </div>
+
+                    <div className="ai-field">
+                      <label>Quantity</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="e.g., 10"
+                        value={it.quantity}
+                        onChange={(e) => updateItem(idx, { quantity: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="ai-field">
+                      <label>Qty Type</label>
+                      <input
+                        type="text"
+                        placeholder="e.g., Bag / Kg / Nos"
+                        value={it.quantity_type}
+                        onChange={(e) => updateItem(idx, { quantity_type: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="ai-field ai-spanAll">
+                      <label>Material Use</label>
+                      <textarea
+                        rows={3}
+                        placeholder="Write full usage details."
+                        value={it.material_use}
+                        onChange={(e) => updateItem(idx, { material_use: e.target.value })}
+                        required
+                      />
+                    </div>
+
+                    {/* ✅ Bill Upload + Remove */}
+                    <div className="ai-field ai-spanAll">
+                      <label>Bill File (Optional)</label>
+
+                      <div className="ai-fileBox">
+                        <input
+                          key={it._fileKey}
+                          className="ai-fileInput"
+                          type="file"
+                          accept="image/*,.pdf"
+                          onChange={(e) => onFileSelected(idx, e.target.files?.[0] || null)}
+                        />
+
+                        <div className="ai-fileMeta">
+                          <div className={`ai-pill ${it.billFile ? "ai-pill--ok" : "ai-pill--wait"}`}>
+                            {it.billFile ? "Selected" : "No file"}
+                          </div>
+
+                          <div className="ai-hint">
+                            {it.billPreviewName ? (
+                              <>
+                                Selected: <span className="ai-mono">{it.billPreviewName}</span>
+                              </>
+                            ) : (
+                              <>Choose an image/PDF file (optional).</>
+                            )}
+                          </div>
+
+                          {it.billFile && (
+                            <button
+                              type="button"
+                              className="ai-btn ai-btn--danger ai-btn--small ai-ripple"
+                              onPointerDown={setRipplePoint}
+                              onClick={() => removeSelectedFile(idx)}
+                            >
+                              Remove Selected File
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="ai-rowActions">
+                      <button
+                        type="button"
+                        className="ai-btn ai-btn--danger ai-ripple"
+                        onPointerDown={setRipplePoint}
+                        onClick={() => removeItemRow(idx)}
+                        disabled={items.length <= 1}
+                      >
+                        Remove Row
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        <div className="ai-divider" />
+
+        {/* ✅ Actions */}
+        <section className="ai-section ai-actions">
           <button
-            className="btn btn-primary"
-            onClick={handleSubmit}
+            type="button"
+            className="ai-btn ai-btn--ghost ai-ripple"
+            onPointerDown={setRipplePoint}
+            onClick={resetForm}
+            disabled={saving}
+          >
+            Clear
+          </button>
+
+          <button
+            type="submit"
+            className="ai-btn ai-btn--primary ai-ripple"
+            onPointerDown={setRipplePoint}
             disabled={saving}
           >
             {saving ? "Saving..." : "Save Inward"}
           </button>
-        </div>
-      </div>
+        </section>
+      </form>
 
-      {popup.open && (
-        <div className="popup-center">
-          <div className="popup-header">{popup.title}</div>
-          <div className="popup-body">{popup.message}</div>
-          <div className="popup-footer">
-            <button className="btn btn-yellow" onClick={closePopup}>
-              OK
-            </button>
-          </div>
-        </div>
-      )}
+      {/* ✅ Portal: Overlay */}
+      {portalTarget &&
+        createPortal(
+          overlay.open ? (
+            <div className="ai-overlay" role="status" aria-live="polite">
+              <div className="ai-overlayCard">
+                <div className="ai-spinner" />
+                <div className="ai-overlayText">{overlay.text}</div>
+                <div className="ai-overlaySub">Please wait…</div>
+              </div>
+            </div>
+          ) : null,
+          portalTarget
+        )}
+
+      {/* ✅ Portal: Modal */}
+      {portalTarget &&
+        createPortal(
+          modal.open ? (
+            <div className="ai-modalOverlay" role="dialog" aria-modal="true" onClick={closeModal}>
+              <div className="ai-modal" onClick={(e) => e.stopPropagation()}>
+                <div className={`ai-modalTop ai-modalTop--${modal.type}`}>
+                  <div className="ai-modalTitle">{modal.title}</div>
+                </div>
+                <div className="ai-modalBody">
+                  <pre className="ai-modalMsg">{modal.message}</pre>
+                </div>
+                <div className="ai-modalActions">
+                  <button className="ai-btn ai-btn--primary ai-ripple" onPointerDown={setRipplePoint} type="button" onClick={closeModal}>
+                    OK
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null,
+          portalTarget
+        )}
+
+      <style>{css}</style>
     </div>
   );
-};
+}
 
-export default AddInward;
+const css = `
+.ai-page{min-height:100vh;width:100%;background:#f5f7fb;margin:0;padding:0;display:flex;flex-direction:column;}
+
+/* ✅ BLACK TOP: title only */
+.ai-topbar{width:100%;background:#0b1220;color:#fff;padding:14px 14px;box-sizing:border-box;}
+.ai-topbar__title{font-size:18px;font-weight:900;}
+
+/* ✅ White section for Date */
+.ai-whiteSection{
+  width:100%;
+  background:#fff;
+  border-bottom:1px solid rgba(0,0,0,0.08);
+  padding:12px;
+  box-sizing:border-box;
+}
+
+.ai-field label{display:block;font-size:12px;font-weight:900;color:#111827;margin-bottom:6px;}
+.ai-field input,.ai-field textarea{
+  width:100%;box-sizing:border-box;border:1px solid rgba(0,0,0,0.15);
+  border-radius:12px;padding:10px 10px;font-size:14px;outline:none;background:#fff;
+}
+.ai-field textarea{resize:vertical;}
+
+/* ✅ Date input (white) */
+.ai-dateWrapWhite{position:relative;display:flex;align-items:center;width:100%;}
+.ai-dateInputWhite{
+  width:100%;
+  max-width:260px;
+  border:1px solid rgba(0,0,0,0.15);
+  border-radius:12px;
+  padding:10px 42px 10px 10px;
+  font-size:14px;
+  outline:none;
+  background:#fff;
+  color:#111827;
+}
+.ai-dateInputWhite::-webkit-calendar-picker-indicator{
+  opacity:1;
+  cursor:pointer;
+}
+.ai-dateIconWhite{
+  position:absolute;
+  right:7px;
+  top:50%;
+  transform:translateY(-50%);
+  pointer-events:none;
+  font-size:16px;
+  opacity:0.9;
+}
+
+.ai-card{width:100%;margin:0;padding:0;background:#fff;box-sizing:border-box;}
+.ai-section{padding:12px;box-sizing:border-box;}
+.ai-divider{height:1px;background:rgba(0,0,0,0.08);width:100%;}
+
+.ai-h2{font-size:16px;font-weight:900;color:#0b1220;}
+.ai-muted{font-size:12px;color:#6b7280;margin-top:4px;}
+.ai-hint{font-size:12px;color:#6b7280;margin-top:6px;}
+.ai-mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;word-break:break-all;}
+
+.ai-sectionHead{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;}
+.ai-items{margin-top:12px;display:flex;flex-direction:column;gap:12px;}
+
+.ai-itemRow{
+  display:flex;gap:10px;width:100%;
+  background:#f9fafb;border:1px solid rgba(0,0,0,0.08);
+  border-radius:16px;padding:10px;box-sizing:border-box;
+}
+.ai-itemBadge{
+  min-width:30px;height:30px;border-radius:12px;display:flex;align-items:center;justify-content:center;
+  background:#0b1220;color:#fff;font-weight:900;
+}
+.ai-itemGrid{flex:1;display:grid;grid-template-columns:1fr;gap:10px;}
+.ai-spanAll{grid-column:1 / -1;}
+.ai-rowActions{grid-column:1 / -1;display:flex;justify-content:flex-end;gap:10px;}
+
+/* file box */
+.ai-fileBox{
+  width:100%;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  padding:12px;
+  border:1px dashed rgba(0,0,0,0.22);
+  border-radius:12px;
+  background:#fff;
+  box-sizing:border-box;
+}
+.ai-fileInput{
+  width:100%;
+  border:1px solid rgba(0,0,0,0.15);
+  border-radius:12px;
+  padding:8px;
+  background:#fff;
+}
+.ai-fileMeta{display:flex;flex-direction:column;gap:8px;}
+
+.ai-pill{width:fit-content;font-size:12px;padding:6px 10px;border-radius:999px;font-weight:900;}
+.ai-pill--ok{background:rgba(16,185,129,0.15);color:#065f46;}
+.ai-pill--wait{background:rgba(234,179,8,0.15);color:#7c5d00;}
+
+/* ✅ Buttons + touch feedback */
+.ai-btn{
+  border:0;border-radius:12px;padding:10px 12px;font-weight:900;
+  cursor:pointer;font-size:14px;user-select:none;
+  transition: transform .08s ease, filter .15s ease, opacity .15s ease;
+  position:relative; overflow:hidden;
+}
+.ai-btn:disabled{opacity:0.6;cursor:not-allowed;}
+.ai-btn:active{transform:scale(0.97);}
+.ai-btn:focus-visible{outline:3px solid rgba(59,130,246,0.5); outline-offset:2px;}
+.ai-btn--primary{background:#0b1220;color:#fff;}
+.ai-btn--ghost{background:rgba(11,18,32,0.08);color:#0b1220;}
+.ai-btn--danger{background:rgba(220,38,38,0.12);color:#b91c1c;}
+.ai-btn--small{padding:9px 12px;font-size:13px;border-radius:12px;}
+.ai-actions{display:flex;gap:10px;justify-content:space-between;}
+
+/* ripple */
+.ai-ripple::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background: radial-gradient(circle at var(--rx, 50%) var(--ry, 50%), rgba(255,255,255,0.45), transparent 45%);
+  opacity:0;
+  transition: opacity .25s ease;
+}
+.ai-ripple:active::after{opacity:1;}
+
+/* Desktop grid */
+@media (min-width:900px){
+  .ai-itemGrid{grid-template-columns:1.2fr 0.6fr 0.6fr;align-items:start;}
+  .ai-spanAll{grid-column:1 / -1;}
+}
+
+/* Overlay + modal */
+.ai-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,0.45);
+  display:flex;align-items:center;justify-content:center;padding:16px;
+  z-index:999999;
+}
+.ai-overlayCard{
+  width:100%;max-width:360px;background:#fff;border-radius:18px;
+  box-shadow:0 20px 60px rgba(0,0,0,0.25);
+  padding:18px;display:flex;flex-direction:column;align-items:center;gap:10px;
+}
+.ai-spinner{
+  width:42px;height:42px;border-radius:999px;
+  border:4px solid rgba(11,18,32,0.18);
+  border-top-color:#0b1220;
+  animation:aiSpin 0.9s linear infinite;
+}
+@keyframes aiSpin{to{transform:rotate(360deg);}}
+.ai-overlayText{font-weight:900;color:#0b1220;font-size:16px;text-align:center;}
+.ai-overlaySub{font-size:12px;color:#6b7280;text-align:center;}
+
+.ai-modalOverlay{
+  position:fixed;inset:0;background:rgba(0,0,0,0.5);
+  display:flex;align-items:center;justify-content:center;padding:16px;
+  z-index:1000000;
+}
+.ai-modal{
+  width:100%;max-width:520px;background:#fff;border-radius:18px;overflow:hidden;
+  box-shadow:0 20px 60px rgba(0,0,0,0.25);
+}
+.ai-modalTop{padding:14px 16px;}
+.ai-modalTop--success{background:rgba(16,185,129,0.15);}
+.ai-modalTop--error{background:rgba(239,68,68,0.15);}
+.ai-modalTop--info{background:rgba(59,130,246,0.15);}
+.ai-modalTitle{font-weight:900;color:#0b1220;font-size:16px;}
+.ai-modalBody{padding:14px 16px;}
+.ai-modalMsg{
+  margin:0;white-space:pre-wrap;word-break:break-word;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
+  font-size:14px;color:#111827;line-height:1.4;
+}
+.ai-modalActions{padding:12px 16px 16px;display:flex;justify-content:flex-end;gap:10px;}
+`;

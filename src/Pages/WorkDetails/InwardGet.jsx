@@ -1,454 +1,974 @@
-// src/pages/InwardGet.jsx
-import React, { useEffect, useState } from "react";
-
-const API_BASE = "https://express-backend-myapp.onrender.com/api";
-const PAGE_SIZE = 10;
-
-const getCurrentMonthName = () =>
-  new Date().toLocaleString("en-US", { month: "long" });
-
-function ymd(dateLike) {
-  if (!dateLike) return "";
-  if (typeof dateLike === "string" && /^\d{4}-\d{2}-\d{2}/.test(dateLike)) return dateLike.slice(0, 10);
-  const d = new Date(dateLike);
-  if (Number.isNaN(d.getTime())) return "";
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-}
-
-async function parseMaybeJson(res) {
-  const txt = await res.text();
-  if (!txt) return null;
-  try { return JSON.parse(txt); } catch { return { raw: txt }; }
-}
+import React, { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 
 export default function InwardGet() {
-  const [month, setMonth] = useState(getCurrentMonthName());
-  const [inwards, setInwards] = useState([]);
-  const [page, setPage] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [popup, setPopup] = useState({ show: false, type: "success", message: "" });
+  const API_BASE = useMemo(() => "https://express-backend-myapp.onrender.com", []);
+  const LIST_API = `${API_BASE}/api/inward`;
+  const ONE_API = (id) => `${API_BASE}/api/inward/${id}`;
+  const UPDATE_API = (id) => `${API_BASE}/api/inward/${id}`;
+  const DELETE_API = (id) => `${API_BASE}/api/inward/${id}`;
+  const PDF_API = `${API_BASE}/api/inward/pdf`;
 
-  const [editRow, setEditRow] = useState(null);
-  const [deleteRow, setDeleteRow] = useState(null);
+  const todayISO = () => {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  };
 
-  // Scroll lock when any dialog is open
-  useEffect(() => {
-    const open = !!(editRow || deleteRow || popup.show);
-    const original = document.body.style.overflow;
-    if (open) document.body.style.overflow = "hidden";
-    else document.body.style.overflow = original || "";
-    return () => { document.body.style.overflow = original || ""; };
-  }, [editRow, deleteRow, popup.show]);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
 
-  // Esc to close dialogs
-  useEffect(() => {
-    const onKey = (e) => {
-      if (e.key === "Escape") {
-        setEditRow(null);
-        setDeleteRow(null);
-        setPopup((p) => ({ ...p, show: false }));
+  const [loading, setLoading] = useState(true);
+  const [rows, setRows] = useState([]);
+
+  const [overlay, setOverlay] = useState({ open: false, text: "Please wait..." });
+
+  const [dlg, setDlg] = useState({
+    open: false,
+    type: "info",
+    title: "",
+    message: "",
+    onOk: null,
+    okText: "OK",
+    showCancel: false,
+    cancelText: "Cancel",
+    onCancel: null,
+  });
+
+  const openDlg = (cfg) =>
+    setDlg({
+      open: true,
+      type: cfg.type || "info",
+      title: cfg.title || "",
+      message: cfg.message || "",
+      onOk: cfg.onOk || null,
+      okText: cfg.okText || "OK",
+      showCancel: !!cfg.showCancel,
+      cancelText: cfg.cancelText || "Cancel",
+      onCancel: cfg.onCancel || null,
+    });
+
+  const closeDlg = () => setDlg((m) => ({ ...m, open: false }));
+
+  const [imageViewer, setImageViewer] = useState({
+    open: false,
+    url: "",
+    isPdf: false,
+    title: "",
+  });
+
+  const [edit, setEdit] = useState({
+    open: false,
+    inwardId: null,
+    seq_no: null,
+    work_date: todayISO(),
+    store: "",
+    items: [],
+  });
+
+  // ✅ Build correct preview URL (absolute)
+  const computeFileUrl = (it) => {
+    if (it?.file_url) return it.file_url;
+    if (it?.upload_id) return `${API_BASE}/api/inward/upload/${it.upload_id}/view`;
+    if (it?.image_path) return it.image_path;
+    return "";
+  };
+
+  const flatten = (records) => {
+    const out = [];
+    for (const rec of records) {
+      const items = Array.isArray(rec.items) ? rec.items : [];
+      for (const it of items) {
+        out.push({
+          inward_id: rec.id,
+          seq_no: rec.seq_no,
+          work_date: String(rec.work_date || "").slice(0, 10),
+          store: rec.store || "",
+          item_id: it.id,
+          item_order: it.item_order,
+          material: it.material || "",
+          quantity: it.quantity,
+          quantity_type: it.quantity_type || "",
+          material_use: it.material_use || "",
+          image_url: computeFileUrl(it),
+          upload_id: it.upload_id || null,
+        });
       }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  const showPopup = (type, message) => {
-    setPopup({ show: true, type, message });
-    window.clearTimeout(showPopup._t);
-    showPopup._t = window.setTimeout(() => {
-      setPopup({ show: false, type: "success", message: "" });
-    }, 2000);
-  };
-
-  const fetchInward = async (m, currentPage = 0) => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/inward?month=${encodeURIComponent(m)}`);
-      const data = await parseMaybeJson(res);
-      if (!res.ok) throw new Error("Failed to load records");
-      const list = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
-      const totalPages = Math.ceil(list.length / PAGE_SIZE) || 1;
-      let newPage = currentPage;
-      if (newPage >= totalPages) newPage = totalPages - 1;
-      setInwards(list);
-      setPage(newPage);
-    } catch (err) {
-      console.error(err);
-      showPopup("error", "Server error fetching data");
-    } finally {
-      setLoading(false);
     }
+    out.sort((a, b) => (a.seq_no - b.seq_no) || (a.item_order - b.item_order));
+    return out;
   };
 
-  useEffect(() => { fetchInward(month, 0); }, [month]);
-
-  const handleDownload = () => {
-    window.open(`${API_BASE}/inward/export?month=${encodeURIComponent(month)}`, "_blank");
-  };
-
-  const handleDelete = async () => {
-    if (!deleteRow) return;
+  const fetchList = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/inward/${deleteRow.id}`, { method: "DELETE" });
-      if (res.status === 204) {
-        showPopup("success", "Deleted successfully ✅");
-        setDeleteRow(null);
-        await fetchInward(month, page);
+      const qs = new URLSearchParams();
+      if (from) qs.set("from", from);
+      if (to) qs.set("to", to);
+      const url = qs.toString() ? `${LIST_API}?${qs.toString()}` : LIST_API;
+
+      const r = await fetch(url);
+      const data = await r.json().catch(() => ({}));
+
+      if (!r.ok || !data?.success) {
+        openDlg({ type: "error", title: "Failed", message: data?.message || "Unable to load inward list." });
+        setRows([]);
+        setLoading(false);
         return;
       }
-      const data = await parseMaybeJson(res);
-      if (!res.ok || data?.ok === false || data?.success === false) {
-        throw new Error(data?.error || "Delete failed");
+
+      const headers = Array.isArray(data.data) ? data.data : [];
+      if (headers.length === 0) {
+        setRows([]);
+        setLoading(false);
+        return;
       }
-      showPopup("success", "Deleted successfully ✅");
-      setDeleteRow(null);
-      await fetchInward(month, page);
-    } catch (err) {
-      console.error(err);
-      showPopup("error", "Delete failed");
-    } finally {
+
+      const hasItemsInline = Array.isArray(headers[0].items);
+      if (hasItemsInline) {
+        setRows(flatten(headers));
+        setLoading(false);
+        return;
+      }
+
+      const detailed = [];
+      for (let i = 0; i < headers.length; i++) {
+        const h = headers[i];
+        const rr = await fetch(ONE_API(h.id));
+        const dd = await rr.json().catch(() => ({}));
+        if (rr.ok && dd?.success && dd?.data) detailed.push(dd.data);
+      }
+
+      setRows(flatten(detailed));
       setLoading(false);
+    } catch (e) {
+      setLoading(false);
+      openDlg({ type: "error", title: "Network Error", message: "Server not reachable." });
     }
   };
 
-  const handleUpdate = async (e) => {
-    e.preventDefault();
-    if (!editRow) return;
+  useEffect(() => {
+    fetchList();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const downloadPdf = () => {
+    const qs = new URLSearchParams();
+    if (from) qs.set("from", from);
+    if (to) qs.set("to", to);
+    const url = qs.toString() ? `${PDF_API}?${qs.toString()}` : PDF_API;
+    window.open(url, "_blank");
+  };
+
+  const openImage = (row) => {
+    const src = row?.image_url || "";
+    if (!src) {
+      openDlg({ type: "info", title: "No File", message: "This row has no bill file." });
+      return;
+    }
+
+    const clean = String(src).toLowerCase().split("?")[0];
+    const isPdf = clean.endsWith(".pdf");
+
+    setImageViewer({
+      open: true,
+      url: src,
+      isPdf,
+      title: `Sr.No ${row.seq_no} • ${row.material}`,
+    });
+  };
+
+  const closeImage = () => setImageViewer({ open: false, url: "", isPdf: false, title: "" });
+
+  const openUpdate = async (inwardId) => {
+    setOverlay({ open: true, text: "Loading details..." });
+    try {
+      const r = await fetch(ONE_API(inwardId));
+      const data = await r.json().catch(() => ({}));
+      setOverlay({ open: false, text: "Please wait..." });
+
+      if (!r.ok || !data?.success || !data?.data) {
+        openDlg({ type: "error", title: "Failed", message: data?.message || "Unable to load details." });
+        return;
+      }
+
+      setEdit({
+        open: true,
+        inwardId: data.data.id,
+        seq_no: data.data.seq_no,
+        work_date: String(data.data.work_date || "").slice(0, 10),
+        store: data.data.store || "",
+        items: (data.data.items || []).map((it) => ({
+          id: it.id,
+          material: it.material || "",
+          quantity: it.quantity ?? "",
+          quantity_type: it.quantity_type || "",
+          material_use: it.material_use || "",
+          image_url: computeFileUrl(it),
+          upload_id: it.upload_id || null,
+        })),
+      });
+    } catch (e) {
+      setOverlay({ open: false, text: "Please wait..." });
+      openDlg({ type: "error", title: "Network Error", message: "Server not reachable." });
+    }
+  };
+
+  const closeUpdate = () =>
+    setEdit({ open: false, inwardId: null, seq_no: null, work_date: todayISO(), store: "", items: [] });
+
+  const updateEditItem = (idx, patch) => {
+    setEdit((p) => {
+      const items = [...p.items];
+      items[idx] = { ...items[idx], ...patch };
+      return { ...p, items };
+    });
+  };
+
+  const saveUpdate = async () => {
+    const errs = [];
+    if (!edit.work_date) errs.push("Date required");
+    if (!edit.store.trim()) errs.push("Store required");
+    if (!edit.items.length) errs.push("At least 1 item required");
+
+    edit.items.forEach((it, i) => {
+      if (!String(it.material || "").trim()) errs.push(`Row ${i + 1}: Material required`);
+      if (!String(it.material_use || "").trim()) errs.push(`Row ${i + 1}: Material Use required`);
+      if (it.quantity !== "" && it.quantity !== null && Number.isNaN(Number(it.quantity))) errs.push(`Row ${i + 1}: Quantity invalid`);
+    });
+
+    if (errs.length) {
+      openDlg({ type: "error", title: "Fix these", message: errs.join("\n") });
+      return;
+    }
 
     const payload = {
-      work_date: editRow.work_date ? ymd(editRow.work_date) : null,
-      work_time: editRow.work_time || null,
-      details: editRow.details || "",
-      quantity:
-        editRow.quantity === "" || editRow.quantity == null
-          ? null
-          : Number(editRow.quantity),
-      quantity_type: editRow.quantity_type || null,
+      work_date: edit.work_date,
+      store: edit.store.trim(),
+      items: edit.items.map((it) => ({
+        material: String(it.material || "").trim(),
+        quantity: it.quantity === "" ? null : Number(it.quantity),
+        quantity_type: String(it.quantity_type || "").trim() || null,
+        material_use: String(it.material_use || "").trim(),
+        image_path: it.image_url || null,
+      })),
     };
 
-    setLoading(true);
+    setOverlay({ open: true, text: "Updating..." });
     try {
-      const res = await fetch(`${API_BASE}/inward/${editRow.id}`, {
+      const r = await fetch(UPDATE_API(edit.inwardId), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await parseMaybeJson(res);
-      const okShape = res.ok && (data?.id || data?.ok === true || data?.success === true);
-      if (!okShape) throw new Error(data?.error || "Update failed");
-      showPopup("success", "Updated successfully ✅");
-      setEditRow(null);
-      await fetchInward(month, page);
-    } catch (err) {
-      console.error(err);
-      showPopup("error", "Update failed");
-    } finally {
-      setLoading(false);
+      const data = await r.json().catch(() => ({}));
+      setOverlay({ open: false, text: "Please wait..." });
+
+      if (r.ok && data?.success) {
+        closeUpdate();
+        fetchList();
+        openDlg({ type: "success", title: "Updated", message: "Inward updated successfully." });
+        return;
+      }
+
+      if (r.status === 409) {
+        openDlg({
+          type: "error",
+          title: "Duplicate Not Allowed",
+          message: "Same Date + Store + Material + Material Use already exists.",
+        });
+        return;
+      }
+
+      openDlg({ type: "error", title: "Failed", message: data?.message || "Update failed." });
+    } catch (e) {
+      setOverlay({ open: false, text: "Please wait..." });
+      openDlg({ type: "error", title: "Network Error", message: "Server not reachable." });
     }
   };
 
-  const totalPages = Math.ceil(inwards.length / PAGE_SIZE) || 1;
-  const paged = inwards.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+  const confirmDelete = (inwardId, seqNo) => {
+    openDlg({
+      type: "error",
+      title: "Delete Inward",
+      message: `Are you sure you want to delete Sr.No ${seqNo}?`,
+      okText: "Delete",
+      showCancel: true,
+      cancelText: "Cancel",
+      onCancel: () => closeDlg(),
+      onOk: async () => {
+        closeDlg();
+        setOverlay({ open: true, text: "Deleting..." });
+        try {
+          const r = await fetch(DELETE_API(inwardId), { method: "DELETE" });
+          const data = await r.json().catch(() => ({}));
+          setOverlay({ open: false, text: "Please wait..." });
+
+          if (r.ok && data?.success) {
+            fetchList();
+            openDlg({ type: "success", title: "Deleted", message: `Sr.No ${seqNo} deleted successfully.` });
+            return;
+          }
+
+          openDlg({ type: "error", title: "Failed", message: data?.message || "Delete failed." });
+        } catch (e) {
+          setOverlay({ open: false, text: "Please wait..." });
+          openDlg({ type: "error", title: "Network Error", message: "Server not reachable." });
+        }
+      },
+    });
+  };
+
+  const grouped = useMemo(() => {
+    const map = new Map();
+    for (const r of rows) {
+      if (!map.has(r.inward_id)) {
+        map.set(r.inward_id, {
+          inward_id: r.inward_id,
+          seq_no: r.seq_no,
+          work_date: r.work_date,
+          store: r.store,
+          items: [],
+        });
+      }
+      map.get(r.inward_id).items.push(r);
+    }
+    return Array.from(map.values()).sort((a, b) => a.seq_no - b.seq_no);
+  }, [rows]);
+
+  const Portal = ({ children }) => {
+    if (typeof document === "undefined") return null;
+    return createPortal(children, document.body);
+  };
+
+  const clearFilters = () => {
+    setFrom("");
+    setTo("");
+    setTimeout(() => fetchList(), 0);
+  };
+
+  // ✅ ripple point
+  const setRipplePoint = (e) => {
+    const el = e.currentTarget;
+    const r = el.getBoundingClientRect();
+    const x = ((e.clientX - r.left) / r.width) * 100;
+    const y = ((e.clientY - r.top) / r.height) * 100;
+    el.style.setProperty("--rx", `${x}%`);
+    el.style.setProperty("--ry", `${y}%`);
+  };
 
   return (
-    <>
-      <style>{`
-        :root{
-          --bg: #fffaf5;
-          --grad1: #ff8a00;
-          --grad2: #ff5f6d;
-          --grad3: #ff758c;
-          --grad4: #fbc2eb;
-          --cardBg: #ffffff;
-          --ink: #111827;
-          --muted: #6b7280;
-          --ring: rgba(255, 99, 71, 0.25);
-        }
-        * { box-sizing: border-box; }
-        html, body, #root { height: 100%; }
-        body {
-          margin: 0;
-          background: var(--bg);
-          font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Poppins", sans-serif;
-          color: var(--ink);
-          font-size: clamp(14px, 1.9vw, 16px);
-          -webkit-font-smoothing: antialiased;
-          -moz-osx-font-smoothing: grayscale;
-        }
-        .page-wrap {
-          min-height: 100vh;
-          background: linear-gradient(180deg, var(--grad1) 0%, var(--grad2) 45%, var(--grad3) 70%, var(--grad4) 100%);
-          padding: clamp(12px, 2vw, 20px);
-        }
-        .container { width: min(1100px, 100%); margin: 0 auto; }
-
-        .header-card {
-          background: rgba(255, 255, 255, 0.25);
-          border-radius: 16px;
-          backdrop-filter: blur(8px);
-          border: 1px solid rgba(255, 255, 255, 0.35);
-          box-shadow: 0 8px 24px rgba(255, 94, 98, 0.25);
-          padding: clamp(12px, 2vw, 18px);
-          color: #fff; display: grid; grid-template-columns: 1fr; gap: 12px;
-        }
-        .header-row{ display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; }
-        @media (max-width: 560px){ .header-row{ grid-template-columns: 1fr; } }
-        .header-title { margin: 0; font-weight: 700; font-size: clamp(18px, 2.6vw, 22px); }
-        .header-sub { opacity: .9; font-size: .95em; }
-
-        .toolbar { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; width: 100%; }
-        .select, .btn { width: 100%; }
-        .select {
-          border-radius: 10px; border: 1px solid rgba(255,255,255,0.5);
-          background: rgba(255,255,255,0.92); color: #111; font-weight: 600;
-          padding: 10px 12px; min-height: 40px; outline: none;
-        }
-        .btn {
-          border: none; border-radius: 10px; padding: 10px 14px; font-weight: 700; cursor: pointer;
-          transition: transform .15s ease, box-shadow .2s ease, background .2s ease; min-height: 40px; white-space: nowrap;
-        }
-        .btn:active { transform: translateY(1px) scale(.99); }
-        .btn-primary { background: linear-gradient(90deg, #ff8a00, #ff3d7f); color: #fff; box-shadow: 0 4px 16px rgba(0,0,0,.15); }
-        .btn-outline-light{ background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.8); }
-        .btn-danger { background: #dc2626; color: #fff; }
-        .btn-warning { background: #f59e0b; color: #111; }
-        .btn-sm{ padding: 8px 10px; border-radius: 8px; font-size: .9em; min-height: 36px; }
-        @media (max-width: 380px){ .btn, .select { padding: 8px 10px; min-height: 38px; } }
-
-        .list { display: grid; gap: 12px; margin-top: 14px; }
-        .card { background: var(--cardBg); border-radius: 14px; padding: clamp(12px, 2vw, 16px); box-shadow: 0 6px 20px rgba(0,0,0,.08);
-                transition: box-shadow .2s ease, transform .2s ease; }
-        .card:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(0,0,0,.10); }
-
-        .card-top{ display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: start; margin-bottom: 6px; }
-        @media (max-width: 460px){ .card-top{ grid-template-columns: 1fr; } .actions{ justify-content: flex-start; } }
-        .idbar{ display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-        .pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 6px 10px; font-weight: 700; font-size: .85em; }
-        .pill-red{ background: #fee2e2; color: #991b1b; }
-        .pill-amber{ background: #fff7ed; color: #9a3412; }
-        .actions{ display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-
-        .details{ margin: 6px 0 8px 0; font-weight: 600; color: var(--ink); line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
-        .meta{ display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 8px; color: var(--muted); font-size: .95em; }
-        @media (max-width: 820px){ .meta{ grid-template-columns: repeat(2, minmax(0,1fr)); } }
-        @media (max-width: 480px){ .meta{ grid-template-columns: 1fr; } }
-        .meta .kv{ background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 10px; padding: 8px 10px; }
-        .kv b{ color: #0f172a; }
-
-        .pager{ display: flex; justify-content: space-between; align-items: center; color: #fff; margin-top: 14px; gap: 10px; flex-wrap: wrap; }
-        .pager small { font-weight: 600; }
-        .pager .group{ display: flex; gap: 8px; flex-wrap: wrap; }
-
-        /* overlays — high z-index, no Bootstrap .modal conflicts */
-        .overlay {
-          position: fixed; inset: 0; background: rgba(0,0,0,.5);
-          display: flex; align-items: center; justify-content: center;
-          z-index: 9999; padding: 16px;
-        }
-        .dialog {
-          background: #fff; border-radius: 16px; width: min(520px, 100%);
-          box-shadow: 0 16px 48px rgba(0,0,0,.25); padding: 16px; animation: fadeIn .2s ease;
-        }
-        .dialog h6{ margin: 0 0 8px 0; font-size: 1.05em; }
-        .field{ display: grid; gap: 8px; margin-top: 8px; }
-        .field > label{ font-weight: 600; font-size: .95em; }
-        .dialog input, .dialog textarea{
-          width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid #e5e7eb; outline: none;
-        }
-        .dialog textarea{ min-height: 110px; resize: vertical; }
-        .dialog .btns{ display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
-        @media (max-width: 420px){ .dialog .btns{ grid-template-columns: 1fr; } }
-
-        .toast { background: #fff; border-radius: 12px; border-top: 6px solid transparent; padding: 14px; width: min(340px, 100%); text-align: center;
-                 box-shadow: 0 12px 36px rgba(0,0,0,.25); }
-        .toast.success{ border-top-color: #22c55e; } .toast.error{ border-top-color: #ef4444; }
-        .toast small{ color: #6b7280; }
-
-        .loader { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.25); z-index: 9998; }
-        .spinner{ width: 54px; height: 54px; border: 5px solid rgba(255,255,255,.35); border-top-color: #fff; border-radius: 999px; animation: spin .7s linear infinite; }
-        @keyframes spin{ to{ transform: rotate(360deg);} }
-        @keyframes fadeIn{ from{opacity:0; transform: scale(.96);} to{opacity:1; transform: scale(1);} }
-      `}</style>
-
-      {/* Global popup (click outside to close) */}
-      {popup.show && (
-        <div className="overlay" role="alert" aria-live="assertive" onClick={() => setPopup({ show:false, type:"success", message:"" })}>
-          <div className={`toast ${popup.type}`} onClick={(e) => e.stopPropagation()}>
-            <h5 style={{ margin: 0 }}>
-              {popup.type === "success" ? "✅ Success" : "⚠️ Error"}
-            </h5>
-            <p style={{ margin: "6px 0" }}>{popup.message}</p>
-            <small>Click anywhere to close</small>
-          </div>
+    <div className="igPage">
+      <div className="igTopbar">
+        <div>
+          <div className="igTopbar__title">Inward List</div>
         </div>
-      )}
 
-      {/* Edit Dialog */}
-      {editRow && (
-        <div className="overlay" role="dialog" aria-modal="true" onClick={() => setEditRow(null)}>
-          <div className="dialog" onClick={(e) => e.stopPropagation()}>
-            <h6>Edit Inward Record</h6>
-            <form onSubmit={handleUpdate}>
-              <div className="field">
-                <label htmlFor="dt">Date</label>
-                <input
-                  id="dt"
-                  type="date"
-                  value={ymd(editRow.work_date)}
-                  onChange={(e) => setEditRow({ ...editRow, work_date: e.target.value })}
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="det">Details</label>
-                <textarea
-                  id="det"
-                  value={editRow.details || ""}
-                  onChange={(e) => setEditRow({ ...editRow, details: e.target.value })}
-                  placeholder="Enter full details..."
-                />
-              </div>
-              <div className="field" style={{ gridTemplateColumns: "1fr 1fr", gap: 10, display: "grid" }}>
-                <div>
-                  <label htmlFor="qty">Quantity</label>
-                  <input
-                    id="qty"
-                    type="number"
-                    value={editRow.quantity ?? ""}
-                    onChange={(e) => setEditRow({ ...editRow, quantity: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="qt">Quantity Type</label>
-                  <input
-                    id="qt"
-                    value={editRow.quantity_type || ""}
-                    onChange={(e) => setEditRow({ ...editRow, quantity_type: e.target.value })}
-                    placeholder="e.g., kg, pcs"
-                  />
-                </div>
-              </div>
-              <div className="field">
-                <label htmlFor="wt">Work Time</label>
-                <input
-                  id="wt"
-                  value={editRow.work_time || ""}
-                  onChange={(e) => setEditRow({ ...editRow, work_time: e.target.value })}
-                  placeholder="e.g., 02:30 PM"
-                />
-              </div>
-              <div className="btns">
-                <button type="submit" className="btn btn-primary">Save</button>
-                <button type="button" className="btn btn-outline-light" onClick={() => setEditRow(null)}>
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirm Dialog */}
-      {deleteRow && (
-        <div className="overlay" role="dialog" aria-modal="true" onClick={() => setDeleteRow(null)}>
-          <div className="dialog" onClick={(e) => e.stopPropagation()}>
-            <h6>🗑️ Delete this record?</h6>
-            <div className="details" style={{ marginTop: 6 }}>{deleteRow.details}</div>
-            <div className="btns">
-              <button type="button" className="btn btn-outline-light" onClick={() => setDeleteRow(null)}>Cancel</button>
-              <button type="button" className="btn btn-danger" onClick={handleDelete}>Delete</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* loading overlay */}
-      {loading && (
-        <div className="loader" aria-busy="true" aria-live="polite">
-          <div className="spinner" />
-        </div>
-      )}
-
-      {/* Main Page */}
-      <div className="page-wrap">
-        <div className="container">
-          <div className="header-card">
-            <div className="header-row">
-              <div>
-                <h5 className="header-title">🧾 Inward Records – {month}</h5>
-                <div className="header-sub">Manage inward entries: view, edit, delete, or download</div>
-              </div>
-            </div>
-            <div className="toolbar">
-              <select className="select" value={month} onChange={(e) => setMonth(e.target.value)}>
-                {["January","February","March","April","May","June","July","August","September","October","November","December"]
-                  .map((m) => (<option key={m}>{m}</option>))}
-              </select>
-              <button className="btn btn-primary" onClick={handleDownload}>⬇️ Download PDF</button>
-              <button className="btn btn-outline-light" onClick={() => fetchInward(month, page)}>↻ Refresh</button>
-            </div>
-          </div>
-
-          {(!loading && inwards.length === 0) ? (
-            <p style={{ color: "#fff", textAlign: "center", margin: "18px 0", fontWeight: 600 }}>
-              No inward records found for {month}.
-            </p>
-          ) : (
-            <>
-              <div className="list">
-                {paged.map((rec) => (
-                  <article key={rec.id} className="card" aria-label={`Inward #${rec.seq_no || rec.id}`}>
-                    <div className="card-top">
-                      <div className="idbar">
-                        <span className="pill pill-red">#{rec.seq_no ?? rec.id}</span>
-                        <span className="pill pill-amber">
-                          {rec.work_date ? new Date(rec.work_date).toLocaleDateString() : "-"}
-                        </span>
-                      </div>
-                      <div className="actions">
-                        <button type="button" className="btn btn-sm btn-warning" onClick={() => setEditRow(rec)}>✏️ Edit</button>
-                        <button type="button" className="btn btn-sm btn-danger" onClick={() => setDeleteRow(rec)}>🗑️ Delete</button>
-                      </div>
-                    </div>
-
-                    <div className="details">{rec.details || "-"}</div>
-
-                    <div className="meta">
-                      <div className="kv">Qty:&nbsp;<b>{rec.quantity ?? "-"}</b></div>
-                      <div className="kv">Type:&nbsp;<b>{rec.quantity_type || "-"}</b></div>
-                      <div className="kv">Work Time:&nbsp;<b>{rec.work_time || "-"}</b></div>
-                      <div className="kv">ID:&nbsp;<b>{rec.id}</b></div>
-                    </div>
-                  </article>
-                ))}
-              </div>
-
-              <div className="pager">
-                <small>Page {page + 1} of {totalPages}</small>
-                <div className="group">
-                  <button
-                    type="button"
-                    className="btn btn-outline-light btn-sm"
-                    disabled={page === 0}
-                    onClick={() => setPage((p) => Math.max(0, p - 1))}
-                  >
-                    ← Prev
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-outline-light btn-sm"
-                    disabled={page + 1 >= totalPages}
-                    onClick={() => setPage((p) => p + 1)}
-                  >
-                    Next →
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
+        <div className="igTopbarActions">
+          <button
+            type="button"
+            className="igBtn igBtn--outline igRipple"
+            onPointerDown={setRipplePoint}
+            onClick={fetchList}
+          >
+            Refresh
+          </button>
+          <button
+            type="button"
+            className="igBtn igBtn--primary igRipple"
+            onPointerDown={setRipplePoint}
+            onClick={downloadPdf}
+          >
+            Download PDF
+          </button>
         </div>
       </div>
-    </>
+
+      <div className="igFilters">
+        <div className="igField">
+          <label>From</label>
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+        </div>
+
+        <div className="igField">
+          <label>To</label>
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+        </div>
+
+        <div className="igFilterBtns">
+          <button
+            type="button"
+            className="igBtn igBtn--dark igRipple"
+            onPointerDown={setRipplePoint}
+            onClick={fetchList}
+          >
+            Apply
+          </button>
+
+          <button
+            type="button"
+            className="igBtn igBtn--ghost igRipple"
+            onPointerDown={setRipplePoint}
+            onClick={clearFilters}
+            disabled={!from && !to}
+            title={!from && !to ? "Nothing to clear" : "Clear dates"}
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="igCenterPad">
+          <div className="igMiniLoader" />
+          <div className="igMuted">Loading...</div>
+        </div>
+      ) : grouped.length === 0 ? (
+        <div className="igEmpty">
+          <div className="igEmptyCard">
+            <div className="igEmptyTitle">No inward records</div>
+            <div className="igEmptySub">Try changing filter dates or clear filters.</div>
+            <div className="igEmptyActions">
+              <button
+                type="button"
+                className="igBtn igBtn--dark igRipple"
+                onPointerDown={setRipplePoint}
+                onClick={fetchList}
+              >
+                Apply / Refresh
+              </button>
+              <button
+                type="button"
+                className="igBtn igBtn--ghost igRipple"
+                onPointerDown={setRipplePoint}
+                onClick={clearFilters}
+              >
+                Clear Filters
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="igList">
+          {grouped.map((g) => (
+            <div className="igCard" key={g.inward_id}>
+              <div className="igCardHead">
+                <div className="igHeadLeft">
+                  <div className="igSrLine">
+                    <span className="igSrLabel">Sr.No</span>
+                    <span className="igPill">{g.seq_no}</span>
+                    <span className="igStorePill" title="Store">
+                      {g.store}
+                    </span>
+                  </div>
+                  <div className="igDateLine">
+                    <span className="igDateDot" />
+                    <span className="igDateText">{g.work_date}</span>
+                  </div>
+                </div>
+
+                <div className="igHeadRight">
+                  <button
+                    type="button"
+                    className="igBtn igBtn--outline igRipple"
+                    onPointerDown={setRipplePoint}
+                    onClick={() => openUpdate(g.inward_id)}
+                  >
+                    Update
+                  </button>
+                  <button
+                    type="button"
+                    className="igBtn igBtn--danger igRipple"
+                    onPointerDown={setRipplePoint}
+                    onClick={() => confirmDelete(g.inward_id, g.seq_no)}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+
+              <div className="igTableWrap">
+                <table className="igTbl igTbl--auto">
+                  <thead>
+                    <tr>
+                      <th className="col-sub">Sub No</th>
+                      <th className="col-mat">Material</th>
+                      <th className="col-qty">Quantity</th>
+                      <th className="col-store">Store</th>
+                      <th className="col-use">Material Use</th>
+                      <th className="col-bill">Bill</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {g.items
+                      .sort((a, b) => a.item_order - b.item_order)
+                      .map((r) => (
+                        <tr key={r.item_id || `${r.inward_id}-${r.item_order}`}>
+                          <td className="igSubNo">{String.fromCharCode(96 + (r.item_order || 1))})</td>
+
+                          <td className="igMaterial">
+                            <div className="igCellMain">{r.material}</div>
+                          </td>
+
+                          <td className="igQty">
+                            <span className="igQtyWrap">
+                              <span className="igQtyNum">{r.quantity ?? ""}</span>
+                              {r.quantity_type ? <span className="igQtyType">{r.quantity_type}</span> : null}
+                            </span>
+                          </td>
+
+                          <td className="igStoreCell">{g.store}</td>
+
+                          <td className="igUse">
+                            <div className="igClamp2" title={r.material_use}>
+                              {r.material_use}
+                            </div>
+                          </td>
+
+                          <td className="igBillCell">
+                            <button
+                              type="button"
+                              className="igBtn igBtn--small igRipple"
+                              onPointerDown={setRipplePoint}
+                              onClick={() => openImage(r)}
+                            >
+                              View
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="igMobileActions">
+                <button
+                  type="button"
+                  className="igBtn igBtn--outline igBtnTiny igRipple"
+                  onPointerDown={setRipplePoint}
+                  onClick={() => openUpdate(g.inward_id)}
+                >
+                  Update
+                </button>
+                <button
+                  type="button"
+                  className="igBtn igBtn--danger igBtnTiny igRipple"
+                  onPointerDown={setRipplePoint}
+                  onClick={() => confirmDelete(g.inward_id, g.seq_no)}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* =============== PORTAL MODALS =============== */}
+      <Portal>
+        {overlay.open && (
+          <div className="igOverlay" role="status" aria-live="polite">
+            <div className="igOverlayCard">
+              <div className="igSpinner" />
+              <div className="igOverlayText">{overlay.text}</div>
+              <div className="igOverlaySub">Please wait…</div>
+            </div>
+          </div>
+        )}
+
+        {dlg.open && (
+          <div className="igDlgOverlay" role="dialog" aria-modal="true" onClick={closeDlg}>
+            <div className="igDlg igDlgScrollable" onClick={(e) => e.stopPropagation()}>
+              <div className={`igDlgTop igDlgTop--${dlg.type}`}>
+                <div className="igDlgTitle">{dlg.title}</div>
+              </div>
+
+              <div className="igDlgBody igDlgBodyScroll">
+                <pre className="igDlgMsg">{dlg.message}</pre>
+              </div>
+
+              <div className="igDlgActions">
+                {dlg.showCancel && (
+                  <button
+                    className="igBtn igBtn--outline igRipple"
+                    onPointerDown={setRipplePoint}
+                    onClick={dlg.onCancel || closeDlg}
+                    type="button"
+                  >
+                    {dlg.cancelText}
+                  </button>
+                )}
+                <button
+                  className="igBtn igBtn--dark igRipple"
+                  onPointerDown={setRipplePoint}
+                  onClick={() => {
+                    if (typeof dlg.onOk === "function") return dlg.onOk();
+                    closeDlg();
+                  }}
+                  type="button"
+                >
+                  {dlg.okText}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* viewer */}
+        {imageViewer.open && (
+          <div className="igImgOverlay" onClick={closeImage} role="dialog" aria-modal="true">
+            <div className="igImgModal igImgModalSafe" onClick={(e) => e.stopPropagation()}>
+              <div className="igImgTop">
+                <div className="igImgTitle">{imageViewer.title}</div>
+                <button
+                  type="button"
+                  className="igXBtn igRipple"
+                  onPointerDown={setRipplePoint}
+                  onClick={closeImage}
+                  aria-label="Close"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="igImgBody">
+                {imageViewer.isPdf ? (
+                  <iframe title="Bill PDF" src={imageViewer.url} className="igPdfFrame" />
+                ) : (
+                  <img src={imageViewer.url} alt="Bill" className="igImgView" />
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* edit */}
+        {edit.open && (
+          <div className="igDlgOverlay" role="dialog" aria-modal="true" onClick={closeUpdate}>
+            <div className="igDlg igDlgWide igDlgScrollable" onClick={(e) => e.stopPropagation()}>
+              <div className="igDlgTop igDlgTop--info">
+                <div className="igDlgTitle">Update Inward (Sr.No {edit.seq_no})</div>
+              </div>
+
+              <div className="igDlgBody igDlgBodyScroll">
+                <div className="igEditGrid">
+                  <div className="igField" style={{ width: "100%" }}>
+                    <label>Date</label>
+                    <input
+                      type="date"
+                      value={edit.work_date}
+                      onChange={(e) => setEdit((p) => ({ ...p, work_date: e.target.value }))}
+                    />
+                  </div>
+                  <div className="igField" style={{ width: "100%" }}>
+                    <label>Store</label>
+                    <input
+                      type="text"
+                      value={edit.store}
+                      onChange={(e) => setEdit((p) => ({ ...p, store: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="igDivider" />
+
+                <div className="igMuted" style={{ marginBottom: 8 }}>
+                  Materials
+                </div>
+
+                <div className="igTableWrap">
+                  <table className="igTbl igTbl--auto">
+                    <thead>
+                      <tr>
+                        <th className="col-mat">Material</th>
+                        <th className="col-qty">Qty</th>
+                        <th className="col-qtyType">Qty Type</th>
+                        <th className="col-use">Material Use</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {edit.items.map((it, idx) => (
+                        <tr key={it.id || idx}>
+                          <td>
+                            <input
+                              className="igCellInput"
+                              value={it.material}
+                              onChange={(e) => updateEditItem(idx, { material: e.target.value })}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              className="igCellInput"
+                              value={it.quantity}
+                              onChange={(e) => updateEditItem(idx, { quantity: e.target.value })}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              className="igCellInput"
+                              value={it.quantity_type}
+                              onChange={(e) => updateEditItem(idx, { quantity_type: e.target.value })}
+                            />
+                          </td>
+                          <td>
+                            <textarea
+                              className="igCellTextarea"
+                              rows={2}
+                              value={it.material_use}
+                              onChange={(e) => updateEditItem(idx, { material_use: e.target.value })}
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="igMuted" style={{ marginTop: 8 }}>
+                  Note: File update is not included here.
+                </div>
+              </div>
+
+              <div className="igDlgActions">
+                <button
+                  type="button"
+                  className="igBtn igBtn--outline igRipple"
+                  onPointerDown={setRipplePoint}
+                  onClick={closeUpdate}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="igBtn igBtn--dark igRipple"
+                  onPointerDown={setRipplePoint}
+                  onClick={saveUpdate}
+                >
+                  Save Update
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </Portal>
+
+      <style>{css}</style>
+    </div>
   );
 }
+
+const css = `
+.igPage{min-height:100vh;width:100%;background:#f6f8fc;margin:0;padding:0;display:flex;flex-direction:column;}
+
+/* topbar */
+.igTopbar{
+  width:calc(100% - 24px);
+  margin:10px 12px 10px;
+  background:linear-gradient(135deg,#0b1220,#0f2147);
+  color:#fff;
+  padding:14px 14px;
+  box-sizing:border-box;
+  display:flex;
+  gap:12px;
+  justify-content:space-between;
+  align-items:flex-start;
+  border-radius:16px;
+  box-shadow:0 14px 40px rgba(11,18,32,0.14);
+}
+.igTopbar__title{font-size:18px;font-weight:900;letter-spacing:0.2px;}
+.igTopbarActions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;}
+
+/* filter card */
+.igFilters{
+  width:calc(100% - 24px);
+  margin:0 12px 12px;
+  background:#fff;
+  border:1px solid rgba(0,0,0,0.08);
+  border-radius:16px;
+  padding:12px;
+  display:flex;
+  gap:10px;
+  align-items:flex-end;
+  flex-wrap:wrap;
+  box-sizing:border-box;
+  box-shadow:0 10px 30px rgba(11,18,32,0.06);
+}
+.igField label{display:block;font-size:12px;font-weight:900;color:#111827;margin-bottom:6px;}
+.igField input{
+  width:160px;box-sizing:border-box;border:1px solid rgba(0,0,0,0.15);
+  border-radius:12px;padding:10px 10px;font-size:14px;outline:none;background:#fff;
+}
+.igFilterBtns{display:flex;gap:10px;flex-wrap:wrap;}
+
+/* buttons */
+.igBtn{
+  border:0;border-radius:12px;padding:10px 12px;font-weight:900;cursor:pointer;font-size:14px;
+  transition:transform .08s ease, filter .15s ease, opacity .2s ease;
+  user-select:none;
+  position:relative;
+  overflow:hidden;
+}
+.igBtn:active{transform:scale(0.98);}
+.igBtn:disabled{opacity:0.55;cursor:not-allowed;}
+.igBtn:focus-visible{outline:3px solid rgba(59,130,246,0.45);outline-offset:2px;}
+
+.igBtn--primary{background:#ffffff;color:#0b1220;}
+.igBtn--dark{background:#0b1220;color:#fff;}
+.igBtn--outline{background:#fff;color:#0b1220;border:1px solid rgba(11,18,32,0.18);}
+.igBtn--danger{background:#fee2e2;color:#b91c1c;border:1px solid rgba(185,28,28,0.18);}
+.igBtn--ghost{background:rgba(11,18,32,0.08);color:#0b1220;border:1px solid rgba(11,18,32,0.06);}
+
+.igBtn--small{
+  padding:8px 10px;font-size:12px;border-radius:10px;
+  background:rgba(11,18,32,0.08);color:#0b1220;border:1px solid rgba(11,18,32,0.06);
+}
+.igBtnTiny{padding:8px 10px;font-size:13px;border-radius:12px;}
+
+/* ripple */
+.igRipple::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background: radial-gradient(circle at var(--rx, 50%) var(--ry, 50%), rgba(255,255,255,0.45), transparent 45%);
+  opacity:0;
+  transition: opacity .25s ease;
+}
+.igRipple:active::after{opacity:1;}
+
+/* center */
+.igCenterPad{padding:28px;text-align:center;}
+.igMuted{font-size:12px;color:#6b7280;}
+.igMiniLoader{width:34px;height:34px;border-radius:999px;border:4px solid rgba(11,18,32,0.15);border-top-color:#0b1220;animation:igSpin 0.9s linear infinite;margin:0 auto 10px;}
+@keyframes igSpin{to{transform:rotate(360deg);}}
+
+/* empty */
+.igEmpty{padding:14px 12px 18px;display:flex;justify-content:center;}
+.igEmptyCard{
+  width:100%;
+  max-width:620px;
+  background:#fff;
+  border:1px solid rgba(0,0,0,0.08);
+  border-radius:18px;
+  padding:16px;
+  box-shadow:0 14px 40px rgba(11,18,32,0.08);
+}
+.igEmptyTitle{font-size:16px;font-weight:900;color:#0b1220;}
+.igEmptySub{margin-top:6px;font-size:12px;color:#6b7280;line-height:1.4;}
+.igEmptyActions{margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;}
+
+/* list cards */
+.igList{padding:0 12px 12px;display:flex;flex-direction:column;gap:12px;box-sizing:border-box;}
+.igCard{
+  width:100%;
+  max-width: 1200px;         /* ✅ not stretch too wide on large screens */
+  margin:0 auto;             /* ✅ center */
+  background:#fff;
+  border:1px solid rgba(0,0,0,0.08);
+  border-radius:20px;
+  overflow:hidden;
+  box-shadow:0 14px 40px rgba(11,18,32,0.08);
+}
+.igCardHead{padding:14px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between;}
+.igHeadLeft{display:flex;flex-direction:column;gap:6px;min-width:0;}
+.igSrLine{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.igSrLabel{font-size:12px;color:#6b7280;font-weight:900;}
+.igPill{display:inline-flex;align-items:center;justify-content:center;padding:6px 12px;border-radius:999px;background:rgba(37,99,235,0.12);color:#1d4ed8;font-weight:900;}
+.igStorePill{display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border-radius:999px;background:rgba(16,185,129,0.14);color:#065f46;font-weight:900;font-size:12px;max-width: 420px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.igDateLine{display:flex;align-items:center;gap:8px;}
+.igDateDot{width:10px;height:10px;border-radius:999px;background:rgba(16,185,129,0.25);border:2px solid rgba(16,185,129,0.45);}
+.igDateText{font-weight:900;color:#0b1220;font-size:13px;}
+.igHeadRight{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;}
+
+/* table wrap */
+.igTableWrap{width:100%;overflow-x:auto;border-top:1px solid rgba(0,0,0,0.06);}
+
+/* ✅ Auto table: content decides width, not fixed 1100 */
+.igTbl--auto{
+  width:100%;
+  table-layout:auto;
+  border-collapse:collapse;
+  font-size:13px;
+  min-width: 860px; /* keep usable on desktop; mobile will scroll */
+}
+.igTbl th,.igTbl td{padding:10px 10px;border-bottom:1px solid rgba(0,0,0,0.06);vertical-align:top;}
+.igTbl th{text-align:left;font-weight:900;background:#f3f4f6;color:#0b1220;white-space:nowrap;}
+
+/* column sizing (close but not touching) */
+.col-sub{width:80px;}
+.col-qty{width:150px;}
+.col-store{width:200px;}
+.col-bill{width:120px;}
+.col-qtyType{width:160px;}
+/* material/use auto, but with minimum */
+.col-mat{min-width:200px;}
+.col-use{min-width:260px;}
+
+/* cell styles */
+.igSubNo{font-weight:900;color:#0b1220;white-space:nowrap;}
+.igMaterial{font-weight:800;color:#0b1220;min-width:200px;}
+.igCellMain{white-space:normal;word-break:break-word;line-height:1.25;}
+.igQty{white-space:nowrap;font-weight:800;}
+.igQtyWrap{display:inline-flex;gap:6px;align-items:baseline;}
+.igQtyNum{font-variant-numeric: tabular-nums;}
+.igQtyType{font-weight:800;color:#334155;}
+.igStoreCell{white-space:nowrap;font-weight:800;color:#0b1220;max-width:240px;overflow:hidden;text-overflow:ellipsis;}
+.igUse{color:#111827;line-height:1.25;}
+/* ✅ show full text, not cut: clamp 2 lines with tooltip */
+.igClamp2{
+  display:-webkit-box;
+  -webkit-line-clamp: 3;  /* show more lines */
+  -webkit-box-orient: vertical;
+  overflow:hidden;
+  white-space:normal;
+  word-break:break-word;
+}
+
+/* mobile actions */
+.igMobileActions{display:none;padding:12px;gap:10px;background:#fff;justify-content:flex-end;border-top:1px solid rgba(0,0,0,0.06);}
+@media (max-width: 720px){
+  .igHeadRight{display:none;}
+  .igMobileActions{display:flex;}
+}
+
+/* overlay + dialogs */
+.igOverlay{position:fixed; inset:0;background:rgba(0,0,0,0.45);display:flex; align-items:center; justify-content:center;padding:16px;z-index:999999;}
+.igOverlayCard{width:100%;max-width:360px;background:#fff;border-radius:18px;box-shadow:0 20px 60px rgba(0,0,0,0.25);padding:18px;display:flex;flex-direction:column;align-items:center;gap:10px;}
+.igSpinner{width:42px;height:42px;border-radius:999px;border:4px solid rgba(11,18,32,0.18);border-top-color:#0b1220;animation:igSpin 0.9s linear infinite;}
+.igOverlayText{font-weight:900;color:#0b1220;font-size:16px;text-align:center;}
+.igOverlaySub{font-size:12px;color:#6b7280;text-align:center;}
+
+.igDlgOverlay{position:fixed; inset:0;background:rgba(0,0,0,0.55);display:flex; justify-content:center; align-items:flex-start;padding:16px;overflow:auto;-webkit-overflow-scrolling:touch;z-index:999999;}
+@media (min-width: 769px){ .igDlgOverlay{align-items:center; padding:16px;} }
+.igDlg{width:100%;max-width:520px;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.25);}
+.igDlgWide{max-width:920px;}
+.igDlgScrollable{max-height: calc(100vh - 32px);display:flex;flex-direction:column;}
+.igDlgTop{padding:14px 16px;}
+.igDlgTop--success{background:rgba(16,185,129,0.15);}
+.igDlgTop--error{background:rgba(239,68,68,0.15);}
+.igDlgTop--info{background:rgba(59,130,246,0.15);}
+.igDlgTitle{font-weight:900;color:#0b1220;font-size:16px;}
+.igDlgBody{padding:14px 16px;}
+.igDlgBodyScroll{overflow:auto;-webkit-overflow-scrolling:touch;}
+.igDlgMsg{margin:0;white-space:pre-wrap;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;font-size:14px;color:#111827;line-height:1.4;}
+.igDlgActions{padding:12px 16px 16px;display:flex;justify-content:flex-end;gap:10px;background:#fff;border-top:1px solid rgba(0,0,0,0.06);}
+
+/* viewer */
+.igImgOverlay{position:fixed; inset:0;background:rgba(0,0,0,0.72);display:flex; justify-content:center; align-items:center;padding:16px;overflow:auto;-webkit-overflow-scrolling:touch;z-index:999999;}
+.igImgModalSafe{max-height:calc(100vh - 32px);display:flex;flex-direction:column;}
+.igImgModal{width:100%;max-width:900px;background:#0b1220;border-radius:18px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.35);}
+.igImgTop{display:flex;align-items:center;justify-content:space-between;padding:12px 12px;color:#fff;}
+.igImgTitle{font-weight:900;font-size:14px;opacity:0.95;}
+.igXBtn{border:0;background:rgba(255,255,255,0.14);color:#fff;border-radius:12px;padding:8px 12px;font-weight:900;cursor:pointer;}
+.igImgBody{background:#111827;overflow:auto;}
+.igImgView{width:100%;max-height:75vh;object-fit:contain;display:block;}
+.igPdfFrame{width:100%;height:75vh;border:0;display:block;background:#111827;}
+
+/* edit */
+.igEditGrid{display:grid;grid-template-columns:1fr;gap:12px;}
+@media (min-width: 900px){ .igEditGrid{grid-template-columns:1fr 1fr;} }
+.igCellInput{width:100%;border:1px solid rgba(0,0,0,0.15);border-radius:12px;padding:10px;font-size:14px;}
+.igCellTextarea{width:100%;border:1px solid rgba(0,0,0,0.15);border-radius:12px;padding:10px;font-size:14px;resize:vertical;}
+.igDivider{height:1px;background:rgba(0,0,0,0.08);width:100%;margin:10px 0;}
+`;
