@@ -3,10 +3,21 @@ import axios from "axios";
 
 const API_BASE = "https://express-backend-myapp.onrender.com/api/transaction-category";
 
+const getErrMsg = (err) => {
+  return (
+    err?.response?.data?.message ||
+    err?.response?.data?.error ||
+    (typeof err?.response?.data === "string" ? err.response.data : null) ||
+    err?.message ||
+    "Something went wrong"
+  );
+};
+
 const TransactionCategory = () => {
   const [categories, setCategories] = useState([]);
   const [selectedCat, setSelectedCat] = useState(null);
   const [subcats, setSubcats] = useState([]);
+
   const [newCat, setNewCat] = useState({ name: "", color: "#0284C7" });
   const [newSub, setNewSub] = useState("");
   const [popup, setPopup] = useState(null);
@@ -35,64 +46,88 @@ const TransactionCategory = () => {
   const [addBusy, setAddBusy] = useState(false);
   const [addSubBusy, setAddSubBusy] = useState(false);
 
-  useEffect(() => { fetchCategories(); }, []);
+  useEffect(() => {
+    fetchCategories();
+  }, []);
 
   const showPopup = (type, msg) => {
     setPopup({ type, msg });
-    setTimeout(() => setPopup(null), 1800);
+    setTimeout(() => setPopup(null), 2200);
   };
 
+  // ===== API CALLS =====
   const fetchCategories = async () => {
     try {
       setLoading(true);
       const { data } = await axios.get(`${API_BASE}/categories`);
       setCategories(Array.isArray(data) ? data : []);
-    } catch {
-      showPopup("error", "Failed to load categories");
-    } finally { setLoading(false); }
+
+      // keep selectedCat in sync
+      if (selectedCat?.category_id) {
+        const fresh = (Array.isArray(data) ? data : []).find((x) => x.category_id === selectedCat.category_id);
+        if (fresh) setSelectedCat(fresh);
+      }
+    } catch (err) {
+      showPopup("error", `Failed to load categories: ${getErrMsg(err)}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const fetchSubcategories = async (id) => {
+  const fetchSubcategories = async (catId) => {
+    if (!catId) return;
     try {
       setSubLoading(true);
-      const { data } = await axios.get(`${API_BASE}/categories/${id}/subcategories`);
+      const { data } = await axios.get(`${API_BASE}/categories/${catId}/subcategories`);
       setSubcats(Array.isArray(data) ? data : []);
-    } catch {
+    } catch (err) {
       setSubcats([]);
-    } finally { setSubLoading(false); }
+      showPopup("error", `Failed to load subcategories: ${getErrMsg(err)}`);
+    } finally {
+      setSubLoading(false);
+    }
   };
 
   const addCategory = async () => {
     if (!newCat.name.trim()) return showPopup("error", "Enter category name");
     try {
       setAddBusy(true);
-      const { data } = await axios.post(`${API_BASE}/categories`, {
-        category_name: newCat.name,
-        category_color: newCat.color,
+
+      await axios.post(`${API_BASE}/categories`, {
+        category_name: newCat.name.trim(),
+        category_color: newCat.color, // backend validates HEX
       });
-      setCategories((prev) => [...prev, data]);
+
       setNewCat({ name: "", color: "#0284C7" });
       showPopup("success", "Category added");
-    } catch {
-      showPopup("error", "Failed to add category");
-    } finally { setAddBusy(false); }
+      await fetchCategories();
+    } catch (err) {
+      showPopup("error", `Failed to add category: ${getErrMsg(err)}`);
+    } finally {
+      setAddBusy(false);
+    }
   };
 
   const addSubcategory = async () => {
-    if (!selectedCat) return showPopup("error", "Select category first");
+    if (!selectedCat?.category_id) return showPopup("error", "Select category first");
     if (!newSub.trim()) return showPopup("error", "Enter subcategory name");
+
     try {
       setAddSubBusy(true);
-      const { data } = await axios.post(`${API_BASE}/subcategories`, {
-        subcategory_name: newSub,
+
+      await axios.post(`${API_BASE}/subcategories`, {
+        subcategory_name: newSub.trim(),
         category_id: selectedCat.category_id,
       });
-      setSubcats((prev) => [...prev, data]);
+
       setNewSub("");
       showPopup("success", "Subcategory added");
-    } catch {
-      showPopup("error", "Failed to add subcategory");
-    } finally { setAddSubBusy(false); }
+      await fetchSubcategories(selectedCat.category_id);
+    } catch (err) {
+      showPopup("error", `Failed to add subcategory: ${getErrMsg(err)}`);
+    } finally {
+      setAddSubBusy(false);
+    }
   };
 
   // ===== Category: Edit =====
@@ -109,34 +144,49 @@ const TransactionCategory = () => {
     const { id, name, color } = editModel;
     if (!id) return;
     if (!name.trim()) return showPopup("error", "Enter category name");
+
     try {
       setEditBusy(true);
-      const { data } = await axios.put(`${API_BASE}/categories/${id}`, {
+
+      await axios.put(`${API_BASE}/categories/${id}`, {
         category_name: name.trim(),
         category_color: color,
       });
-      setCategories((prev) => prev.map((c) => (c.category_id === id ? data : c)));
-      if (selectedCat?.category_id === id) setSelectedCat(data);
+
       setEditOpen(false);
       showPopup("success", "Category updated");
-    } catch {
-      showPopup("error", "Failed to update category");
-    } finally { setEditBusy(false); }
+      await fetchCategories();
+      if (selectedCat?.category_id === id) await fetchSubcategories(id);
+    } catch (err) {
+      showPopup("error", `Failed to update category: ${getErrMsg(err)}`);
+    } finally {
+      setEditBusy(false);
+    }
   };
 
   // ===== Category: Delete =====
-  const askDelete = (id) => { setDeletingId(id); setConfirmOpen(true); };
+  const askDelete = (id) => {
+    setDeletingId(Number(id));
+    setConfirmOpen(true);
+  };
 
   const confirmDelete = async () => {
     if (!deletingId) return;
+
     try {
       setDeleteBusy(true);
       await axios.delete(`${API_BASE}/categories/${deletingId}`);
-      setCategories((prev) => prev.filter((c) => c.category_id !== deletingId));
-      if (selectedCat?.category_id === deletingId) { setSelectedCat(null); setSubcats([]); }
+
       showPopup("success", "Category deleted");
-    } catch {
-      showPopup("error", "Failed to delete category");
+
+      if (selectedCat?.category_id === deletingId) {
+        setSelectedCat(null);
+        setSubcats([]);
+      }
+
+      await fetchCategories();
+    } catch (err) {
+      showPopup("error", `Failed to delete category: ${getErrMsg(err)}`);
     } finally {
       setDeleteBusy(false);
       setConfirmOpen(false);
@@ -154,31 +204,41 @@ const TransactionCategory = () => {
     const { id, name } = subEditModel;
     if (!id) return;
     if (!name.trim()) return showPopup("error", "Enter subcategory name");
+
     try {
       setSubEditBusy(true);
-      const { data } = await axios.put(`${API_BASE}/subcategories/${id}`, {
+
+      await axios.put(`${API_BASE}/subcategories/${id}`, {
         subcategory_name: name.trim(),
       });
-      setSubcats((prev) => prev.map((s) => (s.subcategory_id === id ? data : s)));
+
       setSubEditOpen(false);
       showPopup("success", "Subcategory updated");
-    } catch {
-      showPopup("error", "Failed to update subcategory");
-    } finally { setSubEditBusy(false); }
+      if (selectedCat?.category_id) await fetchSubcategories(selectedCat.category_id);
+    } catch (err) {
+      showPopup("error", `Failed to update subcategory: ${getErrMsg(err)}`);
+    } finally {
+      setSubEditBusy(false);
+    }
   };
 
   // ===== Subcategory: Delete =====
-  const askSubDelete = (id) => { setSubDeletingId(id); setSubConfirmOpen(true); };
+  const askSubDelete = (id) => {
+    setSubDeletingId(Number(id));
+    setSubConfirmOpen(true);
+  };
 
   const confirmSubDelete = async () => {
     if (!subDeletingId) return;
+
     try {
       setSubDeleteBusy(true);
       await axios.delete(`${API_BASE}/subcategories/${subDeletingId}`);
-      setSubcats((prev) => prev.filter((s) => s.subcategory_id !== subDeletingId));
+
       showPopup("success", "Subcategory deleted");
-    } catch {
-      showPopup("error", "Failed to delete subcategory");
+      if (selectedCat?.category_id) await fetchSubcategories(selectedCat.category_id);
+    } catch (err) {
+      showPopup("error", `Failed to delete subcategory: ${getErrMsg(err)}`);
     } finally {
       setSubDeleteBusy(false);
       setSubConfirmOpen(false);
@@ -222,6 +282,7 @@ const TransactionCategory = () => {
         .tc-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
         .tc-actions .tc-btn { min-width:92px; }
 
+        .tc-sub-top { display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; margin-top:10px; }
         .tc-sub-list { background:#f1f5f9; padding:10px; border-radius:12px; margin-top:10px; }
         .tc-sub-row { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; flex-wrap:wrap; }
         .tc-sub-item { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:8px 10px;
@@ -241,7 +302,6 @@ const TransactionCategory = () => {
         .modal-body { padding:14px; }
         .modal-actions { padding:12px 14px; border-top:1px solid #e2e8f0; display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
 
-        /* mobile tweaks */
         @media (max-width: 520px) {
           .tc-wrap { padding: 10px 8px 60px; }
           .tc-header-title { font-size: clamp(1.05rem, 4.4vw, 1.25rem); }
@@ -269,6 +329,7 @@ const TransactionCategory = () => {
       {/* Add Category */}
       <div className="tc-card">
         <h4 style={{ fontWeight: 900, color: "#0F172A", marginBottom: 10 }}>Add Category</h4>
+
         <div className="tc-field">
           <label className="tc-label">Category Name</label>
           <input
@@ -279,6 +340,7 @@ const TransactionCategory = () => {
             onChange={(e) => setNewCat({ ...newCat, name: e.target.value })}
           />
         </div>
+
         <div className="tc-field">
           <label className="tc-label">Color</label>
           <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
@@ -297,6 +359,7 @@ const TransactionCategory = () => {
             />
           </div>
         </div>
+
         <button className="tc-btn tc-btn-primary" onClick={addCategory} disabled={addBusy}>
           {addBusy ? "Saving…" : "Add Category"}
         </button>
@@ -352,7 +415,7 @@ const TransactionCategory = () => {
             {selectedCat.category_name} — Subcategories
           </h4>
 
-          <div className="tc-sub-top" style={{ marginBottom: 8 }}>
+          <div className="tc-sub-top">
             <div style={{ flex: "1 1 260px" }}>
               <label className="tc-label">Add Subcategory</label>
               <input
@@ -380,16 +443,10 @@ const TransactionCategory = () => {
                     {s.subcategory_name}
                   </div>
                   <div className="tc-sub-actions">
-                    <button
-                      className="tc-btn tc-btn-outline"
-                      onClick={() => openSubEdit(s)}
-                    >
+                    <button className="tc-btn tc-btn-outline" onClick={() => openSubEdit(s)}>
                       Edit
                     </button>
-                    <button
-                      className="tc-btn tc-btn-danger"
-                      onClick={() => askSubDelete(s.subcategory_id)}
-                    >
+                    <button className="tc-btn tc-btn-danger" onClick={() => askSubDelete(s.subcategory_id)}>
                       Delete
                     </button>
                   </div>
@@ -406,7 +463,9 @@ const TransactionCategory = () => {
           <div className="modal-card">
             <div className="modal-head">
               <strong>Edit Category</strong>
-              <button className="tc-btn tc-btn-outline" onClick={() => setEditOpen(false)} disabled={editBusy}>Close</button>
+              <button className="tc-btn tc-btn-outline" onClick={() => setEditOpen(false)} disabled={editBusy}>
+                Close
+              </button>
             </div>
             <div className="modal-body">
               <div className="tc-field">
@@ -417,6 +476,7 @@ const TransactionCategory = () => {
                   onChange={(e) => setEditModel((m) => ({ ...m, name: e.target.value }))}
                 />
               </div>
+
               <div className="tc-field">
                 <label className="tc-label">Color</label>
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -434,8 +494,11 @@ const TransactionCategory = () => {
                 </div>
               </div>
             </div>
+
             <div className="modal-actions">
-              <button className="tc-btn tc-btn-outline" onClick={() => setEditOpen(false)} disabled={editBusy}>Cancel</button>
+              <button className="tc-btn tc-btn-outline" onClick={() => setEditOpen(false)} disabled={editBusy}>
+                Cancel
+              </button>
               <button className="tc-btn tc-btn-primary" onClick={saveEdit} disabled={editBusy}>
                 {editBusy ? "Saving…" : "Save Changes"}
               </button>
@@ -450,7 +513,9 @@ const TransactionCategory = () => {
           <div className="modal-card">
             <div className="modal-head">
               <strong>Delete Category</strong>
-              <button className="tc-btn tc-btn-outline" onClick={() => setConfirmOpen(false)} disabled={deleteBusy}>Close</button>
+              <button className="tc-btn tc-btn-outline" onClick={() => setConfirmOpen(false)} disabled={deleteBusy}>
+                Close
+              </button>
             </div>
             <div className="modal-body">
               <p style={{ margin: 0, color: "#334155" }}>
@@ -458,7 +523,9 @@ const TransactionCategory = () => {
               </p>
             </div>
             <div className="modal-actions">
-              <button className="tc-btn tc-btn-outline" onClick={() => setConfirmOpen(false)} disabled={deleteBusy}>Cancel</button>
+              <button className="tc-btn tc-btn-outline" onClick={() => setConfirmOpen(false)} disabled={deleteBusy}>
+                Cancel
+              </button>
               <button className="tc-btn tc-btn-danger" onClick={confirmDelete} disabled={deleteBusy}>
                 {deleteBusy ? "Deleting…" : "Delete"}
               </button>
@@ -473,7 +540,9 @@ const TransactionCategory = () => {
           <div className="modal-card">
             <div className="modal-head">
               <strong>Edit Subcategory</strong>
-              <button className="tc-btn tc-btn-outline" onClick={() => setSubEditOpen(false)} disabled={subEditBusy}>Close</button>
+              <button className="tc-btn tc-btn-outline" onClick={() => setSubEditOpen(false)} disabled={subEditBusy}>
+                Close
+              </button>
             </div>
             <div className="modal-body">
               <div className="tc-field">
@@ -486,7 +555,9 @@ const TransactionCategory = () => {
               </div>
             </div>
             <div className="modal-actions">
-              <button className="tc-btn tc-btn-outline" onClick={() => setSubEditOpen(false)} disabled={subEditBusy}>Cancel</button>
+              <button className="tc-btn tc-btn-outline" onClick={() => setSubEditOpen(false)} disabled={subEditBusy}>
+                Cancel
+              </button>
               <button className="tc-btn tc-btn-primary" onClick={saveSubEdit} disabled={subEditBusy}>
                 {subEditBusy ? "Saving…" : "Save Changes"}
               </button>
@@ -501,7 +572,9 @@ const TransactionCategory = () => {
           <div className="modal-card">
             <div className="modal-head">
               <strong>Delete Subcategory</strong>
-              <button className="tc-btn tc-btn-outline" onClick={() => setSubConfirmOpen(false)} disabled={subDeleteBusy}>Close</button>
+              <button className="tc-btn tc-btn-outline" onClick={() => setSubConfirmOpen(false)} disabled={subDeleteBusy}>
+                Close
+              </button>
             </div>
             <div className="modal-body">
               <p style={{ margin: 0, color: "#334155" }}>
@@ -509,7 +582,9 @@ const TransactionCategory = () => {
               </p>
             </div>
             <div className="modal-actions">
-              <button className="tc-btn tc-btn-outline" onClick={() => setSubConfirmOpen(false)} disabled={subDeleteBusy}>Cancel</button>
+              <button className="tc-btn tc-btn-outline" onClick={() => setSubConfirmOpen(false)} disabled={subDeleteBusy}>
+                Cancel
+              </button>
               <button className="tc-btn tc-btn-danger" onClick={confirmSubDelete} disabled={subDeleteBusy}>
                 {subDeleteBusy ? "Deleting…" : "Delete"}
               </button>
