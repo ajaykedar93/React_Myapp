@@ -45,6 +45,16 @@ async function retry(fn, { tries = 4, delay = 600 }) {
   throw lastErr;
 }
 
+// ✅ Date format: 01/01/2026
+const formatDDMMYYYY = (d) => {
+  const dt = new Date(d);
+  if (Number.isNaN(dt.getTime())) return "-";
+  const dd = String(dt.getDate()).padStart(2, "0");
+  const mm = String(dt.getMonth() + 1).padStart(2, "0");
+  const yyyy = dt.getFullYear();
+  return `${dd}/${mm}/${yyyy}`;
+};
+
 // ---------- Warm-up ----------
 async function warmUp() {
   try {
@@ -80,9 +90,6 @@ export default function DailyTransactionPage() {
   // ---------- Boot spinner ----------
   const [booting, setBooting] = useState(true);
   const [filterDate, setFilterDate] = useState(getLocalDate());
-
-  // ✅ mobile list clean view toggle
-  const [mobileViewMode, setMobileViewMode] = useState("compact"); // compact | detailed
 
   // ---------- Pagination ----------
   const perPage = 20;
@@ -423,10 +430,7 @@ export default function DailyTransactionPage() {
       transaction_date: String(t.transaction_date || "").slice(0, 10),
     });
     setHighlightId(t.daily_transaction_id);
-    // ensure subcats list for this category loads
-    if (t.category_id) {
-      setForm((prev) => ({ ...prev, category_id: String(t.category_id) }));
-    }
+    if (t.category_id) setForm((prev) => ({ ...prev, category_id: String(t.category_id) }));
   };
 
   const cancelEdit = () => {
@@ -442,10 +446,6 @@ export default function DailyTransactionPage() {
     });
     setHighlightId(null);
   };
-
-  // ✅ professional mobile meta line
-  const formatDate = (d) =>
-    new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 
   return (
     <div className="dtp-root" style={{ background: "var(--bg)" }}>
@@ -536,25 +536,7 @@ export default function DailyTransactionPage() {
         .table-striped>tbody>tr:nth-of-type(odd)>*{ background-color: #fafcff; }
         .table-success{ transition: background .4s ease; }
 
-        /* ✅ MOBILE PROFESSIONAL LIST */
-        .mobile-topbar{
-          display:flex; justify-content:space-between; align-items:center;
-          gap:10px; padding: 0 12px;
-        }
-        @media (min-width: 768px){ .mobile-topbar{ display:none; } }
-
-        .seg{
-          display:inline-flex; border:1px solid var(--border); background:#fff; border-radius: 999px; padding: 4px;
-          box-shadow: 0 8px 24px rgba(2,6,23,.06);
-        }
-        .seg button{
-          border:none; background:transparent; padding:6px 10px; border-radius:999px;
-          font-weight:800; font-size: 12px; color: var(--ink-700);
-        }
-        .seg button.active{
-          background: #0f172a; color:#fff;
-        }
-
+        /* ✅ MOBILE PROFESSIONAL LIST (always detailed) */
         .mobile-list{ display: grid; gap: 10px; padding: 0 12px 10px; }
         .tx-card{
           background: #fff;
@@ -577,7 +559,7 @@ export default function DailyTransactionPage() {
           white-space: nowrap; overflow:hidden; text-overflow: ellipsis;
         }
         .chip{
-          display:inline-flex; align-items:center; gap:6px;
+          display:inline-flex; align-items:center;
           padding: 5px 10px; border-radius: 999px; font-size: 12px; font-weight: 900;
           border: 1px solid var(--border);
         }
@@ -601,6 +583,7 @@ export default function DailyTransactionPage() {
           color: var(--ink-600);
           font-size: 12px;
           line-height: 1.35;
+          word-break: break-word;
         }
 
         .tx-actions{
@@ -819,31 +802,8 @@ export default function DailyTransactionPage() {
               />
             </div>
             <div className="text-muted" style={{ fontSize: "var(--fs-sm)" }}>
-              Showing transactions for <strong>{formatDate(filterDate)}</strong>
+              Showing transactions for <strong>{formatDDMMYYYY(filterDate)}</strong>
             </div>
-          </div>
-        </div>
-
-        {/* ✅ MOBILE PROFESSIONAL HEADER */}
-        <div className="mobile-topbar">
-          <div className="text-muted" style={{ fontSize: 12, fontWeight: 800 }}>
-            Transaction History
-          </div>
-          <div className="seg" role="tablist" aria-label="Mobile view mode">
-            <button
-              type="button"
-              className={mobileViewMode === "compact" ? "active" : ""}
-              onClick={() => setMobileViewMode("compact")}
-            >
-              Compact
-            </button>
-            <button
-              type="button"
-              className={mobileViewMode === "detailed" ? "active" : ""}
-              onClick={() => setMobileViewMode("detailed")}
-            >
-              Detailed
-            </button>
           </div>
         </div>
 
@@ -870,24 +830,28 @@ export default function DailyTransactionPage() {
                       <div className="tx-left">
                         <div className="tx-title">{cat}</div>
                         <div className="tx-sub">
-                          {mobileViewMode === "compact" ? formatDate(t.transaction_date) : `${sub} • ${formatDate(t.transaction_date)}`}
+                          {sub} • {formatDDMMYYYY(t.transaction_date)}
                         </div>
                       </div>
 
-                      <span className={`chip ${isCredit ? "chip-credit" : "chip-debit"}`}>{isCredit ? "credit" : "debit"}</span>
+                      <span className={`chip ${isCredit ? "chip-credit" : "chip-debit"}`}>
+                        {isCredit ? "credit" : "debit"}
+                      </span>
                     </div>
 
                     <div className="tx-body">
                       <div className="tx-amt">{INR.format(Number(t.amount || 0))}</div>
                       <div className="tx-meta">
-                        <div>Qty: <strong>{t.quantity ?? 0}</strong></div>
-                        <div>ID: <strong>{t.daily_transaction_id}</strong></div>
+                        <div>
+                          Qty: <strong>{t.quantity ?? 0}</strong>
+                        </div>
+                        <div>
+                          ID: <strong>{t.daily_transaction_id}</strong>
+                        </div>
                       </div>
                     </div>
 
-                    {mobileViewMode === "detailed" && t.purpose ? (
-                      <div className="tx-purpose">{t.purpose}</div>
-                    ) : null}
+                    {t.purpose ? <div className="tx-purpose">{t.purpose}</div> : null}
 
                     <div className="tx-actions">
                       <button className="btn btn-outline-primary btn-sm" onClick={() => editTransaction(t)}>
@@ -952,9 +916,11 @@ export default function DailyTransactionPage() {
                       className={`align-middle ${highlightId === t.daily_transaction_id ? "table-success" : ""}`}
                     >
                       <td>{startIdx + i + 1}</td>
-                      <td>{formatDate(t.transaction_date)}</td>
+                      <td>{formatDDMMYYYY(t.transaction_date)}</td>
                       <td>{INR.format(Number(t.amount || 0))}</td>
-                      <td className={String(t.type).toLowerCase() === "debit" ? "text-danger" : "text-success"}>{t.type}</td>
+                      <td className={String(t.type).toLowerCase() === "debit" ? "text-danger" : "text-success"}>
+                        {t.type}
+                      </td>
                       <td>{catMap.get(String(t.category_id)) || "-"}</td>
                       <td>{subMap.get(String(t.subcategory_id)) || "-"}</td>
                       <td>{t.quantity ?? 0}</td>
