@@ -55,7 +55,7 @@ async function warmUp() {
 export default function DailyTransactionPage() {
   // ---------- State ----------
   const [categories, setCategories] = useState([]);
-  const [subcategories, setSubcategories] = useState([]);
+  const [subcategories, setSubcategories] = useState([]); // global store (for showing names in history)
   const [filteredSubs, setFilteredSubs] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [summary, setSummary] = useState({ total_debit: 0, total_credit: 0, total_transactions: 0 });
@@ -81,6 +81,9 @@ export default function DailyTransactionPage() {
   const [booting, setBooting] = useState(true);
   const [filterDate, setFilterDate] = useState(getLocalDate());
 
+  // ✅ mobile list clean view toggle
+  const [mobileViewMode, setMobileViewMode] = useState("compact"); // compact | detailed
+
   // ---------- Pagination ----------
   const perPage = 20;
   const startIdx = (page - 1) * perPage;
@@ -94,6 +97,19 @@ export default function DailyTransactionPage() {
     () => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }),
     []
   );
+
+  // ✅ FAST LOOKUP MAPS
+  const catMap = useMemo(() => {
+    const m = new Map();
+    (categories || []).forEach((c) => m.set(String(c.category_id), c.category_name));
+    return m;
+  }, [categories]);
+
+  const subMap = useMemo(() => {
+    const m = new Map();
+    (subcategories || []).forEach((s) => m.set(String(s.subcategory_id), s.subcategory_name));
+    return m;
+  }, [subcategories]);
 
   // Keep today's date fresh once a minute
   useEffect(() => {
@@ -156,21 +172,30 @@ export default function DailyTransactionPage() {
     return res.data || { total_debit: 0, total_credit: 0, total_transactions: 0 };
   };
 
-  const fetchLookups = async () => {
-    const [cats, subs] = await Promise.all([
-      retry(() => http.get(`/category`, { signal: newAborter("cats"), params: { t: Date.now() } }), {
-        tries: 4,
-        delay: 500,
-      }),
-      retry(() => http.get(`/subcategory`, { signal: newAborter("subs"), params: { t: Date.now() } }), {
-        tries: 4,
-        delay: 500,
-      }),
-    ]);
-    return {
-      categories: Array.isArray(cats.data) ? cats.data : [],
-      subcategories: Array.isArray(subs.data) ? subs.data : [],
-    };
+  // ✅ category API path fixed
+  const fetchCategories = async () => {
+    const res = await retry(
+      () =>
+        http.get(`/transaction-category/categories`, {
+          signal: newAborter("cats"),
+          params: { t: Date.now() },
+        }),
+      { tries: 4, delay: 500 }
+    );
+    return Array.isArray(res.data) ? res.data : [];
+  };
+
+  const fetchSubcategoriesByCategory = async (catId) => {
+    if (!catId) return [];
+    const res = await retry(
+      () =>
+        http.get(`/transaction-category/categories/${catId}/subcategories`, {
+          signal: newAborter("subs"),
+          params: { t: Date.now() },
+        }),
+      { tries: 4, delay: 500 }
+    );
+    return Array.isArray(res.data) ? res.data : [];
   };
 
   // ---------- INSTANT LOAD + RESILIENT FIRST BATCH ----------
@@ -189,16 +214,15 @@ export default function DailyTransactionPage() {
         await warmUp();
         bootCap = setTimeout(() => setBooting(false), 2500);
 
-        const results = await Promise.allSettled([fetchLookups(), fetchTransactions(), fetchSummary()]);
-        const lookupsRes = results[0];
+        const results = await Promise.allSettled([fetchCategories(), fetchTransactions(), fetchSummary()]);
+        const catsRes = results[0];
         const txRes = results[1];
         const sumRes = results[2];
 
         let anySuccess = false;
 
-        if (lookupsRes.status === "fulfilled") {
-          setCategories(lookupsRes.value.categories);
-          setSubcategories(lookupsRes.value.subcategories);
+        if (catsRes.status === "fulfilled") {
+          setCategories(catsRes.value);
           anySuccess = true;
         }
         if (txRes.status === "fulfilled") {
@@ -211,15 +235,13 @@ export default function DailyTransactionPage() {
         }
 
         saveCache({
-          categories: lookupsRes.status === "fulfilled" ? lookupsRes.value.categories : categories,
-          subcategories: lookupsRes.status === "fulfilled" ? lookupsRes.value.subcategories : subcategories,
+          categories: catsRes.status === "fulfilled" ? catsRes.value : categories,
+          subcategories,
           transactions: txRes.status === "fulfilled" ? txRes.value : transactions,
           summary: sumRes.status === "fulfilled" ? sumRes.value : summary,
         });
 
-        if (!anySuccess) {
-          showPopup("Network error — showing cached data", "error");
-        }
+        if (!anySuccess) showPopup("Network error — showing cached data", "error");
       } finally {
         setPage(1);
         setBooting(false);
@@ -229,21 +251,18 @@ export default function DailyTransactionPage() {
     const onBackOnline = () => {
       (async () => {
         try {
-          const results = await Promise.allSettled([fetchLookups(), fetchTransactions(), fetchSummary()]);
-          const lookupsRes = results[0];
+          const results = await Promise.allSettled([fetchCategories(), fetchTransactions(), fetchSummary()]);
+          const catsRes = results[0];
           const txRes = results[1];
           const sumRes = results[2];
 
-          if (lookupsRes.status === "fulfilled") {
-            setCategories(lookupsRes.value.categories);
-            setSubcategories(lookupsRes.value.subcategories);
-          }
+          if (catsRes.status === "fulfilled") setCategories(catsRes.value);
           if (txRes.status === "fulfilled") setTransactions(txRes.value);
           if (sumRes.status === "fulfilled") setSummary(sumRes.value);
 
           saveCache({
-            categories: lookupsRes.status === "fulfilled" ? lookupsRes.value.categories : categories,
-            subcategories: lookupsRes.status === "fulfilled" ? lookupsRes.value.subcategories : subcategories,
+            categories: catsRes.status === "fulfilled" ? catsRes.value : categories,
+            subcategories,
             transactions: txRes.status === "fulfilled" ? txRes.value : transactions,
             summary: sumRes.status === "fulfilled" ? sumRes.value : summary,
           });
@@ -258,17 +277,38 @@ export default function DailyTransactionPage() {
       if (bootCap) clearTimeout(bootCap);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // run once
+  }, []);
 
-  // ---------- Dependent subcategory filter ----------
+  // ✅ Dependent subcategory loading
   useEffect(() => {
-    if (form.category_id) {
-      setFilteredSubs(subcategories.filter((s) => String(s.category_id) === String(form.category_id)));
-    } else {
-      setFilteredSubs([]);
-    }
+    const catId = form.category_id;
+
     setForm((prev) => ({ ...prev, subcategory_id: "" }));
-  }, [form.category_id, subcategories]);
+
+    if (!catId) {
+      setFilteredSubs([]);
+      return;
+    }
+
+    (async () => {
+      try {
+        const subs = await fetchSubcategoriesByCategory(catId);
+        setFilteredSubs(subs);
+
+        // merge for history display
+        setSubcategories((prev) => {
+          const map = new Map((prev || []).map((s) => [String(s.subcategory_id), s]));
+          subs.forEach((s) => map.set(String(s.subcategory_id), s));
+          const merged = Array.from(map.values());
+          saveCache({ categories, subcategories: merged, transactions, summary });
+          return merged;
+        });
+      } catch {
+        setFilteredSubs([]);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.category_id]);
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
@@ -326,14 +366,10 @@ export default function DailyTransactionPage() {
         showPopup("Transaction added", "success");
       }
 
-      const [tx] = await Promise.all([fetchTransactions()]);
+      const tx = await fetchTransactions();
       setTransactions(tx);
-      saveCache({
-        categories,
-        subcategories,
-        transactions: tx,
-        summary,
-      });
+
+      saveCache({ categories, subcategories, transactions: tx, summary });
 
       setHighlightId(id);
       scrollToBottom();
@@ -363,14 +399,10 @@ export default function DailyTransactionPage() {
       showPopup("Transaction deleted", "success");
       setConfirmDeleteId(null);
 
-      const [tx] = await Promise.all([fetchTransactions()]);
+      const tx = await fetchTransactions();
       setTransactions(tx);
-      saveCache({
-        categories,
-        subcategories,
-        transactions: tx,
-        summary,
-      });
+
+      saveCache({ categories, subcategories, transactions: tx, summary });
       setPage(1);
     } catch (e) {
       if (!axios.isCancel(e)) showPopup("Failed to delete transaction", "error");
@@ -388,9 +420,13 @@ export default function DailyTransactionPage() {
       category_id: String(t.category_id ?? ""),
       subcategory_id: String(t.subcategory_id ?? ""),
       purpose: t.purpose ?? "",
-      transaction_date: t.transaction_date,
+      transaction_date: String(t.transaction_date || "").slice(0, 10),
     });
     setHighlightId(t.daily_transaction_id);
+    // ensure subcats list for this category loads
+    if (t.category_id) {
+      setForm((prev) => ({ ...prev, category_id: String(t.category_id) }));
+    }
   };
 
   const cancelEdit = () => {
@@ -407,9 +443,12 @@ export default function DailyTransactionPage() {
     setHighlightId(null);
   };
 
+  // ✅ professional mobile meta line
+  const formatDate = (d) =>
+    new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+
   return (
     <div className="dtp-root" style={{ background: "var(--bg)" }}>
-      {/* ✅ GLOBAL styles + EDGE TO EDGE */}
       <style>{`
         :root{
           --ink-900:#0f172a; --ink-700:#334155; --ink-600:#475569; --ink-500:#64748b;
@@ -417,8 +456,6 @@ export default function DailyTransactionPage() {
           --brand-grad: linear-gradient(90deg,#5f4bb6 0%, #1f5f78 100%);
           --accent:#2b7a8b; --success:#0f8a5f; --danger:#b33a3a;
           --rad:14px;
-
-          /* ✅ padding vars */
           --px-desktop: clamp(12px, 3.5vw, 20px);
           --px-mobile: 0px;
           --fs: clamp(14px, 3.6vw, 16px);
@@ -426,7 +463,6 @@ export default function DailyTransactionPage() {
           --fs-lg: clamp(16px, 4.2vw, 18px);
         }
 
-        /* ✅ FULL EDGE-TO-EDGE BASE RESET */
         html, body{
           width:100%;
           max-width:100%;
@@ -435,33 +471,23 @@ export default function DailyTransactionPage() {
           overflow-x:hidden !important;
           background: var(--bg);
         }
-        .dtp-root{
-          width:100%;
-          margin:0;
-          padding:0;
-        }
+        .dtp-root{ width:100%; margin:0; padding:0; padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+        @media (min-width: 768px){ .dtp-root{ padding-bottom: 24px; } }
 
-        /* ✅ Page container: desktop center, mobile full edge */
         .page-wrap{
           width:100%;
           max-width: 980px;
           margin: 0 auto;
           padding: 0 var(--px-desktop);
         }
-        @media (max-width: 767.98px){
-          .page-wrap{
-            max-width: 100%;
-            padding: 0 var(--px-mobile);  /* ✅ 0 padding on mobile */
-          }
-        }
+        @media (max-width: 767.98px){ .page-wrap{ max-width: 100%; padding: 0 var(--px-mobile); } }
 
-        /* Title */
         .title{
           font-size: clamp(18px, 5.2vw, 24px);
           background: var(--brand-grad);
           -webkit-background-clip: text; -webkit-text-fill-color: transparent;
           font-weight: 800; letter-spacing:.35px; text-align:center;
-          padding: 12px 0; /* only vertical spacing, no side padding */
+          padding: 12px 0;
           margin: 0 0 8px;
         }
 
@@ -475,14 +501,7 @@ export default function DailyTransactionPage() {
           padding: 12px;
           box-shadow: 0 8px 24px rgba(2,6,23,.06);
         }
-        /* ✅ on mobile: cards edge-to-edge */
-        @media (max-width: 767.98px){
-          .card-ui{
-            border-left: 0;
-            border-right: 0;
-            border-radius: 0;
-          }
-        }
+        @media (max-width: 767.98px){ .card-ui{ border-left: 0; border-right: 0; border-radius: 0; } }
 
         .kpi-card h6{ font-size: var(--fs-sm); color: var(--ink-600); margin: 0 0 4px; }
         .kpi-card h5{ font-size: clamp(18px, 5vw, 22px); font-weight:800; margin:0; }
@@ -494,6 +513,7 @@ export default function DailyTransactionPage() {
           border-radius: 12px;
           border:1px solid var(--border);
         }
+
         .btn-solid{
           background: var(--accent); color:#fff; border:none; border-radius:12px;
           padding:.6rem 1rem; font-weight:700; font-size: var(--fs);
@@ -510,35 +530,86 @@ export default function DailyTransactionPage() {
           box-shadow: 0 8px 24px rgba(0,0,0,.06);
           padding: 8px;
         }
-        @media (max-width: 767.98px){
-          .tbl-wrap{ border-left:0; border-right:0; border-radius:0; padding: 8px 8px; }
-        }
+        @media (max-width: 767.98px){ .tbl-wrap{ border-left:0; border-right:0; border-radius:0; padding: 8px 8px; } }
 
         .table thead th{ position: sticky; top: 0; background:#0f172a; color:#fff; z-index: 1; }
         .table-striped>tbody>tr:nth-of-type(odd)>*{ background-color: #fafcff; }
         .table-success{ transition: background .4s ease; }
 
-        .mobile-list{ display: grid; gap: 10px; }
+        /* ✅ MOBILE PROFESSIONAL LIST */
+        .mobile-topbar{
+          display:flex; justify-content:space-between; align-items:center;
+          gap:10px; padding: 0 12px;
+        }
+        @media (min-width: 768px){ .mobile-topbar{ display:none; } }
+
+        .seg{
+          display:inline-flex; border:1px solid var(--border); background:#fff; border-radius: 999px; padding: 4px;
+          box-shadow: 0 8px 24px rgba(2,6,23,.06);
+        }
+        .seg button{
+          border:none; background:transparent; padding:6px 10px; border-radius:999px;
+          font-weight:800; font-size: 12px; color: var(--ink-700);
+        }
+        .seg button.active{
+          background: #0f172a; color:#fff;
+        }
+
+        .mobile-list{ display: grid; gap: 10px; padding: 0 12px 10px; }
         .tx-card{
           background: #fff;
           border:1px solid var(--border);
-          border-radius: var(--rad);
-          padding: 10px 12px;
-          box-shadow: 0 6px 16px rgba(0,0,0,.05);
+          border-radius: 16px;
+          padding: 12px;
+          box-shadow: 0 10px 24px rgba(2,6,23,.08);
         }
-        @media (max-width: 767.98px){
-          .tx-card{ border-left:0; border-right:0; border-radius:0; }
+        .tx-head{
+          display:flex; justify-content:space-between; align-items:flex-start; gap: 10px;
+          margin-bottom: 8px;
+        }
+        .tx-left{ min-width: 0; }
+        .tx-title{
+          font-weight: 900; font-size: 15px; color: var(--ink-900);
+          white-space: nowrap; overflow:hidden; text-overflow: ellipsis;
+        }
+        .tx-sub{
+          color: var(--ink-600); font-size: 12px;
+          white-space: nowrap; overflow:hidden; text-overflow: ellipsis;
+        }
+        .chip{
+          display:inline-flex; align-items:center; gap:6px;
+          padding: 5px 10px; border-radius: 999px; font-size: 12px; font-weight: 900;
+          border: 1px solid var(--border);
+        }
+        .chip-debit{ background:#fff1f2; color:#b33a3a; border-color:#fecdd3; }
+        .chip-credit{ background:#ecfdf5; color:#0f8a5f; border-color:#bbf7d0; }
+
+        .tx-body{
+          display:flex; justify-content:space-between; align-items:flex-end; gap: 12px;
+        }
+        .tx-amt{
+          font-weight: 1000; font-size: 18px; letter-spacing: .2px; color: var(--ink-900);
+        }
+        .tx-meta{
+          color: var(--ink-600); font-size: 12px; text-align:right;
+          display:flex; flex-direction:column; gap: 2px;
+        }
+        .tx-purpose{
+          margin-top: 8px;
+          padding-top: 8px;
+          border-top: 1px dashed #e8ecf3;
+          color: var(--ink-600);
+          font-size: 12px;
+          line-height: 1.35;
         }
 
-        .tx-top{ display:flex; align-items:flex-start; justify-content:space-between; gap: 8px; }
-        .tx-title{ font-weight: 700; font-size: var(--fs); color: var(--ink-900);}
-        .tx-sub{ color: var(--ink-600); font-size: var(--fs-sm); }
-        .badge{ padding: 3px 8px; border-radius: 999px; font-size: var(--fs-sm); font-weight: 800; }
-        .badge-debit{ background:#fee2e2; color:#b33a3a; }
-        .badge-credit{ background:#dcfce7; color:#0f8a5f; }
-        .tx-row{ display:flex; justify-content:space-between; align-items:center; margin-top: 6px; }
-        .tx-amt{ font-weight: 800; font-size: var(--fs-lg); }
-        .tx-meta{ color: var(--ink-600); font-size: var(--fs-sm); }
+        .tx-actions{
+          display:flex; justify-content:flex-end; gap: 8px; margin-top: 10px;
+        }
+        .tx-actions .btn{
+          border-radius: 12px;
+          font-weight: 800;
+        }
 
         @media (max-width: 767.98px){ .table-view{ display:none; } }
         @media (min-width: 768px){ .mobile-view{ display:none; } }
@@ -550,7 +621,6 @@ export default function DailyTransactionPage() {
         .modal-backdrop{ position: fixed; inset:0; background: rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; z-index: 1100; padding: 16px; }
         .modal-card{ background:#fff; border-radius:14px; border:1px solid var(--border); width:100%; max-width:420px; padding:16px; box-shadow: 0 18px 48px rgba(0,0,0,.25); }
 
-        /* ---------- Full-screen loader ---------- */
         .boot-overlay{
           position: fixed; inset: 0;
           display: flex; align-items: center; justify-content: center; flex-direction: column;
@@ -559,7 +629,6 @@ export default function DailyTransactionPage() {
             radial-gradient(1200px 600px at 20% 10%, rgba(95,75,182,.08), transparent 60%),
             radial-gradient(1000px 500px at 80% 90%, rgba(31,95,120,.08), transparent 60%),
             var(--bg);
-          backdrop-filter: saturate(1.1);
         }
         .loader-wrap{
           display:flex; align-items:center; justify-content:center; gap:14px;
@@ -584,19 +653,6 @@ export default function DailyTransactionPage() {
           letter-spacing: .3px;
         }
         .subtle{ font-size: 13px; color: var(--ink-600); }
-
-
-        /* ✅ Bottom space for mobile navigation bar */
-.dtp-root{
-  padding-bottom: calc(72px + env(safe-area-inset-bottom));
-}
-
-@media (min-width: 768px){
-  .dtp-root{
-    padding-bottom: 24px; /* minimal space on desktop */
-  }
-}
-
       `}</style>
 
       {/* FIRST-LOAD OVERLAY */}
@@ -616,7 +672,6 @@ export default function DailyTransactionPage() {
       )}
 
       <div className="page-wrap" aria-busy={booting ? "true" : "false"} aria-hidden={booting ? "true" : "false"}>
-        {/* Title */}
         <h3 className="title">Daily Transactions</h3>
 
         {/* Popup */}
@@ -751,7 +806,7 @@ export default function DailyTransactionPage() {
         </div>
 
         {/* Filter by Date */}
-        <div className="card-ui mb-3">
+        <div className="card-ui mb-2">
           <div className="d-flex flex-wrap align-items-end justify-content-between gap-2">
             <div>
               <label className="form-label mb-1">Filter by Date</label>
@@ -764,15 +819,31 @@ export default function DailyTransactionPage() {
               />
             </div>
             <div className="text-muted" style={{ fontSize: "var(--fs-sm)" }}>
-              Showing transactions for{" "}
-              <strong>
-                {new Date(filterDate).toLocaleDateString("en-GB", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                })}
-              </strong>
+              Showing transactions for <strong>{formatDate(filterDate)}</strong>
             </div>
+          </div>
+        </div>
+
+        {/* ✅ MOBILE PROFESSIONAL HEADER */}
+        <div className="mobile-topbar">
+          <div className="text-muted" style={{ fontSize: 12, fontWeight: 800 }}>
+            Transaction History
+          </div>
+          <div className="seg" role="tablist" aria-label="Mobile view mode">
+            <button
+              type="button"
+              className={mobileViewMode === "compact" ? "active" : ""}
+              onClick={() => setMobileViewMode("compact")}
+            >
+              Compact
+            </button>
+            <button
+              type="button"
+              className={mobileViewMode === "detailed" ? "active" : ""}
+              onClick={() => setMobileViewMode("detailed")}
+            >
+              Detailed
+            </button>
           </div>
         </div>
 
@@ -780,51 +851,45 @@ export default function DailyTransactionPage() {
         <div className="mobile-view">
           <div className="mobile-list">
             {pagedTransactions.length === 0 ? (
-              <div className="text-center text-muted">No transactions found</div>
+              <div className="text-center text-muted" style={{ padding: "8px 0" }}>
+                No transactions found
+              </div>
             ) : (
               pagedTransactions.map((t) => {
-                const cat = categories.find((c) => String(c.category_id) === String(t.category_id))?.category_name || "-";
-                const sub =
-                  subcategories.find((s) => String(s.subcategory_id) === String(t.subcategory_id))?.subcategory_name ||
-                  "-";
+                const cat = catMap.get(String(t.category_id)) || "-";
+                const sub = subMap.get(String(t.subcategory_id)) || "-";
+                const isCredit = String(t.type || "").toLowerCase() === "credit";
+
                 return (
                   <div
                     key={t.daily_transaction_id}
                     className="tx-card"
-                    style={highlightId === t.daily_transaction_id ? { boxShadow: "0 0 0 2px #bbf7d0 inset" } : {}}
+                    style={highlightId === t.daily_transaction_id ? { outline: "2px solid #bbf7d0" } : {}}
                   >
-                    <div className="tx-top">
-                      <div>
+                    <div className="tx-head">
+                      <div className="tx-left">
                         <div className="tx-title">{cat}</div>
                         <div className="tx-sub">
-                          {sub} •{" "}
-                          {new Date(t.transaction_date).toLocaleDateString("en-GB", {
-                            day: "2-digit",
-                            month: "short",
-                            year: "numeric",
-                          })}
+                          {mobileViewMode === "compact" ? formatDate(t.transaction_date) : `${sub} • ${formatDate(t.transaction_date)}`}
                         </div>
                       </div>
-                      <span className={`badge ${t.type === "debit" ? "badge-debit" : "badge-credit"}`}>{t.type}</span>
+
+                      <span className={`chip ${isCredit ? "chip-credit" : "chip-debit"}`}>{isCredit ? "credit" : "debit"}</span>
                     </div>
 
-                    <div className="tx-row">
-                      <div className="tx-meta">Amount</div>
+                    <div className="tx-body">
                       <div className="tx-amt">{INR.format(Number(t.amount || 0))}</div>
-                    </div>
-
-                    <div className="tx-row">
-                      <div className="tx-meta">Qty</div>
-                      <div className="fw-semibold">{t.quantity ?? 0}</div>
-                    </div>
-
-                    {t.purpose && (
-                      <div className="mt-1 tx-meta" title={t.purpose}>
-                        {t.purpose}
+                      <div className="tx-meta">
+                        <div>Qty: <strong>{t.quantity ?? 0}</strong></div>
+                        <div>ID: <strong>{t.daily_transaction_id}</strong></div>
                       </div>
-                    )}
+                    </div>
 
-                    <div className="d-flex gap-2 justify-content-end mt-2">
+                    {mobileViewMode === "detailed" && t.purpose ? (
+                      <div className="tx-purpose">{t.purpose}</div>
+                    ) : null}
+
+                    <div className="tx-actions">
                       <button className="btn btn-outline-primary btn-sm" onClick={() => editTransaction(t)}>
                         Update
                       </button>
@@ -840,7 +905,7 @@ export default function DailyTransactionPage() {
 
           {/* Pagination (mobile) */}
           {totalPages > 1 && (
-            <div className="d-flex justify-content-between align-items-center mt-2">
+            <div className="d-flex justify-content-between align-items-center mt-2" style={{ padding: "0 12px" }}>
               <button
                 className="btn btn-outline-secondary btn-sm"
                 onClick={() => setPage((p) => Math.max(p - 1, 1))}
@@ -848,7 +913,7 @@ export default function DailyTransactionPage() {
               >
                 Prev
               </button>
-              <span style={{ fontSize: "var(--fs-sm)" }}>
+              <span style={{ fontSize: 12, fontWeight: 800, color: "var(--ink-700)" }}>
                 Page {page} / {totalPages}
               </span>
               <button
@@ -887,20 +952,11 @@ export default function DailyTransactionPage() {
                       className={`align-middle ${highlightId === t.daily_transaction_id ? "table-success" : ""}`}
                     >
                       <td>{startIdx + i + 1}</td>
-                      <td>
-                        {new Date(t.transaction_date).toLocaleDateString("en-GB", {
-                          day: "2-digit",
-                          month: "short",
-                          year: "numeric",
-                        })}
-                      </td>
+                      <td>{formatDate(t.transaction_date)}</td>
                       <td>{INR.format(Number(t.amount || 0))}</td>
-                      <td className={t.type === "debit" ? "text-danger" : "text-success"}>{t.type}</td>
-                      <td>{categories.find((c) => String(c.category_id) === String(t.category_id))?.category_name || "-"}</td>
-                      <td>
-                        {subcategories.find((s) => String(s.subcategory_id) === String(t.subcategory_id))?.subcategory_name ||
-                          "-"}
-                      </td>
+                      <td className={String(t.type).toLowerCase() === "debit" ? "text-danger" : "text-success"}>{t.type}</td>
+                      <td>{catMap.get(String(t.category_id)) || "-"}</td>
+                      <td>{subMap.get(String(t.subcategory_id)) || "-"}</td>
                       <td>{t.quantity ?? 0}</td>
                       <td>{t.purpose || "-"}</td>
                       <td>
