@@ -4,54 +4,44 @@ import { createPortal } from "react-dom";
 export default function InwardViewOnly() {
   /* ================= CONFIG ================= */
 
-  // ✅ Backend (API) base
   const API_BASE = useMemo(() => "https://express-backend-myapp.onrender.com", []);
   const LIST_API = `${API_BASE}/api/inward-view`;
 
-  // ✅ Frontend (Share link) base (Vercel host) - HashRouter route
   const FRONTEND_VIEW_URL = "https://react-myapp-omega.vercel.app/#/inward-view";
 
   /* ================= HELPERS ================= */
 
+  const toISO = (v) => (v ? String(v).slice(0, 10) : "");
+
   const formatDDMMYYYY = (iso) => {
-    if (!iso) return "";
-    const [y, m, d] = String(iso).slice(0, 10).split("-");
+    const s = toISO(iso);
+    if (!s) return "";
+    const [y, m, d] = s.split("-");
     if (!y || !m || !d) return "";
     return `${d}/${m}/${y}`;
   };
 
-  // ✅ HashRouter: read from/to from hash query
+  // ✅ HashRouter query reader: "#/inward-view?from=YYYY-MM-DD&to=YYYY-MM-DD"
   const getQueryDates = () => {
     if (typeof window === "undefined") return { from: "", to: "" };
-
-    // Example hash: "#/inward-view?from=2026-01-01&to=2026-01-31"
     const hash = window.location.hash || "";
     const qIndex = hash.indexOf("?");
-
     if (qIndex === -1) return { from: "", to: "" };
-
-    const qs = hash.slice(qIndex + 1); // "from=...&to=..."
+    const qs = hash.slice(qIndex + 1);
     const params = new URLSearchParams(qs);
-
     return {
       from: params.get("from") || "",
       to: params.get("to") || "",
     };
   };
 
-  // ✅ Share link ALWAYS opens correct page + keeps same filters
   const getShareUrl = () => {
     if (typeof window === "undefined") return "";
-
     const { from, to } = getQueryDates();
-
     const qs = new URLSearchParams();
     if (from) qs.set("from", from);
     if (to) qs.set("to", to);
-
-    return qs.toString()
-      ? `${FRONTEND_VIEW_URL}?${qs.toString()}`
-      : FRONTEND_VIEW_URL;
+    return qs.toString() ? `${FRONTEND_VIEW_URL}?${qs.toString()}` : FRONTEND_VIEW_URL;
   };
 
   const copyToClipboard = async (text) => {
@@ -78,11 +68,50 @@ export default function InwardViewOnly() {
   /* ================= STATE ================= */
 
   const [{ from, to }] = useState(getQueryDates);
-
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-
   const [toast, setToast] = useState({ show: false, text: "" });
+
+  /* ================= GROUPING ================= */
+
+  const normalizeRows = (list) => {
+    const safe = Array.isArray(list) ? list : [];
+    return safe
+      .map((r) => ({
+        inward_id: r.inward_id ?? r.id ?? "",
+        work_date: toISO(r.work_date),
+        store: r.store ?? "",
+        material: r.material ?? "",
+        material_use: r.material_use ?? "",
+        quantity: r.quantity ?? "",
+        quantity_type: r.quantity_type ?? "",
+        item_order: Number(r.item_order || 1),
+      }))
+      .filter((r) => r.work_date);
+  };
+
+  const groupByDate = (list) => {
+    const sorted = [...list].sort((a, b) => {
+      const d = a.work_date.localeCompare(b.work_date);
+      if (d !== 0) return d;
+      return (a.item_order || 1) - (b.item_order || 1);
+    });
+
+    const map = new Map();
+    for (const r of sorted) {
+      if (!map.has(r.work_date)) map.set(r.work_date, []);
+      map.get(r.work_date).push(r);
+    }
+
+    const dates = Array.from(map.keys()).sort((a, b) => a.localeCompare(b));
+    return dates.map((date, idx) => ({
+      date,
+      srNo: idx + 1, // ✅ Sr.No per date group only
+      items: map.get(date) || [],
+    }));
+  };
+
+  const groups = useMemo(() => groupByDate(normalizeRows(rows)), [rows]);
 
   /* ================= FETCH ================= */
 
@@ -114,7 +143,7 @@ export default function InwardViewOnly() {
 
   useEffect(() => {
     fetchData();
-    const t = setInterval(fetchData, 20000); // 🔁 auto refresh
+    const t = setInterval(fetchData, 20000);
     return () => clearInterval(t);
     // eslint-disable-next-line
   }, []);
@@ -137,15 +166,12 @@ export default function InwardViewOnly() {
 
   return (
     <div className="ivPage">
-      {/* HEADER */}
       <div className="ivHeader">
         <div className="ivHeaderTop">
           <div>
             <div className="ivTitle">Inward Register (View Only)</div>
             <div className="ivSub">
-              {from && to
-                ? `From ${formatDDMMYYYY(from)} to ${formatDDMMYYYY(to)}`
-                : "All Records"}
+              {from && to ? `From ${formatDDMMYYYY(from)} to ${formatDDMMYYYY(to)}` : "All Records"}
             </div>
           </div>
 
@@ -155,10 +181,9 @@ export default function InwardViewOnly() {
         </div>
       </div>
 
-      {/* CONTENT */}
       {loading ? (
         <div className="ivCenter">Loading…</div>
-      ) : rows.length === 0 ? (
+      ) : groups.length === 0 ? (
         <div className="ivCenter">No records found</div>
       ) : (
         <div className="ivTableWrap">
@@ -173,29 +198,49 @@ export default function InwardViewOnly() {
                 <th>Material Use</th>
               </tr>
             </thead>
+
             <tbody>
-              {rows.map((r, i) => (
-                <tr key={`${r.inward_id}-${i}`}>
-                  <td className="ivSr">{r.sr_no}</td>
-                  <td>{formatDDMMYYYY(r.work_date)}</td>
-                  <td>
-                    <b>{String.fromCharCode(96 + (r.item_order || 1))}) </b>
-                    {r.material}
-                  </td>
-                  <td>
-                    {r.quantity ?? ""}
-                    {r.quantity_type ? ` ${r.quantity_type}` : ""}
-                  </td>
-                  <td>{r.store}</td>
-                  <td>{r.material_use}</td>
-                </tr>
+              {groups.map((g) => (
+                <React.Fragment key={g.date}>
+                  {g.items.map((r, idx) => {
+                    const showGroupCols = idx === 0;
+                    const letter = String.fromCharCode(97 + idx); // a,b,c...
+
+                    return (
+                      <tr key={`${g.date}-${idx}`}>
+                        <td className="ivSr">{showGroupCols ? g.srNo : ""}</td>
+                        <td className="ivDate">{showGroupCols ? formatDDMMYYYY(g.date) : ""}</td>
+
+                        <td>
+                          <span className="ivLetterBlack">{letter})</span>{" "}
+                          {r.material}
+                        </td>
+
+                        <td>
+                          {r.quantity ?? ""}
+                          {r.quantity_type ? ` ${r.quantity_type}` : ""}
+                        </td>
+
+                        <td className="ivStore">{showGroupCols ? r.store : ""}</td>
+
+                        <td>{r.material_use}</td>
+                      </tr>
+                    );
+                  })}
+
+                  {/* ✅ separator line (100% visible) */}
+                  <tr className="ivSepRow" aria-hidden="true">
+                    <td colSpan={6} className="ivSepTd">
+                      <div className="ivSepLine" />
+                    </td>
+                  </tr>
+                </React.Fragment>
               ))}
             </tbody>
           </table>
         </div>
       )}
 
-      {/* TOAST */}
       <Portal>{toast.show && <div className="ivToast">{toast.text}</div>}</Portal>
 
       <style>{css}</style>
@@ -279,6 +324,37 @@ const css = `
 .ivSr{
   font-weight:900;
   white-space:nowrap;
+}
+
+.ivDate{
+  white-space:nowrap;
+  font-weight:900;
+}
+
+.ivStore{
+  white-space:nowrap;
+  font-weight:400;
+}
+
+.ivLetterBlack{
+  font-weight:900;
+  color:#111827;
+}
+
+/* ✅ separator (guaranteed visible) */
+.ivSepRow td{
+  padding:0 !important;
+  border-bottom:none !important;
+  background:#fff;
+}
+.ivSepTd{
+  padding:0 !important;
+  border-bottom:none !important;
+}
+.ivSepLine{
+  width:100%;
+  border-top:1px solid #0b1220;  /* ✅ thick black line */
+  margin:10px 0;                /* ✅ gap */
 }
 
 /* toast */
