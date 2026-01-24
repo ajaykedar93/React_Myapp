@@ -10,6 +10,9 @@ import Measure from "./Measure";
 import AddInward from "./AddInward";
 import InwardGet from "./InwardGet";
 
+// ✅ NEW: View only inward page
+import InwardViewOnly from "./InwardViewOnly";
+
 export default function Worknewtab() {
   const navigate = useNavigate();
 
@@ -21,6 +24,9 @@ export default function Worknewtab() {
       { key: "total", label: "TOTAL KHARCH", component: <TotalSiteKharch /> },
       { key: "addinward", label: "ADD INWARD", component: <AddInward /> },
       { key: "getinward", label: "GET INWARD", component: <InwardGet /> },
+
+      // ✅ NEW TAB
+      { key: "inwardview", label: "INWARD VIEW ONLY", component: <InwardViewOnly /> },
     ],
     []
   );
@@ -71,7 +77,6 @@ export default function Worknewtab() {
           isolation: auto !important;
         }
 
-        /* ✅ HARD FIX: if any child uses position:fixed (dialogs/modals), it must be above header */
         .worknewtab-page{
           position: relative;
           z-index: 0;
@@ -81,22 +86,17 @@ export default function Worknewtab() {
         .globalModalOverlay{
           position: fixed !important;
           inset: 0 !important;
-          z-index: 999999 !important; /* above navbar/tabs */
+          z-index: 999999 !important;
           display: flex !important;
           justify-content: center !important;
-
-          /* ✅ start below header so not hide behind navbar/tabs */
           align-items: flex-start !important;
-
           padding:
             calc(16px + var(--overlayTopPad)) 16px
             calc(16px + var(--safeBottom)) 16px !important;
-
           overflow: auto !important;
           -webkit-overflow-scrolling: touch !important;
         }
 
-        /* Desktop center */
         @media (min-width: 769px){
           .globalModalOverlay{
             align-items: center !important;
@@ -147,7 +147,6 @@ export default function Worknewtab() {
           <div style={styles.tabsRow} className="worknewtab-tabs-row">
             {tabs.map((tab) => {
               const active = tab.key === activeKey;
-
               const activeStyle = active ? { ...styles.tabActive, border: "1px solid #2563EB" } : {};
 
               return (
@@ -210,7 +209,6 @@ export default function Worknewtab() {
           }
         }
 
-        /* ✅ Header total height -> used for scroll top AND for child overlays */
         :root{
           --headerTotalDesktop: calc(
             var(--safeTop) + var(--navTopGap) + var(--navHDesktop) + ${GAP_1}px + ${TABS_H}px + ${GAP_2}px
@@ -227,7 +225,6 @@ export default function Worknewtab() {
           }
         }
 
-        /* ✅ Scroll area starts after header */
         .worknewtab-scroll{
           top: var(--headerTotalDesktop);
           padding-bottom: var(--safeBottom);

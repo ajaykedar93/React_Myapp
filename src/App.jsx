@@ -28,7 +28,8 @@ import TransactionDashboard from "./Pages/Transaction/TransactionDashboard";
 import DocumentTab from "./Pages/Document/DocumentTab.jsx";
 
 // Work Details pages
-import WorkDetails from "./Pages/WorkDetails/Worknewtab.jsx";
+import WorkDetails from "./Pages/WorkDetails/Worknewtab.jsx";// ✅ PUBLIC PAGE
+import InwardViewOnly from "./Pages/WorkDetails/InwardViewOnly";
 
 // Investment pages
 import InvestmentTabs from "./Pages/Investment/InvestmentTabs.jsx";
@@ -56,6 +57,10 @@ function AppRoutes() {
 
   return (
     <Routes>
+      {/* ✅ PUBLIC: Inward View Only (share link page) */}
+    
+      <Route path="/inward-view" element={<InwardViewOnly />} />
+
       {/* Default route → always go to login if not logged in */}
       <Route path="/" element={<Navigate to={user ? "/dashboard" : "/login"} replace />} />
 
