@@ -181,7 +181,7 @@ export default function InwardViewOnly() {
       <div className="ivHeader">
         <div className="ivHeaderTop">
           <div>
-            <div className="ivTitle">Inward Register (View Only)</div>
+            <div className="ivTitle">Inward Details (View Only)</div>
             <div className="ivSub">
               {from && to ? `From ${formatDDMMYYYY(from)} to ${formatDDMMYYYY(to)}` : "All Records"}
             </div>
