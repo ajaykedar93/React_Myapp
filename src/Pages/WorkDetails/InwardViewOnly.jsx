@@ -183,7 +183,7 @@ export default function InwardViewOnly() {
           <div>
             <div className="ivTitle">Inward Details (View Only)</div>
             <div className="ivSub">
-              {from && to ? `From ${formatDDMMYYYY(from)} to ${formatDDMMYYYY(to)}` : "All Records"}
+              {from && to ? `From ${formatDDMMYYYY(from)} to ${formatDDMMYYYY(to)}` : "Month All Records"}
             </div>
           </div>
 
