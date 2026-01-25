@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 
 export default function InwardGet() {
@@ -28,7 +28,6 @@ export default function InwardGet() {
 
   // ✅ Month title (Jan 2026 etc)
   const formatMonthTitle = (ym) => {
-    // ym = "YYYY-MM"
     const [y, m] = String(ym || "").split("-");
     const monthIdx = Number(m || 0) - 1;
     const names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -118,12 +117,10 @@ export default function InwardGet() {
           material_use: it.material_use || "",
           image_url: computeFileUrl(it),
           upload_id: it.upload_id || null,
-          // ✅ IMPORTANT: backend should send mime_type; else it will stay ""
           mime_type: it.mime_type || "",
         });
       }
     }
-    // stable sort (date then seq then item order)
     out.sort((a, b) => {
       const da = String(a.work_date || "");
       const db = String(b.work_date || "");
@@ -197,8 +194,6 @@ export default function InwardGet() {
     window.open(url, "_blank");
   };
 
-  // ✅ FIX: detect PDF using mime_type (because /view url has no .pdf)
-  // Fallback: if mime_type missing, try extension, else treat as image.
   const openImage = (row, displaySeq) => {
     const src = row?.image_url || "";
     if (!src) {
@@ -246,7 +241,8 @@ export default function InwardGet() {
         items: (data.data.items || []).map((it) => ({
           id: it.id,
           material: it.material || "",
-          quantity: it.quantity ?? "",
+          // ✅ IMPORTANT: keep as STRING to avoid cursor jump / focus issues
+          quantity: it.quantity === null || it.quantity === undefined ? "" : String(it.quantity),
           quantity_type: it.quantity_type || "",
           material_use: it.material_use || "",
           image_url: computeFileUrl(it),
@@ -293,7 +289,8 @@ export default function InwardGet() {
       store: edit.store.trim(),
       items: edit.items.map((it) => ({
         material: String(it.material || "").trim(),
-        quantity: it.quantity === "" ? null : Number(it.quantity),
+        // ✅ convert string -> number/null only at save time
+        quantity: String(it.quantity || "").trim() === "" ? null : Number(it.quantity),
         quantity_type: String(it.quantity_type || "").trim() || null,
         material_use: String(it.material_use || "").trim(),
         image_path: it.image_url || null,
@@ -365,15 +362,8 @@ export default function InwardGet() {
     });
   };
 
-  /**
-   * ✅ YOUR REQUIREMENT (FINAL)
-   * - Still show DATE cards
-   * - But Sr.No must be MONTH-WISE continuous (1..31 or 1..N)
-   * - Deleting should re-pack numbers (no gap) after refresh
-   */
   const groupedByMonth = useMemo(() => {
-    // build headers map from flattened rows
-    const headerMap = new Map(); // inward_id -> header
+    const headerMap = new Map();
     for (const r of rows) {
       if (!headerMap.has(r.inward_id)) {
         headerMap.set(r.inward_id, {
@@ -387,12 +377,11 @@ export default function InwardGet() {
       headerMap.get(r.inward_id).items.push(r);
     }
 
-    // monthMap: YYYY-MM -> { ym, datesMap, entriesFlat }
     const monthMap = new Map();
 
     for (const h of headerMap.values()) {
       const dateISO = String(h.work_date || "").slice(0, 10);
-      const ym = dateISO.slice(0, 7); // YYYY-MM
+      const ym = dateISO.slice(0, 7);
 
       if (!monthMap.has(ym)) monthMap.set(ym, { ym, datesMap: new Map(), entriesFlat: [] });
 
@@ -402,10 +391,8 @@ export default function InwardGet() {
       monthMap.get(ym).datesMap.get(dateISO).entries.push(h);
     }
 
-    // sort months latest first
     const months = Array.from(monthMap.values()).sort((a, b) => String(b.ym).localeCompare(String(a.ym)));
 
-    // for each month, assign Sr.No 1..N across the month
     for (const m of months) {
       m.entriesFlat.sort((a, b) => {
         const da = String(a.work_date || "");
@@ -414,7 +401,7 @@ export default function InwardGet() {
         return Number(a.inward_id || 0) - Number(b.inward_id || 0);
       });
 
-      const seqMap = new Map(); // inward_id -> display_seq
+      const seqMap = new Map();
       m.entriesFlat.forEach((e, idx) => seqMap.set(e.inward_id, idx + 1));
 
       const dateCards = Array.from(m.datesMap.values()).sort((a, b) => String(b.dateISO).localeCompare(String(a.dateISO)));
@@ -454,6 +441,11 @@ export default function InwardGet() {
     const y = ((e.clientY - r.top) / r.height) * 100;
     el.style.setProperty("--rx", `${x}%`);
     el.style.setProperty("--ry", `${y}%`);
+  };
+
+  // ✅ close ONLY when clicking backdrop (not inside modal)
+  const closeIfBackdrop = (e, fn) => {
+    if (e.target === e.currentTarget) fn();
   };
 
   return (
@@ -533,7 +525,6 @@ export default function InwardGet() {
 
               {month.dateCards.map((day) => (
                 <div className="igDateCard" key={day.dateISO}>
-                  {/* ✅ DATE HEADER (one per date) */}
                   <div className="igDateHeader">
                     <div className="igDateHeaderLeft">
                       <div className="igDateHeaderTitle">Date</div>
@@ -674,8 +665,18 @@ export default function InwardGet() {
         )}
 
         {dlg.open && (
-          <div className="igDlgOverlay" role="dialog" aria-modal="true" onClick={closeDlg}>
-            <div className="igDlg igDlgScrollable" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="igDlgOverlay"
+            role="dialog"
+            aria-modal="true"
+            onPointerDown={(e) => closeIfBackdrop(e, closeDlg)}   // ✅ pointer safe
+            onClick={(e) => closeIfBackdrop(e, closeDlg)}        // ✅ click safe
+          >
+            <div
+              className="igDlg igDlgScrollable"
+              onPointerDown={(e) => e.stopPropagation()}         // ✅ STOP pointer
+              onClick={(e) => e.stopPropagation()}               // ✅ STOP click
+            >
               <div className={`igDlgTop igDlgTop--${dlg.type}`}>
                 <div className="igDlgTitle">{dlg.title}</div>
               </div>
@@ -707,8 +708,14 @@ export default function InwardGet() {
         )}
 
         {imageViewer.open && (
-          <div className="igImgOverlay" onClick={closeImage} role="dialog" aria-modal="true">
-            <div className="igImgModal igImgModalSafe" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="igImgOverlay"
+            role="dialog"
+            aria-modal="true"
+            onPointerDown={(e) => closeIfBackdrop(e, closeImage)}
+            onClick={(e) => closeIfBackdrop(e, closeImage)}
+          >
+            <div className="igImgModal igImgModalSafe" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
               <div className="igImgTop">
                 <div className="igImgTitle">{imageViewer.title}</div>
                 <button type="button" className="igXBtn igRipple" onPointerDown={setRipplePoint} onClick={closeImage} aria-label="Close">
@@ -728,8 +735,18 @@ export default function InwardGet() {
         )}
 
         {edit.open && (
-          <div className="igDlgOverlay" role="dialog" aria-modal="true" onClick={closeUpdate}>
-            <div className="igDlg igDlgWide igDlgScrollable" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="igDlgOverlay"
+            role="dialog"
+            aria-modal="true"
+            onPointerDown={(e) => closeIfBackdrop(e, closeUpdate)}  // ✅ only backdrop closes
+            onClick={(e) => closeIfBackdrop(e, closeUpdate)}
+          >
+            <div
+              className="igDlg igDlgWide igDlgScrollable"
+              onPointerDown={(e) => e.stopPropagation()}            // ✅ STOP pointer (fix focus!)
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="igDlgTop igDlgTop--info">
                 <div className="igDlgTitle">Update Inward (Sr.No {edit.display_seq ?? edit.seq_no ?? "-"})</div>
               </div>
@@ -769,7 +786,12 @@ export default function InwardGet() {
                             <input className="igCellInput" value={it.material} onChange={(e) => updateEditItem(idx, { material: e.target.value })} />
                           </td>
                           <td>
-                            <input className="igCellInput" value={it.quantity} onChange={(e) => updateEditItem(idx, { quantity: e.target.value })} />
+                            <input
+                              className="igCellInput"
+                              inputMode="decimal"
+                              value={String(it.quantity ?? "")}   // ✅ always string (no cursor jump)
+                              onChange={(e) => updateEditItem(idx, { quantity: e.target.value })}
+                            />
                           </td>
                           <td>
                             <input className="igCellInput" value={it.quantity_type} onChange={(e) => updateEditItem(idx, { quantity_type: e.target.value })} />
@@ -920,8 +942,6 @@ const css = `
 
 /* list cards */
 .igList{padding:0 12px 12px;display:flex;flex-direction:column;gap:12px;box-sizing:border-box;}
-
-/* ✅ Month wrapper */
 .igMonthWrap{width:100%;max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:12px;}
 .igMonthHeader{
   display:flex;justify-content:space-between;align-items:center;gap:10px;
@@ -932,21 +952,10 @@ const css = `
 }
 .igMonthTitle{font-size:16px;font-weight:1000;letter-spacing:0.2px;}
 .igMonthCount{font-size:12px;font-weight:900;opacity:0.9;}
-
-/* ✅ Date group card */
-.igDateCard{
-  width:100%;
-  max-width:1200px;
-  margin:0 auto;
-  background:transparent;
-}
+.igDateCard{width:100%;max-width:1200px;margin:0 auto;background:transparent;}
 .igDateHeader{
-  display:flex;
-  justify-content:space-between;
-  align-items:flex-end;
-  gap:10px;
-  padding:12px 14px;
-  margin-bottom:10px;
+  display:flex;justify-content:space-between;align-items:flex-end;gap:10px;
+  padding:12px 14px;margin-bottom:10px;
   background:linear-gradient(135deg, rgba(37,99,235,0.14), rgba(16,185,129,0.12));
   border:1px solid rgba(0,0,0,0.06);
   border-radius:18px;
@@ -970,20 +979,14 @@ const css = `
 .igSrLine{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
 .igSrLabel{font-size:12px;color:#6b7280;font-weight:900;}
 .igPill{display:inline-flex;align-items:center;justify-content:center;padding:6px 12px;border-radius:999px;background:rgba(37,99,235,0.12);color:#1d4ed8;font-weight:900;}
-.igStorePill{display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border-radius:999px;background:rgba(16,185,129,0.14);color:#065f46;font-weight:900;font-size:12px;max-width: 420px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.igStorePill{display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border-radius:999px;background:rgba(16,185,129,0.14);color:#065f46;font-weight:900;font-size:12px;max-width:420px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .igDateLine{display:flex;align-items:center;gap:8px;}
 .igDateDot{width:10px;height:10px;border-radius:999px;background:rgba(16,185,129,0.25);border:2px solid rgba(16,185,129,0.45);}
 .igDateText{font-weight:900;color:#0b1220;font-size:13px;}
 .igHeadRight{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;}
 
 .igTableWrap{width:100%;overflow-x:auto;border-top:1px solid rgba(0,0,0,0.06);}
-.igTbl--auto{
-  width:100%;
-  table-layout:auto;
-  border-collapse:collapse;
-  font-size:13px;
-  min-width: 860px;
-}
+.igTbl--auto{width:100%;table-layout:auto;border-collapse:collapse;font-size:13px;min-width:860px;}
 .igTbl th,.igTbl td{padding:10px 10px;border-bottom:1px solid rgba(0,0,0,0.06);vertical-align:top;}
 .igTbl th{text-align:left;font-weight:900;background:#f3f4f6;color:#0b1220;white-space:nowrap;}
 
