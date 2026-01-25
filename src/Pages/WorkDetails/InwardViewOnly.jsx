@@ -8,6 +8,7 @@ export default function InwardViewOnly() {
   const LIST_API = `${API_BASE}/api/inward-view`;
 
   const FRONTEND_VIEW_URL = "https://react-myapp-omega.vercel.app/#/inward-view";
+  const STATIC_SHARE_URL = "https://freeshort.info/fpfG9N";
 
   /* ================= HELPERS ================= */
 
@@ -70,6 +71,8 @@ export default function InwardViewOnly() {
   const [{ from, to }] = useState(getQueryDates);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // ✅ keep only ONE toast state (duplicate removed)
   const [toast, setToast] = useState({ show: false, text: "" });
 
   /* ================= GROUPING ================= */
@@ -148,15 +151,23 @@ export default function InwardViewOnly() {
     // eslint-disable-next-line
   }, []);
 
-  /* ================= SHARE ================= */
+  /* ================= ACTIONS ================= */
 
-  const STATIC_SHARE_URL = "https://freeshort.info/fpfG9N";
+  const showToast = (text) => {
+    setToast({ show: true, text });
+    setTimeout(() => setToast({ show: false, text: "" }), 1500);
+  };
 
-const onShareLink = async () => {
-  const ok = await copyToClipboard(STATIC_SHARE_URL);
-  setToast({ show: true, text: ok ? "Link copied ✅" : "Copy failed ❌" });
-  setTimeout(() => setToast({ show: false, text: "" }), 1500);
-};
+  // ✅ share always copies static short url (hide original)
+  const onShareLink = async () => {
+    const ok = await copyToClipboard(STATIC_SHARE_URL);
+    showToast(ok ? "Link copied ✅" : "Copy failed ❌");
+  };
+
+  // ✅ demo download (only admin)
+  const onDownloadDemo = () => {
+    showToast("Only admin can download 🔒");
+  };
 
   /* ================= PORTAL ================= */
 
@@ -176,9 +187,16 @@ const onShareLink = async () => {
             </div>
           </div>
 
-          <button className="ivShareBtn" type="button" onClick={onShareLink} title="Copy share link">
-            Share Link
-          </button>
+          {/* ✅ right side buttons (professional + small download) */}
+          <div className="ivActions">
+            <button className="ivDownloadBtn" type="button" onClick={onDownloadDemo} title="Admin only">
+              Download
+            </button>
+
+            <button className="ivShareBtn" type="button" onClick={onShareLink} title="Copy share link">
+              Share Link
+            </button>
+          </div>
         </div>
       </div>
 
@@ -213,8 +231,7 @@ const onShareLink = async () => {
                         <td className="ivDate">{showGroupCols ? formatDDMMYYYY(g.date) : ""}</td>
 
                         <td>
-                          <span className="ivLetterBlack">{letter})</span>{" "}
-                          {r.material}
+                          <span className="ivLetterBlack">{letter})</span> {r.material}
                         </td>
 
                         <td>
@@ -229,7 +246,7 @@ const onShareLink = async () => {
                     );
                   })}
 
-                  {/* ✅ separator line (100% visible) */}
+                  {/* ✅ separator line */}
                   <tr className="ivSepRow" aria-hidden="true">
                     <td colSpan={6} className="ivSepTd">
                       <div className="ivSepLine" />
@@ -276,6 +293,13 @@ const css = `
 .ivTitle{font-size:18px;font-weight:900;}
 .ivSub{font-size:12px;opacity:.85;margin-top:4px;}
 
+.ivActions{
+  display:flex;
+  gap:8px;
+  align-items:center;
+}
+
+/* Share button (primary) */
 .ivShareBtn{
   background:#fff;
   color:#0b1220;
@@ -285,6 +309,22 @@ const css = `
   font-weight:900;
   cursor:pointer;
   white-space:nowrap;
+}
+
+/* ✅ Small professional Download button (secondary) */
+.ivDownloadBtn{
+  background:rgba(255,255,255,.14);
+  color:#fff;
+  border:1px solid rgba(255,255,255,.28);
+  padding:7px 10px;              /* ✅ smaller */
+  border-radius:10px;
+  font-weight:900;
+  cursor:pointer;
+  white-space:nowrap;
+  font-size:12px;                /* ✅ smaller text */
+}
+.ivDownloadBtn:hover{
+  background:rgba(255,255,255,.20);
 }
 
 .ivCenter{
@@ -342,7 +382,7 @@ const css = `
   color:#111827;
 }
 
-/* ✅ separator (guaranteed visible) */
+/* ✅ separator */
 .ivSepRow td{
   padding:0 !important;
   border-bottom:none !important;
@@ -354,8 +394,8 @@ const css = `
 }
 .ivSepLine{
   width:100%;
-  border-top:1px solid #0b1220;  /* ✅ thick black line */
-  margin:10px 0;                /* ✅ gap */
+  border-top:1px solid #0b1220;
+  margin:10px 0;
 }
 
 /* toast */
