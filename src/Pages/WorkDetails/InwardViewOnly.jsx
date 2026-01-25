@@ -150,12 +150,13 @@ export default function InwardViewOnly() {
 
   /* ================= SHARE ================= */
 
-  const onShareLink = async () => {
-    const link = getShareUrl();
-    const ok = await copyToClipboard(link);
-    setToast({ show: true, text: ok ? "Link copied ✅" : "Copy failed ❌" });
-    setTimeout(() => setToast({ show: false, text: "" }), 1500);
-  };
+  const STATIC_SHARE_URL = "https://freeshort.info/fpfG9N";
+
+const onShareLink = async () => {
+  const ok = await copyToClipboard(STATIC_SHARE_URL);
+  setToast({ show: true, text: ok ? "Link copied ✅" : "Copy failed ❌" });
+  setTimeout(() => setToast({ show: false, text: "" }), 1500);
+};
 
   /* ================= PORTAL ================= */
 
