@@ -22,7 +22,6 @@ export default function InwardViewOnly() {
     return `${d}/${m}/${y}`;
   };
 
-  // ✅ HashRouter query reader: "#/inward-view?from=YYYY-MM-DD&to=YYYY-MM-DD"
   const getQueryDates = () => {
     if (typeof window === "undefined") return { from: "", to: "" };
     const hash = window.location.hash || "";
@@ -34,15 +33,6 @@ export default function InwardViewOnly() {
       from: params.get("from") || "",
       to: params.get("to") || "",
     };
-  };
-
-  const getShareUrl = () => {
-    if (typeof window === "undefined") return "";
-    const { from, to } = getQueryDates();
-    const qs = new URLSearchParams();
-    if (from) qs.set("from", from);
-    if (to) qs.set("to", to);
-    return qs.toString() ? `${FRONTEND_VIEW_URL}?${qs.toString()}` : FRONTEND_VIEW_URL;
   };
 
   const copyToClipboard = async (text) => {
@@ -72,7 +62,8 @@ export default function InwardViewOnly() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // ✅ toast center screen (mobile perfect)
+  const firstLoadRef = useRef(true);
+
   const [toast, setToast] = useState({ show: false, text: "" });
   const toastTimerRef = useRef(null);
 
@@ -83,7 +74,7 @@ export default function InwardViewOnly() {
     return safe
       .map((r) => ({
         inward_id: r.inward_id ?? r.id ?? "",
-        work_date: toISO(r.work_date), // ✅ date only => same date always grouped
+        work_date: toISO(r.work_date),
         store: (r.store ?? "").trim(),
         material: r.material ?? "",
         material_use: r.material_use ?? "",
@@ -94,7 +85,6 @@ export default function InwardViewOnly() {
       .filter((r) => r.work_date);
   };
 
-  // ✅ Date group + Store subgroup (no mix store)
   const groupByDateThenStore = (list) => {
     const sorted = [...list].sort((a, b) => {
       const d = a.work_date.localeCompare(b.work_date);
@@ -109,7 +99,6 @@ export default function InwardViewOnly() {
       return String(a.inward_id).localeCompare(String(b.inward_id));
     });
 
-    // date -> store -> rows
     const dateMap = new Map();
 
     for (const r of sorted) {
@@ -126,7 +115,6 @@ export default function InwardViewOnly() {
     return dates.map((date, idx) => {
       const storeMap = dateMap.get(date);
 
-      // store sorting (nice)
       const stores = Array.from(storeMap.entries())
         .sort(([a], [b]) => String(a).localeCompare(String(b)))
         .map(([store, items]) => ({
@@ -147,7 +135,8 @@ export default function InwardViewOnly() {
   /* ================= FETCH ================= */
 
   const fetchData = async () => {
-    setLoading(true);
+    if (firstLoadRef.current) setLoading(true);
+
     try {
       const qs = new URLSearchParams();
       if (from) qs.set("from", from);
@@ -155,20 +144,22 @@ export default function InwardViewOnly() {
 
       const url = qs.toString() ? `${LIST_API}?${qs.toString()}` : LIST_API;
 
-      const r = await fetch(url);
+      const r = await fetch(url, { cache: "no-store" });
       const j = await r.json().catch(() => ({}));
 
       if (!r.ok || !j.success) {
-        setRows([]);
-        setLoading(false);
+        if (firstLoadRef.current) setRows([]);
         return;
       }
 
       setRows(Array.isArray(j.data) ? j.data : []);
-      setLoading(false);
     } catch {
-      setRows([]);
-      setLoading(false);
+      if (firstLoadRef.current) setRows([]);
+    } finally {
+      if (firstLoadRef.current) {
+        setLoading(false);
+        firstLoadRef.current = false;
+      }
     }
   };
 
@@ -187,7 +178,6 @@ export default function InwardViewOnly() {
 
   /* ================= ACTIONS ================= */
 
-  // ✅ Toast: center screen (any mobile), very small, very short time
   const showToast = (text) => {
     setToast({ show: true, text });
 
@@ -195,16 +185,14 @@ export default function InwardViewOnly() {
 
     toastTimerRef.current = setTimeout(() => {
       setToast({ show: false, text: "" });
-    }, 650); // ✅ very short
+    }, 650);
   };
 
-  // ✅ share always copies static short url (hide original)
   const onShareLink = async () => {
     const ok = await copyToClipboard(STATIC_SHARE_URL);
     showToast(ok ? "Link copied ✅" : "Copy failed ❌");
   };
 
-  // ✅ demo download (only admin)
   const onDownloadDemo = () => {
     showToast("Only admin can download 🔒");
   };
@@ -258,63 +246,57 @@ export default function InwardViewOnly() {
             </thead>
 
             <tbody>
-              {groups.map((g) => {
-                let isFirstRowOfDate = true;
+              {groups.map((g) => (
+                <React.Fragment key={g.date}>
+                  {g.stores.map((storeGroup, sIdx) => (
+                    <React.Fragment key={`${g.date}-${storeGroup.store}-${sIdx}`}>
+                      {storeGroup.items.map((r, idx) => {
+                        // ✅ Date should show for EACH store group
+                        const showDate = idx === 0;
 
-                return (
-                  <React.Fragment key={g.date}>
-                    {g.stores.map((storeGroup, sIdx) => {
-                      return (
-                        <React.Fragment key={`${g.date}-${storeGroup.store}-${sIdx}`}>
-                          {storeGroup.items.map((r, idx) => {
-                            const showDateCols = isFirstRowOfDate; // only once per date
-                            const showStoreCol = idx === 0; // once per store group
-                            const letter = String.fromCharCode(97 + idx); // a,b,c...
+                        // ✅ Sr.No should show ONLY ONCE PER DATE (first store's first row)
+                        const showSrNo = sIdx === 0 && idx === 0;
 
-                            if (isFirstRowOfDate) isFirstRowOfDate = false;
+                        const showStore = idx === 0;
+                        const letter = String.fromCharCode(97 + idx);
 
-                            return (
-                              <tr key={`${g.date}-${storeGroup.store}-${idx}-${r.inward_id}`}>
-                                <td className="ivSr">{showDateCols ? g.srNo : ""}</td>
-                                <td className="ivDate">{showDateCols ? formatDDMMYYYY(g.date) : ""}</td>
+                        return (
+                          <tr key={`${g.date}-${storeGroup.store}-${idx}-${r.inward_id}`}>
+                            <td className="ivSr">{showSrNo ? g.srNo : ""}</td>
+                            <td className="ivDate">{showDate ? formatDDMMYYYY(g.date) : ""}</td>
 
-                                <td>
-                                  <span className="ivLetterBlack">{letter})</span> {r.material}
-                                </td>
+                            <td>
+                              <span className="ivLetterBlack">{letter})</span> {r.material}
+                            </td>
 
-                                <td>
-                                  {r.quantity ?? ""}
-                                  {r.quantity_type ? ` ${r.quantity_type}` : ""}
-                                </td>
+                            <td>
+                              {r.quantity ?? ""}
+                              {r.quantity_type ? ` ${r.quantity_type}` : ""}
+                            </td>
 
-                                <td className="ivStore">{showStoreCol ? (storeGroup.store || "—") : ""}</td>
+                            <td className="ivStore">{showStore ? (storeGroup.store || "—") : ""}</td>
+                            <td>{r.material_use}</td>
+                          </tr>
+                        );
+                      })}
 
-                                <td>{r.material_use}</td>
-                              </tr>
-                            );
-                          })}
+                      {sIdx !== g.stores.length - 1 && (
+                        <tr className="ivStoreSepRow" aria-hidden="true">
+                          <td colSpan={6} className="ivStoreSepTd">
+                            <div className="ivStoreSepLine" />
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
 
-                          {/* ✅ dotted line between stores (same date, new store) */}
-                          {sIdx !== g.stores.length - 1 && (
-                            <tr className="ivStoreSepRow" aria-hidden="true">
-                              <td colSpan={6} className="ivStoreSepTd">
-                                <div className="ivStoreSepLine" />
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      );
-                    })}
-
-                    {/* ✅ date separator (dark) */}
-                    <tr className="ivSepRow" aria-hidden="true">
-                      <td colSpan={6} className="ivSepTd">
-                        <div className="ivSepLine" />
-                      </td>
-                    </tr>
-                  </React.Fragment>
-                );
-              })}
+                  <tr className="ivSepRow" aria-hidden="true">
+                    <td colSpan={6} className="ivSepTd">
+                      <div className="ivSepLine" />
+                    </td>
+                  </tr>
+                </React.Fragment>
+              ))}
             </tbody>
           </table>
         </div>
@@ -339,8 +321,17 @@ export default function InwardViewOnly() {
 /* ================= STYLES ================= */
 
 const css = `
+html, body {
+  height: 100%;
+  background: #f6f8fc;
+  margin: 0;
+}
+#root { min-height: 100%; background:#f6f8fc; }
+* { box-sizing: border-box; }
+body { overscroll-behavior-y: none; }
+
 .ivPage{
-  min-height:100vh;
+  min-height:100dvh;
   background:#f6f8fc;
   padding:16px;
 }
@@ -360,17 +351,15 @@ const css = `
   align-items:flex-start;
 }
 
-.ivHeaderLeft{
-  min-width:0;
-}
+.ivHeaderLeft{ min-width:0; }
 
 .ivTitle{
   font-size:18px;
   font-weight:900;
   line-height:1.2;
-  word-break:break-word; /* ✅ always visible full */
+  word-break:break-word;
 }
-.ivSub{font-size:12px;opacity:.85;margin-top:4px;}
+.ivSub{ font-size:12px; opacity:.85; margin-top:4px; }
 
 .ivActions{
   display:flex;
@@ -380,7 +369,6 @@ const css = `
   flex-wrap:wrap;
 }
 
-/* ✅ Small buttons (mobile perfect) */
 .ivShareBtn{
   background:#fff;
   color:#0b1220;
@@ -418,6 +406,7 @@ const css = `
   border-radius:14px;
   overflow:auto;
   box-shadow:0 12px 30px rgba(0,0,0,.08);
+  -webkit-overflow-scrolling: touch;
 }
 
 .ivTable{
@@ -425,6 +414,7 @@ const css = `
   border-collapse:collapse;
   font-size:13px;
   min-width:900px;
+  background:#fff;
 }
 
 .ivTable th,
@@ -446,7 +436,6 @@ const css = `
 .ivStore{ white-space:nowrap; font-weight:700; }
 .ivLetterBlack{ font-weight:900; color:#111827; }
 
-/* ✅ date separator (dark) */
 .ivSepRow td{
   padding:0 !important;
   border-bottom:none !important;
@@ -459,7 +448,6 @@ const css = `
   margin:10px 0;
 }
 
-/* ✅ dotted store separator */
 .ivStoreSepRow td{
   padding:0 !important;
   border-bottom:none !important;
@@ -468,11 +456,10 @@ const css = `
 .ivStoreSepTd{ padding:0 !important; border-bottom:none !important; }
 .ivStoreSepLine{
   width:100%;
-  border-top:1px dotted #94a3b8;
-  margin:8px 0;
+  border-top:2px dotted #94a3b8;
+  margin:10px 0;
 }
 
-/* ✅ Toast center screen (any mobile) */
 .ivToastBackdrop{
   position:fixed;
   inset:0;
@@ -487,7 +474,7 @@ const css = `
   transform:translate(-50%,-50%);
   background:#0b1220;
   color:#fff;
-  padding:6px 10px;        /* ✅ very small */
+  padding:6px 10px;
   border-radius:10px;
   font-weight:900;
   font-size:12px;
@@ -497,20 +484,17 @@ const css = `
   text-align:center;
 }
 
-/* ✅ mobile header layout: title full + buttons below */
 @media (max-width: 560px){
   .ivHeaderTop{
     flex-direction:column;
     align-items:stretch;
   }
-
   .ivActions{
     justify-content:flex-start;
     margin-top:10px;
   }
-
   .ivTable{
-    min-width:760px; /* still scroll, but better */
+    min-width:760px;
   }
 }
 `;

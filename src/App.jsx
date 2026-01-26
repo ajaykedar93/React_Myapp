@@ -31,6 +31,8 @@ import DocumentTab from "./Pages/Document/DocumentTab.jsx";
 import WorkDetails from "./Pages/WorkDetails/Worknewtab.jsx";// ✅ PUBLIC PAGE
 import InwardViewOnly from "./Pages/WorkDetails/InwardViewOnly";
 
+import InwardUpdate from "./Pages/WorkDetails/InwardUpdate";
+
 // Investment pages
 import InvestmentTabs from "./Pages/Investment/InvestmentTabs.jsx";
 
@@ -60,6 +62,10 @@ function AppRoutes() {
       {/* ✅ PUBLIC: Inward View Only (share link page) */}
     
       <Route path="/inward-view" element={<InwardViewOnly />} />
+
+      {/* ✅ PROTECTED: Inward Update (full page) */}
+   <Route path="/work-details/inward/update/:id" element={<InwardUpdate />} />
+
 
       {/* Default route → always go to login if not logged in */}
       <Route path="/" element={<Navigate to={user ? "/dashboard" : "/login"} replace />} />

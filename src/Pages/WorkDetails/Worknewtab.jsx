@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 
 // Pages
@@ -9,12 +9,11 @@ import TotalSiteKharch from "./TotalSiteKharch";
 import Measure from "./Measure";
 import AddInward from "./AddInward";
 import InwardGet from "./InwardGet";
-
-// ✅ NEW: View only inward page
 import InwardViewOnly from "./InwardViewOnly";
 
 export default function Worknewtab() {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const tabs = useMemo(
     () => [
@@ -23,9 +22,10 @@ export default function Worknewtab() {
       { key: "get", label: "SITE KHARCH GET", component: <SitekharchGet /> },
       { key: "total", label: "TOTAL KHARCH", component: <TotalSiteKharch /> },
       { key: "addinward", label: "ADD INWARD", component: <AddInward /> },
-      { key: "getinward", label: "GET INWARD", component: <InwardGet /> },
 
-      // ✅ NEW TAB
+      // IMPORTANT: GET INWARD component dynamically render होईल
+      { key: "getinward", label: "GET INWARD", component: null },
+
       { key: "inwardview", label: "INWARD VIEW ONLY", component: <InwardViewOnly /> },
     ],
     []
@@ -34,6 +34,31 @@ export default function Worknewtab() {
   const [activeKey, setActiveKey] = useState(tabs[0].key);
   const [loading, setLoading] = useState(true);
 
+  // ✅ This token will force refresh InwardGet when coming back from Update
+  const [inwardRefreshToken, setInwardRefreshToken] = useState(0);
+
+  // ✅ If navigation comes with state: { tabKey:"getinward", refreshInward:true }
+  useEffect(() => {
+    const tabKey = location?.state?.tabKey;
+    const refreshInward = location?.state?.refreshInward;
+
+    // ✅ tab switch
+    if (tabKey) setActiveKey(tabKey);
+
+    // ✅ refresh token bump (InwardGet refresh)
+    if (refreshInward) {
+      setActiveKey("getinward"); // safety: always open GET INWARD on refresh
+      setInwardRefreshToken((x) => x + 1);
+    }
+
+    // ✅ VERY IMPORTANT: state consume (otherwise back/refresh ला repeated trigger होऊ शकतो)
+    if (tabKey || refreshInward) {
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location?.state]);
+
+  // loader animation on tab change
   useEffect(() => {
     setLoading(true);
     const t = setTimeout(() => setLoading(false), 250);
@@ -42,9 +67,17 @@ export default function Worknewtab() {
 
   const activeTab = tabs.find((t) => t.key === activeKey);
 
+  // ✅ Render InwardGet with refreshToken
+  const renderTabComponent = () => {
+    if (activeKey === "getinward") {
+      // ✅ RefreshToken props pass
+      return <InwardGet refreshToken={inwardRefreshToken} />;
+    }
+    return activeTab?.component || null;
+  };
+
   return (
     <div className="worknewtab-page" style={styles.page}>
-      {/* ✅ GLOBAL CSS (FIX: make all child popups/dialogs always above navbar/tabs and never cut) */}
       <style>{`
         html, body { margin: 0; padding: 0; height: 100%; }
         * { box-sizing: border-box; }
@@ -57,7 +90,6 @@ export default function Worknewtab() {
           --navHDesktop: 85px;
           --navHMobile: 85px;
 
-          /* ✅ IMPORTANT: overlay top padding = navbar + tabs + gaps (auto controlled below) */
           --overlayTopPad: 140px;
         }
 
@@ -68,7 +100,6 @@ export default function Worknewtab() {
           }
         }
 
-        /* ✅ IMPORTANT: make sure no parent creates new fixed stacking context */
         .worknewtab-page, .worknewtab-scroll, .worknewtab-contentWrap, .worknewtab-navbar, .worknewtab-tabs-row{
           transform: none !important;
           filter: none !important;
@@ -77,12 +108,9 @@ export default function Worknewtab() {
           isolation: auto !important;
         }
 
-        .worknewtab-page{
-          position: relative;
-          z-index: 0;
-        }
+        .worknewtab-page{ position: relative; z-index: 0; }
 
-        /* ✅ Global helper classes for ANY child modal/overlay/dialog */
+        /* global overlay helpers (if any modal uses these classes) */
         .globalModalOverlay{
           position: fixed !important;
           inset: 0 !important;
@@ -98,10 +126,7 @@ export default function Worknewtab() {
         }
 
         @media (min-width: 769px){
-          .globalModalOverlay{
-            align-items: center !important;
-            padding: 16px !important;
-          }
+          .globalModalOverlay{ align-items: center !important; padding: 16px !important; }
         }
 
         .globalModalCard{
@@ -118,7 +143,6 @@ export default function Worknewtab() {
           -webkit-overflow-scrolling: touch !important;
         }
 
-        /* Tabs scrollbar */
         .worknewtab-tabs-row::-webkit-scrollbar { height: 6px; }
         .worknewtab-tabs-row::-webkit-scrollbar-thumb {
           background: rgba(0,0,0,0.2);
@@ -128,7 +152,6 @@ export default function Worknewtab() {
         @keyframes spin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }
       `}</style>
 
-      {/* ✅ FIXED HEADER */}
       <div style={styles.headerFixed}>
         <div className="worknewtab-navbar" style={styles.navbar}>
           <div style={styles.navLeft}>
@@ -167,11 +190,15 @@ export default function Worknewtab() {
         <div style={styles.gapBelowTabs} />
       </div>
 
-      {/* ✅ SCROLL AREA */}
       <div className="worknewtab-scroll" style={styles.scrollArea}>
         <AnimatePresence>
           {loading && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={styles.loaderOverlay}>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={styles.loaderOverlay}
+            >
               <div style={styles.loaderBox}>
                 <div style={styles.spinner} />
                 <div style={styles.loadingText}>Loading...</div>
@@ -189,12 +216,11 @@ export default function Worknewtab() {
             transition={{ duration: 0.2 }}
             style={styles.content}
           >
-            {activeTab?.component}
+            {renderTabComponent()}
           </motion.div>
         )}
       </div>
 
-      {/* ✅ ACTUAL LAYOUT CALC (also sets overlayTopPad automatically!) */}
       <style>{`
         .worknewtab-navbar{
           padding-top: calc(var(--safeTop) + var(--navTopGap));
@@ -239,30 +265,13 @@ export default function Worknewtab() {
   );
 }
 
-/* ================= CONSTANTS ================= */
 const GAP_1 = 6;
 const TABS_H = 53;
 const GAP_2 = 10;
 
-/* ================= STYLES ================= */
 const styles = {
-  page: {
-    height: "100vh",
-    width: "100%",
-    background: "#F8FAFF",
-    overflow: "hidden",
-    position: "relative",
-  },
-
-  headerFixed: {
-    position: "fixed",
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 5000,
-    background: "#F8FAFF",
-  },
-
+  page: { height: "100vh", width: "100%", background: "#F8FAFF", overflow: "hidden", position: "relative" },
+  headerFixed: { position: "fixed", top: 0, left: 0, right: 0, zIndex: 5000, background: "#F8FAFF" },
   navbar: {
     background: "linear-gradient(90deg, #2563EB, #06B6D4)",
     display: "flex",
@@ -270,15 +279,9 @@ const styles = {
     justifyContent: "space-between",
     color: "#fff",
   },
-
-  navLeft: {
-    display: "flex",
-    flexDirection: "column",
-  },
-
+  navLeft: { display: "flex", flexDirection: "column" },
   title: { fontSize: 16, fontWeight: 900 },
   subtitle: { fontSize: 11, fontWeight: 700, opacity: 0.95 },
-
   dashboardBtn: {
     background: "#fff",
     color: "#2563EB",
@@ -289,26 +292,9 @@ const styles = {
     fontSize: 12,
     cursor: "pointer",
   },
-
   gapBetweenNavbarAndTabs: { height: GAP_1 },
-
-  tabsBar: {
-    height: TABS_H,
-    background: "#fff",
-    borderBottom: "1px solid #E5E7EB",
-    display: "flex",
-    alignItems: "center",
-  },
-
-  tabsRow: {
-    width: "100%",
-    display: "flex",
-    gap: 8,
-    padding: "8px",
-    overflowX: "auto",
-    WebkitOverflowScrolling: "touch",
-  },
-
+  tabsBar: { height: TABS_H, background: "#fff", borderBottom: "1px solid #E5E7EB", display: "flex", alignItems: "center" },
+  tabsRow: { width: "100%", display: "flex", gap: 8, padding: "8px", overflowX: "auto", WebkitOverflowScrolling: "touch" },
   tabBtn: {
     border: "1px solid #E5E7EB",
     background: "#F1F5F9",
@@ -320,38 +306,11 @@ const styles = {
     cursor: "pointer",
     position: "relative",
   },
-
-  tabActive: {
-    background: "#2563EB",
-    color: "#fff",
-  },
-
-  underline: {
-    position: "absolute",
-    bottom: -6,
-    left: "25%",
-    right: "25%",
-    height: 3,
-    background: "#22C55E",
-    borderRadius: 999,
-  },
-
+  tabActive: { background: "#2563EB", color: "#fff" },
+  underline: { position: "absolute", bottom: -6, left: "25%", right: "25%", height: 3, background: "#22C55E", borderRadius: 999 },
   gapBelowTabs: { height: GAP_2 },
-
-  scrollArea: {
-    position: "fixed",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    overflowY: "auto",
-    background: "#F8FAFF",
-    zIndex: 1,
-  },
-
-  content: {
-    width: "100%",
-  },
-
+  scrollArea: { position: "fixed", left: 0, right: 0, bottom: 0, overflowY: "auto", background: "#F8FAFF", zIndex: 1 },
+  content: { width: "100%" },
   loaderOverlay: {
     position: "absolute",
     inset: 0,
@@ -361,24 +320,7 @@ const styles = {
     justifyContent: "center",
     zIndex: 6000,
   },
-
-  loaderBox: {
-    background: "#fff",
-    padding: 20,
-    borderRadius: 14,
-    textAlign: "center",
-    boxShadow: "0 10px 40px rgba(0,0,0,0.15)",
-  },
-
-  spinner: {
-    width: 40,
-    height: 40,
-    border: "4px solid #DBEAFE",
-    borderTopColor: "#2563EB",
-    borderRadius: "50%",
-    animation: "spin 0.8s linear infinite",
-    margin: "0 auto",
-  },
-
+  loaderBox: { background: "#fff", padding: 20, borderRadius: 14, textAlign: "center", boxShadow: "0 10px 40px rgba(0,0,0,0.15)" },
+  spinner: { width: 40, height: 40, border: "4px solid #DBEAFE", borderTopColor: "#2563EB", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto" },
   loadingText: { marginTop: 10, fontWeight: 900, fontSize: 14 },
 };

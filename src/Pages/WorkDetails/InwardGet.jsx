@@ -1,23 +1,17 @@
-import React, { useEffect, useMemo, useState, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
-export default function InwardGet() {
+export default function InwardGet({ refreshToken = 0 }) {
   const API_BASE = useMemo(() => "https://express-backend-myapp.onrender.com", []);
   const LIST_API = `${API_BASE}/api/inward`;
   const ONE_API = (id) => `${API_BASE}/api/inward/${id}`;
-  const UPDATE_API = (id) => `${API_BASE}/api/inward/${id}`;
   const DELETE_API = (id) => `${API_BASE}/api/inward/${id}`;
   const PDF_API = `${API_BASE}/api/inward/pdf`;
 
-  const todayISO = () => {
-    const d = new Date();
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
-  };
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  // ✅ date show ALWAYS dd/MM/yyyy
   const formatDDMMYYYY = (iso) => {
     const s = String(iso || "").slice(0, 10);
     if (!s || s.length !== 10) return s || "";
@@ -26,7 +20,6 @@ export default function InwardGet() {
     return `${d}/${m}/${y}`;
   };
 
-  // ✅ Month title (Jan 2026 etc)
   const formatMonthTitle = (ym) => {
     const [y, m] = String(ym || "").split("-");
     const monthIdx = Number(m || 0) - 1;
@@ -35,8 +28,9 @@ export default function InwardGet() {
     return `${names[monthIdx]} ${y}`;
   };
 
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  // ✅ Single date input (not applied until Apply click)
+  const [selectedDate, setSelectedDate] = useState("");
+  const [appliedDate, setAppliedDate] = useState(""); // when applied, this controls filtering
 
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState([]);
@@ -77,17 +71,7 @@ export default function InwardGet() {
     title: "",
   });
 
-  const [edit, setEdit] = useState({
-    open: false,
-    inwardId: null,
-    seq_no: null,
-    display_seq: null, // ✅ UI sequence (month-wise)
-    work_date: todayISO(),
-    store: "",
-    items: [],
-  });
-
-  // ✅ FIX: make relative file_url absolute
+  // ✅ make relative file_url absolute
   const computeFileUrl = (it) => {
     const f = it?.file_url || "";
     if (f) {
@@ -133,16 +117,41 @@ export default function InwardGet() {
     return out;
   };
 
-  const fetchList = async () => {
-    setLoading(true);
-    try {
-      const qs = new URLSearchParams();
-      if (from) qs.set("from", from);
-      if (to) qs.set("to", to);
-      const url = qs.toString() ? `${LIST_API}?${qs.toString()}` : LIST_API;
+  // ✅ abortable fetch
+  const abortRef = useRef(null);
 
-      const r = await fetch(url);
-      const data = await r.json().catch(() => ({}));
+  const buildListUrl = (dateISO) => {
+    const qs = new URLSearchParams();
+    if (dateISO) {
+      qs.set("from", dateISO);
+      qs.set("to", dateISO);
+    }
+    return qs.toString() ? `${LIST_API}?${qs.toString()}` : LIST_API;
+  };
+
+  // ✅ SAFE JSON (handles HTML / empty too)
+  const safeReadJson = async (resp) => {
+    const ct = resp.headers.get("content-type") || "";
+    if (ct.includes("application/json")) {
+      return resp.json().catch(() => ({}));
+    }
+    const txt = await resp.text().catch(() => "");
+    return { success: false, message: txt ? String(txt).slice(0, 300) : "Server Error" };
+  };
+
+  const fetchList = async ({ dateISO = "" } = {}) => {
+    try {
+      if (abortRef.current) abortRef.current.abort();
+    } catch {}
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    setLoading(true);
+
+    try {
+      const url = buildListUrl(dateISO);
+      const r = await fetch(url, { signal: controller.signal });
+      const data = await safeReadJson(r);
 
       if (!r.ok || !data?.success) {
         openDlg({ type: "error", title: "Failed", message: data?.message || "Unable to load inward list." });
@@ -158,38 +167,70 @@ export default function InwardGet() {
         return;
       }
 
-      const hasItemsInline = Array.isArray(headers[0].items);
+      const hasItemsInline = Array.isArray(headers[0]?.items);
       if (hasItemsInline) {
         setRows(flatten(headers));
         setLoading(false);
         return;
       }
 
-      const detailed = [];
-      for (let i = 0; i < headers.length; i++) {
-        const h = headers[i];
-        const rr = await fetch(ONE_API(h.id));
-        const dd = await rr.json().catch(() => ({}));
-        if (rr.ok && dd?.success && dd?.data) detailed.push(dd.data);
-      }
+      const tasks = headers.map((h) =>
+        fetch(ONE_API(h.id), { signal: controller.signal })
+          .then((rr) => safeReadJson(rr))
+          .then((dd) => (dd?.success && dd?.data ? dd.data : null))
+          .catch(() => null)
+      );
+
+      const all = await Promise.all(tasks);
+      const detailed = all.filter(Boolean);
 
       setRows(flatten(detailed));
       setLoading(false);
     } catch (e) {
+      if (e?.name === "AbortError") return;
       setLoading(false);
       openDlg({ type: "error", title: "Network Error", message: "Server not reachable." });
     }
   };
 
+  // ✅ FIRST LOAD
   useEffect(() => {
-    fetchList();
+    fetchList({ dateISO: "" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ✅ refreshToken change => refresh with currently applied filter
+  const firstTokenSkip = useRef(true);
+  useEffect(() => {
+    if (firstTokenSkip.current) {
+      firstTokenSkip.current = false;
+      return;
+    }
+    fetchList({ dateISO: appliedDate || "" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshToken]);
+
+  // ✅ when coming back from update page => refresh
+  useEffect(() => {
+    if (location?.state?.refresh === true) {
+      if (typeof location?.state?.date === "string") {
+        setSelectedDate(location.state.date);
+        setAppliedDate(location.state.date);
+        fetchList({ dateISO: location.state.date });
+      } else {
+        fetchList({ dateISO: appliedDate || "" });
+      }
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location?.state]);
+
   const downloadPdf = () => {
     const qs = new URLSearchParams();
-    if (from) qs.set("from", from);
-    if (to) qs.set("to", to);
+    if (appliedDate) {
+      qs.set("from", appliedDate);
+      qs.set("to", appliedDate);
+    }
     const url = qs.toString() ? `${PDF_API}?${qs.toString()}` : PDF_API;
     window.open(url, "_blank");
   };
@@ -219,117 +260,13 @@ export default function InwardGet() {
 
   const closeImage = () => setImageViewer({ open: false, url: "", isPdf: false, title: "" });
 
-  const openUpdate = async (inwardId, displaySeq) => {
-    setOverlay({ open: true, text: "Loading details..." });
-    try {
-      const r = await fetch(ONE_API(inwardId));
-      const data = await r.json().catch(() => ({}));
-      setOverlay({ open: false, text: "Please wait..." });
-
-      if (!r.ok || !data?.success || !data?.data) {
-        openDlg({ type: "error", title: "Failed", message: data?.message || "Unable to load details." });
-        return;
-      }
-
-      setEdit({
-        open: true,
-        inwardId: data.data.id,
-        seq_no: data.data.seq_no,
-        display_seq: displaySeq ?? null,
-        work_date: String(data.data.work_date || "").slice(0, 10),
-        store: data.data.store || "",
-        items: (data.data.items || []).map((it) => ({
-          id: it.id,
-          material: it.material || "",
-          // ✅ IMPORTANT: keep as STRING to avoid cursor jump / focus issues
-          quantity: it.quantity === null || it.quantity === undefined ? "" : String(it.quantity),
-          quantity_type: it.quantity_type || "",
-          material_use: it.material_use || "",
-          image_url: computeFileUrl(it),
-          upload_id: it.upload_id || null,
-          mime_type: it.mime_type || "",
-        })),
-      });
-    } catch (e) {
-      setOverlay({ open: false, text: "Please wait..." });
-      openDlg({ type: "error", title: "Network Error", message: "Server not reachable." });
-    }
-  };
-
-  const closeUpdate = () =>
-    setEdit({ open: false, inwardId: null, seq_no: null, display_seq: null, work_date: todayISO(), store: "", items: [] });
-
-  const updateEditItem = (idx, patch) => {
-    setEdit((p) => {
-      const items = [...p.items];
-      items[idx] = { ...items[idx], ...patch };
-      return { ...p, items };
+  const goUpdatePage = (inwardId, displaySeq) => {
+    navigate(`/work-details/inward/update/${inwardId}`, {
+      state: { displaySeq, date: appliedDate || "", returnTo: location.pathname },
     });
   };
 
-  const saveUpdate = async () => {
-    const errs = [];
-    if (!edit.work_date) errs.push("Date required");
-    if (!edit.store.trim()) errs.push("Store required");
-    if (!edit.items.length) errs.push("At least 1 item required");
-
-    edit.items.forEach((it, i) => {
-      if (!String(it.material || "").trim()) errs.push(`Row ${i + 1}: Material required`);
-      if (!String(it.material_use || "").trim()) errs.push(`Row ${i + 1}: Material Use required`);
-      if (it.quantity !== "" && it.quantity !== null && Number.isNaN(Number(it.quantity))) errs.push(`Row ${i + 1}: Quantity invalid`);
-    });
-
-    if (errs.length) {
-      openDlg({ type: "error", title: "Fix these", message: errs.join("\n") });
-      return;
-    }
-
-    const payload = {
-      work_date: edit.work_date,
-      store: edit.store.trim(),
-      items: edit.items.map((it) => ({
-        material: String(it.material || "").trim(),
-        // ✅ convert string -> number/null only at save time
-        quantity: String(it.quantity || "").trim() === "" ? null : Number(it.quantity),
-        quantity_type: String(it.quantity_type || "").trim() || null,
-        material_use: String(it.material_use || "").trim(),
-        image_path: it.image_url || null,
-      })),
-    };
-
-    setOverlay({ open: true, text: "Updating..." });
-    try {
-      const r = await fetch(UPDATE_API(edit.inwardId), {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await r.json().catch(() => ({}));
-      setOverlay({ open: false, text: "Please wait..." });
-
-      if (r.ok && data?.success) {
-        closeUpdate();
-        fetchList();
-        openDlg({ type: "success", title: "Updated", message: "Inward updated successfully." });
-        return;
-      }
-
-      if (r.status === 409) {
-        openDlg({
-          type: "error",
-          title: "Duplicate Not Allowed",
-          message: "Same Date + Store + Material + Material Use already exists.",
-        });
-        return;
-      }
-
-      openDlg({ type: "error", title: "Failed", message: data?.message || "Update failed." });
-    } catch (e) {
-      setOverlay({ open: false, text: "Please wait..." });
-      openDlg({ type: "error", title: "Network Error", message: "Server not reachable." });
-    }
-  };
-
+  // ✅ Delete popup OK/Cancel FIX
   const confirmDelete = (inwardId, displaySeq) => {
     openDlg({
       type: "error",
@@ -342,29 +279,75 @@ export default function InwardGet() {
       onOk: async () => {
         closeDlg();
         setOverlay({ open: true, text: "Deleting..." });
+
         try {
           const r = await fetch(DELETE_API(inwardId), { method: "DELETE" });
-          const data = await r.json().catch(() => ({}));
+          const data = await safeReadJson(r);
+
           setOverlay({ open: false, text: "Please wait..." });
 
           if (r.ok && data?.success) {
-            fetchList();
+            setRows((prev) => prev.filter((x) => String(x.inward_id) !== String(inwardId)));
             openDlg({ type: "success", title: "Deleted", message: `Sr.No ${displaySeq} deleted successfully.` });
+            // ✅ optional refresh for safety
+            fetchList({ dateISO: appliedDate || "" });
             return;
           }
 
           openDlg({ type: "error", title: "Failed", message: data?.message || "Delete failed." });
-        } catch (e) {
+          fetchList({ dateISO: appliedDate || "" });
+        } catch {
           setOverlay({ open: false, text: "Please wait..." });
           openDlg({ type: "error", title: "Network Error", message: "Server not reachable." });
+          fetchList({ dateISO: appliedDate || "" });
         }
       },
     });
   };
 
+  const applyDate = () => {
+    const d = String(selectedDate || "").slice(0, 10);
+    setAppliedDate(d);
+    fetchList({ dateISO: d });
+  };
+
+  const clearDate = () => {
+    setSelectedDate("");
+    setAppliedDate("");
+    fetchList({ dateISO: "" });
+  };
+
+  const setRipplePoint = (e) => {
+    const el = e.currentTarget;
+    const r = el.getBoundingClientRect();
+    const x = ((e.clientX - r.left) / r.width) * 100;
+    const y = ((e.clientY - r.top) / r.height) * 100;
+    el.style.setProperty("--rx", `${x}%`);
+    el.style.setProperty("--ry", `${y}%`);
+  };
+
+  const Portal = ({ children }) => {
+    if (typeof document === "undefined") return null;
+    return createPortal(children, document.body);
+  };
+
+  const closeIfBackdropClick = (e, fn) => {
+    if (e.target === e.currentTarget) fn();
+  };
+
+  // ✅ IMPORTANT: DO NOT use onClickCapture
+  const stopAll = (e) => {
+    e.stopPropagation();
+  };
+
+  const filteredRows = useMemo(() => {
+    if (!appliedDate) return rows;
+    return rows.filter((r) => String(r.work_date || "").slice(0, 10) === appliedDate);
+  }, [rows, appliedDate]);
+
   const groupedByMonth = useMemo(() => {
     const headerMap = new Map();
-    for (const r of rows) {
+    for (const r of filteredRows) {
       if (!headerMap.has(r.inward_id)) {
         headerMap.set(r.inward_id, {
           inward_id: r.inward_id,
@@ -421,42 +404,18 @@ export default function InwardGet() {
     }
 
     return months;
-  }, [rows]);
-
-  const Portal = ({ children }) => {
-    if (typeof document === "undefined") return null;
-    return createPortal(children, document.body);
-  };
-
-  const clearFilters = () => {
-    setFrom("");
-    setTo("");
-    setTimeout(() => fetchList(), 0);
-  };
-
-  const setRipplePoint = (e) => {
-    const el = e.currentTarget;
-    const r = el.getBoundingClientRect();
-    const x = ((e.clientX - r.left) / r.width) * 100;
-    const y = ((e.clientY - r.top) / r.height) * 100;
-    el.style.setProperty("--rx", `${x}%`);
-    el.style.setProperty("--ry", `${y}%`);
-  };
-
-  // ✅ close ONLY when clicking backdrop (not inside modal)
-  const closeIfBackdrop = (e, fn) => {
-    if (e.target === e.currentTarget) fn();
-  };
+  }, [filteredRows]);
 
   return (
     <div className="igPage">
       <div className="igTopbar">
         <div>
           <div className="igTopbar__title">Inward List</div>
+          {appliedDate ? <div className="igTopbar__sub">Showing: {formatDDMMYYYY(appliedDate)}</div> : null}
         </div>
 
         <div className="igTopbarActions">
-          <button type="button" className="igBtn igBtn--outline igRipple" onPointerDown={setRipplePoint} onClick={fetchList}>
+          <button type="button" className="igBtn igBtn--outline igRipple" onPointerDown={setRipplePoint} onClick={() => fetchList({ dateISO: appliedDate || "" })}>
             Refresh
           </button>
           <button type="button" className="igBtn igBtn--primary igRipple" onPointerDown={setRipplePoint} onClick={downloadPdf}>
@@ -467,17 +426,12 @@ export default function InwardGet() {
 
       <div className="igFilters">
         <div className="igField">
-          <label>From</label>
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-        </div>
-
-        <div className="igField">
-          <label>To</label>
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+          <label>Select Date</label>
+          <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
         </div>
 
         <div className="igFilterBtns">
-          <button type="button" className="igBtn igBtn--dark igRipple" onPointerDown={setRipplePoint} onClick={fetchList}>
+          <button type="button" className="igBtn igBtn--dark igRipple" onPointerDown={setRipplePoint} onClick={applyDate}>
             Apply
           </button>
 
@@ -485,9 +439,9 @@ export default function InwardGet() {
             type="button"
             className="igBtn igBtn--ghost igRipple"
             onPointerDown={setRipplePoint}
-            onClick={clearFilters}
-            disabled={!from && !to}
-            title={!from && !to ? "Nothing to clear" : "Clear dates"}
+            onClick={clearDate}
+            disabled={!selectedDate && !appliedDate}
+            title={!selectedDate && !appliedDate ? "Nothing to clear" : "Clear date"}
           >
             Clear
           </button>
@@ -503,13 +457,13 @@ export default function InwardGet() {
         <div className="igEmpty">
           <div className="igEmptyCard">
             <div className="igEmptyTitle">No inward records</div>
-            <div className="igEmptySub">Try changing filter dates or clear filters.</div>
+            <div className="igEmptySub">Try a different date or clear filter.</div>
             <div className="igEmptyActions">
-              <button type="button" className="igBtn igBtn--dark igRipple" onPointerDown={setRipplePoint} onClick={fetchList}>
-                Apply / Refresh
+              <button type="button" className="igBtn igBtn--dark igRipple" onPointerDown={setRipplePoint} onClick={() => fetchList({ dateISO: appliedDate || "" })}>
+                Refresh
               </button>
-              <button type="button" className="igBtn igBtn--ghost igRipple" onPointerDown={setRipplePoint} onClick={clearFilters}>
-                Clear Filters
+              <button type="button" className="igBtn igBtn--ghost igRipple" onPointerDown={setRipplePoint} onClick={clearDate}>
+                Clear Date
               </button>
             </div>
           </div>
@@ -554,20 +508,10 @@ export default function InwardGet() {
                           </div>
 
                           <div className="igHeadRight">
-                            <button
-                              type="button"
-                              className="igBtn igBtn--outline igRipple"
-                              onPointerDown={setRipplePoint}
-                              onClick={() => openUpdate(g.inward_id, g.display_seq)}
-                            >
+                            <button type="button" className="igBtn igBtn--outline igRipple" onPointerDown={setRipplePoint} onClick={() => goUpdatePage(g.inward_id, g.display_seq)}>
                               Update
                             </button>
-                            <button
-                              type="button"
-                              className="igBtn igBtn--danger igRipple"
-                              onPointerDown={setRipplePoint}
-                              onClick={() => confirmDelete(g.inward_id, g.display_seq)}
-                            >
+                            <button type="button" className="igBtn igBtn--danger igRipple" onPointerDown={setRipplePoint} onClick={() => confirmDelete(g.inward_id, g.display_seq)}>
                               Delete
                             </button>
                           </div>
@@ -610,12 +554,7 @@ export default function InwardGet() {
                                   </td>
 
                                   <td className="igBillCell">
-                                    <button
-                                      type="button"
-                                      className="igBtn igBtn--small igBtn--sky igRipple"
-                                      onPointerDown={setRipplePoint}
-                                      onClick={() => openImage(r, g.display_seq)}
-                                    >
+                                    <button type="button" className="igBtn igBtn--small igBtn--sky igRipple" onPointerDown={setRipplePoint} onClick={() => openImage(r, g.display_seq)}>
                                       View
                                     </button>
                                   </td>
@@ -626,20 +565,10 @@ export default function InwardGet() {
                         </div>
 
                         <div className="igMobileActions">
-                          <button
-                            type="button"
-                            className="igBtn igBtn--outline igBtnTiny igRipple"
-                            onPointerDown={setRipplePoint}
-                            onClick={() => openUpdate(g.inward_id, g.display_seq)}
-                          >
+                          <button type="button" className="igBtn igBtn--outline igBtnTiny igRipple" onPointerDown={setRipplePoint} onClick={() => goUpdatePage(g.inward_id, g.display_seq)}>
                             Update
                           </button>
-                          <button
-                            type="button"
-                            className="igBtn igBtn--danger igBtnTiny igRipple"
-                            onPointerDown={setRipplePoint}
-                            onClick={() => confirmDelete(g.inward_id, g.display_seq)}
-                          >
+                          <button type="button" className="igBtn igBtn--danger igBtnTiny igRipple" onPointerDown={setRipplePoint} onClick={() => confirmDelete(g.inward_id, g.display_seq)}>
                             Delete
                           </button>
                         </div>
@@ -665,18 +594,9 @@ export default function InwardGet() {
         )}
 
         {dlg.open && (
-          <div
-            className="igDlgOverlay"
-            role="dialog"
-            aria-modal="true"
-            onPointerDown={(e) => closeIfBackdrop(e, closeDlg)}   // ✅ pointer safe
-            onClick={(e) => closeIfBackdrop(e, closeDlg)}        // ✅ click safe
-          >
-            <div
-              className="igDlg igDlgScrollable"
-              onPointerDown={(e) => e.stopPropagation()}         // ✅ STOP pointer
-              onClick={(e) => e.stopPropagation()}               // ✅ STOP click
-            >
+          <div className="igDlgOverlay" role="dialog" aria-modal="true" onClick={(e) => closeIfBackdropClick(e, closeDlg)}>
+            {/* ✅ FIX: onClick (NOT onClickCapture) */}
+            <div className="igDlg igDlgScrollable" onClick={stopAll}>
               <div className={`igDlgTop igDlgTop--${dlg.type}`}>
                 <div className="igDlgTitle">{dlg.title}</div>
               </div>
@@ -687,18 +607,27 @@ export default function InwardGet() {
 
               <div className="igDlgActions">
                 {dlg.showCancel && (
-                  <button className="igBtn igBtn--outline igRipple" onPointerDown={setRipplePoint} onClick={dlg.onCancel || closeDlg} type="button">
+                  <button
+                    className="igBtn igBtn--outline igRipple"
+                    type="button"
+                    onPointerDown={setRipplePoint}
+                    onClick={() => {
+                      if (typeof dlg.onCancel === "function") dlg.onCancel();
+                      else closeDlg();
+                    }}
+                  >
                     {dlg.cancelText}
                   </button>
                 )}
+
                 <button
                   className="igBtn igBtn--dark igRipple"
+                  type="button"
                   onPointerDown={setRipplePoint}
                   onClick={() => {
                     if (typeof dlg.onOk === "function") return dlg.onOk();
                     closeDlg();
                   }}
-                  type="button"
                 >
                   {dlg.okText}
                 </button>
@@ -708,14 +637,9 @@ export default function InwardGet() {
         )}
 
         {imageViewer.open && (
-          <div
-            className="igImgOverlay"
-            role="dialog"
-            aria-modal="true"
-            onPointerDown={(e) => closeIfBackdrop(e, closeImage)}
-            onClick={(e) => closeIfBackdrop(e, closeImage)}
-          >
-            <div className="igImgModal igImgModalSafe" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+          <div className="igImgOverlay" role="dialog" aria-modal="true" onClick={(e) => closeIfBackdropClick(e, closeImage)}>
+            {/* ✅ FIX: onClick (NOT onClickCapture) */}
+            <div className="igImgModal igImgModalSafe" onClick={stopAll}>
               <div className="igImgTop">
                 <div className="igImgTitle">{imageViewer.title}</div>
                 <button type="button" className="igXBtn igRipple" onPointerDown={setRipplePoint} onClick={closeImage} aria-label="Close">
@@ -733,99 +657,6 @@ export default function InwardGet() {
             </div>
           </div>
         )}
-
-        {edit.open && (
-          <div
-            className="igDlgOverlay"
-            role="dialog"
-            aria-modal="true"
-            onPointerDown={(e) => closeIfBackdrop(e, closeUpdate)}  // ✅ only backdrop closes
-            onClick={(e) => closeIfBackdrop(e, closeUpdate)}
-          >
-            <div
-              className="igDlg igDlgWide igDlgScrollable"
-              onPointerDown={(e) => e.stopPropagation()}            // ✅ STOP pointer (fix focus!)
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="igDlgTop igDlgTop--info">
-                <div className="igDlgTitle">Update Inward (Sr.No {edit.display_seq ?? edit.seq_no ?? "-"})</div>
-              </div>
-
-              <div className="igDlgBody igDlgBodyScroll">
-                <div className="igEditGrid">
-                  <div className="igField" style={{ width: "100%" }}>
-                    <label>Date</label>
-                    <input type="date" value={edit.work_date} onChange={(e) => setEdit((p) => ({ ...p, work_date: e.target.value }))} />
-                  </div>
-                  <div className="igField" style={{ width: "100%" }}>
-                    <label>Store</label>
-                    <input type="text" value={edit.store} onChange={(e) => setEdit((p) => ({ ...p, store: e.target.value }))} />
-                  </div>
-                </div>
-
-                <div className="igDivider" />
-
-                <div className="igMuted" style={{ marginBottom: 8 }}>
-                  Materials
-                </div>
-
-                <div className="igTableWrap">
-                  <table className="igTbl igTbl--auto">
-                    <thead>
-                      <tr>
-                        <th className="col-mat">Material</th>
-                        <th className="col-qty">Qty</th>
-                        <th className="col-qtyType">Qty Type</th>
-                        <th className="col-use">Material Use</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {edit.items.map((it, idx) => (
-                        <tr key={it.id || idx}>
-                          <td>
-                            <input className="igCellInput" value={it.material} onChange={(e) => updateEditItem(idx, { material: e.target.value })} />
-                          </td>
-                          <td>
-                            <input
-                              className="igCellInput"
-                              inputMode="decimal"
-                              value={String(it.quantity ?? "")}   // ✅ always string (no cursor jump)
-                              onChange={(e) => updateEditItem(idx, { quantity: e.target.value })}
-                            />
-                          </td>
-                          <td>
-                            <input className="igCellInput" value={it.quantity_type} onChange={(e) => updateEditItem(idx, { quantity_type: e.target.value })} />
-                          </td>
-                          <td>
-                            <textarea
-                              className="igCellTextarea"
-                              rows={2}
-                              value={it.material_use}
-                              onChange={(e) => updateEditItem(idx, { material_use: e.target.value })}
-                            />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="igMuted" style={{ marginTop: 8 }}>
-                  Note: File update is not included here.
-                </div>
-              </div>
-
-              <div className="igDlgActions">
-                <button type="button" className="igBtn igBtn--ghost igRipple" onPointerDown={setRipplePoint} onClick={closeUpdate}>
-                  Cancel
-                </button>
-                <button type="button" className="igBtn igBtn--emerald igRipple" onPointerDown={setRipplePoint} onClick={saveUpdate}>
-                  Save Update
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </Portal>
 
       <style>{css}</style>
@@ -834,6 +665,8 @@ export default function InwardGet() {
 }
 
 const css = `
+// ✅ तुझं CSS जसं आहे तसंच ठेव (same)
+
 :root{
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -842,34 +675,46 @@ const css = `
   --modal-pad: 16px;
 }
 
-.igPage{min-height:100svh;width:100%;background:#f6f8fc;margin:0;padding:0;display:flex;flex-direction:column;}
+.igPage{
+  min-height:100svh;
+  width:100%;
+  background:#f6f8fc;
+  margin:0;
+  padding:0;
+  display:flex;
+  flex-direction:column;
+  overflow-x:hidden;
+}
 
-/* topbar */
+/* ✅ BIG SCREEN: remove outside spaces (full page) */
 .igTopbar{
-  width:calc(100% - 24px);
-  margin:10px 12px 10px;
+  width:100%;
+  margin:0;
+  border-radius:0;
   background:linear-gradient(135deg,#0b1220,#0f2147);
   color:#fff;
-  padding:14px 14px;
+  padding:14px 16px;
   box-sizing:border-box;
   display:flex;
   gap:12px;
   justify-content:space-between;
   align-items:flex-start;
-  border-radius:16px;
   box-shadow:0 14px 40px rgba(11,18,32,0.14);
 }
 .igTopbar__title{font-size:18px;font-weight:900;letter-spacing:0.2px;}
+.igTopbar__sub{margin-top:4px;font-size:12px;font-weight:800;opacity:.85;}
 .igTopbarActions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;}
 
-/* filter card */
+/* filter */
 .igFilters{
-  width:calc(100% - 24px);
-  margin:0 12px 12px;
+  width:100%;
+  margin:0;
   background:#fff;
-  border:1px solid rgba(0,0,0,0.08);
-  border-radius:16px;
-  padding:12px;
+  border-top:1px solid rgba(0,0,0,0.08);
+  border-bottom:1px solid rgba(0,0,0,0.08);
+  border-left:0;border-right:0;
+  border-radius:0;
+  padding:12px 16px;
   display:flex;
   gap:10px;
   align-items:flex-end;
@@ -879,12 +724,18 @@ const css = `
 }
 .igField label{display:block;font-size:12px;font-weight:900;color:#111827;margin-bottom:6px;}
 .igField input{
-  width:160px;box-sizing:border-box;border:1px solid rgba(0,0,0,0.15);
-  border-radius:12px;padding:10px 10px;font-size:14px;outline:none;background:#fff;
+  width:220px;
+  box-sizing:border-box;
+  border:1px solid rgba(0,0,0,0.15);
+  border-radius:12px;
+  padding:10px 10px;
+  font-size:14px;
+  outline:none;
+  background:#fff;
 }
 .igFilterBtns{display:flex;gap:10px;flex-wrap:wrap;}
 
-/* buttons (professional smaller) */
+/* buttons */
 .igBtn{
   border:0;border-radius:12px;
   padding:9px 11px;
@@ -906,7 +757,6 @@ const css = `
 .igBtn--ghost{background:rgba(11,18,32,0.08);color:#0b1220;border:1px solid rgba(11,18,32,0.06);}
 .igBtn--emerald{background:rgba(16,185,129,0.16);color:#065f46;border:1px solid rgba(16,185,129,0.20);}
 .igBtn--sky{background:rgba(37,99,235,0.12);color:#1d4ed8;border:1px solid rgba(37,99,235,0.18);}
-
 .igBtn--small{padding:7px 10px;font-size:12px;border-radius:10px;}
 .igBtnTiny{padding:8px 10px;font-size:13px;border-radius:12px;}
 
@@ -926,7 +776,7 @@ const css = `
 @keyframes igSpin{to{transform:rotate(360deg);}}
 
 /* empty */
-.igEmpty{padding:14px 12px 18px;display:flex;justify-content:center;}
+.igEmpty{padding:14px 16px 18px;display:flex;justify-content:center;}
 .igEmptyCard{
   width:100%;
   max-width:620px;
@@ -940,9 +790,16 @@ const css = `
 .igEmptySub{margin-top:6px;font-size:12px;color:#6b7280;line-height:1.4;}
 .igEmptyActions{margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;}
 
-/* list cards */
-.igList{padding:0 12px 12px;display:flex;flex-direction:column;gap:12px;box-sizing:border-box;}
-.igMonthWrap{width:100%;max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:12px;}
+/* list */
+.igList{
+  padding:12px 16px 16px;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  box-sizing:border-box;
+}
+
+.igMonthWrap{width:100%;margin:0;display:flex;flex-direction:column;gap:12px;}
 .igMonthHeader{
   display:flex;justify-content:space-between;align-items:center;gap:10px;
   padding:12px 14px;
@@ -952,7 +809,8 @@ const css = `
 }
 .igMonthTitle{font-size:16px;font-weight:1000;letter-spacing:0.2px;}
 .igMonthCount{font-size:12px;font-weight:900;opacity:0.9;}
-.igDateCard{width:100%;max-width:1200px;margin:0 auto;background:transparent;}
+
+.igDateCard{width:100%;margin:0;background:transparent;}
 .igDateHeader{
   display:flex;justify-content:space-between;align-items:flex-end;gap:10px;
   padding:12px 14px;margin-bottom:10px;
@@ -979,13 +837,18 @@ const css = `
 .igSrLine{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
 .igSrLabel{font-size:12px;color:#6b7280;font-weight:900;}
 .igPill{display:inline-flex;align-items:center;justify-content:center;padding:6px 12px;border-radius:999px;background:rgba(37,99,235,0.12);color:#1d4ed8;font-weight:900;}
-.igStorePill{display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border-radius:999px;background:rgba(16,185,129,0.14);color:#065f46;font-weight:900;font-size:12px;max-width:420px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.igStorePill{display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border-radius:999px;background:rgba(16,185,129,0.14);color:#065f46;font-weight:900;font-size:12px;max-width:520px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .igDateLine{display:flex;align-items:center;gap:8px;}
 .igDateDot{width:10px;height:10px;border-radius:999px;background:rgba(16,185,129,0.25);border:2px solid rgba(16,185,129,0.45);}
 .igDateText{font-weight:900;color:#0b1220;font-size:13px;}
 .igHeadRight{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;}
 
-.igTableWrap{width:100%;overflow-x:auto;border-top:1px solid rgba(0,0,0,0.06);}
+.igTableWrap{
+  width:100%;
+  overflow-x:auto;
+  border-top:1px solid rgba(0,0,0,0.06);
+  -webkit-overflow-scrolling:touch;
+}
 .igTbl--auto{width:100%;table-layout:auto;border-collapse:collapse;font-size:13px;min-width:860px;}
 .igTbl th,.igTbl td{padding:10px 10px;border-bottom:1px solid rgba(0,0,0,0.06);vertical-align:top;}
 .igTbl th{text-align:left;font-weight:900;background:#f3f4f6;color:#0b1220;white-space:nowrap;}
@@ -994,7 +857,6 @@ const css = `
 .col-qty{width:150px;}
 .col-store{width:200px;}
 .col-bill{width:120px;}
-.col-qtyType{width:160px;}
 .col-mat{min-width:200px;}
 .col-use{min-width:260px;}
 
@@ -1005,7 +867,7 @@ const css = `
 .igQtyWrap{display:inline-flex;gap:6px;align-items:baseline;}
 .igQtyNum{font-variant-numeric: tabular-nums;}
 .igQtyType{font-weight:800;color:#334155;}
-.igStoreCell{white-space:nowrap;font-weight:800;color:#0b1220;max-width:240px;overflow:hidden;text-overflow:ellipsis;}
+.igStoreCell{white-space:nowrap;font-weight:800;color:#0b1220;max-width:280px;overflow:hidden;text-overflow:ellipsis;}
 .igUse{color:#111827;line-height:1.25;}
 .igClamp2{
   display:-webkit-box;
@@ -1017,11 +879,26 @@ const css = `
 }
 
 .igMobileActions{display:none;padding:12px;gap:10px;background:#fff;justify-content:flex-end;border-top:1px solid rgba(0,0,0,0.06);}
+
 @media (max-width: 720px){
+  .igPage{
+    padding-left: var(--safe-left);
+    padding-right: var(--safe-right);
+  }
+
+  .igTopbar{padding-left: calc(12px + var(--safe-left)); padding-right: calc(12px + var(--safe-right));}
+  .igFilters{padding-left: calc(12px + var(--safe-left)); padding-right: calc(12px + var(--safe-right));}
+  .igList{padding-left: calc(12px + var(--safe-left)); padding-right: calc(12px + var(--safe-right));}
+
   .igHeadRight{display:none;}
   .igMobileActions{display:flex;}
+
+  .igField{flex:1 1 100%;}
   .igField input{width:100%;}
-  .igFilters{align-items:stretch;}
+
+  .igBtn{padding:8px 10px;font-size:12px;border-radius:11px;}
+  .igBtn--small{padding:6px 9px;font-size:11.5px;border-radius:10px;}
+  .igBtnTiny{padding:7px 9px;font-size:12px;border-radius:11px;}
 }
 
 /* overlays */
@@ -1051,7 +928,6 @@ const css = `
 
 /* dialogs */
 .igDlg{width:100%;max-width:520px;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.25);}
-.igDlgWide{max-width:920px;}
 .igDlgScrollable{max-height: calc(100svh - 32px);display:flex;flex-direction:column;}
 @media (max-width: 768px){
   .igDlgScrollable{
@@ -1082,11 +958,4 @@ const css = `
 .igImgBody{background:#111827;overflow:auto;}
 .igImgView{width:100%;max-height:70svh;object-fit:contain;display:block;}
 .igPdfFrame{width:100%;height:70svh;border:0;display:block;background:#111827;}
-
-/* edit */
-.igEditGrid{display:grid;grid-template-columns:1fr;gap:12px;}
-@media (min-width: 900px){ .igEditGrid{grid-template-columns:1fr 1fr;} }
-.igCellInput{width:100%;border:1px solid rgba(0,0,0,0.15);border-radius:12px;padding:10px;font-size:14px;}
-.igCellTextarea{width:100%;border:1px solid rgba(0,0,0,0.15);border-radius:12px;padding:10px;font-size:14px;resize:vertical;}
-.igDivider{height:1px;background:rgba(0,0,0,0.08);width:100%;margin:10px 0;}
 `;
