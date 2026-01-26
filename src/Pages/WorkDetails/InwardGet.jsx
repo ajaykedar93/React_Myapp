@@ -880,11 +880,15 @@ const css = `
 
 .igMobileActions{display:none;padding:12px;gap:10px;background:#fff;justify-content:flex-end;border-top:1px solid rgba(0,0,0,0.06);}
 
-@media (max-width: 720px){
-  .igPage{
-    padding-left: var(--safe-left);
-    padding-right: var(--safe-right);
+
+
+  @media (max-width: 720px){
+  .igList{
+    padding-left:  calc(20px + var(--safe-left));
+    padding-right: calc(20px + var(--safe-right));
+    
   }
+}
 
   .igTopbar{padding-left: calc(12px + var(--safe-left)); padding-right: calc(12px + var(--safe-right));}
   .igFilters{padding-left: calc(12px + var(--safe-left)); padding-right: calc(12px + var(--safe-right));}
