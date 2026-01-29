@@ -105,7 +105,7 @@ const InvestmentTabs = () => {
     <div className="it-page">
       <style>{css}</style>
 
-      {/* ✅ FIXED NAVBAR */}
+      {/* ✅ FIXED NAVBAR (safe-area top space added) */}
       <nav ref={navbarRef} className="it-nav">
         <div className="it-navInner">
           <h1 className="it-title">Investment Plan</h1>
@@ -116,11 +116,7 @@ const InvestmentTabs = () => {
       </nav>
 
       {/* ✅ FIXED TABS */}
-      <div
-        ref={tabsWrapRef}
-        className="it-tabsWrap"
-        style={{ top: heights.nav + GAP_PX }}
-      >
+      <div ref={tabsWrapRef} className="it-tabsWrap" style={{ top: heights.nav + GAP_PX }}>
         <div className="it-fadeLeft" aria-hidden />
         <div className="it-fadeRight" aria-hidden />
 
@@ -158,11 +154,7 @@ const InvestmentTabs = () => {
       </div>
 
       {/* ✅ ONLY CONTENT SCROLLS */}
-      <section
-        className="it-scrollArea"
-        style={{ top: heights.nav + heights.tabs + GAP_PX }}
-      >
-        {/* ✅ Edge-to-edge on mobile | Card only on desktop */}
+      <section className="it-scrollArea" style={{ top: heights.nav + heights.tabs + GAP_PX }}>
         <div className="it-contentShell">{renderContent()}</div>
       </section>
     </div>
@@ -172,6 +164,13 @@ const InvestmentTabs = () => {
 /* ✅ Scoped CSS (only this page) */
 const css = `
   .it-page, .it-page *{ box-sizing:border-box; }
+
+  :root{
+    /* ✅ top safe padding extra so content never touches notch/camera */
+    --it-safe-top: max(env(safe-area-inset-top, 0px), 0px);
+    --it-nav-core: 64px;           /* base nav height without safe-top */
+    --it-nav-extra-top: 10px;      /* extra breathing room */
+  }
 
   .it-page{
     height:100dvh;
@@ -184,19 +183,26 @@ const css = `
       linear-gradient(180deg, #ffffff, #f5f7fb);
   }
 
-  /* Navbar */
+  /* ✅ Navbar: safe-area top space + extra padding (fix notch/camera hide) */
   .it-nav{
     position:fixed;
     top:0; left:0; right:0;
     z-index:80;
-    height:64px;
+
+    /* height becomes core + safe-top */
+    min-height: calc(var(--it-nav-core) + var(--it-safe-top));
     background: linear-gradient(90deg, #065f46 0%, #10b981 50%, #34d399 100%);
     border-bottom: 1px solid rgba(255,255,255,0.18);
     box-shadow: 0 10px 30px rgba(16,185,129,0.25), inset 0 -1px 0 rgba(255,255,255,0.06);
+
     display:flex;
-    align-items:center;
-    padding: 10px 14px;
-    padding-top: calc(10px + env(safe-area-inset-top, 0px));
+    align-items:flex-end;
+
+    /* ✅ main fix */
+    padding-top: calc(var(--it-safe-top) + var(--it-nav-extra-top));
+    padding-bottom: 10px;
+    padding-left: 14px;
+    padding-right: 14px;
   }
 
   .it-navInner{
@@ -308,16 +314,16 @@ const css = `
     left:0; right:0; bottom:0;
     overflow-y:auto;
     -webkit-overflow-scrolling: touch;
-    padding: 0; /* ✅ no outside padding */
+    padding: 0;
   }
 
-  /* ✅ Mobile: edge-to-edge (no card/padding) */
+  /* Mobile: edge-to-edge */
   .it-contentShell{
     width:100%;
-    padding: 12px; /* inner padding for content readability */
+    padding: 12px;
   }
 
-  /* ✅ Desktop: centered card */
+  /* Desktop: centered card */
   @media (min-width: 900px){
     .it-contentShell{
       max-width: 1100px;
@@ -332,10 +338,14 @@ const css = `
 
   /* Small screens tweaks */
   @media (max-width: 540px){
+    :root{
+      --it-nav-core: 58px;      /* your old 58px */
+      --it-nav-extra-top: 45px; /* ✅ a bit more breathing room on mobile */
+    }
+
     .it-tabBtn{ min-width: auto; padding: 10px 11px; font-size: 0.88rem; }
     .it-tabIcon{ font-size: 1.05rem; }
     .it-contentShell{ padding: 10px; }
-    .it-nav{ height:58px; }
   }
 `;
 
