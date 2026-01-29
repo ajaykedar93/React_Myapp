@@ -232,7 +232,7 @@ export default function InwardViewOnly() {
       ) : groups.length === 0 ? (
         <div className="ivCenter">No records found</div>
       ) : (
-        <div className="ivTableWrap">
+        <div className="ivTableWrap" role="region" aria-label="Inward table scroll area">
           <table className="ivTable">
             <thead>
               <tr>
@@ -251,12 +251,8 @@ export default function InwardViewOnly() {
                   {g.stores.map((storeGroup, sIdx) => (
                     <React.Fragment key={`${g.date}-${storeGroup.store}-${sIdx}`}>
                       {storeGroup.items.map((r, idx) => {
-                        // ✅ Date should show for EACH store group
                         const showDate = idx === 0;
-
-                        // ✅ Sr.No should show ONLY ONCE PER DATE (first store's first row)
                         const showSrNo = sIdx === 0 && idx === 0;
-
                         const showStore = idx === 0;
                         const letter = String.fromCharCode(97 + idx);
 
@@ -274,7 +270,7 @@ export default function InwardViewOnly() {
                               {r.quantity_type ? ` ${r.quantity_type}` : ""}
                             </td>
 
-                            <td className="ivStore">{showStore ? (storeGroup.store || "—") : ""}</td>
+                            <td className="ivStore">{showStore ? storeGroup.store || "—" : ""}</td>
                             <td>{r.material_use}</td>
                           </tr>
                         );
@@ -298,6 +294,13 @@ export default function InwardViewOnly() {
                 </React.Fragment>
               ))}
             </tbody>
+
+            {/* ✅ bottom space inside table so last row never hides */}
+            <tfoot>
+              <tr aria-hidden="true">
+                <td colSpan={6} className="ivTfootSpacer" />
+              </tr>
+            </tfoot>
           </table>
         </div>
       )}
@@ -322,8 +325,8 @@ export default function InwardViewOnly() {
 
 const css = `
 :root{
-  /* ✅ extra bottom space so last row never hides behind mobile nav/buttons */
-  --iv-bottom-gap: 110px;
+  --iv-wrap-offset: 180px;      /* header + padding approx */
+  --iv-table-bottom-gap: 140px; /* space for last row visibility */
 }
 
 html, body {
@@ -331,19 +334,17 @@ html, body {
   background: #f6f8fc;
   margin: 0;
 }
+
 #root { min-height: 100%; background:#f6f8fc; }
 * { box-sizing: border-box; }
-body { overscroll-behavior-y: none; }
 
 .ivPage{
   min-height:100dvh;
   background:#f6f8fc;
   padding:16px;
-
-  /* ✅ IMPORTANT: add bottom padding */
-  padding-bottom: calc(var(--iv-bottom-gap) + env(safe-area-inset-bottom));
 }
 
+/* Header */
 .ivHeader{
   background:#0b1220;
   color:#fff;
@@ -409,12 +410,18 @@ body { overscroll-behavior-y: none; }
   font-weight:700;
 }
 
+/* ✅ IMPORTANT: Table area scrolls, header row stays fixed */
 .ivTableWrap{
   background:#fff;
   border-radius:14px;
-  overflow:auto;
+  overflow:auto; /* ✅ BOTH scroll */
   box-shadow:0 12px 30px rgba(0,0,0,.08);
   -webkit-overflow-scrolling: touch;
+
+  /* ✅ fixed height scroll area => only body rows scroll */
+  max-height: calc(100dvh - var(--iv-wrap-offset));
+  overscroll-behavior: contain;
+  touch-action: pan-x pan-y;
 }
 
 .ivTable{
@@ -433,10 +440,14 @@ body { overscroll-behavior-y: none; }
   vertical-align:top;
 }
 
+/* ✅ STICKY HEADER (won't scroll) */
 .ivTable th{
   background:#f3f4f6;
   font-weight:900;
   white-space:nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 5;
 }
 
 .ivSr{ font-weight:900; white-space:nowrap; }
@@ -444,6 +455,7 @@ body { overscroll-behavior-y: none; }
 .ivStore{ white-space:nowrap; font-weight:700; }
 .ivLetterBlack{ font-weight:900; color:#111827; }
 
+/* separators */
 .ivSepRow td{
   padding:0 !important;
   border-bottom:none !important;
@@ -468,13 +480,21 @@ body { overscroll-behavior-y: none; }
   margin:10px 0;
 }
 
+/* ✅ bottom spacer INSIDE table */
+.ivTfootSpacer{
+  height: calc(var(--iv-table-bottom-gap) + env(safe-area-inset-bottom));
+  border-bottom:none !important;
+  padding:0 !important;
+  background:#fff;
+}
+
+/* Toast */
 .ivToastBackdrop{
   position:fixed;
   inset:0;
   background:transparent;
   z-index:999998;
 }
-
 .ivToast{
   position:fixed;
   left:50%;
@@ -492,9 +512,12 @@ body { overscroll-behavior-y: none; }
   text-align:center;
 }
 
-/* ✅ Mobile: slightly more bottom gap because nav bars are taller sometimes */
+/* ✅ Mobile tuning */
 @media (max-width: 560px){
-  :root{ --iv-bottom-gap: 140px; }
+  :root{
+    --iv-wrap-offset: 230px;
+    --iv-table-bottom-gap: 220px;
+  }
 
   .ivHeaderTop{
     flex-direction:column;
