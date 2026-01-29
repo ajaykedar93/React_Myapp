@@ -321,6 +321,11 @@ export default function InwardViewOnly() {
 /* ================= STYLES ================= */
 
 const css = `
+:root{
+  /* ✅ extra bottom space so last row never hides behind mobile nav/buttons */
+  --iv-bottom-gap: 110px;
+}
+
 html, body {
   height: 100%;
   background: #f6f8fc;
@@ -334,6 +339,9 @@ body { overscroll-behavior-y: none; }
   min-height:100dvh;
   background:#f6f8fc;
   padding:16px;
+
+  /* ✅ IMPORTANT: add bottom padding */
+  padding-bottom: calc(var(--iv-bottom-gap) + env(safe-area-inset-bottom));
 }
 
 .ivHeader{
@@ -484,7 +492,10 @@ body { overscroll-behavior-y: none; }
   text-align:center;
 }
 
+/* ✅ Mobile: slightly more bottom gap because nav bars are taller sometimes */
 @media (max-width: 560px){
+  :root{ --iv-bottom-gap: 140px; }
+
   .ivHeaderTop{
     flex-direction:column;
     align-items:stretch;
