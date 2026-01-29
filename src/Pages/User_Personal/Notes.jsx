@@ -15,25 +15,28 @@ const MONTHS = [
 
 function daysInMonth(m, y) { return new Date(y, m, 0).getDate(); }
 function toDMY(day, monthShort, year) { return `${Number(day)} ${monthShort} ${Number(year)}`; }
+
 function parseDMY(str) {
   if (!str) return null;
   const parts = String(str).trim().split(/\s+/);
   if (parts.length !== 3) return null;
   const [dStr, mStr, yStr] = parts;
   const day = Number(dStr);
-  const monthShort = mStr;
   const year = Number(yStr);
-  if (!day || !year || !MONTHS.find((m) => m.short === monthShort)) return null;
-  return { day, monthShort, year };
+  if (!day || !year || !MONTHS.find((m) => m.short === mStr)) return null;
+  return { day, monthShort: mStr, year };
 }
+
 function normalizeDMY(str) {
   const p = parseDMY(String(str || "").trim());
   if (!p) return "";
   return toDMY(p.day, p.monthShort, p.year);
 }
+
 function toPrettyDate(val) {
   if (!val) return "";
   if (typeof val === "string") {
+    // ISO from backend: YYYY-MM-DD
     const m = val.match(/^(\d{4})-(\d{2})-(\d{2})/);
     if (m) {
       const y = +m[1], mo = +m[2], d = +m[3];
@@ -43,23 +46,17 @@ function toPrettyDate(val) {
     const already = normalizeDMY(val);
     if (already) return already;
   }
-  if (val instanceof Date) {
-    const y = val.getUTCFullYear();
-    const mo = val.getUTCMonth();
-    const d = val.getUTCDate();
+  const d = new Date(val);
+  if (!isNaN(d)) {
+    const y = d.getUTCFullYear();
+    const mo = d.getUTCMonth();
+    const da = d.getUTCDate();
     const monthShort = MONTHS[mo]?.short || "Jan";
-    return `${d} ${monthShort} ${y}`;
-  }
-  const dobj = new Date(val);
-  if (!isNaN(dobj)) {
-    const y = dobj.getUTCFullYear();
-    const mo = dobj.getUTCMonth();
-    const d = dobj.getUTCDate();
-    const monthShort = MONTHS[mo]?.short || "Jan";
-    return `${d} ${monthShort} ${y}`;
+    return `${da} ${monthShort} ${y}`;
   }
   return String(val);
 }
+
 function dmyToUTC(dmy) {
   const p = parseDMY(toPrettyDate(dmy));
   if (!p) return new Date(0);
@@ -122,11 +119,7 @@ function DateSelect({ value, onChange, label, idPrefix = "ds", required = false 
   useEffect(() => {
     const pretty = toPrettyDate(value);
     const p = parseDMY(pretty);
-    if (p) {
-      setDay(p.day);
-      setMonthShort(p.monthShort);
-      setYear(p.year);
-    }
+    if (p) { setDay(p.day); setMonthShort(p.monthShort); setYear(p.year); }
   }, [value]);
 
   const totalDays = daysInMonth(MONTHS.find((m) => m.short === monthShort)?.num || 1, year);
@@ -157,11 +150,7 @@ function DateSelect({ value, onChange, label, idPrefix = "ds", required = false 
           required={required}
           style={{ maxWidth: 110 }}
         >
-          {dayOptions.map((d) => (
-            <option key={d} value={d}>
-              {d}
-            </option>
-          ))}
+          {dayOptions.map((d) => <option key={d} value={d}>{d}</option>)}
         </select>
 
         <select
@@ -172,11 +161,7 @@ function DateSelect({ value, onChange, label, idPrefix = "ds", required = false 
           required={required}
           style={{ maxWidth: 140 }}
         >
-          {MONTHS.map((m) => (
-            <option key={m.short} value={m.short}>
-              {m.short}
-            </option>
-          ))}
+          {MONTHS.map((m) => <option key={m.short} value={m.short}>{m.short}</option>)}
         </select>
 
         <select
@@ -187,13 +172,10 @@ function DateSelect({ value, onChange, label, idPrefix = "ds", required = false 
           required={required}
           style={{ maxWidth: 130 }}
         >
-          {years.map((y) => (
-            <option key={y} value={y}>
-              {y}
-            </option>
-          ))}
+          {years.map((y) => <option key={y} value={y}>{y}</option>)}
         </select>
       </div>
+
       <div className="form-text mt-1 fs-11-13">
         Format: <strong>{toDMY(day, monthShort, year)}</strong>
       </div>
@@ -204,17 +186,14 @@ function DateSelect({ value, onChange, label, idPrefix = "ds", required = false 
 /* ====== Hook: detect if a block overflows 3 lines ====== */
 function useOverflowMap(ids, depKey) {
   const refs = useRef({});
-  const [map, setMap] = useState({}); // { [id]: true/false }
+  const [map, setMap] = useState({});
 
   useEffect(() => {
     const calc = () => {
       const next = {};
       ids.forEach((id) => {
         const el = refs.current[id];
-        if (!el) {
-          next[id] = false;
-          return;
-        }
+        if (!el) { next[id] = false; return; }
 
         el.classList.add("no-clamp");
         const full = el.scrollHeight;
@@ -234,11 +213,10 @@ function useOverflowMap(ids, depKey) {
   return { refs, needMore: map };
 }
 
-/* ========================= Notes Page (professional) ========================= */
 export default function NotesProfessional() {
   const [form, setForm] = useState({
     title: "",
-    note_date: "",        // ✅ same date, multiple notes allowed
+    note_date: "",
     details: "",
     user_name: "",
     user_email: "",
@@ -248,31 +226,24 @@ export default function NotesProfessional() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
-  // Search & Month
   const [search, setSearch] = useState("");
   const [monthFilter, setMonthFilter] = useState("All");
-
-  // Edit modal
   const [editItem, setEditItem] = useState(null);
 
-  // Toast overlay
   const [overlayMsg, setOverlayMsg] = useState({ show: false, type: "", text: "" });
   const toastTimerRef = useRef(null);
 
-  // Pagination
   const PAGE_SIZE = 12;
   const [page, setPage] = useState(1);
 
-  // Refs
   const addFormRef = useRef(null);
   const listRef = useRef(null);
 
-  // Expanded
   const [expandedIds, setExpandedIds] = useState(() => new Set());
 
-  // One-time CSS (professional, consistent, vibrant)
+  // One-time CSS
   useEffect(() => {
-    const id = "notes-pro-style-v2";
+    const id = "notes-pro-style-v3";
     if (document.getElementById(id)) return;
     const s = document.createElement("style");
     s.id = id;
@@ -281,21 +252,16 @@ export default function NotesProfessional() {
         --txt-10-12: clamp(10px, 2.7vw, 12px);
         --txt-11-13: clamp(11px, 2.8vw, 13px);
         --txt-12-14: clamp(12px, 3.2vw, 14px);
-        --txt-13-15: clamp(13px, 3.4vw, 15px);
         --txt-14-16: clamp(14px, 3.8vw, 16px);
         --txt-16-20: clamp(16px, 4.6vw, 20px);
 
-        --brandA: #0ea5e9;
-        --brandB: #22c55e;
-        --brandC: #a855f7;
-        --ink: #0b1221;
-        --muted: rgba(15,23,42,.70);
+        --brandA:#0ea5e9;
+        --brandB:#22c55e;
+        --brandC:#a855f7;
       }
 
-      .fs-10-12 { font-size: var(--txt-10-12); }
       .fs-11-13, .fs-11-13 * { font-size: var(--txt-11-13); }
       .fs-12-14, .fs-12-14 * { font-size: var(--txt-12-14); }
-      .fs-13-15 { font-size: var(--txt-13-15); }
       .fs-14-16 { font-size: var(--txt-14-16); }
 
       .np-glass{
@@ -306,28 +272,28 @@ export default function NotesProfessional() {
         box-shadow: 0 14px 40px rgba(0,0,0,0.07);
       }
 
-      .np-headerTitle{
+      .np-title{
         background: linear-gradient(90deg,var(--brandA),var(--brandB),var(--brandC));
-        -webkit-background-clip: text;
+        -webkit-background-clip:text;
         background-clip:text;
         color: transparent;
         font-weight: 950;
         letter-spacing: .2px;
       }
 
-      .np-pillTabs{
+      .np-tabs{
         background: linear-gradient(180deg,#fff,#f8fbff);
         border: 1px solid rgba(2,6,23,0.06);
         border-radius: 16px;
         padding: 6px;
       }
-      .np-pillTabs .nav-link{
+      .np-tabs .nav-link{
         border-radius: 999px;
         font-weight: 900;
         color: #0f172a;
         padding: .5rem 1rem;
       }
-      .np-pillTabs .nav-link.active{
+      .np-tabs .nav-link.active{
         background: linear-gradient(90deg,var(--brandA),var(--brandB));
         color: white;
         box-shadow: 0 10px 22px rgba(14,165,233,.22);
@@ -341,7 +307,6 @@ export default function NotesProfessional() {
         background: linear-gradient(90deg,var(--brandA),var(--brandB));
         box-shadow: 0 14px 26px rgba(2,6,23,.12);
       }
-      .np-btnGrad:disabled{ opacity: .65; }
 
       .np-card{
         position: relative;
@@ -434,7 +399,6 @@ export default function NotesProfessional() {
         place-items: center;
         z-index: 2400;
         background: rgba(0,0,0,0.28);
-        animation: fadeIn .18s ease both;
         padding: 14px;
       }
       .np-overlayCard{
@@ -444,13 +408,9 @@ export default function NotesProfessional() {
         border: 1px solid rgba(2,6,23,.10);
         box-shadow: 0 20px 60px rgba(0,0,0,.20);
         padding: 16px;
-        animation: popIn .18s ease both;
       }
       .np-overlayCard.success{ border-left: 6px solid #22c55e; }
       .np-overlayCard.error{ border-left: 6px solid #ef4444; }
-
-      @keyframes fadeIn{ from{opacity:0} to{opacity:1} }
-      @keyframes popIn{ from{transform:scale(.97);opacity:0} to{transform:scale(1);opacity:1} }
 
       .form-label{ font-weight: 900; color: rgba(15,23,42,.78); }
       .form-control, .form-select{
@@ -463,7 +423,6 @@ export default function NotesProfessional() {
     document.head.appendChild(s);
   }, []);
 
-  /* toast */
   const showCenterMsg = (type, text, ms = 1600) => {
     setOverlayMsg({ show: true, type, text });
     clearTimeout(toastTimerRef.current);
@@ -473,17 +432,21 @@ export default function NotesProfessional() {
     );
   };
 
-  /* fetch notes */
   const fetchNotes = async () => {
     setLoading(true);
     try {
       const res = await fetch(BASE_URL);
       const json = await res.json();
       if (!res.ok) throw new Error(json.message || "Fetch failed");
-      let data = Array.isArray(json.data) ? json.data : [];
 
-      // ✅ Sort by date desc (same date allowed, no issue)
-      data.sort((a, b) => dmyToUTC(b.note_date) - dmyToUTC(a.note_date));
+      const data = Array.isArray(json.data) ? json.data : [];
+      // backend already sorts, but we keep safe sort:
+      data.sort((a, b) => {
+        const d = dmyToUTC(b.note_date) - dmyToUTC(a.note_date);
+        if (d !== 0) return d;
+        return (b.id || 0) - (a.id || 0); // same date: newest id first
+      });
+
       setNotes(data);
     } catch (err) {
       showCenterMsg("error", err.message);
@@ -494,7 +457,6 @@ export default function NotesProfessional() {
 
   useEffect(() => { fetchNotes(); }, []);
 
-  /* add note (same date multiple allowed) */
   const addNote = async () => {
     if (!form.title.trim()) return showCenterMsg("error", "Title is required.");
     if (!form.note_date) return showCenterMsg("error", "Please select a date.");
@@ -504,7 +466,7 @@ export default function NotesProfessional() {
 
     const payload = {
       title: form.title.trim(),
-      note_date: normalized,
+      note_date: normalized, // backend converts to ISO DATE
       details: form.details || "",
       user_name: form.user_name || "",
       user_email: form.user_email || "",
@@ -520,11 +482,11 @@ export default function NotesProfessional() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.message || "Add failed");
 
-      setForm({ title: "", note_date: normalized, details: "", user_name: "", user_email: "" });
+      // ✅ keep the same date so user can add multiple notes for same date quickly
+      setForm((f) => ({ ...f, title: "", details: "", user_name: "", user_email: "" }));
+
       showCenterMsg("success", "Note added successfully");
       await fetchNotes();
-
-      // Smooth scroll to list
       listRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch (e) {
       showCenterMsg("error", e.message);
@@ -533,7 +495,6 @@ export default function NotesProfessional() {
     }
   };
 
-  /* delete note */
   const deleteNote = async (id) => {
     const res = await Swal.fire({
       title: "Delete this note?",
@@ -554,7 +515,6 @@ export default function NotesProfessional() {
       showCenterMsg("success", "Note deleted");
       await fetchNotes();
 
-      // keep pagination valid
       setPage((p) => {
         const newTotal = Math.max(0, filtered.length - 1);
         const totalPages = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
@@ -567,7 +527,6 @@ export default function NotesProfessional() {
     }
   };
 
-  /* update note */
   const updateNote = async () => {
     if (!editItem) return;
     if (!String(editItem.title || "").trim()) return showCenterMsg("error", "Title is required.");
@@ -603,7 +562,6 @@ export default function NotesProfessional() {
     }
   };
 
-  /* client filters */
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return notes.filter((n) => {
@@ -615,7 +573,6 @@ export default function NotesProfessional() {
     });
   }, [notes, search, monthFilter]);
 
-  /* pagination */
   const total = filtered.length;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const pageItems = useMemo(() => {
@@ -628,7 +585,6 @@ export default function NotesProfessional() {
 
   useEffect(() => { setPage(1); }, [search, monthFilter]);
 
-  /* expand */
   const isExpanded = (id) => expandedIds.has(id);
   const toggleExpand = (id) => {
     setExpandedIds((prev) => {
@@ -639,7 +595,6 @@ export default function NotesProfessional() {
     });
   };
 
-  /* overflow map */
   const currentIds = pageItems.map((n) => n.id);
   const { refs: detailsRefs, needMore } = useOverflowMap(
     currentIds,
@@ -679,11 +634,11 @@ export default function NotesProfessional() {
             N
           </div>
           <div>
-            <h4 className="m-0 np-headerTitle" style={{ fontSize: "var(--txt-16-20)" }}>
+            <h4 className="m-0 np-title" style={{ fontSize: "var(--txt-16-20)" }}>
               Notes Manager
             </h4>
             <div className="text-muted fs-11-13">
-              Add unlimited notes (same date allowed) • Clean & Professional
+              Add unlimited notes (same date allowed) • Professional UI
             </div>
           </div>
         </div>
@@ -695,7 +650,7 @@ export default function NotesProfessional() {
       </div>
 
       {/* Tabs */}
-      <div className="np-pillTabs mb-3">
+      <div className="np-tabs mb-3">
         <ul className="nav nav-pills gap-2">
           <li className="nav-item">
             <button className="nav-link active" onClick={() => scrollToRef(listRef)} type="button">
@@ -793,7 +748,6 @@ export default function NotesProfessional() {
           <button className="btn np-btnGrad btn-lg px-5 py-2 w-100 w-md-auto" onClick={addNote} disabled={busy} type="button">
             {busy ? "Saving…" : "Add Note"}
           </button>
-
           <button
             className="btn btn-outline-secondary btn-lg px-4 py-2 w-100 w-md-auto"
             onClick={() => setForm((f) => ({ ...f, title: "", details: "", user_name: "", user_email: "" }))}
@@ -834,16 +788,14 @@ export default function NotesProfessional() {
                       boxShadow: `0 12px 30px rgba(0,0,0,.06), 0 6px 20px ${glow}`,
                     }}
                   >
-                    {/* Date badge */}
                     <div className="np-badgeWrap">
                       <span className={`badge ${badgeClass}`}>{datePretty || "-"}</span>
                     </div>
 
-                    {/* Meta row */}
                     <div className="np-meta np-prBadge">
-                      <span className="text-muted fs-10-12">#{rowNumber}</span>
+                      <span className="text-muted fs-11-13">#{rowNumber}</span>
                       {n.user_name ? (
-                        <span className="text-muted fs-10-12 text-truncate" title={n.user_name}>
+                        <span className="text-muted fs-11-13 text-truncate" title={n.user_name}>
                           {n.user_name}
                         </span>
                       ) : (
@@ -852,25 +804,15 @@ export default function NotesProfessional() {
                     </div>
 
                     <div className="np-prBadge">
-                      <h6
-                        className="fw-bold mb-1"
-                        title={n.title}
-                        style={{
-                          wordBreak: "break-word",
-                          fontSize: "var(--txt-14-16)",
-                          fontWeight: 950,
-                        }}
-                      >
+                      <h6 className="fw-bold mb-1" title={n.title} style={{ wordBreak: "break-word", fontWeight: 950 }}>
                         {n.title}
                       </h6>
 
                       <div
-                        ref={(el) => {
-                          if (el) detailsRefs.current[n.id] = el;
-                        }}
+                        ref={(el) => { if (el) detailsRefs.current[n.id] = el; }}
                         className={`text-secondary ${expanded ? "" : "truncate-3"}`}
                         title={details}
-                        style={{ fontSize: "var(--txt-12-14)", lineHeight: 1.52, color: "var(--muted)" }}
+                        style={{ fontSize: "var(--txt-12-14)", lineHeight: 1.52 }}
                       >
                         {details}
                       </div>
@@ -890,17 +832,11 @@ export default function NotesProfessional() {
                     <div className="mt-3 d-flex justify-content-end gap-2 flex-wrap">
                       <button
                         className="btn btn-outline-primary btn-sm np-chipBtn fs-12-14"
-                        onClick={() =>
-                          setEditItem({
-                            ...n,
-                            note_date: datePretty || n.note_date,
-                          })
-                        }
+                        onClick={() => setEditItem({ ...n, note_date: datePretty || n.note_date })}
                         type="button"
                       >
                         Edit
                       </button>
-
                       <button
                         className="btn btn-outline-danger btn-sm np-chipBtn fs-12-14"
                         onClick={() => deleteNote(n.id)}
@@ -916,7 +852,6 @@ export default function NotesProfessional() {
           </div>
         )}
 
-        {/* Pagination footer */}
         {!loading && total > 0 && (
           <div className="d-flex flex-wrap align-items-center justify-content-between p-2 p-md-3 gap-2 mt-2">
             <div className="text-muted fs-12-14">
@@ -949,61 +884,31 @@ export default function NotesProfessional() {
       </div>
 
       {/* Floating Add */}
-      <button
-        className="np-fab btn np-btnGrad"
-        onClick={() => scrollToRef(addFormRef)}
-        aria-label="Add Note"
-        title="Add Note"
-        type="button"
-      >
+      <button className="np-fab btn np-btnGrad" onClick={() => scrollToRef(addFormRef)} type="button" aria-label="Add Note">
         +
       </button>
 
       {/* Edit Modal */}
       {editItem && (
-        <div
-          className="np-overlay"
-          onClick={(e) => e.target.classList.contains("np-overlay") && setEditItem(null)}
-        >
+        <div className="np-overlay" onClick={(e) => e.target.classList.contains("np-overlay") && setEditItem(null)}>
           <div className="np-overlayCard">
             <div className="d-flex align-items-center justify-content-between mb-2">
-              <h5 className="mb-0 fs-14-16" style={{ fontWeight: 950 }}>
-                Edit Note
-              </h5>
-              <button className="btn btn-light btn-sm" onClick={() => setEditItem(null)} type="button">
-                ✕
-              </button>
+              <h5 className="mb-0 fs-14-16" style={{ fontWeight: 950 }}>Edit Note</h5>
+              <button className="btn btn-light btn-sm" onClick={() => setEditItem(null)} type="button">✕</button>
             </div>
 
             <label className="form-label fs-12-14">Title</label>
-            <input
-              className="form-control mb-2"
-              value={editItem.title || ""}
-              onChange={(e) => setEditItem({ ...editItem, title: e.target.value })}
-            />
+            <input className="form-control mb-2" value={editItem.title || ""} onChange={(e) => setEditItem({ ...editItem, title: e.target.value })} />
 
             <div className="mb-2">
-              <DateSelect
-                label="Date"
-                value={editItem.note_date}
-                onChange={(v) => setEditItem({ ...editItem, note_date: v })}
-                idPrefix="edit"
-                required
-              />
+              <DateSelect label="Date" value={editItem.note_date} onChange={(v) => setEditItem({ ...editItem, note_date: v })} idPrefix="edit" required />
             </div>
 
             <label className="form-label fs-12-14">Details</label>
-            <textarea
-              className="form-control mb-3"
-              rows="3"
-              value={editItem.details || ""}
-              onChange={(e) => setEditItem({ ...editItem, details: e.target.value })}
-            />
+            <textarea className="form-control mb-3" rows="3" value={editItem.details || ""} onChange={(e) => setEditItem({ ...editItem, details: e.target.value })} />
 
             <div className="d-flex justify-content-end gap-2 flex-wrap">
-              <button className="btn btn-light" onClick={() => setEditItem(null)} type="button">
-                Cancel
-              </button>
+              <button className="btn btn-light" onClick={() => setEditItem(null)} type="button">Cancel</button>
               <button className="btn np-btnGrad px-4" onClick={updateNote} type="button" disabled={busy}>
                 {busy ? "Updating…" : "Update"}
               </button>
