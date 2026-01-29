@@ -177,19 +177,22 @@ export default function UserTabs() {
           min-width:0;
           flex: 1 1 auto;
         }
+.ut-title{
+  font-weight: 900;
+  color: #0b1220;
+  letter-spacing: .2px;
+  line-height: 1.1;
 
-        .ut-title{
-          font-weight: 900;
-          color: #0b1220;
-          letter-spacing: .2px;
-          line-height: 1.1;
+  /* ✅ small breathing space from top */
+  padding-top: 40px;
 
-          /* ✅ no cut */
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          font-size: clamp(16px, 2.2vw, 22px);
-        }
+  /* ✅ no cut */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: clamp(16px, 2.2vw, 22px);
+}
+
 
         .ut-subtitle{
           font-size: 12px;
@@ -197,20 +200,26 @@ export default function UserTabs() {
           margin-top: 2px;
         }
 
-        /* ✅ Professional button, never cuts */
-        .ut-dash-btn{
-          flex: 0 0 auto;
-          background: #fbbf24;
-          border: 1px solid rgba(0,0,0,0.12);
-          font-weight: 800;
-          border-radius: 999px;
-          padding: 10px 14px;
-          white-space: nowrap;
-          line-height: 1;
-          font-size: 0.95rem;
-          box-shadow: 0 6px 14px rgba(2,6,23,.12), inset 0 1px 0 rgba(255,255,255,.4);
-          transition: transform .12s ease, filter .12s ease;
-        }
+       /* ✅ Professional button, never cuts */
+.ut-dash-btn{
+  flex: 0 0 auto;
+  background: #fbbf24;
+  border: 1px solid rgba(0,0,0,0.12);
+  font-weight: 800;
+  border-radius: 999px;
+  padding: 10px 14px;
+  white-space: nowrap;
+  line-height: 1;
+  font-size: 0.95rem;
+
+  /* ✅ small top breathing space */
+  margin-top: 40px;
+
+  box-shadow: 0 6px 14px rgba(2,6,23,.12),
+              inset 0 1px 0 rgba(255,255,255,.4);
+  transition: transform .12s ease, filter .12s ease;
+}
+
         .ut-dash-btn:hover{ transform: translateY(-1px); filter: brightness(.98); }
         .ut-dash-btn:active{ transform: translateY(0); }
 

@@ -160,7 +160,7 @@ export default function TransactionDashboard() {
           height: calc(var(--nav-h) + var(--safeTop));
           z-index: 100;
           background: linear-gradient(120deg, #1d4ed8, #2563eb);
-          padding: calc(var(--safeTop) + 8px) 14px 8px;
+          padding: calc(var(--safeTop) + 12px) 14px 8px;
           border-bottom: 1px solid rgba(148,163,184,0.4);
           box-shadow: 0 18px 40px rgba(15,23,42,0.2);
           backdrop-filter: blur(10px);
@@ -169,6 +169,7 @@ export default function TransactionDashboard() {
           color: #f9fafb;
         }
 
+ 
         .td-nav-inner {
           width: 100%;
           max-width: 1120px;
