@@ -172,44 +172,57 @@ const Dashboard = () => {
           --footer-h: 110px;
         }
 
-        html, body { margin: 0; padding: 0; }
+        html, body { margin: 0; padding: 0; height: 100%; overflow-y: auto; background: #f7fafc; }
 
+        /* ✅ IMPORTANT: remove overflow hidden => page scroll will work on mobile */
         .dashboard-container {
           min-height: 100dvh;
-          display: flex; flex-direction: column;
-          overflow: hidden;
           background: #f7fafc;
           -webkit-tap-highlight-color: transparent;
         }
 
         .custom-navbar {
-          margin: 0 !important; position: fixed !important;
-          top: var(--top-strip); left: 0; right: 0; z-index: 1190;
+          margin: 0 !important;
+          position: fixed !important;
+          top: var(--top-strip);
+          left: 0; right: 0;
+          z-index: 1190;
         }
-        .top-strip { position: fixed !important; top: 0; left: 0; right: 0; height: 6px; z-index: 1200; }
+
+        .top-strip {
+          position: fixed !important;
+          top: 0; left: 0; right: 0;
+          height: 6px;
+          z-index: 1200;
+        }
 
         .dashboard-container .pro-footer {
-          margin: 0 !important; position: fixed !important;
-          left: 0; right: 0; bottom: 0; z-index: 1030;
+          margin: 0 !important;
+          position: fixed !important;
+          left: 0; right: 0;
+          bottom: 0;
+          z-index: 1030;
           padding-bottom: max(env(safe-area-inset-bottom, 0px), 8px);
           background-clip: padding-box;
         }
 
+        /* ✅ PAGE SCROLL (no inner scroll box) */
         .dashboard-scroll {
+          /* create space for fixed navbar */
+          padding-top: 10px;
           margin-top: var(--nav-h);
-          margin-bottom: var(--footer-h);
-          height: calc(100dvh - var(--nav-h) - var(--footer-h));
-          min-height: calc(100dvh - var(--nav-h) - var(--footer-h));
-          overflow-y: auto;
-          overscroll-behavior: contain;
-          -webkit-overflow-scrolling: touch;
-          scroll-behavior: smooth;
-          scrollbar-gutter: stable both-edges;
+
+          /* create space for fixed footer so content never hides */
+          padding-bottom: calc(var(--footer-h) + 24px + env(safe-area-inset-bottom, 0px));
+
+          /* no height/overflow here => body scroll handles it */
+          height: auto;
+          overflow: visible;
         }
 
         .dashboard-content { padding: 16px 12px 24px; }
 
-        /* ✅ FORCE CARD GAP ON MOBILE (overrides global .row > * { padding:0 !important }) */
+        /* ✅ FORCE CARD GAP ON MOBILE (overrides global rules) */
         .dashboard-content .dashboard-cards-row{
           --bs-gutter-x: 18px;
           --bs-gutter-y: 18px;
@@ -219,23 +232,17 @@ const Dashboard = () => {
           .dashboard-content .dashboard-cards-row{
             --bs-gutter-x: 16px !important;
             --bs-gutter-y: 16px !important;
-
-            /* restore bootstrap negative margins, because other page set margin 0 !important */
             margin-left: calc(var(--bs-gutter-x) / -2) !important;
             margin-right: calc(var(--bs-gutter-x) / -2) !important;
           }
 
           .dashboard-content .dashboard-cards-row > *{
-            /* IMPORTANT: must be !important to beat other page global rule */
             padding-left: calc(var(--bs-gutter-x) / 2) !important;
             padding-right: calc(var(--bs-gutter-x) / 2) !important;
-
-            /* extra vertical spacing in case gutter-y got zeroed */
             margin-top: 0 !important;
             margin-bottom: var(--bs-gutter-y) !important;
           }
 
-          /* last row bottom spacing avoid too much */
           .dashboard-content .dashboard-cards-row > *:last-child{
             margin-bottom: 6px !important;
           }
@@ -250,6 +257,7 @@ const Dashboard = () => {
           display: flex;
           transition: transform .2s ease, box-shadow .2s ease;
         }
+
         .square-card__content{
           height: 100%; width: 100%;
           display: flex;
@@ -260,6 +268,7 @@ const Dashboard = () => {
           gap: 10px;
           text-align: center;
         }
+
         .square-card__img{
           max-width: 72%;
           max-height: 62%;
@@ -268,6 +277,7 @@ const Dashboard = () => {
           user-select: none;
           -webkit-user-drag: none;
         }
+
         @media (max-width: 576px){
           .square-card__img{ max-width: 78%; max-height: 66%; }
         }
@@ -275,6 +285,7 @@ const Dashboard = () => {
         @media (hover:hover){
           .square-card:hover { transform: translateY(-6px); box-shadow: 0 12px 24px rgba(16,24,40,.12); }
         }
+
         .square-card:focus-visible {
           outline: none;
           box-shadow: 0 0 0 4px rgba(59,130,246,.45), 0 12px 24px rgba(16,24,40,.12);
@@ -289,8 +300,11 @@ const Dashboard = () => {
         .transaction-card { background-color: #ef4444; color: #ffffff; }
         .work-details-card{ background-color: #a855f7; color: #ffffff; }
 
+        /* ✅ sticky banner but doesn't break mobile scroll */
         .manage-details-banner {
-          position: sticky; top: 0; z-index: 5;
+          position: sticky;
+          top: 0;
+          z-index: 5;
           font-family: 'Poppins','Segoe UI',system-ui,-apple-system,Roboto,Arial,sans-serif;
           font-weight: 800;
           font-size: 1.45rem;
@@ -317,7 +331,6 @@ const Dashboard = () => {
           .square-card, .square-card:hover, .square-card:focus-visible {
             transition: none !important; transform: none !important;
           }
-          .dashboard-scroll { scroll-behavior: auto; }
         }
       `}</style>
     </div>

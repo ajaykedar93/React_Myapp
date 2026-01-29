@@ -57,7 +57,9 @@ function TabButton({ id, active, onClick, onKeyDown, children, c1, c2 }) {
       >
         <span className="pill-ripple" aria-hidden="true" />
         <span className="d-flex align-items-center justify-content-center w-100 gap-2 tab-content-wrap">
-          <span className="me-1" aria-hidden="true">{children && children[0]}</span>
+          <span className="me-1" aria-hidden="true">
+            {children && children[0]}
+          </span>
           <span className="tab-label text-truncate">{children && children[1] ? children[1] : children}</span>
         </span>
       </button>
@@ -65,8 +67,11 @@ function TabButton({ id, active, onClick, onKeyDown, children, c1, c2 }) {
   );
 }
 
-/** Underline INSIDE the UL: positions by offsetLeft/offsetTop for perfect multi-row support */
-function ActiveUnderlineInsideUL({ activeKey, c1, c2 }) {
+/**
+ * Underline INSIDE the UL.
+ * ✅ Fix: don’t auto-scroll while user is manually scrolling/dragging.
+ */
+function ActiveUnderlineInsideUL({ activeKey, c1, c2, isUserScrollingRef }) {
   const ulRef = useRef(null);
   const [pos, setPos] = useState({ left: 0, top: 0, width: 0, visible: false });
 
@@ -77,31 +82,34 @@ function ActiveUnderlineInsideUL({ activeKey, c1, c2 }) {
     const compute = () => {
       const btn = ul.querySelector(`#tab-${activeKey}`);
       if (!btn) return;
+
       const left = btn.offsetLeft;
       const top = btn.offsetTop + btn.offsetHeight - 4;
       const width = btn.offsetWidth;
       setPos({ left, top, width, visible: true });
 
-      btn.scrollIntoView({ inline: "center", behavior: "smooth", block: "nearest" });
+      // ✅ Only auto-center AFTER user finishes scrolling (not during drag)
+      if (!isUserScrollingRef?.current) {
+        btn.scrollIntoView({ inline: "center", behavior: "smooth", block: "nearest" });
+      }
     };
 
     compute();
 
     const ro = new ResizeObserver(compute);
     ro.observe(ul);
-    ul.addEventListener("scroll", compute);
+
     window.addEventListener("resize", compute);
     window.addEventListener("__tab_resize", compute);
     const raf = requestAnimationFrame(compute);
 
     return () => {
       ro.disconnect();
-      ul.removeEventListener("scroll", compute);
       window.removeEventListener("resize", compute);
       window.removeEventListener("__tab_resize", compute);
       cancelAnimationFrame(raf);
     };
-  }, [activeKey]);
+  }, [activeKey, isUserScrollingRef]);
 
   return (
     <div
@@ -126,15 +134,19 @@ export default function Movies_SeriesTab() {
   const [activeTab, setActiveTab] = useState("movies");
   const tablistRef = useRef(null);
 
+  // ✅ track manual scroll/drag state (stops auto-centering)
+  const isUserScrollingRef = useRef(false);
+  const scrollEndTimerRef = useRef(null);
+
   const tabs = useMemo(
     () => [
-      { key: "movies",    label: "Movies",          icon: "🎬", component: <AddMovies />,      c1: "#ff6b6b", c2: "#f06595" },
-      { key: "series",    label: "Series",          icon: "📺", component: <AddSeries />,      c1: "#51cf66", c2: "#0ca678" },
-      { key: "manage",    label: "Manage",          icon: "⚙️", component: <Manage />,         c1: "#339af0", c2: "#845ef7" },
-      { key: "category",  label: "Categories",      icon: "🏷", component: <Allcategories />,  c1: "#fcc419", c2: "#f08c00" },
-      { key: "fevarate",  label: "Favorites",       icon: "❤️", component: <Fevarate />,      c1: "#f06595", c2: "#d6336c" },
-      { key: "download",  label: "Download",        icon: "⬇️", component: <Download />,      c1: "#4dabf7", c2: "#15aabf" },
-      { key: "all-list",  label: "Movies & Series", icon: "🎞️", component: <AllList />,       c1: "#ddce34", c2: "#fc3d80" },
+      { key: "movies", label: "Movies", icon: "🎬", component: <AddMovies />, c1: "#ff6b6b", c2: "#f06595" },
+      { key: "series", label: "Series", icon: "📺", component: <AddSeries />, c1: "#51cf66", c2: "#0ca678" },
+      { key: "manage", label: "Manage", icon: "⚙️", component: <Manage />, c1: "#339af0", c2: "#845ef7" },
+      { key: "category", label: "Categories", icon: "🏷", component: <Allcategories />, c1: "#fcc419", c2: "#f08c00" },
+      { key: "fevarate", label: "Favorites", icon: "❤️", component: <Fevarate />, c1: "#f06595", c2: "#d6336c" },
+      { key: "download", label: "Download", icon: "⬇️", component: <Download />, c1: "#4dabf7", c2: "#15aabf" },
+      { key: "all-list", label: "Movies & Series", icon: "🎞️", component: <AllList />, c1: "#ddce34", c2: "#fc3d80" },
     ],
     []
   );
@@ -146,6 +158,7 @@ export default function Movies_SeriesTab() {
     e.preventDefault();
     const last = tabs.length - 1;
     let nextIndex = idx;
+
     if (e.key === "ArrowLeft") nextIndex = idx === 0 ? last : idx - 1;
     if (e.key === "ArrowRight") nextIndex = idx === last ? 0 : idx + 1;
     if (e.key === "Home") nextIndex = 0;
@@ -167,25 +180,37 @@ export default function Movies_SeriesTab() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  // ✅ Free scroll: mark user-scrolling while they scroll/drag
   useEffect(() => {
-    const listEl = tablistRef.current;
-    if (listEl) listEl.style.setProperty("--tab-count", tabs.length);
-  }, [tabs.length]);
+    const el = tablistRef.current;
+    if (!el) return;
 
-  useEffect(() => {
-    const listEl = tablistRef.current;
-    if (!listEl) return;
-    const btn = listEl.querySelector(`#tab-${active.key}`);
-    btn?.scrollIntoView({ inline: "center", behavior: "smooth", block: "nearest" });
-  }, [active.key]);
+    const markScrolling = () => {
+      isUserScrollingRef.current = true;
+      if (scrollEndTimerRef.current) clearTimeout(scrollEndTimerRef.current);
+      scrollEndTimerRef.current = setTimeout(() => {
+        isUserScrollingRef.current = false;
+      }, 180);
+    };
 
+    el.addEventListener("scroll", markScrolling, { passive: true });
+    el.addEventListener("pointerdown", markScrolling, { passive: true });
+    el.addEventListener("touchstart", markScrolling, { passive: true });
+
+    return () => {
+      el.removeEventListener("scroll", markScrolling);
+      el.removeEventListener("pointerdown", markScrolling);
+      el.removeEventListener("touchstart", markScrolling);
+      if (scrollEndTimerRef.current) clearTimeout(scrollEndTimerRef.current);
+    };
+  }, []);
+
+  // ✅ Mouse wheel vertical -> horizontal (kept)
   useEffect(() => {
     const el = tablistRef.current;
     if (!el) return;
     const onWheel = (e) => {
-      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-        el.scrollLeft += e.deltaY;
-      }
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) el.scrollLeft += e.deltaY;
     };
     el.addEventListener("wheel", onWheel, { passive: true });
     return () => el.removeEventListener("wheel", onWheel);
@@ -208,12 +233,15 @@ export default function Movies_SeriesTab() {
             <div
               className="rounded-circle d-flex align-items-center justify-content-center shadow-sm"
               style={{
-                width: 44, height: 44,
+                width: 44,
+                height: 44,
                 background: "radial-gradient(120px 120px at 30% 30%, rgba(13,110,253,.2), rgba(111,66,193,.15))",
               }}
               aria-hidden="true"
             >
-              <span style={{ fontSize: 20 }} role="img" aria-label="clapper">🎞️</span>
+              <span style={{ fontSize: 20 }} role="img" aria-label="clapper">
+                🎞️
+              </span>
             </div>
             <div>
               <h1 className="h5 mb-1 mb-md-0">Entertainment Hub</h1>
@@ -234,9 +262,9 @@ export default function Movies_SeriesTab() {
         </div>
       </header>
 
-      {/* Body (EDGE-TO-EDGE) */}
+      {/* Body */}
       <div className="ent-page">
-        {/* Sticky tab bar below any fixed navbar */}
+        {/* Sticky tab bar */}
         <div
           className="position-sticky bg-white pt-2 tabbar-sticky"
           style={{ zIndex: 1020, top: "var(--fixed-top, 0px)", boxShadow: "0 8px 18px rgba(2,6,23,.06)" }}
@@ -246,13 +274,7 @@ export default function Movies_SeriesTab() {
               ref={tablistRef}
               className="nav nav-pills eh-tabs"
               role="tablist"
-              style={{
-                gap: ".5rem",
-                overflowX: "auto",
-                WebkitOverflowScrolling: "touch",
-                position: "relative",
-                scrollbarWidth: "thin",
-              }}
+              aria-label="Entertainment tabs"
             >
               {tabs.map((t, i) => (
                 <TabButton
@@ -264,29 +286,33 @@ export default function Movies_SeriesTab() {
                   c1={t.c1}
                   c2={t.c2}
                 >
-                  {[<span className="me-1" aria-hidden="true" key="i">{t.icon}</span>, <span key="l">{t.label}</span>]}
+                  {[
+                    <span className="me-1" aria-hidden="true" key="i">
+                      {t.icon}
+                    </span>,
+                    <span key="l">{t.label}</span>,
+                  ]}
                 </TabButton>
               ))}
 
-              {/* Underline inside UL */}
-              <ActiveUnderlineInsideUL activeKey={activeTab} c1={active.c1} c2={active.c2} />
+              <ActiveUnderlineInsideUL
+                activeKey={activeTab}
+                c1={active.c1}
+                c2={active.c2}
+                isUserScrollingRef={isUserScrollingRef}
+              />
             </ul>
           </div>
         </div>
 
-        {/* Active tab content (EDGE-TO-EDGE) */}
+        {/* Active tab content */}
         <div className="tab-content ent-shell ent-scope">
-          <div
-            id={`panel-${active.key}`}
-            role="tabpanel"
-            aria-labelledby={`tab-${active.key}`}
-            className="tab-pane fade show active"
-          >
+          <div id={`panel-${active.key}`} role="tabpanel" aria-labelledby={`tab-${active.key}`} className="tab-pane fade show active">
             <div className="card border-0 shadow-sm ent-card">
-              {/* ✅ removed inside padding */}
               <div className="card-body">
-                {/* keep heading but no extra padding */}
-                <h2 className="h5 mb-3">{active.icon} {active.label}</h2>
+                <h2 className="h5 mb-3">
+                  {active.icon} {active.label}
+                </h2>
                 {active.component}
               </div>
             </div>
@@ -294,178 +320,162 @@ export default function Movies_SeriesTab() {
         </div>
       </div>
 
-      {/* Styles */}
       <style>{`
         :root{
-          --tab-min: 110px;
-          --tab-max: 340px;
+          --tab-min: 130px;
+          --tab-max: 260px;
           --tap: 44px;
         }
 
-        /* ✅ page: edge-to-edge on mobile, centered on desktop */
-        .ent-page{
-          width: 100%;
-          margin: 0;
-          padding: 0;
-        }
+        .ent-page{ width:100%; margin:0; padding:0; }
         .ent-shell{
-          width: 100%;
-          margin: 0;
-          padding: 0;
-          max-width: 980px;
-          margin-inline: auto;
+          width:100%;
+          margin:0;
+          padding:0;
+          max-width:980px;
+          margin-inline:auto;
         }
+
         @media (max-width: 768px){
-          .ent-shell{
-            max-width: 100%;
-          }
+          .ent-shell{ max-width: 100%; }
+          :root{ --tab-min: 110px; --tab-max: 340px; }
         }
 
-        /* ✅ remove extra spacing around content area */
-        .tab-content.ent-shell{
-          margin-top: 0 !important;
-          padding: 0 !important;
-        }
+        .tab-content.ent-shell{ margin-top:0 !important; padding:0 !important; }
 
-        /* ✅ card should touch edges on mobile, keep nice radius on desktop */
-        .ent-card{
-          border-radius: 0;
-        }
+        .ent-card{ border-radius:0; }
         @media (min-width: 992px){
-          .ent-card{
-            border-radius: 16px;
-            margin-top: 12px;
-            margin-bottom: 12px;
-          }
+          .ent-card{ border-radius:16px; margin-top:12px; margin-bottom:12px; }
         }
+        .ent-card > .card-body{ padding:0 !important; }
 
-        /* ✅ remove bootstrap card-body padding completely */
-        .ent-card > .card-body{
-          padding: 0 !important;
-        }
-
-        /* --------- TAB STRIP (responsive) ---------- */
+        /* ✅ KEY FIX: remove scroll-snap forcing “one-by-one” scrolling */
         .eh-tabs{
-          display:flex; align-items:stretch; gap:.5rem; padding:.5rem;
-          scroll-snap-type: x mandatory;
+          display:flex;
+          align-items:stretch;
+          gap:.5rem;
+          padding:.5rem;
+
+          flex-wrap: nowrap;
+          overflow-x: auto;
+          overflow-y: hidden;
+
+          /* ❌ removed snap to stop step-by-step */
+          scroll-snap-type: none;
+
           overscroll-behavior-x: contain;
           -webkit-overflow-scrolling: touch;
-          mask-image: linear-gradient(to right, transparent 0, black 14px, black calc(100% - 14px), transparent 100%);
-        }
-        .eh-tabs .nav-item{
-          flex: 0 0 auto;
-          min-width: var(--tab-min); max-width: var(--tab-max);
-          scroll-snap-align: center;
-        }
-        @media (min-width: 768px){
-          .eh-tabs .nav-item{ flex: 1 1 0; min-width: 128px; }
+
+          scrollbar-width: thin;
+          scroll-behavior: smooth;
+
+          mask-image: none;
+
+          position: relative;
+          scrollbar-gutter: stable both-edges;
         }
 
-        .nav-pills .nav-link.pill {
+        .eh-tabs::-webkit-scrollbar{ height: 8px; }
+        .eh-tabs::-webkit-scrollbar-thumb{ border-radius: 999px; background: rgba(15,23,42,.18); }
+        .eh-tabs::-webkit-scrollbar-track{ background: transparent; }
+
+        .eh-tabs .nav-item{
+          flex: 0 0 auto;
+          min-width: var(--tab-min);
+          max-width: var(--tab-max);
+          /* ❌ removed snap align */
+        }
+
+        .nav-pills .nav-link.pill{
           position: relative;
           --bg1: color-mix(in oklab, var(--c1) 12%, #fff);
           --bg2: color-mix(in oklab, var(--c2) 12%, #fff);
           background: linear-gradient(135deg, var(--bg1), var(--bg2));
           border: 1px solid #e8edf2;
           color: #2b2f32;
-          transition:
-            transform .12s ease,
-            box-shadow .18s ease,
-            background .18s ease,
-            color .18s ease,
-            border-color .18s ease,
-            filter .18s ease;
+          transition: transform .12s ease, box-shadow .18s ease, background .18s ease, color .18s ease, border-color .18s ease, filter .18s ease;
           overflow: hidden;
           isolation: isolate;
           min-height: var(--tap);
-
           font-size: clamp(12px, 2.8vw, 15px);
-          padding: clamp(6px, 1.8vw, 10px) clamp(10px, 3vw, 16px);
+          padding: clamp(7px, 1.8vw, 10px) clamp(12px, 3vw, 16px);
           line-height: 1.2;
+          white-space: nowrap;
+          user-select: none;
         }
+
         @media (min-width: 992px){
-          .nav-pills .nav-link.pill {
-            font-size: clamp(14px, 1.1vw, 16px);
+          .nav-pills .nav-link.pill{
+            font-size: 15px;
             padding: 10px 16px;
           }
         }
 
-        .tab-label { display:inline-block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .tab-label{ display:inline-block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
-        .nav-pills .nav-link.pill:hover {
+        .nav-pills .nav-link.pill:hover{
           transform: translateY(-1px);
           box-shadow: 0 10px 22px color-mix(in oklab, var(--c2) 22%, transparent);
-          color: #111;
+          color:#111;
           background: linear-gradient(135deg,
             color-mix(in oklab, var(--c1) 26%, #fff 0%),
             color-mix(in oklab, var(--c2) 26%, #fff 0%)
           );
           border-color: color-mix(in oklab, var(--c2) 32%, #e8edf2);
         }
-        .nav-pills .nav-link.pill:focus-visible {
-          outline: none;
+
+        .nav-pills .nav-link.pill:focus-visible{
+          outline:none;
           box-shadow: 0 0 0 .22rem color-mix(in oklab, var(--c1) 35%, var(--c2) 35%, #0000 30%);
         }
-        .nav-pills .nav-link.pill.active {
-          color: #fff;
+
+        .nav-pills .nav-link.pill.active{
+          color:#fff;
           background: linear-gradient(135deg, var(--c1), var(--c2));
           border-color: transparent;
-          box-shadow:
-            0 10px 26px color-mix(in oklab, var(--c2) 28%, transparent),
-            0 0 0 1px color-mix(in oklab, #fff 20%, #0000 80%) inset;
+          box-shadow: 0 10px 26px color-mix(in oklab, var(--c2) 28%, transparent), 0 0 0 1px color-mix(in oklab, #fff 20%, #0000 80%) inset;
           transform: translateY(-1px);
           filter: saturate(1.02);
         }
 
-        .pill .pill-ripple {
-          position: absolute; inset: 0; pointer-events: none; opacity: 0;
-          background:
-            radial-gradient(140px 60px at var(--x,50%) var(--y,50%),
-              color-mix(in oklab, var(--c1) 32%, transparent),
-              transparent 60%);
+        .pill .pill-ripple{
+          position:absolute; inset:0;
+          pointer-events:none;
+          opacity:0;
+          background: radial-gradient(140px 60px at var(--x,50%) var(--y,50%),
+            color-mix(in oklab, var(--c1) 32%, transparent),
+            transparent 60%);
           transition: opacity .35s ease;
         }
-        .pill:active .pill-ripple { opacity: .55; transition: opacity .2s ease; }
+        .pill:active .pill-ripple{ opacity:.55; transition: opacity .2s ease; }
 
-        .tab-underline {
-          position: absolute;
-          height: 4px; border-radius: 8px;
+        .tab-underline{
+          position:absolute;
+          height:4px;
+          border-radius:8px;
           background: linear-gradient(90deg, var(--u1), var(--u2));
           box-shadow: 0 6px 18px rgba(0,0,0,.12);
-          pointer-events: none;
-          transition:
-            transform .28s cubic-bezier(.2,.8,.2,1),
-            width .28s cubic-bezier(.2,.8,.2,1),
-            opacity .15s ease,
-            background .2s ease,
-            top .28s cubic-bezier(.2,.8,.2,1),
-            left .28s cubic-bezier(.2,.8,.2,1);
+          pointer-events:none;
+          transition: transform .28s cubic-bezier(.2,.8,.2,1), width .28s cubic-bezier(.2,.8,.2,1), opacity .15s ease,
+                      background .2s ease, top .28s cubic-bezier(.2,.8,.2,1), left .28s cubic-bezier(.2,.8,.2,1);
         }
 
-        .tabbar-sticky { border-bottom: 1px solid #eef2f6; }
+        .tabbar-sticky{ border-bottom:1px solid #eef2f6; }
 
-        .ent-scope {
-          font-size: 1rem;
-          line-height: 1.5;
-        }
-        .ent-scope :where(p, li, span, small, strong, em) { font-size: 1rem; }
-        .ent-scope h1 { font-size: 1.75rem; line-height: 1.25; }
-        .ent-scope h2 { font-size: 1.25rem; line-height: 1.35; }
-        .ent-scope h3 { font-size: 1.125rem; line-height: 1.35; }
-        .ent-scope h4 { font-size: 1rem; line-height: 1.35; }
-        .ent-scope h5, .ent-scope h6 { font-size: .95rem; line-height: 1.35; }
-        @media (min-width: 992px){
-          .ent-scope h1 { font-size: 2rem; }
-          .ent-scope h2 { font-size: 1.35rem; }
-          .ent-scope h3 { font-size: 1.2rem; }
+        .ent-scope{ font-size:1rem; line-height:1.5; }
+        .ent-scope :where(p, li, span, small, strong, em){ font-size:1rem; }
+
+        @media (max-width: 720px){
+          .eh-tabs{ padding:.35rem .4rem; gap:.4rem; }
         }
 
-        @media (max-width: 720px) {
-          .eh-tabs { padding: .35rem .4rem; gap: .4rem; }
+        @media (prefers-reduced-motion: reduce){
+          .eh-tabs{ scroll-behavior: auto; }
+          .nav-pills .nav-link.pill{ transition:none !important; }
         }
       `}</style>
 
-      {/* Ripple + underline refresh */}
+      {/* Ripple */}
       <script
         dangerouslySetInnerHTML={{
           __html: `
@@ -478,7 +488,6 @@ export default function Movies_SeriesTab() {
               rr.style.setProperty('--x', (e.clientX - r.left) + 'px');
               rr.style.setProperty('--y', (e.clientY - r.top) + 'px');
             });
-            window.addEventListener('__tab_resize', () => window.dispatchEvent(new Event('resize')));
           `,
         }}
       />
