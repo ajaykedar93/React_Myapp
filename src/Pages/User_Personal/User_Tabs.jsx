@@ -21,14 +21,14 @@ const COLORS = {
 };
 
 const TABS = [
-  { id: "investment", label: "Investment" },
-  { id: "password", label: "Add Password" },
-  { id: "getpassword", label: "Get Password" },
-  { id: "favorite", label: "Add Actress Favorite" },
-  { id: "actresslist", label: "Actress List" },
-  { id: "websites", label: "Websites" },
-  { id: "notes", label: "Notes" },
-  { id: "addlist", label: "Act List" },
+  { id: "investment", label: "Investment", activeColor: "#1d4ed8" },   // Deep Blue (Trust, Finance)
+  { id: "password", label: "Add Password", activeColor: "#6d28d9" },   // Royal Purple (Security)
+  { id: "getpassword", label: "Get Password", activeColor: "#0284c7" },// Steel Sky (Access)
+  { id: "favorite", label: "Add Actress Favorite", activeColor: "#be185d" }, // Rose Wine (Personal)
+  { id: "actresslist", label: "Actress List", activeColor: "#c2410c" },// Burnt Orange (Content)
+  { id: "websites", label: "Websites", activeColor: "#ed1e90" },       // Deep Teal (Links / Web)
+  { id: "notes", label: "Notes", activeColor: "#208b47" },             // Emerald Green (Writing)
+  { id: "addlist", label: "Act List", activeColor: "#ff9c12" },        // Muted Gold (Collection)
 ];
 
 export default function UserTabs() {
@@ -99,14 +99,20 @@ export default function UserTabs() {
         <section className="ut-tabs-wrap" onKeyDown={() => {}}>
           <div className="ut-tablist">
             {TABS.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setActiveTab(t.id)}
-                className={`ut-chip ${activeTab === t.id ? "is-active" : ""}`}
-                type="button"
-              >
-                {t.label}
-              </button>
+             <button
+  key={t.id}
+  onClick={() => setActiveTab(t.id)}
+  className={`ut-chip ${activeTab === t.id ? "is-active" : ""}`}
+  type="button"
+  style={
+    activeTab === t.id
+      ? { background: t.activeColor, borderColor: t.activeColor }
+      : undefined
+  }
+>
+  {t.label}
+</button>
+
             ))}
           </div>
           <div className="ut-tab-divider" />
@@ -275,11 +281,12 @@ export default function UserTabs() {
           overflow-wrap: break-word;
         }
 
-        .ut-chip.is-active{
-          background: #22c55e;
-          color: #fff;
-          border-color: #16a34a;
-        }
+.ut-chip.is-active{
+  color: #fff;
+  box-shadow:
+    0 6px 16px rgba(0,0,0,0.15),
+    inset 0 1px 0 rgba(255,255,255,0.25);
+}
 
         /* CONTENT */
         .ut-content-full{
