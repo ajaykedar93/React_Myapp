@@ -7,7 +7,6 @@ export default function InwardViewOnly() {
   const API_BASE = useMemo(() => "https://express-backend-myapp.onrender.com", []);
   const LIST_API = `${API_BASE}/api/inward-view`;
 
-  const FRONTEND_VIEW_URL = "https://react-myapp-omega.vercel.app/#/inward-view";
   const STATIC_SHARE_URL = "https://freeshort.info/fpfG9N";
 
   /* ================= HELPERS ================= */
@@ -22,17 +21,18 @@ export default function InwardViewOnly() {
     return `${d}/${m}/${y}`;
   };
 
-  const getQueryDates = () => {
-    if (typeof window === "undefined") return { from: "", to: "" };
-    const hash = window.location.hash || "";
-    const qIndex = hash.indexOf("?");
-    if (qIndex === -1) return { from: "", to: "" };
-    const qs = hash.slice(qIndex + 1);
-    const params = new URLSearchParams(qs);
-    return {
-      from: params.get("from") || "",
-      to: params.get("to") || "",
-    };
+  const getCurrentMonth = () => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    return `${y}-${m}`; // YYYY-MM
+  };
+
+  const monthToLabel = (ym) => {
+    if (!ym || !/^\d{4}-\d{2}$/.test(ym)) return ym || "";
+    const [y, m] = ym.split("-").map(Number);
+    const dt = new Date(y, m - 1, 1);
+    return dt.toLocaleString("en-IN", { month: "short", year: "numeric" });
   };
 
   const copyToClipboard = async (text) => {
@@ -58,11 +58,13 @@ export default function InwardViewOnly() {
 
   /* ================= STATE ================= */
 
-  const [{ from, to }] = useState(getQueryDates);
+  const [month, setMonth] = useState(getCurrentMonth); // ✅ default current month
+  const [monthOpen, setMonthOpen] = useState(false);
+
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const firstLoadRef = useRef(true);
+  const pollRef = useRef(null);
 
   const [toast, setToast] = useState({ show: false, text: "" });
   const toastTimerRef = useRef(null);
@@ -134,47 +136,61 @@ export default function InwardViewOnly() {
 
   /* ================= FETCH ================= */
 
-  const fetchData = async () => {
-    if (firstLoadRef.current) setLoading(true);
+  const fetchData = async (selectedMonth) => {
+    setLoading(true);
 
     try {
       const qs = new URLSearchParams();
-      if (from) qs.set("from", from);
-      if (to) qs.set("to", to);
+      qs.set("month", selectedMonth);
 
-      const url = qs.toString() ? `${LIST_API}?${qs.toString()}` : LIST_API;
+      const url = `${LIST_API}?${qs.toString()}`;
 
       const r = await fetch(url, { cache: "no-store" });
       const j = await r.json().catch(() => ({}));
 
       if (!r.ok || !j.success) {
-        if (firstLoadRef.current) setRows([]);
+        setRows([]);
         return;
       }
 
+      // ✅ IMPORTANT: use API data ONLY
       setRows(Array.isArray(j.data) ? j.data : []);
     } catch {
-      if (firstLoadRef.current) setRows([]);
+      setRows([]);
     } finally {
-      if (firstLoadRef.current) {
-        setLoading(false);
-        firstLoadRef.current = false;
-      }
+      setLoading(false);
     }
   };
 
+  // ✅ first load + start polling
   useEffect(() => {
-    fetchData();
-    const t = setInterval(fetchData, 20000);
-    return () => clearInterval(t);
+    fetchData(month);
+
+    pollRef.current = setInterval(() => {
+      fetchData(month);
+    }, 20000);
+
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
     // eslint-disable-next-line
   }, []);
 
+  // ✅ when month changes: clear old data + refetch + reset polling to avoid mismatch
   useEffect(() => {
+    setRows([]); // ✅ prevents Jan flashing when user selects Feb
+    fetchData(month);
+
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(() => {
+      fetchData(month);
+    }, 20000);
+
     return () => {
-      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, []);
+    // eslint-disable-next-line
+  }, [month]);
 
   /* ================= ACTIONS ================= */
 
@@ -193,9 +209,7 @@ export default function InwardViewOnly() {
     showToast(ok ? "Link copied ✅" : "Copy failed ❌");
   };
 
-  const onDownloadDemo = () => {
-    showToast("Only admin can download 🔒");
-  };
+  const onDownloadDemo = () => showToast("Only admin can download 🔒");
 
   /* ================= PORTAL ================= */
 
@@ -204,18 +218,23 @@ export default function InwardViewOnly() {
 
   /* ================= RENDER ================= */
 
+  const noData = !loading && groups.length === 0;
+
   return (
     <div className="ivPage">
       <div className="ivHeader">
         <div className="ivHeaderTop">
           <div className="ivHeaderLeft">
             <div className="ivTitle">Inward Details (View Only)</div>
-            <div className="ivSub">
-              {from && to ? `From ${formatDDMMYYYY(from)} to ${formatDDMMYYYY(to)}` : "Month All Records"}
-            </div>
+            <div className="ivSub">Month: {monthToLabel(month)}</div>
           </div>
 
           <div className="ivActions">
+            {/* ✅ Month button */}
+            <button className="ivMonthBtn" type="button" onClick={() => setMonthOpen(true)}>
+              {monthToLabel(month)}
+            </button>
+
             <button className="ivDownloadBtn" type="button" onClick={onDownloadDemo} title="Admin only">
               Download
             </button>
@@ -229,8 +248,8 @@ export default function InwardViewOnly() {
 
       {loading ? (
         <div className="ivCenter">Loading…</div>
-      ) : groups.length === 0 ? (
-        <div className="ivCenter">No records found</div>
+      ) : noData ? (
+        <div className="ivCenter ivNoData">No records found</div>
       ) : (
         <div className="ivTableWrap" role="region" aria-label="Inward table scroll area">
           <table className="ivTable">
@@ -295,7 +314,6 @@ export default function InwardViewOnly() {
               ))}
             </tbody>
 
-            {/* ✅ bottom space inside table so last row never hides */}
             <tfoot>
               <tr aria-hidden="true">
                 <td colSpan={6} className="ivTfootSpacer" />
@@ -306,11 +324,45 @@ export default function InwardViewOnly() {
       )}
 
       <Portal>
+        {/* Toast */}
         {toast.show && (
           <>
             <div className="ivToastBackdrop" />
             <div className="ivToast" role="status" aria-live="polite">
               {toast.text}
+            </div>
+          </>
+        )}
+
+        {/* Month Modal */}
+        {monthOpen && (
+          <>
+            <div className="ivModalBackdrop" onClick={() => setMonthOpen(false)} />
+            <div className="ivModal" role="dialog" aria-modal="true">
+              <div className="ivModalTitle">Select Month</div>
+
+              <input
+                className="ivMonthInput"
+                type="month"
+                value={month}
+                onChange={(e) => setMonth(e.target.value)}
+              />
+
+              <div className="ivModalActions">
+                <button className="ivModalBtnGhost" type="button" onClick={() => setMonthOpen(false)}>
+                  Close
+                </button>
+                <button
+                  className="ivModalBtn"
+                  type="button"
+                  onClick={() => {
+                    setMonthOpen(false);
+                    showToast("Month updated ✅");
+                  }}
+                >
+                  Done
+                </button>
+              </div>
             </div>
           </>
         )}
@@ -325,16 +377,11 @@ export default function InwardViewOnly() {
 
 const css = `
 :root{
-  --iv-wrap-offset: 180px;      /* header + padding approx */
-  --iv-table-bottom-gap: 140px; /* space for last row visibility */
+  --iv-wrap-offset: 190px;
+  --iv-table-bottom-gap: 320px;
 }
 
-html, body {
-  height: 100%;
-  background: #f6f8fc;
-  margin: 0;
-}
-
+html, body { height: 100%; background: #f6f8fc; margin: 0; }
 #root { min-height: 100%; background:#f6f8fc; }
 * { box-sizing: border-box; }
 
@@ -344,7 +391,6 @@ html, body {
   padding:16px;
 }
 
-/* Header */
 .ivHeader{
   background:#0b1220;
   color:#fff;
@@ -378,6 +424,19 @@ html, body {
   flex-wrap:wrap;
 }
 
+.ivMonthBtn{
+  background:rgba(255,255,255,.16);
+  color:#fff;
+  border:1px solid rgba(255,255,255,.28);
+  padding:7px 10px;
+  border-radius:10px;
+  font-weight:900;
+  cursor:pointer;
+  white-space:nowrap;
+  font-size:12px;
+}
+.ivMonthBtn:hover{ background:rgba(255,255,255,.22); }
+
 .ivShareBtn{
   background:#fff;
   color:#0b1220;
@@ -407,18 +466,20 @@ html, body {
   text-align:center;
   padding:40px;
   color:#6b7280;
-  font-weight:700;
+  font-weight:800;
 }
 
-/* ✅ IMPORTANT: Table area scrolls, header row stays fixed */
+.ivNoData{
+  color:#dc2626;
+  font-weight:900;
+}
+
 .ivTableWrap{
   background:#fff;
   border-radius:14px;
-  overflow:auto; /* ✅ BOTH scroll */
+  overflow:auto;
   box-shadow:0 12px 30px rgba(0,0,0,.08);
   -webkit-overflow-scrolling: touch;
-
-  /* ✅ fixed height scroll area => only body rows scroll */
   max-height: calc(100dvh - var(--iv-wrap-offset));
   overscroll-behavior: contain;
   touch-action: pan-x pan-y;
@@ -440,7 +501,6 @@ html, body {
   vertical-align:top;
 }
 
-/* ✅ STICKY HEADER (won't scroll) */
 .ivTable th{
   background:#f3f4f6;
   font-weight:900;
@@ -455,32 +515,14 @@ html, body {
 .ivStore{ white-space:nowrap; font-weight:700; }
 .ivLetterBlack{ font-weight:900; color:#111827; }
 
-/* separators */
-.ivSepRow td{
-  padding:0 !important;
-  border-bottom:none !important;
-  background:#fff;
-}
+.ivSepRow td{ padding:0 !important; border-bottom:none !important; background:#fff; }
 .ivSepTd{ padding:0 !important; border-bottom:none !important; }
-.ivSepLine{
-  width:100%;
-  border-top:1px solid #0b1220;
-  margin:10px 0;
-}
+.ivSepLine{ width:100%; border-top:1px solid #0b1220; margin:10px 0; }
 
-.ivStoreSepRow td{
-  padding:0 !important;
-  border-bottom:none !important;
-  background:#fff;
-}
+.ivStoreSepRow td{ padding:0 !important; border-bottom:none !important; background:#fff; }
 .ivStoreSepTd{ padding:0 !important; border-bottom:none !important; }
-.ivStoreSepLine{
-  width:100%;
-  border-top:2px dotted #94a3b8;
-  margin:10px 0;
-}
+.ivStoreSepLine{ width:100%; border-top:2px dotted #94a3b8; margin:10px 0; }
 
-/* ✅ bottom spacer INSIDE table */
 .ivTfootSpacer{
   height: calc(var(--iv-table-bottom-gap) + env(safe-area-inset-bottom));
   border-bottom:none !important;
@@ -512,11 +554,63 @@ html, body {
   text-align:center;
 }
 
-/* ✅ Mobile tuning */
+/* Month modal */
+.ivModalBackdrop{
+  position:fixed;
+  inset:0;
+  background: rgba(0,0,0,.25);
+  z-index:999997;
+}
+.ivModal{
+  position:fixed;
+  left:50%;
+  top:50%;
+  transform: translate(-50%,-50%);
+  width: min(92vw, 360px);
+  background:#fff;
+  border-radius:14px;
+  padding:14px;
+  z-index:999999;
+  box-shadow:0 16px 40px rgba(0,0,0,.22);
+}
+.ivModalTitle{ font-weight:900; color:#0b1220; margin-bottom:10px; }
+.ivMonthInput{
+  width:100%;
+  padding:10px;
+  border-radius:12px;
+  border:1px solid #e5e7eb;
+  font-weight:800;
+  outline:none;
+}
+.ivModalActions{
+  display:flex;
+  justify-content:flex-end;
+  gap:8px;
+  margin-top:12px;
+}
+.ivModalBtn{
+  background:#0b1220;
+  color:#fff;
+  border:none;
+  padding:8px 12px;
+  border-radius:10px;
+  font-weight:900;
+  cursor:pointer;
+}
+.ivModalBtnGhost{
+  background:#f3f4f6;
+  color:#0b1220;
+  border:none;
+  padding:8px 12px;
+  border-radius:10px;
+  font-weight:900;
+  cursor:pointer;
+}
+
 @media (max-width: 560px){
   :root{
-    --iv-wrap-offset: 230px;
-    --iv-table-bottom-gap: 220px;
+    --iv-wrap-offset: 260px;
+    --iv-table-bottom-gap: 380px;
   }
 
   .ivHeaderTop{
