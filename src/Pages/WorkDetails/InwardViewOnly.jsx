@@ -2,14 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 export default function InwardViewOnly() {
-  /* ================= CONFIG ================= */
-
   const API_BASE = useMemo(() => "https://express-backend-myapp.onrender.com", []);
   const LIST_API = `${API_BASE}/api/inward-view`;
-
   const STATIC_SHARE_URL = "https://freeshort.info/fpfG9N";
-
-  /* ================= HELPERS ================= */
 
   const toISO = (v) => (v ? String(v).slice(0, 10) : "");
 
@@ -25,7 +20,7 @@ export default function InwardViewOnly() {
     const d = new Date();
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, "0");
-    return `${y}-${m}`; // YYYY-MM
+    return `${y}-${m}`;
   };
 
   const monthToLabel = (ym) => {
@@ -56,17 +51,11 @@ export default function InwardViewOnly() {
     }
   };
 
-  /* ================= STATE ================= */
-
   const [month, setMonth] = useState(getCurrentMonth);
   const [monthOpen, setMonthOpen] = useState(false);
-
   const [rows, setRows] = useState([]);
 
-  // ✅ Only for FIRST load (or explicit month change)
   const [initialLoading, setInitialLoading] = useState(true);
-
-  // ✅ Silent refresh flag (no UI loading)
   const [refreshing, setRefreshing] = useState(false);
 
   const pollRef = useRef(null);
@@ -75,8 +64,6 @@ export default function InwardViewOnly() {
 
   const [toast, setToast] = useState({ show: false, text: "" });
   const toastTimerRef = useRef(null);
-
-  /* ================= GROUPING ================= */
 
   const normalizeRows = (list) => {
     const safe = Array.isArray(list) ? list : [];
@@ -134,19 +121,14 @@ export default function InwardViewOnly() {
 
   const groups = useMemo(() => groupByDateThenStore(normalizeRows(rows)), [rows]);
 
-  /* ================= FETCH ================= */
-
   const fetchData = async (selectedMonth, { silent = false } = {}) => {
-    // ✅ Prevent overlapping calls (poll + month change)
     if (inFlightRef.current) return;
     inFlightRef.current = true;
 
-    // Abort previous request if any
     if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
     abortRef.current = controller;
 
-    // ✅ UI flags
     if (silent) setRefreshing(true);
     else setInitialLoading(true);
 
@@ -154,9 +136,7 @@ export default function InwardViewOnly() {
       const qs = new URLSearchParams();
       qs.set("month", selectedMonth);
 
-      const url = `${LIST_API}?${qs.toString()}`;
-
-      const r = await fetch(url, {
+      const r = await fetch(`${LIST_API}?${qs.toString()}`, {
         cache: "no-store",
         signal: controller.signal,
       });
@@ -164,51 +144,40 @@ export default function InwardViewOnly() {
       const j = await r.json().catch(() => ({}));
 
       if (!r.ok || !j.success) {
-        // ✅ Silent refresh should NOT clear the table (no flicker)
         if (!silent) setRows([]);
         return;
       }
 
-      const incoming = Array.isArray(j.data) ? j.data : [];
-
-      // ✅ Update rows without clearing first (smooth)
-      setRows(incoming);
+      setRows(Array.isArray(j.data) ? j.data : []);
     } catch (e) {
-      // Abort is normal, ignore
       if (e?.name !== "AbortError") {
         if (!silent) setRows([]);
       }
     } finally {
       if (silent) setRefreshing(false);
       else setInitialLoading(false);
-
       inFlightRef.current = false;
     }
   };
 
   const startPolling = (m) => {
     if (pollRef.current) clearInterval(pollRef.current);
-    pollRef.current = setInterval(() => {
-      // ✅ silent refresh = no loading UI + no scroll jump
-      fetchData(m, { silent: true });
-    }, 20000);
+    pollRef.current = setInterval(() => fetchData(m, { silent: true }), 20000);
   };
 
-  // ✅ first load + start polling
   useEffect(() => {
     fetchData(month, { silent: false });
     startPolling(month);
 
-    // ✅ pause polling when tab hidden (less flicker + better UX)
     const onVis = () => {
       if (document.visibilityState === "hidden") {
         if (pollRef.current) clearInterval(pollRef.current);
       } else {
-        // refresh once silently when user comes back
         fetchData(month, { silent: true });
         startPolling(month);
       }
     };
+
     document.addEventListener("visibilitychange", onVis);
 
     return () => {
@@ -219,9 +188,7 @@ export default function InwardViewOnly() {
     // eslint-disable-next-line
   }, []);
 
-  // ✅ month change: fetch + restart polling
   useEffect(() => {
-    // ✅ Don't show “loading” in center after first load, but for month change we do a clean load
     fetchData(month, { silent: false });
     startPolling(month);
 
@@ -231,16 +198,10 @@ export default function InwardViewOnly() {
     // eslint-disable-next-line
   }, [month]);
 
-  /* ================= ACTIONS ================= */
-
   const showToast = (text) => {
     setToast({ show: true, text });
-
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-
-    toastTimerRef.current = setTimeout(() => {
-      setToast({ show: false, text: "" });
-    }, 650);
+    toastTimerRef.current = setTimeout(() => setToast({ show: false, text: "" }), 650);
   };
 
   const onShareLink = async () => {
@@ -250,12 +211,8 @@ export default function InwardViewOnly() {
 
   const onDownloadDemo = () => showToast("Only admin can download 🔒");
 
-  /* ================= PORTAL ================= */
-
   const Portal = ({ children }) =>
     typeof document === "undefined" ? null : createPortal(children, document.body);
-
-  /* ================= RENDER ================= */
 
   const noData = !initialLoading && groups.length === 0;
 
@@ -284,14 +241,12 @@ export default function InwardViewOnly() {
         </div>
       </div>
 
-      {/* ✅ Only show Loading on FIRST load / Month change */}
       {initialLoading ? (
         <div className="ivCenter">Loading…</div>
       ) : noData ? (
         <div className="ivCenter ivNoData">No records found</div>
       ) : (
         <>
-          {/* ✅ very subtle “Refreshing…” badge (optional professional) */}
           {refreshing && <div className="ivRefreshPill">Refreshing…</div>}
 
           <div className="ivTableWrap" role="region" aria-label="Inward table scroll area">
@@ -322,16 +277,13 @@ export default function InwardViewOnly() {
                             <tr key={`${g.date}-${storeGroup.store}-${idx}-${r.inward_id}`}>
                               <td className="ivSr">{showSrNo ? g.srNo : ""}</td>
                               <td className="ivDate">{showDate ? formatDDMMYYYY(g.date) : ""}</td>
-
                               <td>
                                 <span className="ivLetterBlack">{letter})</span> {r.material}
                               </td>
-
                               <td>
                                 {r.quantity ?? ""}
                                 {r.quantity_type ? ` ${r.quantity_type}` : ""}
                               </td>
-
                               <td className="ivStore">{showStore ? storeGroup.store || "—" : ""}</td>
                               <td>{r.material_use}</td>
                             </tr>
@@ -362,7 +314,6 @@ export default function InwardViewOnly() {
       )}
 
       <Portal>
-        {/* Toast */}
         {toast.show && (
           <>
             <div className="ivToastBackdrop" />
@@ -372,7 +323,6 @@ export default function InwardViewOnly() {
           </>
         )}
 
-        {/* Month Modal */}
         {monthOpen && (
           <>
             <div className="ivModalBackdrop" onClick={() => setMonthOpen(false)} />
@@ -406,30 +356,38 @@ export default function InwardViewOnly() {
   );
 }
 
-/* ================= STYLES ================= */
-
 const css = `
 :root{
-  /* ✅ Small professional spacing */
   --iv-wrap-offset: 150px;
 }
 
-html, body { height: 100%; background: #f6f8fc; margin: 0; scroll-behavior:smooth; }
-#root { min-height: 100%; background:#f6f8fc; }
+html, body {
+  height: 100%;
+  margin: 0;
+  background: #f6f8fc;
+}
+
+/* ✅ IMPORTANT: Body should not fight with wrapper scroll */
+body { overflow: hidden; }
+
+#root { height: 100%; background:#f6f8fc; }
 * { box-sizing: border-box; }
 
 .ivPage{
-  min-height:100dvh;
+  height: 100dvh;
   background:#f6f8fc;
-  padding:10px; /* ✅ reduced */
+  padding:10px;
+  overflow: hidden; /* ✅ only wrapper scroll */
+  display:flex;
+  flex-direction:column;
 }
 
 .ivHeader{
   background:#0b1220;
   color:#fff;
-  padding:14px; /* ✅ reduced */
+  padding:14px;
   border-radius:14px;
-  margin-bottom:10px; /* ✅ reduced */
+  margin-bottom:10px;
 }
 
 .ivHeaderTop{
@@ -493,7 +451,6 @@ html, body { height: 100%; background: #f6f8fc; margin: 0; scroll-behavior:smoot
   white-space:nowrap;
   font-size:12px;
 }
-.ivDownloadBtn:hover{ background:rgba(255,255,255,.20); }
 
 .ivCenter{
   text-align:center;
@@ -502,23 +459,32 @@ html, body { height: 100%; background: #f6f8fc; margin: 0; scroll-behavior:smoot
   font-weight:800;
 }
 
-.ivNoData{
-  color:#dc2626;
+.ivNoData{ color:#dc2626; font-weight:900; }
+
+.ivRefreshPill{
+  display:inline-block;
+  margin: 0 0 8px 2px;
+  padding: 5px 10px;
+  background:#0b1220;
+  color:#fff;
+  border-radius:999px;
   font-weight:900;
+  font-size:11px;
+  width: fit-content;
 }
 
-/* ✅ Smooth + professional scroll */
+/* ✅ THE MAIN FIX */
 .ivTableWrap{
+  flex:1;                 /* ✅ takes remaining height */
+  min-height: 0;          /* ✅ IMPORTANT for flex scroll */
   background:#fff;
   border-radius:14px;
-  overflow:auto;
+  overflow: auto;         /* ✅ both vertical + horizontal */
   box-shadow:0 12px 30px rgba(0,0,0,.08);
-  -webkit-overflow-scrolling: touch;
-  max-height: calc(100dvh - var(--iv-wrap-offset));
-  overscroll-behavior: contain;
-  touch-action: pan-x pan-y;
-  scroll-behavior: smooth;
-  padding-bottom: 14px; /* ✅ small bottom breathing space */
+  -webkit-overflow-scrolling: touch; /* ✅ iOS momentum */
+  overscroll-behavior: auto;         /* ✅ allow up/down smoothly */
+  /* removed touch-action that was blocking */
+  padding-bottom: 10px;
 }
 
 .ivTable{
@@ -558,19 +524,6 @@ html, body { height: 100%; background: #f6f8fc; margin: 0; scroll-behavior:smoot
 .ivStoreSepRow td{ padding:0 !important; border-bottom:none !important; background:#fff; }
 .ivStoreSepTd{ padding:0 !important; border-bottom:none !important; }
 .ivStoreSepLine{ width:100%; border-top:2px dotted #94a3b8; margin:10px 0; }
-
-/* ✅ small refresh indicator */
-.ivRefreshPill{
-  display:inline-block;
-  margin: 0 0 8px 2px;
-  padding: 5px 10px;
-  background:#0b1220;
-  color:#fff;
-  border-radius:999px;
-  font-weight:900;
-  font-size:11px;
-  width: fit-content;
-}
 
 /* Toast */
 .ivToastBackdrop{
@@ -650,9 +603,7 @@ html, body { height: 100%; background: #f6f8fc; margin: 0; scroll-behavior:smoot
 }
 
 @media (max-width: 560px){
-  :root{
-    --iv-wrap-offset: 220px;
-  }
+  :root{ --iv-wrap-offset: 220px; }
 
   .ivHeaderTop{
     flex-direction:column;
@@ -662,8 +613,6 @@ html, body { height: 100%; background: #f6f8fc; margin: 0; scroll-behavior:smoot
     justify-content:flex-start;
     margin-top:10px;
   }
-  .ivTable{
-    min-width:760px;
-  }
+  .ivTable{ min-width:760px; }
 }
 `;
