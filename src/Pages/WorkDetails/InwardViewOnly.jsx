@@ -3,14 +3,11 @@ import { createPortal } from "react-dom";
 
 export default function InwardViewOnly() {
   /* ================= CONFIG ================= */
-
   const API_BASE = useMemo(() => "https://express-backend-myapp.onrender.com", []);
   const LIST_API = `${API_BASE}/api/inward-view`;
-
   const STATIC_SHARE_URL = "https://freeshort.info/fpfG9N";
 
   /* ================= HELPERS ================= */
-
   const toISO = (v) => (v ? String(v).slice(0, 10) : "");
 
   const formatDDMMYYYY = (iso) => {
@@ -57,7 +54,6 @@ export default function InwardViewOnly() {
   };
 
   /* ================= STATE ================= */
-
   const [month, setMonth] = useState(getCurrentMonth);
   const [monthOpen, setMonthOpen] = useState(false);
 
@@ -71,7 +67,6 @@ export default function InwardViewOnly() {
   const abortRef = useRef(null);
 
   /* ================= GROUPING ================= */
-
   const normalizeRows = (list) => {
     const safe = Array.isArray(list) ? list : [];
     return safe
@@ -117,11 +112,9 @@ export default function InwardViewOnly() {
 
     return dates.map((date, idx) => {
       const storeMap = dateMap.get(date);
-
       const stores = Array.from(storeMap.entries())
         .sort(([a], [b]) => String(a).localeCompare(String(b)))
         .map(([store, items]) => ({ store, items }));
-
       return { date, srNo: idx + 1, stores };
     });
   };
@@ -129,11 +122,10 @@ export default function InwardViewOnly() {
   const groups = useMemo(() => groupByDateThenStore(normalizeRows(rows)), [rows]);
 
   /* ================= FETCH ================= */
-
   const fetchData = async ({ selectedMonth, silent = false }) => {
-    if (!silent) setLoading(true);
+    // ✅ loader only for first load / month change
+    if (!silent && rows.length === 0) setLoading(true);
 
-    // cancel previous request
     if (abortRef.current) abortRef.current.abort();
     const ac = new AbortController();
     abortRef.current = ac;
@@ -162,24 +154,24 @@ export default function InwardViewOnly() {
     }
   };
 
-  /* ================= EFFECT: LOAD + POLL (ONLY ONE EFFECT ✅) ================= */
-
   useEffect(() => {
+    // ✅ fast load once + silent refresh every 20s
+    setLoading(true);
     fetchData({ selectedMonth: month, silent: false });
 
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(() => {
-      fetchData({ selectedMonth: month, silent: true }); // silent refresh = no loader
+      fetchData({ selectedMonth: month, silent: true });
     }, 20000);
 
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
       if (abortRef.current) abortRef.current.abort();
     };
+    // eslint-disable-next-line
   }, [month]);
 
   /* ================= ACTIONS ================= */
-
   const showToast = (text) => {
     setToast({ show: true, text });
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -197,12 +189,10 @@ export default function InwardViewOnly() {
   const onDownloadDemo = () => showToast("Only admin can download 🔒");
 
   /* ================= PORTAL ================= */
-
   const Portal = ({ children }) =>
     typeof document === "undefined" ? null : createPortal(children, document.body);
 
   /* ================= RENDER ================= */
-
   const noData = !loading && groups.length === 0;
 
   return (
@@ -230,76 +220,120 @@ export default function InwardViewOnly() {
         </div>
       </div>
 
-      {loading ? (
-        <div className="ivCenter">Loading…</div>
-      ) : noData ? (
-        <div className="ivCenter ivNoData">No records found</div>
-      ) : (
-        <div className="ivTableWrap" role="region" aria-label="Inward table scroll area">
-          <table className="ivTable">
-            <thead>
-              <tr>
-                <th>Sr.No</th>
-                <th>Date</th>
-                <th>Material</th>
-                <th>Quantity</th>
-                <th>Store</th>
-                <th>Material Use</th>
-              </tr>
-            </thead>
+      {/* ✅ body fills remaining height (NO extra white space) */}
+      <div className="ivBody">
+        {loading ? (
+          <div className="ivCenter">Loading…</div>
+        ) : noData ? (
+          <div className="ivCenter ivNoData">No records found</div>
+        ) : (
+          <>
+            {/* Desktop/Tablet Table */}
+            <div className="ivTableWrap" role="region" aria-label="Inward table scroll area">
+              <table className="ivTable">
+                <thead>
+                  <tr>
+                    <th>Sr.No</th>
+                    <th>Date</th>
+                    <th>Material</th>
+                    <th>Quantity</th>
+                    <th>Store</th>
+                    <th>Material Use</th>
+                  </tr>
+                </thead>
 
-            <tbody>
-              {groups.map((g) => (
-                <React.Fragment key={g.date}>
-                  {g.stores.map((storeGroup, sIdx) => (
-                    <React.Fragment key={`${g.date}-${storeGroup.store}-${sIdx}`}>
-                      {storeGroup.items.map((r, idx) => {
-                        const showDate = idx === 0;
-                        const showSrNo = sIdx === 0 && idx === 0;
-                        const showStore = idx === 0;
-                        const letter = String.fromCharCode(97 + idx);
+                <tbody>
+                  {groups.map((g) => (
+                    <React.Fragment key={g.date}>
+                      {g.stores.map((storeGroup, sIdx) => (
+                        <React.Fragment key={`${g.date}-${storeGroup.store}-${sIdx}`}>
+                          {storeGroup.items.map((r, idx) => {
+                            const showDate = idx === 0;
+                            const showSrNo = sIdx === 0 && idx === 0;
+                            const showStore = idx === 0;
+                            const letter = String.fromCharCode(97 + idx);
 
-                        return (
-                          <tr key={`${g.date}-${storeGroup.store}-${idx}-${r.inward_id}`}>
-                            <td className="ivSr">{showSrNo ? g.srNo : ""}</td>
-                            <td className="ivDate">{showDate ? formatDDMMYYYY(g.date) : ""}</td>
+                            return (
+                              <tr key={`${g.date}-${storeGroup.store}-${idx}-${r.inward_id}`}>
+                                <td className="ivSr">{showSrNo ? g.srNo : ""}</td>
+                                <td className="ivDate">{showDate ? formatDDMMYYYY(g.date) : ""}</td>
+                                <td>
+                                  <span className="ivLetterBlack">{letter})</span> {r.material}
+                                </td>
+                                <td>
+                                  {r.quantity ?? ""}
+                                  {r.quantity_type ? ` ${r.quantity_type}` : ""}
+                                </td>
+                                <td className="ivStore">{showStore ? storeGroup.store || "—" : ""}</td>
+                                <td>{r.material_use}</td>
+                              </tr>
+                            );
+                          })}
 
-                            <td>
-                              <span className="ivLetterBlack">{letter})</span> {r.material}
-                            </td>
+                          {sIdx !== g.stores.length - 1 && (
+                            <tr className="ivStoreSepRow" aria-hidden="true">
+                              <td colSpan={6} className="ivStoreSepTd">
+                                <div className="ivStoreSepLine" />
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      ))}
 
-                            <td>
-                              {r.quantity ?? ""}
-                              {r.quantity_type ? ` ${r.quantity_type}` : ""}
-                            </td>
-
-                            <td className="ivStore">{showStore ? storeGroup.store || "—" : ""}</td>
-                            <td>{r.material_use}</td>
-                          </tr>
-                        );
-                      })}
-
-                      {sIdx !== g.stores.length - 1 && (
-                        <tr className="ivStoreSepRow" aria-hidden="true">
-                          <td colSpan={6} className="ivStoreSepTd">
-                            <div className="ivStoreSepLine" />
-                          </td>
-                        </tr>
-                      )}
+                      <tr className="ivSepRow" aria-hidden="true">
+                        <td colSpan={6} className="ivSepTd">
+                          <div className="ivSepLine" />
+                        </td>
+                      </tr>
                     </React.Fragment>
                   ))}
+                </tbody>
+              </table>
+            </div>
 
-                  <tr className="ivSepRow" aria-hidden="true">
-                    <td colSpan={6} className="ivSepTd">
-                      <div className="ivSepLine" />
-                    </td>
-                  </tr>
-                </React.Fragment>
+            {/* Mobile Cards */}
+            <div className="ivCards" aria-label="Inward cards">
+              {groups.map((g) => (
+                <div className="ivCardGroup" key={`m-${g.date}`}>
+                  <div className="ivCardGroupTop">
+                    <div className="ivCardSr">Sr. {g.srNo}</div>
+                    <div className="ivCardDate">{formatDDMMYYYY(g.date)}</div>
+                  </div>
+
+                  {g.stores.map((storeGroup, sIdx) => (
+                    <div className="ivStoreBlock" key={`m-${g.date}-${storeGroup.store}-${sIdx}`}>
+                      <div className="ivStorePill">{storeGroup.store || "—"}</div>
+
+                      {storeGroup.items.map((r, idx) => {
+                        const letter = String.fromCharCode(97 + idx);
+                        return (
+                          <div className="ivItemCard" key={`m-${g.date}-${storeGroup.store}-${idx}-${r.inward_id}`}>
+                            <div className="ivItemTop">
+                              <div className="ivItemTitle">
+                                <span className="ivLetterBlack">{letter})</span> {r.material || "—"}
+                              </div>
+                              <div className="ivQty">
+                                {(r.quantity ?? "") + (r.quantity_type ? ` ${r.quantity_type}` : "")}
+                              </div>
+                            </div>
+
+                            <div className="ivItemMeta">
+                              <div className="ivMetaRow">
+                                <span className="ivMetaLabel">Use</span>
+                                <span className="ivMetaValue">{r.material_use || "—"}</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
               ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+            </div>
+          </>
+        )}
+      </div>
 
       <Portal>
         {toast.show && (
@@ -317,12 +351,7 @@ export default function InwardViewOnly() {
             <div className="ivModal" role="dialog" aria-modal="true">
               <div className="ivModalTitle">Select Month</div>
 
-              <input
-                className="ivMonthInput"
-                type="month"
-                value={month}
-                onChange={(e) => setMonth(e.target.value)}
-              />
+              <input className="ivMonthInput" type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
 
               <div className="ivModalActions">
                 <button className="ivModalBtnGhost" type="button" onClick={() => setMonthOpen(false)}>
@@ -350,52 +379,50 @@ export default function InwardViewOnly() {
 }
 
 /* ================= STYLES ================= */
-
 const css = `
-:root{
-  --iv-wrap-offset: 190px;
+/* ✅ remove browser default gaps */
+html, body { height: 100%; margin: 0; padding: 0; background: #f6f8fc; }
+#root { height: 100%; }
+
+/* ✅ full screen layout WITHOUT extra white space */
+.ivPage{
+  height: 100dvh;
+  display:flex;
+  flex-direction:column;
+  background:#f6f8fc;
+
+  /* ✅ only small safe-area padding (no big top/bottom) */
+  padding-top: max(10px, env(safe-area-inset-top));
+  padding-left: 12px;
+  padding-right: 12px;
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
 }
 
-html, body { height: 100%; background: #f6f8fc; margin: 0; }
-#root { min-height: 100%; background:#f6f8fc; }
 * { box-sizing: border-box; }
 
-.ivPage{
-  min-height:100dvh;
-  background:#f6f8fc;
-  padding:16px;
-}
-
 .ivHeader{
+  flex: 0 0 auto;
   background:#0b1220;
   color:#fff;
-  padding:16px;
+  padding:14px;
   border-radius:14px;
-  margin-bottom:14px;
+  margin-bottom:10px;
 }
 
 .ivHeaderTop{
   display:flex;
   justify-content:space-between;
-  gap:12px;
+  gap:10px;
   align-items:flex-start;
 }
 
-.ivHeaderLeft{ min-width:0; }
-
-.ivTitle{
-  font-size:18px;
-  font-weight:900;
-  line-height:1.2;
-  word-break:break-word;
-}
+.ivTitle{ font-size:18px; font-weight:900; line-height:1.2; }
 .ivSub{ font-size:12px; opacity:.85; margin-top:4px; }
 
 .ivActions{
   display:flex;
   gap:8px;
   align-items:center;
-  flex-shrink:0;
   flex-wrap:wrap;
 }
 
@@ -403,11 +430,10 @@ html, body { height: 100%; background: #f6f8fc; margin: 0; }
   background:rgba(255,255,255,.16);
   color:#fff;
   border:1px solid rgba(255,255,255,.28);
-  padding:7px 10px;
+  padding:8px 12px;
   border-radius:10px;
   font-weight:900;
   cursor:pointer;
-  white-space:nowrap;
   font-size:12px;
 }
 .ivMonthBtn:hover{ background:rgba(255,255,255,.22); }
@@ -416,11 +442,10 @@ html, body { height: 100%; background: #f6f8fc; margin: 0; }
   background:#fff;
   color:#0b1220;
   border:none;
-  padding:7px 10px;
+  padding:8px 12px;
   border-radius:10px;
   font-weight:900;
   cursor:pointer;
-  white-space:nowrap;
   font-size:12px;
 }
 
@@ -428,39 +453,43 @@ html, body { height: 100%; background: #f6f8fc; margin: 0; }
   background:rgba(255,255,255,.14);
   color:#fff;
   border:1px solid rgba(255,255,255,.28);
-  padding:7px 10px;
+  padding:8px 12px;
   border-radius:10px;
   font-weight:900;
   cursor:pointer;
-  white-space:nowrap;
   font-size:12px;
 }
 .ivDownloadBtn:hover{ background:rgba(255,255,255,.20); }
 
+/* ✅ body fills remaining height (removes bottom blank area) */
+.ivBody{
+  flex: 1 1 auto;
+  min-height: 0;
+  display:block;
+}
+
+/* loader centered inside body */
 .ivCenter{
-  text-align:center;
-  padding:40px;
+  height: 100%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
   color:#6b7280;
   font-weight:800;
 }
+.ivNoData{ color:#dc2626; font-weight:900; }
 
-.ivNoData{
-  color:#dc2626;
-  font-weight:900;
-}
-
+/* ===== Desktop Table ===== */
 .ivTableWrap{
+  height: 100%;
   background:#fff;
   border-radius:14px;
   overflow:auto;
   box-shadow:0 12px 30px rgba(0,0,0,.08);
   -webkit-overflow-scrolling: touch;
-  max-height: calc(100dvh - var(--iv-wrap-offset));
-  overscroll-behavior: contain;
-  touch-action: pan-x pan-y;
 
-  /* ✅ professional: small inner bottom padding only */
-  padding-bottom: 8px;
+  /* ✅ only small inner padding, no huge blank */
+  padding-bottom: 10px;
 }
 
 .ivTable{
@@ -494,24 +523,108 @@ html, body { height: 100%; background: #f6f8fc; margin: 0; }
 .ivLetterBlack{ font-weight:900; color:#111827; }
 
 .ivSepRow td{ padding:0 !important; border-bottom:none !important; background:#fff; }
-.ivSepTd{ padding:0 !important; border-bottom:none !important; }
 .ivSepLine{ width:100%; border-top:1px solid #0b1220; margin:10px 0; }
 
 .ivStoreSepRow td{ padding:0 !important; border-bottom:none !important; background:#fff; }
-.ivStoreSepTd{ padding:0 !important; border-bottom:none !important; }
 .ivStoreSepLine{ width:100%; border-top:2px dotted #94a3b8; margin:10px 0; }
 
-/* Toast */
-.ivToastBackdrop{
-  position:fixed;
-  inset:0;
-  background:transparent;
-  z-index:999998;
+/* ===== Mobile Cards ===== */
+.ivCards{ display:none; height: 100%; overflow:auto; padding-bottom: 10px; }
+
+.ivCardGroup{
+  background:#fff;
+  border-radius:16px;
+  box-shadow:0 12px 30px rgba(0,0,0,.08);
+  padding:18px;
+  margin-bottom:12px;
 }
+
+.ivCardGroupTop{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+  margin-bottom:12px;
+}
+
+.ivCardSr{
+  font-weight:900;
+  color:#0b1220;
+  font-size:12px;
+  background:#f3f4f6;
+  padding:7px 12px;
+  border-radius:999px;
+}
+
+.ivCardDate{
+  font-weight:900;
+  color:#0b1220;
+  font-size:12px;
+}
+
+.ivStoreBlock{ margin-top:14px; }
+
+.ivStorePill{
+  display:inline-flex;
+  padding:8px 14px;
+  border-radius:999px;
+  background:#0b1220;
+  color:#fff;
+  font-weight:900;
+  font-size:13px;
+}
+
+.ivItemCard{
+  margin-top:14px;
+  border:1px solid #e5e7eb;
+  border-radius:14px;
+  padding:16px;
+  background:#fff;
+
+  /* ✅ card height increased (not short) */
+  min-height: 140px;
+
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+}
+
+.ivItemTop{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  align-items:flex-start;
+}
+
+.ivItemTitle{
+  font-weight:900;
+  color:#111827;
+  font-size:14px;
+  line-height:1.35;
+  word-break:break-word;
+}
+
+.ivQty{
+  flex-shrink:0;
+  font-weight:900;
+  font-size:13px;
+  background:#f3f4f6;
+  color:#0b1220;
+  padding:8px 12px;
+  border-radius:12px;
+  white-space:nowrap;
+}
+
+.ivItemMeta{ margin-top:12px; }
+.ivMetaRow{ display:flex; justify-content:space-between; gap:10px; }
+.ivMetaLabel{ font-weight:900; color:#6b7280; font-size:12px; }
+.ivMetaValue{ font-weight:800; color:#111827; font-size:13px; text-align:right; word-break:break-word; }
+
+/* Toast */
+.ivToastBackdrop{ position:fixed; inset:0; background:transparent; z-index:999998; }
 .ivToast{
   position:fixed;
-  left:50%;
-  top:50%;
+  left:50%; top:50%;
   transform:translate(-50%,-50%);
   background:#0b1220;
   color:#fff;
@@ -526,16 +639,10 @@ html, body { height: 100%; background: #f6f8fc; margin: 0; }
 }
 
 /* Month modal */
-.ivModalBackdrop{
-  position:fixed;
-  inset:0;
-  background: rgba(0,0,0,.25);
-  z-index:999997;
-}
+.ivModalBackdrop{ position:fixed; inset:0; background: rgba(0,0,0,.25); z-index:999997; }
 .ivModal{
   position:fixed;
-  left:50%;
-  top:50%;
+  left:50%; top:50%;
   transform: translate(-50%,-50%);
   width: min(92vw, 360px);
   background:#fff;
@@ -553,12 +660,7 @@ html, body { height: 100%; background: #f6f8fc; margin: 0; }
   font-weight:800;
   outline:none;
 }
-.ivModalActions{
-  display:flex;
-  justify-content:flex-end;
-  gap:8px;
-  margin-top:12px;
-}
+.ivModalActions{ display:flex; justify-content:flex-end; gap:8px; margin-top:12px; }
 .ivModalBtn{
   background:#0b1220;
   color:#fff;
@@ -578,19 +680,13 @@ html, body { height: 100%; background: #f6f8fc; margin: 0; }
   cursor:pointer;
 }
 
-@media (max-width: 560px){
-  :root{ --iv-wrap-offset: 260px; }
+/* ✅ Mobile layout */
+@media (max-width: 760px){
+  .ivHeaderTop{ flex-direction:column; align-items:stretch; }
+  .ivActions{ margin-top:10px; }
 
-  .ivHeaderTop{
-    flex-direction:column;
-    align-items:stretch;
-  }
-  .ivActions{
-    justify-content:flex-start;
-    margin-top:10px;
-  }
-  .ivTable{
-    min-width:760px;
-  }
+  /* hide wide table, show cards */
+  .ivTableWrap{ display:none; }
+  .ivCards{ display:block; }
 }
 `;
