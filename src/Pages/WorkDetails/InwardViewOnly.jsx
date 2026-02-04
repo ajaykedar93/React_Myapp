@@ -25,7 +25,7 @@ export default function InwardViewOnly() {
     const d = new Date();
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, "0");
-    return `${y}-${m}`; // YYYY-MM
+    return `${y}-${m}`;
   };
 
   const monthToLabel = (ym) => {
@@ -58,7 +58,7 @@ export default function InwardViewOnly() {
 
   /* ================= STATE ================= */
 
-  const [month, setMonth] = useState(getCurrentMonth); // default current month
+  const [month, setMonth] = useState(getCurrentMonth);
   const [monthOpen, setMonthOpen] = useState(false);
 
   const [rows, setRows] = useState([]);
@@ -69,8 +69,6 @@ export default function InwardViewOnly() {
 
   const pollRef = useRef(null);
   const abortRef = useRef(null);
-
-  const isFirstLoadRef = useRef(true);
 
   /* ================= GROUPING ================= */
 
@@ -133,7 +131,6 @@ export default function InwardViewOnly() {
   /* ================= FETCH ================= */
 
   const fetchData = async ({ selectedMonth, silent = false }) => {
-    // silent refresh = do NOT show loader / do NOT clear table
     if (!silent) setLoading(true);
 
     // cancel previous request
@@ -155,10 +152,8 @@ export default function InwardViewOnly() {
         return;
       }
 
-      // update rows (no clearing before, so no flicker)
       setRows(Array.isArray(j.data) ? j.data : []);
     } catch (e) {
-      // ignore abort errors
       if (e?.name !== "AbortError") {
         if (!silent) setRows([]);
       }
@@ -167,18 +162,14 @@ export default function InwardViewOnly() {
     }
   };
 
-  /* ================= EFFECT: LOAD + POLL ================= */
+  /* ================= EFFECT: LOAD + POLL (ONLY ONE EFFECT ✅) ================= */
 
   useEffect(() => {
-    // month change = show loader once
-    isFirstLoadRef.current = false;
-
     fetchData({ selectedMonth: month, silent: false });
 
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(() => {
-      // polling refresh = silent (NO loading, NO row clear)
-      fetchData({ selectedMonth: month, silent: true });
+      fetchData({ selectedMonth: month, silent: true }); // silent refresh = no loader
     }, 20000);
 
     return () => {
@@ -186,12 +177,6 @@ export default function InwardViewOnly() {
       if (abortRef.current) abortRef.current.abort();
     };
   }, [month]);
-
-  // first mount only: keep your initial loading smooth
-  useEffect(() => {
-    fetchData({ selectedMonth: month, silent: false });
-    // eslint-disable-next-line
-  }, []);
 
   /* ================= ACTIONS ================= */
 
@@ -311,11 +296,6 @@ export default function InwardViewOnly() {
                   </tr>
                 </React.Fragment>
               ))}
-
-              {/* ✅ small bottom space only */}
-              <tr aria-hidden="true">
-                <td colSpan={6} className="ivBottomPad" />
-              </tr>
             </tbody>
           </table>
         </div>
@@ -478,6 +458,9 @@ html, body { height: 100%; background: #f6f8fc; margin: 0; }
   max-height: calc(100dvh - var(--iv-wrap-offset));
   overscroll-behavior: contain;
   touch-action: pan-x pan-y;
+
+  /* ✅ professional: small inner bottom padding only */
+  padding-bottom: 8px;
 }
 
 .ivTable{
@@ -517,14 +500,6 @@ html, body { height: 100%; background: #f6f8fc; margin: 0; }
 .ivStoreSepRow td{ padding:0 !important; border-bottom:none !important; background:#fff; }
 .ivStoreSepTd{ padding:0 !important; border-bottom:none !important; }
 .ivStoreSepLine{ width:100%; border-top:2px dotted #94a3b8; margin:10px 0; }
-
-/* ✅ small bottom padding (instead of huge 320px spacer) */
-.ivBottomPad{
-  height: 22px;
-  border-bottom:none !important;
-  padding:0 !important;
-  background:#fff;
-}
 
 /* Toast */
 .ivToastBackdrop{
