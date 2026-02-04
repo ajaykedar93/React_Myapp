@@ -4,21 +4,28 @@ import { createPortal } from "react-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
 import {
-  FiPlus, FiSearch, FiTrash2, FiEdit2, FiGlobe, FiUploadCloud, FiX, FiImage,
-  FiExternalLink, FiCheckCircle, FiAlertTriangle, FiInfo, FiRotateCcw, FiCopy
+  FiPlus,
+  FiSearch,
+  FiTrash2,
+  FiEdit2,
+  FiGlobe,
+  FiUploadCloud,
+  FiX,
+  FiImage,
+  FiExternalLink,
+  FiCheckCircle,
+  FiAlertTriangle,
+  FiInfo,
+  FiRotateCcw,
+  FiCopy,
 } from "react-icons/fi";
-
-/**
- * WebsitesUrl.jsx — Mobile-safe overlays & full-screen image preview (10/page)
- * - Image preview now uses a PORTAL to escape stacking contexts and always renders above navbar.
- * - All overlays (confirm, busy) are also portaled and have higher z-index.
- * - Body scroll locks while preview/notice/confirm are open (mobile friendly).
- * - Layout remains flexible for mobile; images are fully visible (no crop) and open full-screen.
- */
 
 const API_BASE = "https://express-backend-myapp.onrender.com"; // no trailing slash
 const PAGE_SIZE = 10;
 const spring = { type: "spring", stiffness: 420, damping: 32, mass: 0.7 };
+
+// ✅ Default filter category (auto-select)
+const DEFAULT_CATEGORY_NAME = "Important"; // <-- if your DB uses different name, change this
 
 async function api(path, { method = "GET", body, headers, json = true } = {}) {
   const url = `${API_BASE}/api${path}`;
@@ -52,14 +59,7 @@ const toAbsUrl = (u) => {
 };
 
 const getImageSrc = (item) => {
-  const v =
-    item?.image ??
-    item?.image_url ??
-    item?.imageUrl ??
-    item?.thumbnail ??
-    item?.thumb ??
-    null;
-
+  const v = item?.image ?? item?.image_url ?? item?.imageUrl ?? item?.thumbnail ?? item?.thumb ?? null;
   if (!v) return "";
   if (typeof v === "string") return toAbsUrl(v);
   if (typeof v === "object") {
@@ -72,9 +72,11 @@ const getImageSrc = (item) => {
 
 const Badge = ({ tone = "info", children }) => {
   const cls =
-    tone === "success" ? "badge text-bg-success" :
-    tone === "danger" ? "badge text-bg-danger" :
-    "badge text-bg-secondary";
+    tone === "success"
+      ? "badge text-bg-success"
+      : tone === "danger"
+      ? "badge text-bg-danger"
+      : "badge text-bg-secondary";
   return <span className={cls}>{children}</span>;
 };
 
@@ -83,11 +85,13 @@ function useBodyLock(locked) {
   useEffect(() => {
     const original = document.body.style.overflow;
     if (locked) document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = original; };
+    return () => {
+      document.body.style.overflow = original;
+    };
   }, [locked]);
 }
 
-/** Centered popup via portal (guaranteed center on mobile & desktop) */
+/** Centered popup via portal */
 function CenterNotice({ open, type = "success", title, message, onClose }) {
   useBodyLock(open);
   const palette =
@@ -101,7 +105,9 @@ function CenterNotice({ open, type = "success", title, message, onClose }) {
   const okBtnRef = useRef(null);
   useEffect(() => {
     if (open) {
-      try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch {}
+      try {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } catch {}
       setTimeout(() => okBtnRef.current?.focus(), 0);
     }
   }, [open]);
@@ -116,7 +122,14 @@ function CenterNotice({ open, type = "success", title, message, onClose }) {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="position-fixed top-0 start-0 w-100"
-          style={{ zIndex: 6000, height: "100dvh", display: "grid", placeItems: "center", background: "rgba(0,0,0,.25)" }}
+          style={{
+            zIndex: 6000,
+            height: "100dvh",
+            display: "grid",
+            placeItems: "center",
+            background: "rgba(0,0,0,.25)",
+            padding: "12px",
+          }}
         >
           <motion.div
             initial={{ scale: 0.98, opacity: 0 }}
@@ -128,14 +141,19 @@ function CenterNotice({ open, type = "success", title, message, onClose }) {
           >
             <div className="card-body">
               <div className="d-flex align-items-center gap-3 mb-2">
-                <div className="d-inline-flex align-items-center justify-content-center rounded-circle border" style={{ width: 40, height: 40 }}>
+                <div
+                  className="d-inline-flex align-items-center justify-content-center rounded-circle border"
+                  style={{ width: 40, height: 40 }}
+                >
                   <Icon />
                 </div>
                 <h5 className="card-title mb-0 fw-bold">{title}</h5>
               </div>
               <p className="card-text text-secondary mb-4 small">{message}</p>
               <div className="text-end">
-                <button ref={okBtnRef} className="btn btn-primary fw-bold" onClick={onClose}>OK</button>
+                <button ref={okBtnRef} className="btn btn-primary fw-bold" onClick={onClose}>
+                  OK
+                </button>
               </div>
             </div>
           </motion.div>
@@ -157,7 +175,14 @@ const Confirm = ({ open, title, message, onCancel, onConfirm }) => {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="position-fixed top-0 start-0 w-100"
-          style={{ zIndex: 5900, height: "100dvh", background: "rgba(0,0,0,.5)", display: "grid", placeItems: "center" }}
+          style={{
+            zIndex: 5900,
+            height: "100dvh",
+            background: "rgba(0,0,0,.5)",
+            display: "grid",
+            placeItems: "center",
+            padding: "12px",
+          }}
         >
           <motion.div
             initial={{ y: 16, opacity: 0 }}
@@ -174,8 +199,12 @@ const Confirm = ({ open, title, message, onCancel, onConfirm }) => {
               </div>
               <div className="text-secondary mb-4 small">{message}</div>
               <div className="d-flex flex-wrap justify-content-end gap-2">
-                <button onClick={onCancel} className="btn btn-outline-secondary">Cancel</button>
-                <button onClick={onConfirm} className="btn btn-danger fw-bold">Delete</button>
+                <button onClick={onCancel} className="btn btn-outline-secondary">
+                  Cancel
+                </button>
+                <button onClick={onConfirm} className="btn btn-danger fw-bold">
+                  Delete
+                </button>
               </div>
             </div>
           </motion.div>
@@ -197,7 +226,14 @@ const BusyOverlay = ({ show }) => {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="position-fixed top-0 start-0 w-100"
-          style={{ zIndex: 5800, height: "100dvh", backdropFilter: "blur(2px)", background: "rgba(0,0,0,.15)", display: "grid", placeItems: "center" }}
+          style={{
+            zIndex: 5800,
+            height: "100dvh",
+            backdropFilter: "blur(2px)",
+            background: "rgba(0,0,0,.15)",
+            display: "grid",
+            placeItems: "center",
+          }}
         >
           <div className="spinner-border text-light" role="status" aria-label="loading" />
         </motion.div>
@@ -225,10 +261,15 @@ function Dropzone({ file, setFile }) {
 
   return (
     <div
-      onDragOver={(e) => { e.preventDefault(); setIsOver(true); }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setIsOver(true);
+      }}
       onDragLeave={() => setIsOver(false)}
       onDrop={onDrop}
-      className={`p-3 rounded-3 border ${isOver ? "border-primary bg-primary-subtle" : "border-secondary-subtle bg-white"}`}
+      className={`p-3 rounded-3 border ${
+        isOver ? "border-primary bg-primary-subtle" : "border-secondary-subtle bg-white"
+      }`}
       style={{ minHeight: 84 }}
     >
       <input type="file" accept="image/*" onChange={onChange} className="d-none" ref={ref} />
@@ -238,7 +279,11 @@ function Dropzone({ file, setFile }) {
           <div className="fw-semibold text-dark">Drag & drop image (optional)</div>
           <div className="text-secondary">
             or{" "}
-            <button type="button" onClick={() => ref.current?.click()} className="btn btn-link p-0 align-baseline">
+            <button
+              type="button"
+              onClick={() => ref.current?.click()}
+              className="btn btn-link p-0 align-baseline"
+            >
               browse
             </button>
           </div>
@@ -247,7 +292,11 @@ function Dropzone({ file, setFile }) {
       {file && (
         <div className="mt-2 d-inline-flex align-items-center gap-2 small text-secondary">
           <FiImage /> <span>{file.name}</span>
-          <button type="button" onClick={() => setFile(null)} className="btn btn-link text-danger p-0 align-baseline">
+          <button
+            type="button"
+            onClick={() => setFile(null)}
+            className="btn btn-link text-danger p-0 align-baseline"
+          >
             <FiX /> remove
           </button>
         </div>
@@ -258,23 +307,22 @@ function Dropzone({ file, setFile }) {
 
 // ----------------------------- Main Page -----------------------------
 export default function WebsitesUrl() {
-  // list state
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
-  const [category, setCategory] = useState("");
+
+  // ✅ default category should be selected automatically (Important)
+  const [category, setCategory] = useState(DEFAULT_CATEGORY_NAME);
+
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // notice / confirm
   const [notice, setNotice] = useState({ open: false, type: "success", title: "", message: "" });
   const [confirm, setConfirm] = useState({ open: false, id: null, name: "" });
 
-  // image preview overlay state
   const [preview, setPreview] = useState({ open: false, src: "", title: "" });
 
-  // form state
   const [editing, setEditing] = useState(null);
   const [fUrl, setFUrl] = useState("");
   const [fName, setFName] = useState("");
@@ -282,8 +330,9 @@ export default function WebsitesUrl() {
   const [fFile, setFFile] = useState(null);
   const [saving, setSaving] = useState(false);
 
-  // image ok/broken state
-  const [imgOk, setImgOk] = useState({}); // { [id]: boolean }
+  const [imgOk, setImgOk] = useState({});
+
+  useBodyLock(preview.open);
 
   const showNotice = (type, title, message) => setNotice({ open: true, type, title, message });
 
@@ -294,7 +343,11 @@ export default function WebsitesUrl() {
         await navigator.clipboard.writeText(link);
       } else {
         const ta = document.createElement("textarea");
-        ta.value = link; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta);
+        ta.value = link;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
       }
       showNotice("success", "Link Copied", "The website link has been copied to clipboard.");
     } catch {
@@ -302,10 +355,41 @@ export default function WebsitesUrl() {
     }
   };
 
+  // ✅ IMPORTANT first in dropdown list
+  const orderedCategories = useMemo(() => {
+    const arr = Array.isArray(categories) ? [...categories] : [];
+    arr.sort((a, b) => {
+      const an = String(a?.name || "").toLowerCase();
+      const bn = String(b?.name || "").toLowerCase();
+      const aImp = an === DEFAULT_CATEGORY_NAME.toLowerCase() || an.includes("important");
+      const bImp = bn === DEFAULT_CATEGORY_NAME.toLowerCase() || bn.includes("important");
+      if (aImp && !bImp) return -1;
+      if (!aImp && bImp) return 1;
+      return an.localeCompare(bn);
+    });
+    return arr;
+  }, [categories]);
+
   const loadCategories = async () => {
     try {
       const data = await api("/websitecategory");
-      setCategories(Array.isArray(data) ? data : []);
+      const list = Array.isArray(data) ? data : [];
+      setCategories(list);
+
+      // ✅ If default category not present, auto-pick first available
+      const hasDefault = list.some(
+        (c) =>
+          String(c?.name || "").toLowerCase() === DEFAULT_CATEGORY_NAME.toLowerCase() ||
+          String(c?.name || "").toLowerCase().includes("important")
+      );
+
+      if (!hasDefault && list.length > 0) {
+        // keep current selection if user already selected something
+        setCategory((prev) => (prev ? prev : list[0].name));
+      } else {
+        // ensure default stays selected
+        setCategory((prev) => (prev ? prev : DEFAULT_CATEGORY_NAME));
+      }
     } catch (e) {
       showNotice("error", "Load Failed", e.message || "Could not load categories.");
     }
@@ -318,7 +402,10 @@ export default function WebsitesUrl() {
       params.set("page", String(page));
       params.set("limit", String(PAGE_SIZE));
       if (q) params.set("q", q);
+
+      // ✅ Default is Important, and when user selects any category, list shows that category
       if (category) params.set("category", category);
+
       const data = await api(`/websites?${params.toString()}`);
       setItems(data.items || []);
       setTotal(data.total || 0);
@@ -329,15 +416,30 @@ export default function WebsitesUrl() {
     }
   };
 
-  useEffect(() => { loadCategories(); }, []);
-  useEffect(() => { load(); }, [page, q, category]);
+  useEffect(() => {
+    loadCategories();
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [page, q, category]);
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total]);
 
-  const clearFilters = () => { setQ(""); setCategory(""); setPage(1); };
+  // ✅ Reset should go back to default Important
+  const clearFilters = () => {
+    setQ("");
+    setCategory(DEFAULT_CATEGORY_NAME);
+    setPage(1);
+  };
 
   const resetForm = () => {
-    setEditing(null); setFUrl(""); setFName(""); setFCategory(""); setFFile(null); setSaving(false);
+    setEditing(null);
+    setFUrl("");
+    setFName("");
+    setFCategory("");
+    setFFile(null);
+    setSaving(false);
   };
 
   const fillFormForEdit = (it) => {
@@ -403,6 +505,14 @@ export default function WebsitesUrl() {
     }
   };
 
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape" && preview.open) setPreview({ open: false, src: "", title: "" });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [preview.open]);
+
   return (
     <div className="min-vh-100" style={{ background: "#f5f7fb", minHeight: "100dvh" }}>
       {/* Header */}
@@ -416,7 +526,7 @@ export default function WebsitesUrl() {
           color: "#fff",
           boxShadow: "0 12px 28px rgba(91,52,230,.25)",
           borderBottom: "1px solid rgba(255,255,255,.25)",
-          zIndex: 1020
+          zIndex: 1020,
         }}
       >
         <div className="container py-3 d-flex align-items-center justify-content-between gap-3 flex-wrap">
@@ -433,8 +543,9 @@ export default function WebsitesUrl() {
                 backdropFilter: "blur(6px)",
                 border: "1px solid rgba(255,255,255,.45)",
                 boxShadow: "0 8px 24px rgba(0,0,0,.15), inset 0 0 0 1px rgba(255,255,255,.2)",
-                textShadow: "0 1px 0 rgba(0,0,0,.35), 0 0 10px rgba(255,255,255,.7), 0 0 18px rgba(255,255,255,.45)",
-                letterSpacing: "0.5px"
+                textShadow:
+                  "0 1px 0 rgba(0,0,0,.35), 0 0 10px rgba(255,255,255,.7), 0 0 18px rgba(255,255,255,.45)",
+                letterSpacing: "0.5px",
               }}
             >
               URL
@@ -449,16 +560,71 @@ export default function WebsitesUrl() {
         </div>
       </motion.div>
 
+      {/* ✅ CSS FIXED (no extra bracket) */}
+      <style>{`
+        .wu-imgBox{
+          height: 170px;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          background:#fff;
+        }
+        .wu-img{
+          max-width:100%;
+          max-height:100%;
+          object-fit:contain;
+          cursor: zoom-in;
+        }
+
+        .wu-previewCard{
+          position: relative;
+          width: min(980px, 100%);
+          max-height: 92dvh;
+          display: grid;
+          place-items: center;
+        }
+
+        .wu-previewClose{
+          position: absolute;
+          top: 6px;
+          right: 6px;
+          z-index: 5;
+          width: 40px;
+          height: 40px;
+          border-radius: 999px;
+          border: 1px solid rgba(255,255,255,.22);
+          background: rgba(0,0,0,.55);
+          color: #fff;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          backdrop-filter: blur(6px);
+          box-shadow: 0 10px 28px rgba(0,0,0,.35);
+        }
+        .wu-previewClose:active{ transform: translateY(1px); }
+      `}</style>
+
       <div className="container py-4">
         {/* Add/Edit Form */}
-        <motion.form onSubmit={submitForm} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={spring} className="card shadow-sm mb-4">
+        <motion.form
+          onSubmit={submitForm}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={spring}
+          className="card shadow-sm mb-4"
+        >
           <div className="card-body">
             <div className="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
               <h5 className="mb-0 fw-bold">{editing ? "Edit Website" : "Add Website"}</h5>
               <div className="d-flex align-items-center gap-2 flex-wrap">
                 {editing ? <Badge>Update</Badge> : <Badge>Create</Badge>}
                 {editing && (
-                  <button type="button" onClick={resetForm} className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1" title="Reset to Add mode">
+                  <button
+                    type="button"
+                    onClick={resetForm}
+                    className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1"
+                    title="Reset to Add mode"
+                  >
                     <FiRotateCcw /> Cancel Edit
                   </button>
                 )}
@@ -468,21 +634,39 @@ export default function WebsitesUrl() {
             <div className="row g-3">
               <div className="col-lg-8">
                 <label className="form-label fw-semibold">Website URL</label>
-                <input value={fUrl} onChange={(e) => setFUrl(e.target.value)} placeholder="example.com or https://example.com" className="form-control" />
-                <div className="form-text">Any format allowed; we’ll auto-prepend <code>https://</code> if missing.</div>
+                <input
+                  value={fUrl}
+                  onChange={(e) => setFUrl(e.target.value)}
+                  placeholder="example.com or https://example.com"
+                  className="form-control"
+                />
+                <div className="form-text">
+                  Any format allowed; we’ll auto-prepend <code>https://</code> if missing.
+                </div>
               </div>
 
               <div className="col-md-6 col-lg-4">
                 <label className="form-label fw-semibold">Name (optional)</label>
-                <input value={fName} onChange={(e) => setFName(e.target.value)} placeholder="Display name" className="form-control" />
+                <input
+                  value={fName}
+                  onChange={(e) => setFName(e.target.value)}
+                  placeholder="Display name"
+                  className="form-control"
+                />
               </div>
 
               <div className="col-md-6 col-lg-4">
                 <label className="form-label fw-semibold">Category (optional)</label>
-                <select value={fCategory} onChange={(e) => setFCategory(e.target.value)} className="form-select">
+                <select
+                  value={fCategory}
+                  onChange={(e) => setFCategory(e.target.value)}
+                  className="form-select"
+                >
                   <option value="">Select category</option>
-                  {categories.map((c) => (
-                    <option key={c.id || c.name} value={c.name}>{c.name}</option>
+                  {orderedCategories.map((c) => (
+                    <option key={c.id || c.name} value={c.name}>
+                      {c.name}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -494,9 +678,29 @@ export default function WebsitesUrl() {
             </div>
 
             <div className="mt-3 d-flex flex-wrap justify-content-end gap-2">
-              <button type="button" onClick={resetForm} className="btn btn-outline-secondary">Reset</button>
-              <button type="submit" disabled={saving} className="btn btn-primary fw-bold d-inline-flex align-items-center gap-2">
-                {editing ? (saving ? "Saving..." : <> <FiCheckCircle/> Save Changes</>) : saving ? "Adding..." : <> <FiPlus/> Add Website</> }
+              <button type="button" onClick={resetForm} className="btn btn-outline-secondary">
+                Reset
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="btn btn-primary fw-bold d-inline-flex align-items-center gap-2"
+              >
+                {editing ? (
+                  saving ? (
+                    "Saving..."
+                  ) : (
+                    <>
+                      <FiCheckCircle /> Save Changes
+                    </>
+                  )
+                ) : saving ? (
+                  "Adding..."
+                ) : (
+                  <>
+                    <FiPlus /> Add Website
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -508,20 +712,46 @@ export default function WebsitesUrl() {
             <div className="row g-2 align-items-center">
               <div className="col-md">
                 <div className="position-relative">
-                  <FiSearch className="position-absolute" style={{ left: 10, top: 10, opacity: .5 }} />
-                  <input value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Search url or name" className="form-control ps-5" />
+                  <FiSearch className="position-absolute" style={{ left: 10, top: 10, opacity: 0.5 }} />
+                  <input
+                    value={q}
+                    onChange={(e) => {
+                      setQ(e.target.value);
+                      setPage(1);
+                    }}
+                    placeholder="Search url or name"
+                    className="form-control ps-5"
+                  />
                 </div>
               </div>
+
+              {/* ✅ Default shows "Important" selected, user can select any category */}
               <div className="col-md-auto">
-                <select value={category} onChange={(e) => { setCategory(e.target.value); setPage(1); }} className="form-select">
-                  <option value="">All categories</option>
-                  {categories.map((c) => (
-                    <option key={c.id || c.name} value={c.name}>{c.name}</option>
-                  ))}
+                <select
+                  value={category}
+                  onChange={(e) => {
+                    setCategory(e.target.value);
+                    setPage(1);
+                  }}
+                  className="form-select"
+                >
+                  {orderedCategories.length === 0 ? (
+                    <option value={DEFAULT_CATEGORY_NAME}>{DEFAULT_CATEGORY_NAME}</option>
+                  ) : (
+                    orderedCategories.map((c) => (
+                      <option key={c.id || c.name} value={c.name}>
+                        {c.name}
+                        {String(c.name).toLowerCase() === DEFAULT_CATEGORY_NAME.toLowerCase() ? " (Default)" : ""}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
+
               <div className="col-md-auto">
-                <button onClick={clearFilters} className="btn btn-outline-secondary">Reset</button>
+                <button onClick={clearFilters} className="btn btn-outline-secondary">
+                  Reset
+                </button>
               </div>
             </div>
           </div>
@@ -537,24 +767,34 @@ export default function WebsitesUrl() {
                 const showImg = !!imgSrc && imgOk[it.id] !== false;
 
                 return (
-                  <motion.div key={it.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="col-12 col-sm-6 col-lg-4 col-xl-3">
+                  <motion.div
+                    key={it.id}
+                    layout
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className="col-12 col-sm-6 col-lg-4 col-xl-3"
+                  >
                     <div className="card h-100 shadow-sm">
-                      {/* Image area – full image, no crop; tap to open preview */}
                       <div className="bg-white border-bottom">
                         {showImg ? (
-                          <img
-                            src={imgSrc}
-                            alt={it.name || it.url}
-                            className="img-fluid w-100 d-block"
-                            style={{ height: "auto", cursor: "zoom-in" }}
-                            onClick={() => setPreview({ open: true, src: imgSrc, title: it.name || it.url })}
-                            onError={() => setImgOk((m) => ({ ...m, [it.id]: false }))}
-                          />
+                          <div className="wu-imgBox">
+                            <img
+                              src={imgSrc}
+                              alt={it.name || it.url}
+                              className="wu-img"
+                              onClick={() =>
+                                setPreview({ open: true, src: imgSrc, title: it.name || it.url })
+                              }
+                              onError={() => setImgOk((m) => ({ ...m, [it.id]: false }))}
+                            />
+                          </div>
                         ) : (
-                          <div className="d-flex align-items-center justify-content-center py-4 text-secondary">
+                          <div className="wu-imgBox text-secondary">
                             <FiImage size={36} />
                           </div>
                         )}
+
                         <div className="px-2 pb-2 d-flex flex-wrap gap-2 justify-content-end">
                           <button
                             type="button"
@@ -567,16 +807,23 @@ export default function WebsitesUrl() {
                         </div>
                       </div>
 
-                      {/* Body */}
                       <div className="card-body d-flex flex-column">
                         <div className="d-flex justify-content-between align-items-start mb-2 gap-2">
                           <div className="flex-grow-1">
-                            <div className="fw-bold" title={it.name || it.url} style={{ wordBreak: "break-word" }}>
+                            <div
+                              className="fw-bold"
+                              title={it.name || it.url}
+                              style={{ wordBreak: "break-word" }}
+                            >
                               {it.name || it.url}
                             </div>
 
                             {it.url && (
-                              <div className="small text-secondary mt-1" title={it.url} style={{ wordBreak: "break-all", whiteSpace: "normal" }}>
+                              <div
+                                className="small text-secondary mt-1"
+                                title={it.url}
+                                style={{ wordBreak: "break-all", whiteSpace: "normal" }}
+                              >
                                 <FiGlobe className="me-1" />
                                 {displayUrl}
                               </div>
@@ -584,14 +831,24 @@ export default function WebsitesUrl() {
                           </div>
                           {it.category ? <Badge>{it.category}</Badge> : <span />}
                         </div>
+
                         <div className="mt-auto d-flex flex-wrap justify-content-end gap-2">
-                          <button onClick={() => copyLink(it.url)} className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1">
+                          <button
+                            onClick={() => copyLink(it.url)}
+                            className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1"
+                          >
                             <FiCopy /> Copy
                           </button>
-                          <button onClick={() => fillFormForEdit(it)} className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1">
+                          <button
+                            onClick={() => fillFormForEdit(it)}
+                            className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1"
+                          >
                             <FiEdit2 /> Edit
                           </button>
-                          <button onClick={() => askDelete(it)} className="btn btn-danger btn-sm d-inline-flex align-items-center gap-1">
+                          <button
+                            onClick={() => askDelete(it)}
+                            className="btn btn-danger btn-sm d-inline-flex align-items-center gap-1"
+                          >
                             <FiTrash2 /> Delete
                           </button>
                         </div>
@@ -603,34 +860,48 @@ export default function WebsitesUrl() {
             </AnimatePresence>
           </div>
 
-          {items.length === 0 && (
-            <div className="text-center text-secondary py-5">No websites found.</div>
-          )}
+          {items.length === 0 && <div className="text-center text-secondary py-5">No websites found.</div>}
         </LayoutGroup>
 
-        {/* Pagination (fixed 10/page) */}
+        {/* Pagination */}
         <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-4">
           <div className="text-secondary">
             Total: <span className="fw-bold text-dark">{total}</span>
           </div>
           <div className="d-flex align-items-center gap-2">
-            <button disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="btn btn-outline-secondary">Prev</button>
-            <span className="small">Page <b>{page}</b> / {totalPages}</span>
-            <button disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="btn btn-outline-secondary">Next</button>
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="btn btn-outline-secondary"
+            >
+              Prev
+            </button>
+            <span className="small">
+              Page <b>{page}</b> / {totalPages}
+            </span>
+            <button
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              className="btn btn-outline-secondary"
+            >
+              Next
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Confirm delete (portal) */}
       <Confirm
         open={confirm.open}
         title="Delete Website"
-        message={<span>Are you sure you want to delete <b>{confirm.name}</b>? This action cannot be undone.</span>}
+        message={
+          <span>
+            Are you sure you want to delete <b>{confirm.name}</b>? This action cannot be undone.
+          </span>
+        }
         onCancel={() => setConfirm({ open: false, id: null, name: "" })}
         onConfirm={doDelete}
       />
 
-      {/* Centered notice (portal) */}
       <CenterNotice
         open={notice.open}
         type={notice.type}
@@ -639,7 +910,7 @@ export default function WebsitesUrl() {
         onClose={() => setNotice((n) => ({ ...n, open: false }))}
       />
 
-      {/* Image full-screen preview overlay (portal) */}
+      {/* ✅ Image preview (X is now on image corner, not notch) */}
       {createPortal(
         <AnimatePresence>
           {preview.open && (
@@ -648,32 +919,62 @@ export default function WebsitesUrl() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="position-fixed top-0 start-0 w-100"
-              style={{ zIndex: 6100, height: "100dvh", background: "rgba(0,0,0,.85)" }}
+              style={{
+                zIndex: 6100,
+                height: "100dvh",
+                background: "rgba(0,0,0,.88)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "14px",
+              }}
               onClick={() => setPreview({ open: false, src: "", title: "" })}
             >
-              <div className="container h-100 d-flex flex-column justify-content-center align-items-center overflow-auto py-3" style={{ touchAction: "manipulation" }}>
+              <motion.div
+                initial={{ scale: 0.98, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.98, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 260, damping: 28 }}
+                onClick={(e) => e.stopPropagation()}
+                className="wu-previewCard"
+              >
+                <button
+                  type="button"
+                  className="wu-previewClose"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPreview({ open: false, src: "", title: "" });
+                  }}
+                  aria-label="Close preview"
+                  title="Close"
+                >
+                  <FiX size={20} />
+                </button>
+
                 <img
                   src={preview.src}
                   alt={preview.title}
-                  className="img-fluid d-block"
-                  style={{ maxWidth: "100%", maxHeight: "80vh", objectFit: "contain" }}
-                  onClick={(e) => e.stopPropagation()}
+                  className="d-block"
+                  style={{
+                    maxWidth: "100%",
+                    maxHeight: "82dvh",
+                    objectFit: "contain",
+                    borderRadius: 12,
+                    boxShadow: "0 16px 44px rgba(0,0,0,.35)",
+                    background: "rgba(255,255,255,.04)",
+                  }}
                 />
-                <button
-                  className="btn btn-light btn-sm mt-3 d-inline-flex align-items-center gap-1"
-                  onClick={(e) => { e.stopPropagation(); setPreview({ open: false, src: "", title: "" }); }}
-                  title="Close"
-                >
-                  <FiX /> Close
-                </button>
-              </div>
+
+                <div className="text-white-50 small mt-2 text-center" style={{ maxWidth: 760 }}>
+                  {preview.title}
+                </div>
+              </motion.div>
             </motion.div>
           )}
         </AnimatePresence>,
         document.body
       )}
 
-      {/* Busy overlay (portal) */}
       <BusyOverlay show={loading} />
     </div>
   );
