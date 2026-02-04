@@ -58,16 +58,19 @@ export default function InwardViewOnly() {
 
   /* ================= STATE ================= */
 
-  const [month, setMonth] = useState(getCurrentMonth); // ✅ default current month
+  const [month, setMonth] = useState(getCurrentMonth); // default current month
   const [monthOpen, setMonthOpen] = useState(false);
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const pollRef = useRef(null);
-
   const [toast, setToast] = useState({ show: false, text: "" });
   const toastTimerRef = useRef(null);
+
+  const pollRef = useRef(null);
+  const abortRef = useRef(null);
+
+  const isFirstLoadRef = useRef(true);
 
   /* ================= GROUPING ================= */
 
@@ -119,16 +122,9 @@ export default function InwardViewOnly() {
 
       const stores = Array.from(storeMap.entries())
         .sort(([a], [b]) => String(a).localeCompare(String(b)))
-        .map(([store, items]) => ({
-          store,
-          items,
-        }));
+        .map(([store, items]) => ({ store, items }));
 
-      return {
-        date,
-        srNo: idx + 1,
-        stores,
-      };
+      return { date, srNo: idx + 1, stores };
     });
   };
 
@@ -136,8 +132,14 @@ export default function InwardViewOnly() {
 
   /* ================= FETCH ================= */
 
-  const fetchData = async (selectedMonth) => {
-    setLoading(true);
+  const fetchData = async ({ selectedMonth, silent = false }) => {
+    // silent refresh = do NOT show loader / do NOT clear table
+    if (!silent) setLoading(true);
+
+    // cancel previous request
+    if (abortRef.current) abortRef.current.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
 
     try {
       const qs = new URLSearchParams();
@@ -145,58 +147,56 @@ export default function InwardViewOnly() {
 
       const url = `${LIST_API}?${qs.toString()}`;
 
-      const r = await fetch(url, { cache: "no-store" });
+      const r = await fetch(url, { cache: "no-store", signal: ac.signal });
       const j = await r.json().catch(() => ({}));
 
       if (!r.ok || !j.success) {
-        setRows([]);
+        if (!silent) setRows([]);
         return;
       }
 
-      // ✅ IMPORTANT: use API data ONLY
+      // update rows (no clearing before, so no flicker)
       setRows(Array.isArray(j.data) ? j.data : []);
-    } catch {
-      setRows([]);
+    } catch (e) {
+      // ignore abort errors
+      if (e?.name !== "AbortError") {
+        if (!silent) setRows([]);
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
-  // ✅ first load + start polling
+  /* ================= EFFECT: LOAD + POLL ================= */
+
   useEffect(() => {
-    fetchData(month);
+    // month change = show loader once
+    isFirstLoadRef.current = false;
 
-    pollRef.current = setInterval(() => {
-      fetchData(month);
-    }, 20000);
-
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-    // eslint-disable-next-line
-  }, []);
-
-  // ✅ when month changes: clear old data + refetch + reset polling to avoid mismatch
-  useEffect(() => {
-    setRows([]); // ✅ prevents Jan flashing when user selects Feb
-    fetchData(month);
+    fetchData({ selectedMonth: month, silent: false });
 
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(() => {
-      fetchData(month);
+      // polling refresh = silent (NO loading, NO row clear)
+      fetchData({ selectedMonth: month, silent: true });
     }, 20000);
 
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
+      if (abortRef.current) abortRef.current.abort();
     };
-    // eslint-disable-next-line
   }, [month]);
+
+  // first mount only: keep your initial loading smooth
+  useEffect(() => {
+    fetchData({ selectedMonth: month, silent: false });
+    // eslint-disable-next-line
+  }, []);
 
   /* ================= ACTIONS ================= */
 
   const showToast = (text) => {
     setToast({ show: true, text });
-
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
 
     toastTimerRef.current = setTimeout(() => {
@@ -230,7 +230,6 @@ export default function InwardViewOnly() {
           </div>
 
           <div className="ivActions">
-            {/* ✅ Month button */}
             <button className="ivMonthBtn" type="button" onClick={() => setMonthOpen(true)}>
               {monthToLabel(month)}
             </button>
@@ -312,19 +311,17 @@ export default function InwardViewOnly() {
                   </tr>
                 </React.Fragment>
               ))}
-            </tbody>
 
-            <tfoot>
+              {/* ✅ small bottom space only */}
               <tr aria-hidden="true">
-                <td colSpan={6} className="ivTfootSpacer" />
+                <td colSpan={6} className="ivBottomPad" />
               </tr>
-            </tfoot>
+            </tbody>
           </table>
         </div>
       )}
 
       <Portal>
-        {/* Toast */}
         {toast.show && (
           <>
             <div className="ivToastBackdrop" />
@@ -334,7 +331,6 @@ export default function InwardViewOnly() {
           </>
         )}
 
-        {/* Month Modal */}
         {monthOpen && (
           <>
             <div className="ivModalBackdrop" onClick={() => setMonthOpen(false)} />
@@ -378,7 +374,6 @@ export default function InwardViewOnly() {
 const css = `
 :root{
   --iv-wrap-offset: 190px;
-  --iv-table-bottom-gap: 320px;
 }
 
 html, body { height: 100%; background: #f6f8fc; margin: 0; }
@@ -523,8 +518,9 @@ html, body { height: 100%; background: #f6f8fc; margin: 0; }
 .ivStoreSepTd{ padding:0 !important; border-bottom:none !important; }
 .ivStoreSepLine{ width:100%; border-top:2px dotted #94a3b8; margin:10px 0; }
 
-.ivTfootSpacer{
-  height: calc(var(--iv-table-bottom-gap) + env(safe-area-inset-bottom));
+/* ✅ small bottom padding (instead of huge 320px spacer) */
+.ivBottomPad{
+  height: 22px;
   border-bottom:none !important;
   padding:0 !important;
   background:#fff;
@@ -608,10 +604,7 @@ html, body { height: 100%; background: #f6f8fc; margin: 0; }
 }
 
 @media (max-width: 560px){
-  :root{
-    --iv-wrap-offset: 260px;
-    --iv-table-bottom-gap: 380px;
-  }
+  :root{ --iv-wrap-offset: 260px; }
 
   .ivHeaderTop{
     flex-direction:column;
