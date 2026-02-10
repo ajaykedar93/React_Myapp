@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import InvestmentCategoryManager from "./InvestmentCategoryManager";
 import DailyTradeJournal from "./DailyTradeJournal";
 import DailyCalculate from "./InvestmentDepositLogic";
-import InvestmentMonthSummary from "./InvestmentMonthSummary";
+import InvestmentMonthSummary from "./InvestmentMonthSummary"; // existing (your monthly report page)
+import InvestmentMonthlySummary from "./InvestmentMonthlySummary"; // ✅ NEW TAB PAGE (the summary page)
 
 const GAP_PX = 6;
 
@@ -27,11 +28,13 @@ const InvestmentTabs = () => {
     }
   };
 
+  // ✅ Added NEW TAB: Monthly Summary
   const tabs = useMemo(
     () => [
       { id: "manageCategory", label: "Manage Category", icon: "📂", color: "#2563eb" },
       { id: "TradeJournal", label: "Trading Journal", icon: "📘", color: "#f59e0b" },
-      { id: "DailyCalculate", label: "Daily Calculate", icon: "📅", color: "#ef4444" },
+      { id: "DailyCalculate", label: "Diposit Logic", icon: "📅", color: "#ef4444" },
+      { id: "MonthlySummary", label: "Monthly Summary", icon: "🧾", color: "#14b8a6" }, // ✅ NEW
       { id: "MonthlyReport", label: "Monthly Report", icon: "📈", color: "#8b5cf6" },
     ],
     []
@@ -94,6 +97,8 @@ const InvestmentTabs = () => {
         return <DailyTradeJournal />;
       case "DailyCalculate":
         return <DailyCalculate />;
+      case "MonthlySummary": // ✅ NEW TAB CONTENT
+        return <InvestmentMonthlySummary />;
       case "MonthlyReport":
         return <InvestmentMonthSummary />;
       default:
@@ -105,7 +110,7 @@ const InvestmentTabs = () => {
     <div className="it-page">
       <style>{css}</style>
 
-      {/* ✅ FIXED NAVBAR (safe-area top space added) */}
+      {/* FIXED NAVBAR */}
       <nav ref={navbarRef} className="it-nav">
         <div className="it-navInner">
           <h1 className="it-title">Investment Plan</h1>
@@ -115,7 +120,7 @@ const InvestmentTabs = () => {
         </div>
       </nav>
 
-      {/* ✅ FIXED TABS */}
+      {/* FIXED TABS */}
       <div ref={tabsWrapRef} className="it-tabsWrap" style={{ top: heights.nav + GAP_PX }}>
         <div className="it-fadeLeft" aria-hidden />
         <div className="it-fadeRight" aria-hidden />
@@ -137,8 +142,8 @@ const InvestmentTabs = () => {
                     ? {
                         background: tab.color,
                         color: "#fff",
-                        boxShadow: `0 10px 20px var(--active-shadow, rgba(0,0,0,.18))`,
-                        transform: "translateY(-1px) scale(1.03)",
+                        boxShadow: `0 10px 18px var(--active-shadow, rgba(0,0,0,.18))`,
+                        transform: "translateY(-1px)",
                       }
                     : undefined
                 }
@@ -153,7 +158,7 @@ const InvestmentTabs = () => {
         </div>
       </div>
 
-      {/* ✅ ONLY CONTENT SCROLLS */}
+      {/* ONLY CONTENT SCROLLS */}
       <section className="it-scrollArea" style={{ top: heights.nav + heights.tabs + GAP_PX }}>
         <div className="it-contentShell">{renderContent()}</div>
       </section>
@@ -161,15 +166,14 @@ const InvestmentTabs = () => {
   );
 };
 
-/* ✅ Scoped CSS (only this page) */
+/* Scoped CSS */
 const css = `
   .it-page, .it-page *{ box-sizing:border-box; }
 
   :root{
-    /* ✅ top safe padding extra so content never touches notch/camera */
     --it-safe-top: max(env(safe-area-inset-top, 0px), 0px);
-    --it-nav-core: 64px;           /* base nav height without safe-top */
-    --it-nav-extra-top: 10px;      /* extra breathing room */
+    --it-nav-core: 64px;
+    --it-nav-extra-top: 10px;
   }
 
   .it-page{
@@ -183,13 +187,12 @@ const css = `
       linear-gradient(180deg, #ffffff, #f5f7fb);
   }
 
-  /* ✅ Navbar: safe-area top space + extra padding (fix notch/camera hide) */
+  /* Navbar */
   .it-nav{
     position:fixed;
     top:0; left:0; right:0;
     z-index:80;
 
-    /* height becomes core + safe-top */
     min-height: calc(var(--it-nav-core) + var(--it-safe-top));
     background: linear-gradient(90deg, #065f46 0%, #10b981 50%, #34d399 100%);
     border-bottom: 1px solid rgba(255,255,255,0.18);
@@ -198,7 +201,6 @@ const css = `
     display:flex;
     align-items:flex-end;
 
-    /* ✅ main fix */
     padding-top: calc(var(--it-safe-top) + var(--it-nav-extra-top));
     padding-bottom: 10px;
     padding-left: 14px;
@@ -206,8 +208,7 @@ const css = `
   }
 
   .it-navInner{
-    width:100%;
-    max-width: 1100px;
+    width: min(1240px, calc(100% - 16px));
     margin:0 auto;
     display:flex;
     align-items:center;
@@ -220,7 +221,7 @@ const css = `
     color:#0b0b0b;
     font-weight:900;
     letter-spacing:.2px;
-    font-size:clamp(18px,2.4vw,24px);
+    font-size:clamp(18px,2.1vw,24px);
   }
 
   .it-dashBtn{
@@ -228,7 +229,7 @@ const css = `
     cursor:pointer;
     font-weight:900;
     border-radius:999px;
-    padding: 10px 14px;
+    padding: 9px 13px;
     background: #fbbf24;
     color:#111827;
     box-shadow: 0 10px 20px rgba(0,0,0,.12);
@@ -246,13 +247,12 @@ const css = `
   }
 
   .it-tabsBar{
-    width:100%;
-    max-width: 1100px;
+    width: min(1240px, calc(100% - 16px));
     margin: 0 auto;
     display:flex;
-    gap:10px;
+    gap:8px;
     overflow-x:auto;
-    padding: 10px 10px;
+    padding: 8px 6px;
     position:relative;
     -webkit-overflow-scrolling: touch;
     scroll-snap-type: x mandatory;
@@ -262,7 +262,7 @@ const css = `
 
   .it-indicator{
     position:absolute;
-    bottom: 5px;
+    bottom: 4px;
     height: 3px;
     width: 0;
     border-radius: 999px;
@@ -271,19 +271,21 @@ const css = `
 
   .it-edgeSpacer{ flex: 0 0 8px; }
 
+  /* ✅ Small tabs on mobile, still premium on desktop */
   .it-tabBtn{
     border:1px solid #e5e7eb;
     background:#fff;
     color:#374151;
     border-radius:999px;
-    padding: 10px 12px;
-    font-weight:800;
-    font-size: 0.92rem;
+    padding: 8px 10px;
+    font-weight:850;
+    font-size: 0.86rem;
     white-space:nowrap;
     display:flex;
     align-items:center;
-    gap:8px;
-    min-width: 150px;
+    gap:7px;
+
+    min-width: 132px;
     scroll-snap-align: center;
     cursor:pointer;
     transition: transform .2s ease, box-shadow .2s ease, background .2s ease;
@@ -293,7 +295,7 @@ const css = `
   .it-tabBtn:hover{ transform: translateY(-1px); }
   .it-tabBtn:active{ transform: scale(.985); }
 
-  .it-tabIcon{ font-size: 1.1rem; }
+  .it-tabIcon{ font-size: 1.02rem; }
   .it-tabLabel{ font-weight:900; }
 
   /* fades */
@@ -317,35 +319,39 @@ const css = `
     padding: 0;
   }
 
-  /* Mobile: edge-to-edge */
+  /* ✅ Full width page (not half) */
   .it-contentShell{
-    width:100%;
-    padding: 12px;
+    width: min(1240px, calc(100% - 16px));
+    margin: 0 auto;
+    padding: 12px 0;
   }
 
-  /* Desktop: centered card */
-  @media (min-width: 900px){
-    .it-contentShell{
-      max-width: 1100px;
-      margin: 16px auto 22px;
-      padding: 18px;
-      background: rgba(255,255,255,.92);
-      border: 1px solid rgba(15,23,42,.10);
-      border-radius: 18px;
-      box-shadow: 0 18px 55px rgba(15,23,42,.10);
-    }
-  }
-
-  /* Small screens tweaks */
+  /* Mobile perfect */
   @media (max-width: 540px){
     :root{
-      --it-nav-core: 58px;      /* your old 58px */
-      --it-nav-extra-top: 45px; /* ✅ a bit more breathing room on mobile */
+      --it-nav-core: 56px;
+      --it-nav-extra-top: 38px;
     }
 
-    .it-tabBtn{ min-width: auto; padding: 10px 11px; font-size: 0.88rem; }
-    .it-tabIcon{ font-size: 1.05rem; }
-    .it-contentShell{ padding: 10px; }
+    .it-tabsBar{ gap:7px; padding: 7px 4px; }
+
+    .it-tabBtn{
+      min-width: auto;
+      padding: 7px 10px;
+      font-size: 0.80rem;
+      gap: 6px;
+    }
+    .it-tabIcon{ font-size: .98rem; }
+  }
+
+  /* Large screens */
+  @media (min-width: 1100px){
+    .it-tabBtn{
+      font-size: 0.9rem;
+      padding: 9px 12px;
+      min-width: 148px;
+    }
+    .it-tabIcon{ font-size: 1.06rem; }
   }
 `;
 

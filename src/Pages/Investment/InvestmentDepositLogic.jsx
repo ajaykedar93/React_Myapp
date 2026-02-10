@@ -16,6 +16,7 @@ const colors = {
   bg: "#f6f8fb",
   text: "#1b2430",
   muted: "#6b7280",
+  soft: "#f3f6ff",
 };
 
 export default function InvestmentDepositLogic() {
@@ -52,7 +53,10 @@ export default function InvestmentDepositLogic() {
   const showToast = (message, type = "success") => {
     setToast({ show: true, message, type });
     window.clearTimeout(showToast._t);
-    showToast._t = window.setTimeout(() => setToast({ show: false, message: "", type: "success" }), 1800);
+    showToast._t = window.setTimeout(
+      () => setToast({ show: false, message: "", type: "success" }),
+      1800
+    );
   };
 
   const askConfirm = (message, onConfirm) => {
@@ -93,11 +97,6 @@ export default function InvestmentDepositLogic() {
     return subcategories.filter((s) => String(s.category_id) === String(form.category_id));
   }, [form.category_id, subcategories]);
 
-  const filteredSubcategoriesEdit = useMemo(() => {
-    if (!editForm.category_id) return [];
-    return subcategories.filter((s) => String(s.category_id) === String(editForm.category_id));
-  }, [editForm.category_id, subcategories]);
-
   const handleFormChange = (e) => {
     const { name, value } = e.target;
     setForm((f) => ({ ...f, [name]: value }));
@@ -107,12 +106,19 @@ export default function InvestmentDepositLogic() {
   const handleEditChange = (e) => {
     const { name, value } = e.target;
     setEditForm((f) => ({ ...f, [name]: value }));
-    if (name === "category_id") setEditForm((f) => ({ ...f, category_id: value, subcategory_id: "" }));
   };
 
   const validate = (obj) => {
     const { category_id, subcategory_id, deposit_amount, risk, reward, trading_days, ratio } = obj;
-    if (!category_id || !subcategory_id || deposit_amount === "" || risk === "" || reward === "" || trading_days === "" || !ratio)
+    if (
+      !category_id ||
+      !subcategory_id ||
+      deposit_amount === "" ||
+      risk === "" ||
+      reward === "" ||
+      trading_days === "" ||
+      !ratio
+    )
       return "Please fill all required fields.";
     if (Number(deposit_amount) <= 0) return "Deposit must be > 0.";
     if (Number(trading_days) <= 0) return "Trading days must be > 0.";
@@ -136,7 +142,15 @@ export default function InvestmentDepositLogic() {
 
       showToast("Saved successfully");
       await fetchAll();
-      setForm({ category_id: "", subcategory_id: "", deposit_amount: "", risk: "", reward: "", trading_days: "", ratio: "" });
+      setForm({
+        category_id: "",
+        subcategory_id: "",
+        deposit_amount: "",
+        risk: "",
+        reward: "",
+        trading_days: "",
+        ratio: "",
+      });
     } catch {
       showToast("Failed to save deposit", "danger");
     }
@@ -163,12 +177,10 @@ export default function InvestmentDepositLogic() {
 
   const updateDeposit = async () => {
     if (!editRow?.deposit_id) return showToast("Invalid row selected", "danger");
-
     const err = validate(editForm);
     if (err) return showToast(err, "danger");
 
     try {
-      // your PATCH route only updates allowed fields; extra fields will be ignored by backend filter
       await axios.patch(`${API_DEPOSIT}/${editRow.deposit_id}`, {
         deposit_amount: Number(editForm.deposit_amount),
         risk: Number(editForm.risk),
@@ -185,11 +197,11 @@ export default function InvestmentDepositLogic() {
     }
   };
 
-  // ✅ CORRECT DELETE for your API: /api/deposits/id/:deposit_id
+  // ✅ DELETE: /api/deposits/id/:deposit_id
   const deleteDeposit = async (row) => {
     askConfirm(`Delete logic for "${row.category_name} → ${row.subcategory_name}"?`, async () => {
       try {
-        await axios.delete(`${API_DEPOSIT}/id/${row.deposit_id}`); // ✅ FIXED
+        await axios.delete(`${API_DEPOSIT}/id/${row.deposit_id}`);
         showToast("Deleted");
         await fetchAll();
       } catch {
@@ -200,15 +212,26 @@ export default function InvestmentDepositLogic() {
 
   const th = {
     textAlign: "left",
-    padding: "10px 10px",
-    fontWeight: 800,
+    padding: "12px 12px",
+    fontWeight: 900,
     borderBottom: `1px solid ${colors.border}`,
     whiteSpace: "nowrap",
     color: colors.text,
+    background: colors.soft,
+    position: "sticky",
+    top: 0,
+    zIndex: 1,
   };
   const thRight = { ...th, textAlign: "right" };
   const thCenter = { ...th, textAlign: "center" };
-  const td = { padding: "10px 10px", verticalAlign: "middle", borderBottom: `1px solid ${colors.border}`, color: colors.text };
+
+  const td = {
+    padding: "12px 12px",
+    verticalAlign: "middle",
+    borderBottom: `1px solid ${colors.border}`,
+    color: colors.text,
+    background: "#fff",
+  };
   const tdRight = { ...td, textAlign: "right" };
 
   const fmtMoney = (n) => {
@@ -229,60 +252,49 @@ export default function InvestmentDepositLogic() {
   };
 
   return (
-    <div style={{ background: colors.bg, minHeight: "100vh", paddingBottom: 28 }}>
+    <div className="idl-page">
+      <style>{css}</style>
+
+      {/* Toast */}
       {toast.show && (
         <div
-          style={{
-            position: "fixed",
-            left: "50%",
-            top: "12%",
-            transform: "translate(-50%, -50%)",
-            background: toast.type === "success" ? colors.success : toast.type === "danger" ? colors.danger : colors.warning,
-            color: "#fff",
-            padding: "12px 16px",
-            borderRadius: 12,
-            zIndex: 5000,
-            fontWeight: 800,
-            textAlign: "center",
-            boxShadow: "0 16px 40px rgba(0,0,0,0.15)",
-          }}
+          className={`idl-toast ${toast.type}`}
+          role="status"
+          aria-live="polite"
         >
           {toast.message}
         </div>
       )}
 
-      <div style={{ maxWidth: 1100, margin: "24px auto", padding: "0 12px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-          <h2
-            style={{
-              margin: 0,
-              fontWeight: 900,
-              background: `linear-gradient(90deg, ${colors.primary}, ${colors.secondary})`,
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-            }}
-          >
-            Investment Deposit Logic
-          </h2>
+      {/* Header (full width, no extra outer padding) */}
+      <div className="idl-topbar">
+        <div className="idl-topbarInner">
+          <div>
+            <h2 className="idl-title">Investment Deposit Logic</h2>
+            <p className="idl-subtitle">
+              Add logic for Category → Subcategory, then manage it in the list.
+            </p>
+          </div>
 
-          <button className="btn-outline" onClick={fetchAll} disabled={loading}>
-            {loading ? "Refreshing..." : "Refresh"}
+          {/* ✅ Small refresh button */}
+          <button className="idl-refreshBtn" onClick={fetchAll} disabled={loading}>
+            {loading ? "Refreshing…" : "Refresh"}
           </button>
         </div>
+      </div>
 
-        <p style={{ marginTop: 8, color: colors.muted, fontWeight: 600 }}>
-          Add deposit logic for Category → Subcategory, then manage it from the table.
-        </p>
-
-        <div className="card">
-          <div className="cardHeader">
+      {/* Content (full width) */}
+      <div className="idl-content">
+        {/* Add Card */}
+        <div className="idl-card">
+          <div className="idl-cardHead">
             <div>
-              <div className="cardTitle">Add Deposit</div>
-              <div className="cardSub">Create new deposit logic</div>
+              <div className="idl-cardTitle">Add Deposit</div>
+              <div className="idl-cardSub">Create new deposit logic</div>
             </div>
           </div>
 
-          <div className="form-grid">
+          <div className="idl-formGrid">
             <div>
               <label>Category *</label>
               <select name="category_id" value={form.category_id} onChange={handleFormChange}>
@@ -297,7 +309,12 @@ export default function InvestmentDepositLogic() {
 
             <div>
               <label>Subcategory *</label>
-              <select name="subcategory_id" value={form.subcategory_id} onChange={handleFormChange} disabled={!form.category_id}>
+              <select
+                name="subcategory_id"
+                value={form.subcategory_id}
+                onChange={handleFormChange}
+                disabled={!form.category_id}
+              >
                 <option value="">Select Subcategory</option>
                 {filteredSubcategories.map((s) => (
                   <option key={s.subcategory_id} value={s.subcategory_id}>
@@ -309,45 +326,78 @@ export default function InvestmentDepositLogic() {
 
             <div>
               <label>Deposit *</label>
-              <input type="number" name="deposit_amount" value={form.deposit_amount} onChange={handleFormChange} placeholder="e.g., 5000" />
+              <input
+                type="number"
+                name="deposit_amount"
+                value={form.deposit_amount}
+                onChange={handleFormChange}
+                placeholder="e.g., 5000"
+              />
             </div>
 
             <div>
               <label>Risk *</label>
-              <input type="number" name="risk" step="0.01" value={form.risk} onChange={handleFormChange} placeholder="e.g., 1" />
+              <input
+                type="number"
+                name="risk"
+                step="0.01"
+                value={form.risk}
+                onChange={handleFormChange}
+                placeholder="e.g., 1"
+              />
             </div>
 
             <div>
               <label>Reward *</label>
-              <input type="number" name="reward" step="0.01" value={form.reward} onChange={handleFormChange} placeholder="e.g., 2" />
+              <input
+                type="number"
+                name="reward"
+                step="0.01"
+                value={form.reward}
+                onChange={handleFormChange}
+                placeholder="e.g., 2"
+              />
             </div>
 
             <div>
               <label>Trading Days *</label>
-              <input type="number" name="trading_days" value={form.trading_days} onChange={handleFormChange} placeholder="e.g., 10" />
+              <input
+                type="number"
+                name="trading_days"
+                value={form.trading_days}
+                onChange={handleFormChange}
+                placeholder="e.g., 10"
+              />
             </div>
 
             <div>
               <label>Ratio *</label>
-              <input type="text" name="ratio" placeholder="e.g., 2:1" value={form.ratio} onChange={handleFormChange} />
+              <input
+                type="text"
+                name="ratio"
+                placeholder="e.g., 2:1"
+                value={form.ratio}
+                onChange={handleFormChange}
+              />
             </div>
           </div>
 
-          <button className="btn-primary" onClick={saveDeposit} disabled={loading}>
-            {loading ? "Please wait..." : "Save"}
+          <button className="idl-primaryBtn" onClick={saveDeposit} disabled={loading}>
+            {loading ? "Please wait…" : "Save"}
           </button>
         </div>
 
-        <div className="card" style={{ marginTop: 16 }}>
-          <div className="cardHeader">
+        {/* List Card */}
+        <div className="idl-card">
+          <div className="idl-cardHead">
             <div>
-              <div className="cardTitle">All Deposits</div>
-              <div className="cardSub">Total: {deposits.length}</div>
+              <div className="idl-cardTitle">All Deposits</div>
+              <div className="idl-cardSub">Total: {deposits.length}</div>
             </div>
           </div>
 
-          <div className="table-responsive">
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+          <div className="idl-tableWrap">
+            <table className="idl-table">
               <thead>
                 <tr>
                   <th style={th}>#</th>
@@ -366,19 +416,19 @@ export default function InvestmentDepositLogic() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan="10" style={{ textAlign: "center", padding: 18 }}>
-                      Loading...
+                    <td colSpan="10" style={{ textAlign: "center", padding: 18, background: "#fff" }}>
+                      Loading…
                     </td>
                   </tr>
                 ) : deposits.length === 0 ? (
                   <tr>
-                    <td colSpan="10" style={{ textAlign: "center", padding: 18 }}>
+                    <td colSpan="10" style={{ textAlign: "center", padding: 18, background: "#fff" }}>
                       No records
                     </td>
                   </tr>
                 ) : (
                   deposits.map((r, i) => (
-                    <tr key={r.deposit_id}>
+                    <tr key={r.deposit_id} className="idl-row">
                       <td style={td}>{i + 1}</td>
                       <td style={td}>{r.category_name}</td>
                       <td style={td}>{r.subcategory_name}</td>
@@ -389,12 +439,14 @@ export default function InvestmentDepositLogic() {
                       <td style={td}>{r.ratio}</td>
                       <td style={td}>{fmtDateOnly(r.updated_at || r.created_at)}</td>
                       <td style={{ ...td, textAlign: "center" }}>
-                        <button className="btn-ghost" onClick={() => openEdit(r)}>
-                          Edit
-                        </button>
-                        <button className="btn-ghost danger" onClick={() => deleteDeposit(r)}>
-                          Delete
-                        </button>
+                        <div className="idl-actions">
+                          <button className="idl-miniBtn edit" onClick={() => openEdit(r)}>
+                            Edit
+                          </button>
+                          <button className="idl-miniBtn del" onClick={() => deleteDeposit(r)}>
+                            Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -407,21 +459,21 @@ export default function InvestmentDepositLogic() {
 
       {/* EDIT MODAL */}
       {editOpen && (
-        <div className="modalOverlay" onMouseDown={closeEdit}>
-          <div className="modalCard" onMouseDown={(e) => e.stopPropagation()}>
-            <div className="modalHeader">
+        <div className="idl-modalOverlay" onMouseDown={closeEdit}>
+          <div className="idl-modalCard" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="idl-modalHeader">
               <div>
-                <div className="modalTitle">Edit Deposit</div>
-                <div className="modalSub">
+                <div className="idl-modalTitle">Edit Deposit</div>
+                <div className="idl-modalSub">
                   {editRow?.category_name} → {editRow?.subcategory_name}
                 </div>
               </div>
-              <button className="btn-close" onClick={closeEdit}>
+              <button className="idl-closeBtn" onClick={closeEdit} aria-label="Close">
                 ✕
               </button>
             </div>
 
-            <div className="form-grid" style={{ marginTop: 10 }}>
+            <div className="idl-formGrid" style={{ marginTop: 10 }}>
               <div>
                 <label>Deposit *</label>
                 <input type="number" name="deposit_amount" value={editForm.deposit_amount} onChange={handleEditChange} />
@@ -444,11 +496,11 @@ export default function InvestmentDepositLogic() {
               </div>
             </div>
 
-            <div className="modalActions">
-              <button className="btn-ghost" onClick={closeEdit}>
+            <div className="idl-modalActions">
+              <button className="idl-outlineBtn" onClick={closeEdit}>
                 Cancel
               </button>
-              <button className="btn-primary" onClick={updateDeposit} disabled={loading}>
+              <button className="idl-primaryBtn" onClick={updateDeposit} disabled={loading}>
                 Update
               </button>
             </div>
@@ -458,171 +510,291 @@ export default function InvestmentDepositLogic() {
 
       {/* CONFIRM MODAL */}
       {confirm.show && (
-        <div className="modalOverlay" onMouseDown={() => setConfirm({ show: false, message: "", onConfirm: null })}>
-          <div className="confirmCard" onMouseDown={(e) => e.stopPropagation()}>
-            <div className="confirmTitle">Confirm</div>
-            <div className="confirmMsg">{confirm.message}</div>
-            <div className="modalActions">
-              <button className="btn-ghost" onClick={() => setConfirm({ show: false, message: "", onConfirm: null })}>
+        <div className="idl-modalOverlay" onMouseDown={() => setConfirm({ show: false, message: "", onConfirm: null })}>
+          <div className="idl-confirmCard" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="idl-confirmTitle">Confirm</div>
+            <div className="idl-confirmMsg">{confirm.message}</div>
+            <div className="idl-modalActions">
+              <button className="idl-outlineBtn" onClick={() => setConfirm({ show: false, message: "", onConfirm: null })}>
                 Cancel
               </button>
-              <button className="btn-danger" onClick={confirm.onConfirm}>
+              <button className="idl-dangerBtn" onClick={confirm.onConfirm}>
                 Delete
               </button>
             </div>
           </div>
         </div>
       )}
-
-      <style>{`
-        .card{
-          background:${colors.surface};
-          border-radius:16px;
-          padding:18px;
-          box-shadow:0 10px 28px rgba(0,0,0,0.06);
-          border:1px solid ${colors.border};
-        }
-        .cardHeader{
-          display:flex;
-          justify-content:space-between;
-          align-items:center;
-          gap:12px;
-          flex-wrap:wrap;
-          margin-bottom:10px;
-        }
-        .cardTitle{ font-weight:900; font-size:16px; color:${colors.text}; }
-        .cardSub{ font-weight:700; font-size:13px; color:${colors.muted}; margin-top:2px; }
-
-        .form-grid{
-          display:grid;
-          grid-template-columns:repeat(4, minmax(0,1fr));
-          gap:12px;
-          margin-top:12px;
-        }
-        label{ font-weight:700; font-size:12px; margin-bottom:6px; display:block; color:${colors.text}; }
-        input, select{
-          width:100%;
-          padding:10px 12px;
-          border:1px solid ${colors.border};
-          border-radius:10px;
-          font-size:14px;
-          outline:none;
-          background:#fff;
-        }
-
-        .btn-primary{
-          margin-top:14px;
-          background:${colors.primary};
-          color:#fff;
-          border:none;
-          padding:12px 14px;
-          border-radius:12px;
-          font-weight:900;
-          width:100%;
-          cursor:pointer;
-        }
-        .btn-outline{
-          background:#fff;
-          border:1px solid ${colors.primary};
-          color:${colors.primary};
-          padding:10px 12px;
-          border-radius:12px;
-          font-weight:900;
-          cursor:pointer;
-        }
-        .btn-ghost{
-          background:#fff;
-          border:1px solid ${colors.primary};
-          color:${colors.primary};
-          border-radius:10px;
-          padding:7px 10px;
-          font-size:13px;
-          font-weight:800;
-          margin:2px;
-          cursor:pointer;
-        }
-        .btn-ghost.danger{
-          border-color:${colors.danger};
-          color:${colors.danger};
-        }
-        .btn-danger{
-          background:${colors.danger};
-          border:none;
-          color:#fff;
-          padding:10px 14px;
-          border-radius:12px;
-          font-weight:900;
-          cursor:pointer;
-        }
-
-        .table-responsive{
-          overflow-x:auto;
-          -webkit-overflow-scrolling:touch;
-          border-radius:12px;
-        }
-
-        .modalOverlay{
-          position:fixed;
-          inset:0;
-          background:rgba(0,0,0,0.45);
-          display:flex;
-          align-items:center;
-          justify-content:center;
-          z-index:6000;
-          padding:14px;
-        }
-        .modalCard{
-          width:min(760px, 100%);
-          background:#fff;
-          border-radius:16px;
-          border:1px solid ${colors.border};
-          box-shadow:0 18px 60px rgba(0,0,0,0.2);
-          padding:16px;
-        }
-        .modalHeader{
-          display:flex;
-          justify-content:space-between;
-          align-items:flex-start;
-          gap:10px;
-        }
-        .modalTitle{ font-weight:1000; font-size:16px; color:${colors.text}; }
-        .modalSub{ font-weight:800; font-size:13px; color:${colors.muted}; margin-top:3px; }
-        .btn-close{
-          border:none;
-          background:#f3f4f6;
-          border-radius:10px;
-          padding:8px 10px;
-          cursor:pointer;
-          font-weight:900;
-        }
-        .modalActions{
-          display:flex;
-          gap:10px;
-          justify-content:flex-end;
-          margin-top:14px;
-          flex-wrap:wrap;
-        }
-
-        .confirmCard{
-          width:min(420px, 100%);
-          background:#fff;
-          border-radius:16px;
-          border:1px solid ${colors.border};
-          box-shadow:0 18px 60px rgba(0,0,0,0.2);
-          padding:16px;
-        }
-        .confirmTitle{ font-weight:1000; font-size:16px; }
-        .confirmMsg{ margin-top:8px; color:${colors.text}; font-weight:700; }
-
-        /* responsive */
-        @media (max-width: 1024px){
-          .form-grid{ grid-template-columns:repeat(2, minmax(0,1fr)); }
-        }
-        @media (max-width: 640px){
-          .form-grid{ grid-template-columns:1fr; }
-          table{ font-size:12px; }
-        }
-      `}</style>
     </div>
   );
 }
+
+const css = `
+  .idl-page{
+    min-height:100vh;
+    width:100%;
+    background: ${colors.bg};
+    color: ${colors.text};
+  }
+
+  /* ✅ no big outer margins/padding */
+  .idl-topbar{
+    width:100%;
+    padding: 16px 12px;
+    background:
+      radial-gradient(900px 400px at 10% 10%, rgba(95,75,182,.10), transparent 55%),
+      radial-gradient(900px 400px at 95% 0%, rgba(31,95,120,.10), transparent 55%),
+      linear-gradient(180deg, #ffffff, #f7f9ff);
+    border-bottom: 1px solid ${colors.border};
+  }
+  .idl-topbarInner{
+    width: min(1240px, calc(100% - 16px));
+    margin: 0 auto;
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap: 10px;
+    flex-wrap:wrap;
+  }
+
+  .idl-title{
+    margin:0;
+    font-weight:1000;
+    letter-spacing:.2px;
+    background: linear-gradient(90deg, ${colors.primary}, ${colors.secondary});
+    -webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;
+    font-size: clamp(18px, 2.2vw, 26px);
+  }
+  .idl-subtitle{
+    margin: 6px 0 0;
+    color: ${colors.muted};
+    font-weight: 700;
+    font-size: 0.92rem;
+  }
+
+  /* ✅ small refresh button */
+  .idl-refreshBtn{
+    border: 1px solid ${colors.border};
+    background: #fff;
+    color: ${colors.text};
+    border-radius: 999px;
+    padding: 8px 12px;
+    font-weight: 900;
+    font-size: .88rem;
+    cursor:pointer;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.06);
+    white-space:nowrap;
+  }
+  .idl-refreshBtn:active{ transform: scale(.99); }
+  .idl-refreshBtn:disabled{ opacity:.6; cursor:not-allowed; }
+
+  .idl-content{
+    width: min(1240px, calc(100% - 16px));
+    margin: 0 auto;
+    padding: 12px 0 18px; /* ✅ no side padding, just vertical */
+    display:flex;
+    flex-direction:column;
+    gap: 14px;
+  }
+
+  .idl-card{
+    background:${colors.surface};
+    border-radius:18px;
+    border:1px solid ${colors.border};
+    box-shadow:0 14px 40px rgba(15,23,42,0.06);
+    padding: 14px;
+  }
+
+  .idl-cardHead{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:12px;
+    flex-wrap:wrap;
+    margin-bottom: 10px;
+  }
+  .idl-cardTitle{ font-weight:1000; font-size: 15px; }
+  .idl-cardSub{ margin-top:3px; font-weight:800; font-size: 12.5px; color:${colors.muted}; }
+
+  .idl-formGrid{
+    display:grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 10px;
+  }
+  .idl-formGrid label{
+    font-weight: 850;
+    font-size: 12px;
+    margin-bottom: 6px;
+    display:block;
+  }
+  .idl-formGrid input, .idl-formGrid select{
+    width:100%;
+    padding: 10px 12px;
+    border:1px solid ${colors.border};
+    border-radius: 12px;
+    font-size: 14px;
+    outline:none;
+    background:#fff;
+  }
+  .idl-formGrid input:focus, .idl-formGrid select:focus{
+    border-color: rgba(95,75,182,.55);
+    box-shadow: 0 0 0 .2rem rgba(95,75,182,.12);
+  }
+
+  .idl-primaryBtn{
+    margin-top: 12px;
+    width:100%;
+    border:0;
+    border-radius: 14px;
+    padding: 12px 14px;
+    font-weight: 1000;
+    cursor:pointer;
+    color:#fff;
+    background: linear-gradient(135deg, ${colors.primary}, ${colors.secondary});
+    box-shadow: 0 16px 32px rgba(95,75,182,0.18);
+  }
+  .idl-primaryBtn:active{ transform: translateY(1px); }
+  .idl-primaryBtn:disabled{ opacity:.6; cursor:not-allowed; }
+
+  .idl-outlineBtn{
+    border: 1px solid ${colors.border};
+    background:#fff;
+    color:${colors.text};
+    border-radius: 12px;
+    padding: 10px 14px;
+    font-weight: 900;
+    cursor:pointer;
+  }
+  .idl-dangerBtn{
+    border:0;
+    background: linear-gradient(135deg, ${colors.danger}, #ff6b6b);
+    color:#fff;
+    border-radius: 12px;
+    padding: 10px 14px;
+    font-weight: 1000;
+    cursor:pointer;
+  }
+
+  .idl-tableWrap{
+    width:100%;
+    overflow:auto;
+    border-radius: 14px;
+    border: 1px solid ${colors.border};
+    background:#fff;
+  }
+  .idl-table{
+    width:100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 14px;
+  }
+  .idl-row:hover td{ background: rgba(95,75,182,.04); }
+
+  .idl-actions{
+    display:flex;
+    gap:8px;
+    justify-content:center;
+    flex-wrap:wrap;
+  }
+
+  /* ✅ small action buttons always (mobile + desktop) */
+  .idl-miniBtn{
+    border:0;
+    border-radius: 999px;
+    padding: 7px 10px;
+    font-weight: 950;
+    font-size: .82rem;
+    cursor:pointer;
+    color:#fff;
+    white-space:nowrap;
+    box-shadow: 0 10px 18px rgba(0,0,0,0.10);
+  }
+  .idl-miniBtn.edit{ background: linear-gradient(135deg, ${colors.primary}, ${colors.secondary}); }
+  .idl-miniBtn.del{ background: linear-gradient(135deg, ${colors.danger}, #ff6b6b); }
+  .idl-miniBtn:active{ transform: scale(.99); }
+
+  .idl-toast{
+    position: fixed;
+    left: 50%;
+    top: 12%;
+    transform: translate(-50%, -50%);
+    color:#fff;
+    padding: 12px 16px;
+    border-radius: 14px;
+    z-index: 5000;
+    font-weight: 900;
+    text-align:center;
+    box-shadow: 0 18px 55px rgba(0,0,0,0.18);
+    min-width: 260px;
+  }
+  .idl-toast.success{ background: linear-gradient(135deg, ${colors.success}, #22c55e); }
+  .idl-toast.danger{ background: linear-gradient(135deg, ${colors.danger}, #ff6b6b); }
+  .idl-toast.warning{ background: linear-gradient(135deg, ${colors.warning}, #fbbf24); }
+
+  .idl-modalOverlay{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.45);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    z-index:6000;
+    padding: 14px;
+  }
+  .idl-modalCard{
+    width: min(820px, 100%);
+    background:#fff;
+    border-radius: 18px;
+    border:1px solid ${colors.border};
+    box-shadow: 0 22px 70px rgba(0,0,0,0.22);
+    padding: 14px;
+  }
+  .idl-modalHeader{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:10px;
+  }
+  .idl-modalTitle{ font-weight:1000; font-size: 16px; }
+  .idl-modalSub{ margin-top:3px; color:${colors.muted}; font-weight: 850; font-size: 12.5px; }
+  .idl-closeBtn{
+    border:0;
+    background:#f3f4f6;
+    border-radius: 12px;
+    padding: 8px 10px;
+    cursor:pointer;
+    font-weight: 1000;
+  }
+  .idl-modalActions{
+    display:flex;
+    justify-content:flex-end;
+    gap: 10px;
+    flex-wrap:wrap;
+    margin-top: 14px;
+  }
+
+  .idl-confirmCard{
+    width: min(440px, 100%);
+    background:#fff;
+    border-radius: 18px;
+    border:1px solid ${colors.border};
+    box-shadow: 0 22px 70px rgba(0,0,0,0.22);
+    padding: 14px;
+  }
+  .idl-confirmTitle{ font-weight: 1000; font-size: 16px; }
+  .idl-confirmMsg{ margin-top: 8px; font-weight: 800; color:${colors.text}; }
+
+  /* Responsive */
+  @media (max-width: 1024px){
+    .idl-formGrid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 640px){
+    .idl-topbarInner, .idl-content{ width: calc(100% - 16px); }
+    .idl-formGrid{ grid-template-columns: 1fr; }
+    .idl-table{ font-size: 12px; }
+    .idl-miniBtn{ padding: 6px 9px; font-size: .78rem; } /* ✅ even smaller on mobile */
+    .idl-refreshBtn{ padding: 7px 10px; font-size: .82rem; }
+  }
+`;
