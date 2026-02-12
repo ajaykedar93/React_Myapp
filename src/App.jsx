@@ -34,7 +34,9 @@ import InwardViewOnly from "./Pages/WorkDetails/InwardViewOnly";
 import InwardUpdate from "./Pages/WorkDetails/InwardUpdate";
 
 // Investment pages
-import InvestmentTabs from "./Pages/Investment/InvestmentTabs.jsx";
+//import InvestmentTabs from "./Pages/Investment/InvestmentTabs.jsx";
+import Investment_DashboardTab from "./Pages/Investment/Investment_DashboardTab.jsx";
+
 
 import UserTabs from "./Pages/User_Personal/User_Tabs.jsx";
 
@@ -215,7 +217,7 @@ function AppRoutes() {
         path="/investment"
         element={
           <PrivateRoute>
-            <InvestmentTabs />
+            <Investment_DashboardTab />
           </PrivateRoute>
         }
       />
