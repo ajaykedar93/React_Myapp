@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -7,23 +6,25 @@ import InvestmentPlan from "./InvestmentPlan";
 import TradingJournal from "./TradingJournal";
 import InvestmentReports from "./InvestmentReports";
 import DipWid from "./DipWid";
+import GetTradingJournal from "./GetTradingJournal";
 
 export default function Investment_DashboardTab() {
   const navigate = useNavigate();
 
   const tabs = useMemo(
     () => [
-      { key: "catsub", label: "Category & Subcategory", render: () => <Investmentcatsub /> },
-      { key: "plan", label: "Trading Plan", render: () => <InvestmentPlan /> },
-      { key: "journal", label: "Trading Journal", render: () => <TradingJournal /> },
-      { key: "reports", label: "Reports", render: () => <InvestmentReports /> },
-      { key: "dipwid", label: "Deposit / Withdraw", render: () => <DipWid /> },
+      { key: "catsub", label: "Category & Subcategory", render: Investmentcatsub },
+      { key: "plan", label: "Trading Plan", render: InvestmentPlan },
+      { key: "journal", label: "Trading Journal", render: TradingJournal },
+      { key: "getjournal", label: "Get Trading Journal", render: GetTradingJournal },
+      { key: "reports", label: "Reports", render: InvestmentReports },
+      { key: "dipwid", label: "Deposit / Withdraw", render: DipWid },
     ],
     []
   );
 
   const [activeTab, setActiveTab] = useState(tabs[0]?.key || "catsub");
-  const ActiveView = tabs.find((t) => t.key === activeTab)?.render;
+  const ActiveComponent = tabs.find((t) => t.key === activeTab)?.render || null;
 
   return (
     <div className="id3-root">
@@ -47,7 +48,7 @@ export default function Investment_DashboardTab() {
         </button>
       </header>
 
-      {/* TABS (horizontal scroll) */}
+      {/* TABS */}
       <div className="id3-tabsBar">
         <div className="id3-tabsScroll" role="tablist" aria-label="Investment Tabs">
           {tabs.map((t) => {
@@ -69,10 +70,10 @@ export default function Investment_DashboardTab() {
         </div>
       </div>
 
-      {/* CONTENT */}
+      {/* CONTENT (STRICT: ONLY ACTIVE TAB RENDERS) */}
       <main className="id3-content">
         <div key={activeTab} className="id3-view">
-          {ActiveView ? <ActiveView /> : null}
+          {ActiveComponent ? <ActiveComponent /> : null}
         </div>
       </main>
     </div>
@@ -117,7 +118,7 @@ const styles = `
     position: sticky;
     top: 0;
     z-index: 60;
- height: 150px;
+    height: 150px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -151,7 +152,6 @@ const styles = `
     box-shadow: 0 14px 28px rgba(255,61,141,.22);
   }
 
-  /* allow wrap so title never cuts */
   .id3-titleWrap{
     display: flex;
     flex-direction: column;
@@ -203,7 +203,7 @@ const styles = `
   /* TABS BAR */
   .id3-tabsBar{
     position: sticky;
-    top: 74px;
+    top: 150px;          /* ✅ MUST match navbar height */
     z-index: 55;
 
     background: var(--glass2);
@@ -213,27 +213,19 @@ const styles = `
     padding: 8px 8px;
   }
 
-  /* ✅ horizontal scroll container */
   .id3-tabsScroll{
     display: flex;
     gap: 8px;
     overflow-x: auto;
     overflow-y: hidden;
     padding: 2px 2px;
-
-    /* smooth scroll */
     scroll-behavior: smooth;
-
-    /* hide scrollbar */
     scrollbar-width: none;
   }
   .id3-tabsScroll::-webkit-scrollbar{ display:none; }
 
-  /* ✅ tab button: auto width to show FULL text */
   .id3-tab{
     position: relative;
-
-    /* CRITICAL: do not shrink, so text never cuts */
     flex: 0 0 auto;
 
     border: 1px solid rgba(0,0,0,.10);
@@ -256,7 +248,6 @@ const styles = `
   }
   .id3-tab:active{ transform: scale(.98); }
 
-  /* ✅ keep full label (no ellipsis) */
   .id3-tabText{
     white-space: nowrap;
     overflow: visible;
@@ -270,7 +261,6 @@ const styles = `
     box-shadow: 0 12px 24px rgba(255,61,141,.18);
   }
 
-  /* glow animation on active */
   .id3-tabGlow{
     position: absolute;
     inset: -40% -20%;
@@ -296,7 +286,7 @@ const styles = `
 
   .id3-view{
     width: 100%;
-    min-height: calc(100vh - 74px - 48px);
+    min-height: calc(100vh - 150px - 52px);
     animation: viewIn .22s ease-out;
   }
   @keyframes viewIn{
@@ -312,6 +302,7 @@ const styles = `
       box-shadow: var(--shadow2);
       border: 1px solid rgba(255,255,255,.40);
       padding: 14px 16px;
+      height: 150px; /* keep same */
     }
 
     .id3-title{ font-size: 18px; }
@@ -322,7 +313,7 @@ const styles = `
       border-radius: var(--radius);
       box-shadow: var(--shadow2);
       border: 1px solid rgba(255,255,255,.40);
-      top: 104px;
+      top: calc(16px + 150px); /* ✅ navbar (with margin) safe */
       padding: 10px 10px;
     }
 
@@ -333,7 +324,7 @@ const styles = `
     }
 
     .id3-view{
-      min-height: calc(100vh - 104px - 62px - 28px);
+      min-height: calc(100vh - 150px - 60px - 28px);
     }
   }
 `;
