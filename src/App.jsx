@@ -41,6 +41,9 @@ import Investment_DashboardTab from "./Pages/Investment/Investment_DashboardTab.
 import UserTabs from "./Pages/User_Personal/User_Tabs.jsx";
 
 
+// Notes pages 
+import NotesTab from "./Pages/Notes/NotesN.jsx";
+
 // ✅ Private Route Wrapper
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
@@ -218,6 +221,16 @@ function AppRoutes() {
         element={
           <PrivateRoute>
             <Investment_DashboardTab />
+          </PrivateRoute>
+        }
+      />
+
+      {/* Notes (protected) */}
+      <Route
+        path="/notes"
+        element={
+          <PrivateRoute>
+            <NotesTab />
           </PrivateRoute>
         }
       />

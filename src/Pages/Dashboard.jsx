@@ -11,6 +11,7 @@ import DocumentImg from "../assets/Document.png";
 import moviesImg from "../assets/movies_series.png";
 import transactionImg from "../assets/transaction_dollersign.png";
 import workDetailsImg from "../assets/Word_Details.png";
+import notesImg from "../assets/notes.png"; // ✅ ADD THIS
 
 /** Measure fixed bars and expose CSS vars for perfect layout. */
 function useFixedLayoutVars() {
@@ -78,7 +79,8 @@ const Dashboard = () => {
         </div>
 
         <Container className="dashboard-content">
-          <Row className="dashboard-cards-row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-5">
+          {/* ✅ UPDATED: 6 cards grid */}
+          <Row className="dashboard-cards-row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-6">
             <Col className="d-flex">
               <Card
                 className="clickable-card square-card documents-card w-100"
@@ -90,7 +92,12 @@ const Dashboard = () => {
               >
                 <Card.Body className="square-card__content">
                   <h3 className="card-title mb-2">Documents</h3>
-                  <img src={DocumentImg} alt="Documents" loading="lazy" className="square-card__img" />
+                  <img
+                    src={DocumentImg}
+                    alt="Documents"
+                    loading="lazy"
+                    className="square-card__img"
+                  />
                 </Card.Body>
               </Card>
             </Col>
@@ -106,7 +113,12 @@ const Dashboard = () => {
               >
                 <Card.Body className="square-card__content">
                   <h3 className="card-title mb-2">Investment</h3>
-                  <img src={investmentImg} alt="Investment" loading="lazy" className="square-card__img" />
+                  <img
+                    src={investmentImg}
+                    alt="Investment"
+                    loading="lazy"
+                    className="square-card__img"
+                  />
                 </Card.Body>
               </Card>
             </Col>
@@ -122,7 +134,12 @@ const Dashboard = () => {
               >
                 <Card.Body className="square-card__content">
                   <h3 className="card-title mb-2">Movies &amp; Series</h3>
-                  <img src={moviesImg} alt="Movies and Series" loading="lazy" className="square-card__img" />
+                  <img
+                    src={moviesImg}
+                    alt="Movies and Series"
+                    loading="lazy"
+                    className="square-card__img"
+                  />
                 </Card.Body>
               </Card>
             </Col>
@@ -138,7 +155,12 @@ const Dashboard = () => {
               >
                 <Card.Body className="square-card__content">
                   <h3 className="card-title mb-2">Transaction</h3>
-                  <img src={transactionImg} alt="Transaction" loading="lazy" className="square-card__img" />
+                  <img
+                    src={transactionImg}
+                    alt="Transaction"
+                    loading="lazy"
+                    className="square-card__img"
+                  />
                 </Card.Body>
               </Card>
             </Col>
@@ -154,7 +176,34 @@ const Dashboard = () => {
               >
                 <Card.Body className="square-card__content">
                   <h3 className="card-title mb-2">Work Details</h3>
-                  <img src={workDetailsImg} alt="Work Details" loading="lazy" className="square-card__img" />
+                  <img
+                    src={workDetailsImg}
+                    alt="Work Details"
+                    loading="lazy"
+                    className="square-card__img"
+                  />
+                </Card.Body>
+              </Card>
+            </Col>
+
+            {/* ✅ NEW: NOTES CARD */}
+            <Col className="d-flex">
+              <Card
+                className="clickable-card square-card notes-card w-100"
+                role="button"
+                tabIndex={0}
+                onClick={() => handleCardClick("/notes")}
+                onKeyDown={(e) => onCardKey(e, "/notes")}
+                aria-label="Open Notes"
+              >
+                <Card.Body className="square-card__content">
+                  <h3 className="card-title mb-2">Notes</h3>
+                  <img
+                    src={notesImg}
+                    alt="Notes"
+                    loading="lazy"
+                    className="square-card__img"
+                  />
                 </Card.Body>
               </Card>
             </Col>
@@ -296,9 +345,10 @@ const Dashboard = () => {
 
         .documents-card   { background-color: #ffeb3b; color: #0f172a; }
         .investment-card  { background-color: #22c55e; color: #ffffff; }
-        .movies-card      { background-color: #3b82f6; color: #ffffff; }
+        .movies-card      { background-color: #f83db7; color: #ffffff; }
         .transaction-card { background-color: #ef4444; color: #ffffff; }
         .work-details-card{ background-color: #a855f7; color: #ffffff; }
+        .notes-card       { background-color: #0ea5e9; color: #ffffff; } /* ✅ NEW COLOR */
 
         /* ✅ sticky banner but doesn't break mobile scroll */
         .manage-details-banner {
