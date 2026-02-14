@@ -3,44 +3,31 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../../context/AuthContext";
 
-const API_BASE = "https://express-projectrandom.onrender.com/api/notes-random";
+// ✅ UPDATED API (notes_myapp)
+const API_BASE = "https://express-backend-myapp.onrender.com/api/notes-myapp";
 
 export default function GetNote() {
   const { user, loading: authLoading } = useAuth();
 
-  // ✅ userId same logic you use in other pages
+  // ✅ SAME AS Document.jsx: token only from AuthContext
+  const token = user?.token || "";
+
+  // ✅ SAME AS Document.jsx: userId from user object only
+  // ✅ IMPORTANT: notes_myapp expects INTEGER user_id
+  const userIdRaw = user?.user_id ?? user?.id ?? null;
   const userId = useMemo(() => {
-    return (
-      user?.id ||
-      user?.user_id ||
-      user?.userid ||
-      user?.UserId ||
-      localStorage.getItem("user_id") ||
-      ""
-    );
-  }, [user]);
+    const n = Number(userIdRaw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }, [userIdRaw]);
 
-  // ✅ headers same as your logic (x-user-id)
-  const headers = useMemo(() => {
-    const h = { "Content-Type": "application/json" };
-    if (userId) h["x-user-id"] = String(userId);
-    return h;
-  }, [userId]);
+  const isAuthenticated = !!token && !!user;
 
-  // Optional bearer token (kept if your backend also checks it)
-  const token =
-    localStorage.getItem("token") ||
-    localStorage.getItem("user_token") ||
-    sessionStorage.getItem("token") ||
-    "";
-
+  // ✅ SAME as your AddNote final: Bearer header only
   const authHeaders = useMemo(() => {
-    const h = { ...headers };
+    const h = {};
     if (token) h.Authorization = `Bearer ${token}`;
     return h;
-  }, [headers, token]);
-
-  const isAuthenticated = !!user;
+  }, [token]);
 
   const [notes, setNotes] = useState([]);
   const [notesLoading, setNotesLoading] = useState(false);
@@ -94,18 +81,18 @@ export default function GetNote() {
 
   const safeText = (v) => (v == null || v === "" ? "—" : String(v));
 
-  // ✅ IMPORTANT: backend expects user_id query, keep it
+  // ✅ Backend expects user_id query for GET/DELETE/IMAGE
   const withUserQuery = (url) => {
-    const u = String(userId || "");
     const join = url.includes("?") ? "&" : "?";
-    return `${url}${join}user_id=${encodeURIComponent(u)}`;
+    return `${url}${join}user_id=${encodeURIComponent(String(userId ?? ""))}`;
   };
 
   const getImageUrl = (noteId) => withUserQuery(`${API_BASE}/${noteId}/image`);
 
   // ✅ Image viewer
   const [imgViewer, setImgViewer] = useState({ open: false, src: "", alt: "" });
-  const openImage = (src, alt = "note") => setImgViewer({ open: true, src, alt });
+  const openImage = (src, alt = "note") =>
+    setImgViewer({ open: true, src, alt });
   const closeImage = () => setImgViewer({ open: false, src: "", alt: "" });
 
   // ✅ Reset edit modal scroll TOP
@@ -135,7 +122,7 @@ export default function GetNote() {
     };
   }, [imgViewer.open, editModal.open, centerModal.open, authLoading]);
 
-  // ✅ Fetch Notes (uses x-user-id header + user_id query)
+  // ✅ Fetch Notes (GET /api/notes-myapp?user_id=INTEGER)
   const fetchNotes = async () => {
     if (!userId) return;
 
@@ -173,6 +160,7 @@ export default function GetNote() {
     });
   };
 
+  // ✅ DELETE /api/notes-myapp/:note_id?user_id=INTEGER
   const deleteNote = async (noteId) => {
     closeCenterModal();
     if (!userId) return;
@@ -207,24 +195,26 @@ export default function GetNote() {
     }
   };
 
+  // ✅ UPDATE (must be multipart for this backend, because route uses multer)
+  // PUT /api/notes-myapp/:note_id  (body: FormData including user_id)
   const updateNote = async () => {
     if (!userId || !editModal.noteId) return;
 
     setEditModal((p) => ({ ...p, saving: true }));
     try {
-      const payload = {
-        user_id: userId,
-        note_title: editModal.note_title,
-        note_description: editModal.note_description,
-        note_info: editModal.note_info,
-        note_date: editModal.note_date,
-        note_time: editModal.note_time,
-      };
+      const fd = new FormData();
+      fd.append("user_id", String(userId));
 
-      const res = await fetch(withUserQuery(`${API_BASE}/${editModal.noteId}`), {
+      fd.append("note_title", editModal.note_title || "");
+      fd.append("note_description", editModal.note_description || "");
+      fd.append("note_info", editModal.note_info || "");
+      fd.append("note_date", editModal.note_date || "");
+      fd.append("note_time", editModal.note_time || "");
+
+      const res = await fetch(`${API_BASE}/${editModal.noteId}`, {
         method: "PUT",
-        headers: { ...authHeaders },
-        body: JSON.stringify(payload),
+        headers: { ...authHeaders }, // ✅ DO NOT set Content-Type for FormData
+        body: fd,
       });
 
       const data = await res.json().catch(() => ({}));
@@ -257,7 +247,10 @@ export default function GetNote() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, userId]);
 
-  const orderedNotes = useMemo(() => (Array.isArray(notes) ? notes : []), [notes]);
+  const orderedNotes = useMemo(
+    () => (Array.isArray(notes) ? notes : []),
+    [notes]
+  );
 
   // ✅ Timestamp formatter: dd/mm/yyyy + hh:mm AM/PM
   const pad2 = (n) => String(n).padStart(2, "0");
@@ -406,7 +399,10 @@ export default function GetNote() {
                     className="input"
                     value={editModal.note_title}
                     onChange={(e) =>
-                      setEditModal((p) => ({ ...p, note_title: e.target.value }))
+                      setEditModal((p) => ({
+                        ...p,
+                        note_title: e.target.value,
+                      }))
                     }
                     placeholder="Eg. Meeting points"
                   />
@@ -418,7 +414,10 @@ export default function GetNote() {
                     className="input"
                     value={editModal.note_info}
                     onChange={(e) =>
-                      setEditModal((p) => ({ ...p, note_info: e.target.value }))
+                      setEditModal((p) => ({
+                        ...p,
+                        note_info: e.target.value,
+                      }))
                     }
                     placeholder="Eg. Name / number / details"
                   />
@@ -446,7 +445,10 @@ export default function GetNote() {
                       className="input"
                       value={editModal.note_date}
                       onChange={(e) =>
-                        setEditModal((p) => ({ ...p, note_date: e.target.value }))
+                        setEditModal((p) => ({
+                          ...p,
+                          note_date: e.target.value,
+                        }))
                       }
                       placeholder="dd/mm/yyyy"
                     />
@@ -458,7 +460,10 @@ export default function GetNote() {
                       className="input"
                       value={editModal.note_time}
                       onChange={(e) =>
-                        setEditModal((p) => ({ ...p, note_time: e.target.value }))
+                        setEditModal((p) => ({
+                          ...p,
+                          note_time: e.target.value,
+                        }))
                       }
                       placeholder="hh:mm AM/PM"
                     />
@@ -472,7 +477,9 @@ export default function GetNote() {
                       <button
                         type="button"
                         className="btn mini primary"
-                        onClick={() => openImage(getImageUrl(editModal.noteId), "note")}
+                        onClick={() =>
+                          openImage(getImageUrl(editModal.noteId), "note")
+                        }
                       >
                         View
                       </button>
@@ -525,7 +532,6 @@ export default function GetNote() {
           document.body
         )}
 
-      {/* Title */}
       <div className="pageTitle">Get Notes</div>
 
       {!isAuthenticated || !userId ? (
@@ -584,7 +590,6 @@ export default function GetNote() {
                     </div>
                   </div>
 
-                  {/* ✅ Timestamp bar ABOVE title */}
                   <div className="stampBar">
                     <span className="stampIcon">🕒</span>
                     <span className="stampText">
@@ -636,23 +641,24 @@ export default function GetNote() {
   );
 }
 
-/* ✅ FULL CSS (same as your file) */
+/* ✅ FULL CSS (Same UI) + ✅ Darker text everywhere for clear reading */
 const css = `
   *{ box-sizing:border-box; }
   html, body { margin:0; padding:0; width:100%; height:100%; overflow-x:hidden; }
 
   :root{
-    --text:#0f172a;
-    --muted: rgba(15,23,42,.65);
+    /* ✅ Stronger blacks */
+    --text:#000000;
+    --muted: rgba(0,0,0,.70);
 
     --blue:#2563eb;
     --red:#ef4444;
     --amber:#f59e0b;
     --green:#22c55e;
 
-    --border: rgba(15,23,42,.12);
-    --shadow: 0 18px 55px rgba(15,23,42,.12);
-    --shadow2: 0 26px 90px rgba(15,23,42,.18);
+    --border: rgba(0,0,0,.14);
+    --shadow: 0 18px 55px rgba(0,0,0,.12);
+    --shadow2: 0 26px 90px rgba(0,0,0,.18);
 
     --pad: clamp(12px, 3.2vw, 18px);
   }
@@ -685,11 +691,11 @@ const css = `
 
   .noteCard{
     width:100%;
-    border: 2px solid rgba(0,0,0,.85);
+    border: 2px solid rgba(0,0,0,.90);
     background: rgba(255,255,255,.96);
     border-radius: 14px;
     padding: var(--pad);
-    box-shadow: 0 10px 22px rgba(15,23,42,.08);
+    box-shadow: 0 10px 22px rgba(0,0,0,.10);
   }
 
   .noteHead{
@@ -728,7 +734,7 @@ const css = `
   .stampIcon{ font-size: 13px; line-height: 1; }
   .stampText{
     color: #000;
-    font-weight: 800;
+    font-weight: 1100;
     font-size: 12px;
     letter-spacing: .2px;
     word-break: break-word;
@@ -740,9 +746,9 @@ const css = `
     border-radius: 14px;
     background: rgba(37,99,235,.08);
     border: 1px solid rgba(37,99,235,.18);
-    color: rgba(15,23,42,.92);
+    color: #000;
     font-size: 15px;
-    font-weight: 1300;
+    font-weight: 1400;
     word-break: break-word;
   }
 
@@ -752,9 +758,9 @@ const css = `
     border-radius: 14px;
     background: rgba(34,197,94,.08);
     border: 1px solid rgba(34,197,94,.18);
-    color: rgba(15,23,42,.92);
+    color: #000;
     font-size: 13px;
-    font-weight: 1100;
+    font-weight: 1200;
     word-break: break-word;
   }
 
@@ -763,26 +769,26 @@ const css = `
     padding: 12px;
     border-radius: 14px;
     background: #fff;
-    border: 1px solid rgba(15,23,42,.10);
-    color: rgba(15,23,42,.92);
+    border: 1px solid rgba(0,0,0,.14);
+    color: #000;
     font-size: 13px;
-    font-weight: 950;
+    font-weight: 1100;
     line-height: 1.55;
     white-space: pre-wrap;
     word-break: break-word;
   }
-  .muted{ color: var(--muted); font-weight: 900; }
+  .muted{ color: var(--muted); font-weight: 1100; }
 
   .imgRow{ margin-top: 12px; display:flex; align-items:center; gap: 10px; flex-wrap: wrap; }
   .imgThumb{
     width: 74px; height: 74px;
     border-radius: 14px;
     object-fit: cover;
-    border: 1px solid rgba(15,23,42,.12);
-    box-shadow: 0 10px 24px rgba(15,23,42,.10);
+    border: 1px solid rgba(0,0,0,.16);
+    box-shadow: 0 10px 24px rgba(0,0,0,.12);
   }
 
-  .noImg{ margin-top: 12px; font-size: 12px; font-weight: 1000; color: rgba(15,23,42,.65); }
+  .noImg{ margin-top: 12px; font-size: 12px; font-weight: 1200; color: rgba(0,0,0,.72); }
 
   .btn{
     border:none;
@@ -799,8 +805,8 @@ const css = `
   .btn.mini{ padding: 10px 12px; border-radius: 12px; font-size: 12px; }
 
   .btn.primary{ color:#fff; background: linear-gradient(135deg, var(--blue), #60a5fa); box-shadow: 0 12px 24px rgba(37,99,235,.18); }
-  .btn.ghost{ color: rgba(15,23,42,.88); background: rgba(37,99,235,.08); border: 1px solid rgba(37,99,235,.18); }
-  .btn.warn{ color: rgba(15,23,42,.92); background: linear-gradient(135deg, rgba(245,158,11,.20), rgba(245,158,11,.10)); border: 1px solid rgba(245,158,11,.28); }
+  .btn.ghost{ color: #000; background: rgba(37,99,235,.08); border: 1px solid rgba(37,99,235,.18); }
+  .btn.warn{ color: #000; background: linear-gradient(135deg, rgba(245,158,11,.20), rgba(245,158,11,.10)); border: 1px solid rgba(245,158,11,.28); }
   .btn.danger{ color:#fff; background: linear-gradient(135deg, var(--red), #fb7185); box-shadow: 0 12px 24px rgba(239,68,68,.18); }
 
   .miniLoadingRow{
@@ -808,9 +814,9 @@ const css = `
     display:flex;
     align-items:center;
     gap: 8px;
-    font-weight: 1100;
+    font-weight: 1200;
     font-size: 12px;
-    color: rgba(15,23,42,.72);
+    color: rgba(0,0,0,.78);
   }
   .miniSpin{
     width: 14px; height: 14px;
@@ -824,17 +830,18 @@ const css = `
   .fullCard{
     width: calc(100% - (var(--pad) * 2));
     margin: 0 var(--pad);
-    border: 1px solid rgba(15,23,42,.12);
+    border: 1px solid rgba(0,0,0,.14);
     border-radius: 14px;
     background: rgba(255,255,255,.96);
     padding: var(--pad);
+    color: #000;
   }
   .warnCard{ background: rgba(245,158,11,.10); border: 1px dashed rgba(245,158,11,.35); }
-  .warnTitle{ font-weight: 1300; color: var(--text); }
-  .warnSub{ margin-top: 6px; font-weight: 1000; color: rgba(15,23,42,.72); }
+  .warnTitle{ font-weight: 1400; color: #000; }
+  .warnSub{ margin-top: 6px; font-weight: 1200; color: rgba(0,0,0,.78); }
   .emptyCard{ display:flex; flex-direction:column; gap: 10px; align-items:flex-start; }
   .emptyIcon{ font-size: 26px; }
-  .emptyTitle{ font-weight: 1300; color: var(--text); }
+  .emptyTitle{ font-weight: 1400; color: #000; }
 
   .modalOverlay,
   .editOverlay,
@@ -867,11 +874,12 @@ const css = `
     max-height: calc(100dvh - (var(--pad) * 2) - env(safe-area-inset-bottom));
     overflow: auto;
     background: #fff;
-    border: 1px solid rgba(15,23,42,.10);
+    border: 1px solid rgba(0,0,0,.14);
     border-radius: 18px;
     padding: 16px;
-    box-shadow: 0 20px 70px rgba(17,24,39,.16);
+    box-shadow: 0 20px 70px rgba(0,0,0,.16);
     margin: auto;
+    color: #000;
   }
 
   .modalTop{ display:flex; flex-direction:column; gap: 8px; }
@@ -881,7 +889,7 @@ const css = `
     padding: 6px 10px;
     border-radius: 999px;
     font-size: 12px;
-    font-weight: 1200;
+    font-weight: 1300;
     border: 1px solid rgba(37,99,235,.20);
     background: rgba(37,99,235,.10);
     color: rgba(37,99,235,1);
@@ -890,8 +898,8 @@ const css = `
   .badge.bad{ border-color: rgba(239,68,68,.22); background: rgba(239,68,68,.10); color: rgba(239,68,68,1); }
   .badge.warn{ border-color: rgba(245,158,11,.25); background: rgba(245,158,11,.12); color: rgba(245,158,11,1); }
 
-  .modalTitle{ font-size: 15px; font-weight: 1300; color: var(--text); }
-  .modalMsg{ font-size: 12.5px; font-weight: 1000; color: rgba(15,23,42,.72); line-height: 1.45; }
+  .modalTitle{ font-size: 15px; font-weight: 1400; color: #000; }
+  .modalMsg{ font-size: 12.5px; font-weight: 1200; color: rgba(0,0,0,.78); line-height: 1.45; }
   .modalActions{ display:flex; justify-content:flex-end; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
 
   .editCard{
@@ -899,29 +907,30 @@ const css = `
     max-height: calc(100dvh - (var(--pad) * 2) - env(safe-area-inset-bottom));
     overflow: auto;
     background: #fff;
-    border: 1px solid rgba(15,23,42,.14);
+    border: 1px solid rgba(0,0,0,.16);
     border-radius: 22px;
     box-shadow: var(--shadow2);
     display:flex;
     flex-direction:column;
     margin: auto;
+    color: #000;
   }
 
   .editHead{
     padding: 14px 16px;
-    border-bottom: 1px solid rgba(15,23,42,.10);
+    border-bottom: 1px solid rgba(0,0,0,.12);
     background: linear-gradient(135deg, rgba(245,158,11,.14), rgba(37,99,235,.08));
     position: sticky;
     top: 0;
     z-index: 2;
   }
-  .editTitle{ font-size: 16px; font-weight: 1400; color: rgba(15,23,42,.95); }
-  .editSub{ margin-top: 4px; font-size: 12px; font-weight: 1100; color: rgba(15,23,42,.70); }
+  .editTitle{ font-size: 16px; font-weight: 1500; color: #000; }
+  .editSub{ margin-top: 4px; font-size: 12px; font-weight: 1200; color: rgba(0,0,0,.78); }
   .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
 
   .editBody{ padding: 16px; display:flex; flex-direction:column; gap: 12px; }
   .field{ display:flex; flex-direction:column; gap: 7px; }
-  .label{ font-size: 12px; font-weight: 1200; color: rgba(15,23,42,.86); }
+  .label{ font-size: 12px; font-weight: 1300; color: #000; }
 
   .input, .textarea{
     width:100%;
@@ -930,8 +939,8 @@ const css = `
     background: #fff;
     padding: 12px 12px;
     outline:none;
-    color: rgba(15,23,42,.92);
-    font-weight: 950;
+    color: #000;
+    font-weight: 1100;
   }
   .textarea{ min-height: 92px; resize: vertical; }
 
@@ -939,20 +948,20 @@ const css = `
   @media (min-width: 720px){ .grid2{ grid-template-columns: 1fr 1fr; } }
 
   .imagePreview{
-    border: 1px solid rgba(15,23,42,.10);
-    background: rgba(15,23,42,.03);
+    border: 1px solid rgba(0,0,0,.12);
+    background: rgba(0,0,0,.03);
     border-radius: 18px;
     padding: 12px;
   }
   .imagePreviewTop{ display:flex; align-items:center; justify-content:space-between; gap: 10px; margin-bottom: 10px; }
-  .imagePreviewTitle{ font-weight: 1200; font-size: 12.5px; color: rgba(15,23,42,.86); }
+  .imagePreviewTitle{ font-weight: 1300; font-size: 12.5px; color: #000; }
 
-  .imgSmall{ width: 100%; max-width: 280px; border-radius: 16px; border: 1px solid rgba(15,23,42,.10); display:block; }
-  .noImageBox{ border: 1px dashed rgba(15,23,42,.18); background: rgba(15,23,42,.04); border-radius: 18px; padding: 12px; font-weight: 1100; color: rgba(15,23,42,.72); }
+  .imgSmall{ width: 100%; max-width: 280px; border-radius: 16px; border: 1px solid rgba(0,0,0,.12); display:block; }
+  .noImageBox{ border: 1px dashed rgba(0,0,0,.22); background: rgba(0,0,0,.04); border-radius: 18px; padding: 12px; font-weight: 1200; color: rgba(0,0,0,.78); }
 
   .editActions{
     padding: 12px 16px 14px;
-    border-top: 1px solid rgba(15,23,42,.10);
+    border-top: 1px solid rgba(0,0,0,.12);
     display:flex;
     justify-content:flex-end;
     gap: 10px;
@@ -1002,15 +1011,16 @@ const css = `
   .loaderCard{
     width: min(340px, 92vw);
     background: #fff;
-    border: 1px solid rgba(15,23,42,.10);
+    border: 1px solid rgba(0,0,0,.14);
     border-radius: 18px;
     padding: 16px;
-    box-shadow: 0 16px 44px rgba(17,24,39,.12);
+    box-shadow: 0 16px 44px rgba(0,0,0,.14);
     display:flex;
     flex-direction:column;
     align-items:center;
     gap: 8px;
     margin: auto;
+    color: #000;
   }
   .spinner{
     width: 42px; height: 42px;
@@ -1019,8 +1029,8 @@ const css = `
     border-top-color: rgba(37,99,235,.95);
     animation: spin 1s linear infinite;
   }
-  .loaderText{ font-size: 13px; font-weight: 1200; color: rgba(15,23,42,.86); }
-  .loaderSub{ font-size: 12px; font-weight: 1000; color: rgba(15,23,42,.70); }
+  .loaderText{ font-size: 13px; font-weight: 1300; color: #000; }
+  .loaderSub{ font-size: 12px; font-weight: 1200; color: rgba(0,0,0,.78); }
 
   @media (max-height: 650px){
     .modalOverlay, .editOverlay, .imgOverlay{ align-items: flex-start; }

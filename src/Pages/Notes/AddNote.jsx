@@ -1,29 +1,31 @@
+// AddNote.jsx (FINAL: same UI/page, but uses notes_myapp API + INTEGER user_id)
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 
-const API_BASE = "https://express-projectrandom.onrender.com/api/notes-random";
+// ✅ UPDATED API (notes_myapp routes)
+const API_BASE = "https://express-backend-myapp.onrender.com/api/notes-myapp";
 
 export default function AddNote() {
   const { user, loading: authLoading } = useAuth();
 
-  const token =
-    localStorage.getItem("token") ||
-    localStorage.getItem("user_token") ||
-    sessionStorage.getItem("token") ||
-    "";
+  // ✅ token from AuthContext (same style)
+  const token = user?.token || "";
 
-  const isAuthenticated = !!user;
-
+  // ✅ user_id must be INTEGER now (admin.user_id SERIAL)
+  // take from auth user only (same style) and ensure number
+  const userIdRaw = user?.user_id ?? user?.id ?? null;
   const userId = useMemo(() => {
-    return (
-      user?.id ||
-      user?.user_id ||
-      user?.userid ||
-      user?.UserId ||
-      localStorage.getItem("user_id") ||
-      ""
-    );
-  }, [user]);
+    const n = Number(userIdRaw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }, [userIdRaw]);
+
+  const isAuthenticated = !!token && !!user;
+
+  const authHeaders = useMemo(() => {
+    const h = {};
+    if (token) h.Authorization = `Bearer ${token}`;
+    return h;
+  }, [token]);
 
   const [pageLoading, setPageLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -38,16 +40,9 @@ export default function AddNote() {
     cancelText: "Cancel",
   });
 
-  const openCenterModal = (payload) =>
-    setCenterModal({ open: true, ...payload });
+  const openCenterModal = (payload) => setCenterModal({ open: true, ...payload });
   const closeCenterModal = () =>
     setCenterModal((p) => ({ ...p, open: false, onConfirm: null }));
-
-  const authHeaders = useMemo(() => {
-    const h = {};
-    if (token) h.Authorization = `Bearer ${token}`;
-    return h;
-  }, [token]);
 
   const fileRef = useRef(null);
 
@@ -100,9 +95,7 @@ export default function AddNote() {
 
   const getISTNow = () => {
     const now = new Date();
-    const ist = new Date(
-      now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
-    );
+    const ist = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
 
     const dd = String(ist.getDate()).padStart(2, "0");
     const mm = String(ist.getMonth() + 1).padStart(2, "0");
@@ -149,7 +142,6 @@ export default function AddNote() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ✅ remove selected file anytime
   const removeFile = () => {
     setForm((p) => ({ ...p, imageFile: null }));
     if (fileRef.current) fileRef.current.value = "";
@@ -164,11 +156,12 @@ export default function AddNote() {
   const addNote = async (e) => {
     e.preventDefault();
 
+    // ✅ userId must be INTEGER
     if (!userId) {
       openCenterModal({
         type: "error",
         title: "Login required",
-        message: "User id not found. Please login again.",
+        message: "Valid user id not found. Please login again.",
         confirmText: "OK",
       });
       return;
@@ -177,11 +170,10 @@ export default function AddNote() {
     setSaving(true);
     try {
       const fd = new FormData();
-      fd.append("user_id", userId);
+      fd.append("user_id", String(userId)); // ✅ send as string but numeric
 
       if (form.note_title) fd.append("note_title", form.note_title);
-      if (form.note_description)
-        fd.append("note_description", form.note_description);
+      if (form.note_description) fd.append("note_description", form.note_description);
       if (form.note_info) fd.append("note_info", form.note_info);
 
       if (form.note_date) fd.append("note_date", form.note_date);
@@ -221,7 +213,7 @@ export default function AddNote() {
       openCenterModal({
         type: "error",
         title: "Failed",
-        message: err.message || "Something went wrong.",
+        message: err?.message || "Something went wrong.",
         confirmText: "OK",
       });
     } finally {
@@ -271,7 +263,6 @@ export default function AddNote() {
         </div>
       )}
 
-      {/* ✅ PERFECT CENTER MODAL */}
       {centerModal.open && (
         <div className="modalOverlay" onClick={closeCenterModal}>
           <div className="modalCard" onClick={(e) => e.stopPropagation()}>
@@ -308,22 +299,18 @@ export default function AddNote() {
         </div>
       )}
 
-      {/* TOP TITLE */}
       <div className="topBar">
         <div className="topLeft">
           <div className="chip">ADD NOTE</div>
           <div className="topTitle">Create a bright new note ✨</div>
-         
         </div>
       </div>
 
-      {/* EDGE TO EDGE SECTION */}
       <div className="shell">
         <div className="card edge">
           <div className="cardHead">
             <div className="headLeft">
               <div className="cardTitle">Note Details</div>
-             
             </div>
             <div className="headRight">
               <div className="miniPill">Secure</div>
@@ -338,9 +325,7 @@ export default function AddNote() {
               <div className="softActions">
                 <button
                   className="btn ghost"
-                  onClick={() =>
-                    window.scrollTo({ top: 0, behavior: "smooth" })
-                  }
+                  onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
                 >
                   OK
                 </button>
@@ -354,9 +339,7 @@ export default function AddNote() {
                   <input
                     className="input"
                     value={form.note_title}
-                    onChange={(e) =>
-                      setForm((p) => ({ ...p, note_title: e.target.value }))
-                    }
+                    onChange={(e) => setForm((p) => ({ ...p, note_title: e.target.value }))}
                     placeholder="Eg. Meeting points"
                   />
                 </div>
@@ -366,9 +349,7 @@ export default function AddNote() {
                   <input
                     className="input"
                     value={form.note_info}
-                    onChange={(e) =>
-                      setForm((p) => ({ ...p, note_info: e.target.value }))
-                    }
+                    onChange={(e) => setForm((p) => ({ ...p, note_info: e.target.value }))}
                     placeholder="Eg. Name / number / details"
                   />
                 </div>
@@ -380,10 +361,7 @@ export default function AddNote() {
                   className="textarea"
                   value={form.note_description}
                   onChange={(e) =>
-                    setForm((p) => ({
-                      ...p,
-                      note_description: e.target.value,
-                    }))
+                    setForm((p) => ({ ...p, note_description: e.target.value }))
                   }
                   placeholder="Write your note…"
                 />
@@ -484,9 +462,7 @@ export default function AddNote() {
                 </button>
               </div>
 
-              <div className="bottomTip">
-               $ notes
-              </div>
+              <div className="bottomTip">📝 Notes are saved securely under your account.</div>
             </form>
           )}
         </div>
@@ -517,11 +493,9 @@ const css = `
     --shadow: 0 18px 55px rgba(15,23,42,.12);
     --radius: 22px;
 
-    /* ✅ consistent page padding (mobile to desktop) */
     --pagePad: clamp(12px, 3.2vw, 20px);
   }
 
-  /* ✅ NEVER use 100vw here (causes cut/overflow) */
   .addnotePage{
     min-height:100vh;
     width:100%;
@@ -534,14 +508,11 @@ const css = `
       linear-gradient(180deg, #ffffff, var(--bg));
   }
 
-  /* ✅ top area */
-  .topBar{
-    padding: 14px var(--pagePad) 10px;
-  }
+  .topBar{ padding: 14px var(--pagePad) 10px; }
 
   .topLeft{
     width:100%;
-    max-width: 1100px; /* ✅ desktop */
+    max-width: 1100px;
     margin: 0 auto;
   }
 
@@ -563,22 +534,14 @@ const css = `
     font-weight: 1100;
     color: var(--text);
   }
-  .topSub{
-    margin-top: 4px;
-    font-size: 12.5px;
-    font-weight: 850;
-    color: var(--muted);
-  }
 
-  /* ✅ shell should be 100% width, not 100vw */
   .shell{
     width:100%;
-    max-width: 1100px; /* ✅ desktop */
+    max-width: 1100px;
     margin: 0 auto;
-    padding: 0; /* edge-to-edge outer */
+    padding: 0;
   }
 
-  /* ✅ Card: edge-to-edge on mobile, but NOT overflowing */
   .card{
     width:100%;
     max-width: 100%;
@@ -590,12 +553,9 @@ const css = `
     border-left: 0;
     border-right: 0;
     box-shadow: none;
-
-    /* ✅ IMPORTANT: inside padding so inputs never cut */
     padding: var(--pagePad);
   }
 
-  /* Header inside card */
   .cardHead{
     display:flex;
     justify-content:space-between;
@@ -622,18 +582,14 @@ const css = `
   }
 
   .cardTitle{ font-size: 15px; font-weight: 1100; color: var(--text); }
-  .cardSub{ font-size: 12.5px; font-weight: 850; color: var(--muted); line-height: 1.45; }
 
   .form{ display:flex; flex-direction:column; gap: 12px; }
-
   .grid2{ display:grid; grid-template-columns: 1fr; gap: 12px; }
   .grid3{ display:grid; grid-template-columns: 1fr; gap: 12px; }
 
   .field{ display:flex; flex-direction:column; gap: 7px; }
-
   .label{ font-size: 12px; font-weight: 1100; color: rgba(15,23,42,.86); }
 
-  /* ✅ Inputs never cut: full width, no overflow */
   .input, .textarea{
     width:100%;
     max-width:100%;
@@ -744,7 +700,6 @@ const css = `
     font-size: 12px;
   }
 
-  /* ✅ Modal always perfectly centered and fully visible */
   .modalOverlay{
     position:fixed;
     inset:0;
@@ -810,7 +765,6 @@ const css = `
     flex-wrap: wrap;
   }
 
-  /* loader overlay */
   .overlay{
     position:fixed;
     inset:0;
@@ -842,7 +796,6 @@ const css = `
   .loaderText{ font-size: 13px; font-weight: 1100; color: rgba(15,23,42,.86); }
   .loaderSub{ font-size: 12px; font-weight: 900; color: rgba(15,23,42,.62); }
 
-  /* login info */
   .softInfo{
     border: 1px solid rgba(239,68,68,.18);
     background: rgba(239,68,68,.08);
@@ -853,17 +806,14 @@ const css = `
   .softText{ margin-top: 6px; font-weight: 900; color: rgba(15,23,42,.70); font-size: 12.5px; line-height:1.45; }
   .softActions{ margin-top: 10px; display:flex; justify-content:flex-end; }
 
-  /* ✅ Desktop: premium card + spacing */
   @media (min-width: 740px){
     .shell{ padding: 10px var(--pagePad) 26px; }
-
     .card{
       border-radius: var(--radius);
       border: 1px solid rgba(15,23,42,.10);
       box-shadow: var(--shadow);
       padding: 16px;
     }
-
     .grid2{ grid-template-columns: 1fr 1fr; }
     .grid3{ grid-template-columns: 1fr 1fr 1fr; }
     .topTitle{ font-size: 22px; }
