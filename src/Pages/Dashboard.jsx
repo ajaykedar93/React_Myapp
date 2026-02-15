@@ -363,7 +363,7 @@ const Dashboard = () => {
         .transaction-card { background-color: #ef4444; color: #ffffff; }
         .work-details-card{ background-color: #a855f7; color: #ffffff; }
         .notes-card       { background-color: #0ea5e9; color: #ffffff; }
-        .newfeatures-card { background-color: #f3ab11; color: #ffffff; } 
+        .newfeatures-card { background-color: #f2a916; color: #ffffff; } 
 
         .manage-details-banner {
           position: sticky;
