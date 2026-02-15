@@ -11,7 +11,8 @@ import DocumentImg from "../assets/Document.png";
 import moviesImg from "../assets/movies_series.png";
 import transactionImg from "../assets/transaction_dollersign.png";
 import workDetailsImg from "../assets/Word_Details.png";
-import notesImg from "../assets/notes.png"; // ✅ ADD THIS
+import notesImg from "../assets/notesn.png";
+import newfeature from "../assets/newfeature.png"; // ✅ NEW IMPORT
 
 /** Measure fixed bars and expose CSS vars for perfect layout. */
 function useFixedLayoutVars() {
@@ -79,7 +80,7 @@ const Dashboard = () => {
         </div>
 
         <Container className="dashboard-content">
-          {/* ✅ UPDATED: 6 cards grid */}
+          {/* ✅ UPDATED: 7 cards grid */}
           <Row className="dashboard-cards-row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-6">
             <Col className="d-flex">
               <Card
@@ -186,7 +187,6 @@ const Dashboard = () => {
               </Card>
             </Col>
 
-            {/* ✅ NEW: NOTES CARD */}
             <Col className="d-flex">
               <Card
                 className="clickable-card square-card notes-card w-100"
@@ -201,6 +201,28 @@ const Dashboard = () => {
                   <img
                     src={notesImg}
                     alt="Notes"
+                    loading="lazy"
+                    className="square-card__img"
+                  />
+                </Card.Body>
+              </Card>
+            </Col>
+
+            {/* ✅ NEW: NEW FEATURES CARD */}
+            <Col className="d-flex">
+              <Card
+                className="clickable-card square-card newfeatures-card w-100"
+                role="button"
+                tabIndex={0}
+                onClick={() => handleCardClick("/new-features")}
+                onKeyDown={(e) => onCardKey(e, "/new-features")}
+                aria-label="Open New Features"
+              >
+                <Card.Body className="square-card__content">
+                  <h3 className="card-title mb-2">New Features</h3>
+                  <img
+                    src={newfeature}
+                    alt="New Features"
                     loading="lazy"
                     className="square-card__img"
                   />
@@ -223,7 +245,6 @@ const Dashboard = () => {
 
         html, body { margin: 0; padding: 0; height: 100%; overflow-y: auto; background: #f7fafc; }
 
-        /* ✅ IMPORTANT: remove overflow hidden => page scroll will work on mobile */
         .dashboard-container {
           min-height: 100dvh;
           background: #f7fafc;
@@ -255,23 +276,16 @@ const Dashboard = () => {
           background-clip: padding-box;
         }
 
-        /* ✅ PAGE SCROLL (no inner scroll box) */
         .dashboard-scroll {
-          /* create space for fixed navbar */
           padding-top: 10px;
           margin-top: var(--nav-h);
-
-          /* create space for fixed footer so content never hides */
           padding-bottom: calc(var(--footer-h) + 24px + env(safe-area-inset-bottom, 0px));
-
-          /* no height/overflow here => body scroll handles it */
           height: auto;
           overflow: visible;
         }
 
         .dashboard-content { padding: 16px 12px 24px; }
 
-        /* ✅ FORCE CARD GAP ON MOBILE (overrides global rules) */
         .dashboard-content .dashboard-cards-row{
           --bs-gutter-x: 18px;
           --bs-gutter-y: 18px;
@@ -348,9 +362,9 @@ const Dashboard = () => {
         .movies-card      { background-color: #f83db7; color: #ffffff; }
         .transaction-card { background-color: #ef4444; color: #ffffff; }
         .work-details-card{ background-color: #a855f7; color: #ffffff; }
-        .notes-card       { background-color: #0ea5e9; color: #ffffff; } /* ✅ NEW COLOR */
+        .notes-card       { background-color: #0ea5e9; color: #ffffff; }
+        .newfeatures-card { background-color: #f3ab11; color: #ffffff; } 
 
-        /* ✅ sticky banner but doesn't break mobile scroll */
         .manage-details-banner {
           position: sticky;
           top: 0;

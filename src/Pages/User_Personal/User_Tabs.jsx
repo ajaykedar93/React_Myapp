@@ -1,4 +1,4 @@
-// src/pages/UserTabs.jsx
+// src/pages/UserTabs.jsx (FINAL: same full page + NO CUT + correct spacing + clean tabs)
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
@@ -8,7 +8,6 @@ import PasswordManager from "./PasswordManager";
 import Act_Favorite from "./AddfevActress";
 import ShowActress from "./ActressesPage";
 import GetPassword from "./GetPassword";
-import Notes from "./Notes";
 import WebsitesUrl from "./WebsitesUrl";
 import Addlist from "./FevActListNew";
 
@@ -21,14 +20,13 @@ const COLORS = {
 };
 
 const TABS = [
-  { id: "investment", label: "Investment", activeColor: "#1d4ed8" },   // Deep Blue (Trust, Finance)
-  { id: "password", label: "Add Password", activeColor: "#6d28d9" },   // Royal Purple (Security)
-  { id: "getpassword", label: "Get Password", activeColor: "#0284c7" },// Steel Sky (Access)
-  { id: "favorite", label: "Add Actress Favorite", activeColor: "#be185d" }, // Rose Wine (Personal)
-  { id: "actresslist", label: "Actress List", activeColor: "#c2410c" },// Burnt Orange (Content)
-  { id: "websites", label: "Websites", activeColor: "#ed1e90" },       // Deep Teal (Links / Web)
-  { id: "notes", label: "Notes", activeColor: "#208b47" },             // Emerald Green (Writing)
-  { id: "addlist", label: "Act List", activeColor: "#ff9c12" },        // Muted Gold (Collection)
+  { id: "investment", label: "Investment", activeColor: "#1d4ed8" },
+  { id: "password", label: "Add Password", activeColor: "#6d28d9" },
+  { id: "getpassword", label: "Get Password", activeColor: "#0284c7" },
+  { id: "favorite", label: "Add Actress Favorite", activeColor: "#be185d" },
+  { id: "actresslist", label: "Actress List", activeColor: "#c2410c" },
+  { id: "websites", label: "Websites", activeColor: "#ed1e90" },
+  { id: "addlist", label: "Act List", activeColor: "#ff9c12" },
 ];
 
 export default function UserTabs() {
@@ -58,7 +56,7 @@ export default function UserTabs() {
     const apply = () => setNavH(navRef.current?.offsetHeight || 72);
     apply();
     const ro = new ResizeObserver(apply);
-    navRef.current && ro.observe(navRef.current);
+    if (navRef.current) ro.observe(navRef.current);
     window.addEventListener("resize", apply);
     return () => {
       ro.disconnect();
@@ -91,34 +89,30 @@ export default function UserTabs() {
       </nav>
 
       {/* MAIN */}
-      <main
-        className="ut-main"
-        style={{ paddingTop: `calc(${navH}px + var(--safeTop, 0px))` }}
-      >
-        {/* Tabs bar (EDGE TO EDGE, NO OUTSIDE/INSIDE PADDING) */}
-        <section className="ut-tabs-wrap" onKeyDown={() => {}}>
+      <main className="ut-main" style={{ paddingTop: `${navH}px` }}>
+        {/* Tabs bar */}
+        <section className="ut-tabs-wrap">
           <div className="ut-tablist">
             {TABS.map((t) => (
-             <button
-  key={t.id}
-  onClick={() => setActiveTab(t.id)}
-  className={`ut-chip ${activeTab === t.id ? "is-active" : ""}`}
-  type="button"
-  style={
-    activeTab === t.id
-      ? { background: t.activeColor, borderColor: t.activeColor }
-      : undefined
-  }
->
-  {t.label}
-</button>
-
+              <button
+                key={t.id}
+                onClick={() => setActiveTab(t.id)}
+                className={`ut-chip ${activeTab === t.id ? "is-active" : ""}`}
+                type="button"
+                style={
+                  activeTab === t.id
+                    ? { background: t.activeColor, borderColor: t.activeColor }
+                    : undefined
+                }
+              >
+                {t.label}
+              </button>
             ))}
           </div>
           <div className="ut-tab-divider" />
         </section>
 
-        {/* CONTENT (FULL WIDTH, NO EXTRA PADDING) */}
+        {/* CONTENT (FULL WIDTH) */}
         <section className="ut-content-full">
           {activeTab === "investment" && <UserInvestment />}
           {activeTab === "password" && <PasswordManager />}
@@ -126,7 +120,6 @@ export default function UserTabs() {
           {activeTab === "favorite" && <Act_Favorite />}
           {activeTab === "actresslist" && <ShowActress />}
           {activeTab === "websites" && <WebsitesUrl />}
-          {activeTab === "notes" && <Notes />}
 
           {/* Scope wrapper so FevActListNew CSS won't break other pages */}
           {activeTab === "addlist" && (
@@ -167,14 +160,14 @@ export default function UserTabs() {
           box-shadow: 0 10px 25px rgba(2,6,23,0.10);
         }
 
-        /* ✅ Removed container padding completely */
+        /* ✅ minimal safe padding only (no big top margin hacks) */
         .ut-nav-inner{
           display:flex;
-          align-items:center;
+          align-items:flex-end;
           justify-content:space-between;
           gap:10px;
           width:100%;
-          padding: 0 12px; /* minimal safe padding only */
+          padding: 0 12px;
         }
 
         .ut-head{
@@ -183,49 +176,41 @@ export default function UserTabs() {
           min-width:0;
           flex: 1 1 auto;
         }
-.ut-title{
-  font-weight: 900;
-  color: #0b1220;
-  letter-spacing: .2px;
-  line-height: 1.1;
 
-  /* ✅ small breathing space from top */
-  padding-top: 40px;
-
-  /* ✅ no cut */
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: clamp(16px, 2.2vw, 22px);
-}
-
+        /* ✅ FIX: remove padding-top:40px (that was causing layout/cut issues) */
+        .ut-title{
+          font-weight: 900;
+          color: #0b1220;
+          letter-spacing: .2px;
+          line-height: 1.15;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          font-size: clamp(16px, 2.2vw, 22px);
+        }
 
         .ut-subtitle{
           font-size: 12px;
           color: rgba(15,23,42,0.75);
           margin-top: 2px;
+          line-height: 1.2;
         }
 
-       /* ✅ Professional button, never cuts */
-.ut-dash-btn{
-  flex: 0 0 auto;
-  background: #fbbf24;
-  border: 1px solid rgba(0,0,0,0.12);
-  font-weight: 800;
-  border-radius: 999px;
-  padding: 10px 14px;
-  white-space: nowrap;
-  line-height: 1;
-  font-size: 0.95rem;
-
-  /* ✅ small top breathing space */
-  margin-top: 40px;
-
-  box-shadow: 0 6px 14px rgba(2,6,23,.12),
-              inset 0 1px 0 rgba(255,255,255,.4);
-  transition: transform .12s ease, filter .12s ease;
-}
-
+        /* ✅ FIX: remove margin-top:40px (that was pushing button down) */
+        .ut-dash-btn{
+          flex: 0 0 auto;
+          background: #fbbf24;
+          border: 1px solid rgba(0,0,0,0.12);
+          font-weight: 800;
+          border-radius: 999px;
+          padding: 10px 14px;
+          white-space: nowrap;
+          line-height: 1;
+          font-size: 0.95rem;
+          box-shadow: 0 6px 14px rgba(2,6,23,.12),
+                      inset 0 1px 0 rgba(255,255,255,.4);
+          transition: transform .12s ease, filter .12s ease;
+        }
         .ut-dash-btn:hover{ transform: translateY(-1px); filter: brightness(.98); }
         .ut-dash-btn:active{ transform: translateY(0); }
 
@@ -236,7 +221,7 @@ export default function UserTabs() {
           padding-right: 0;
         }
 
-        /* ✅ Tabs: Edge-to-edge (no outer card / no padding) */
+        /* Tabs */
         .ut-tabs-wrap{
           width: 100%;
           margin: 0;
@@ -249,7 +234,7 @@ export default function UserTabs() {
           display:flex;
           gap: 10px;
           overflow-x:auto;
-          padding: 10px 10px; /* minimal safe padding only */
+          padding: 10px 10px;
           -webkit-overflow-scrolling: touch;
           scrollbar-width: thin;
         }
@@ -262,7 +247,6 @@ export default function UserTabs() {
           width: 100%;
         }
 
-        /* ✅ Chips medium professional */
         .ut-chip{
           flex: 0 0 auto;
           min-width: 160px;
@@ -275,18 +259,16 @@ export default function UserTabs() {
           font-weight: 800;
           line-height: 1.15;
           text-align: center;
-
-          /* wrap nicely */
           white-space: normal;
           overflow-wrap: break-word;
         }
 
-.ut-chip.is-active{
-  color: #fff;
-  box-shadow:
-    0 6px 16px rgba(0,0,0,0.15),
-    inset 0 1px 0 rgba(255,255,255,0.25);
-}
+        .ut-chip.is-active{
+          color: #fff;
+          box-shadow:
+            0 6px 16px rgba(0,0,0,0.15),
+            inset 0 1px 0 rgba(255,255,255,0.25);
+        }
 
         /* CONTENT */
         .ut-content-full{

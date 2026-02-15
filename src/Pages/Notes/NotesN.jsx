@@ -1,10 +1,11 @@
-// src/components/NotesN.jsx
+// src/components/NotesN.jsx (FINAL: same page + NEW "Notes" tab + clean imports)
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Container, Button, Nav } from "react-bootstrap";
 
 import AddNote from "../Notes/AddNote";
 import GetNote from "../Notes/GetNote";
+import Notes from "./Notes"; // ✅ your new component
 
 export default function NotesN() {
   const navigate = useNavigate();
@@ -61,6 +62,13 @@ export default function NotesN() {
               activeKey={activeTab}
               onSelect={(k) => k && setActiveTab(k)}
             >
+              {/* ✅ NEW TAB */}
+              <Nav.Item>
+                <Nav.Link eventKey="notes" className="notes-tab" role="tab">
+                  Notes
+                </Nav.Link>
+              </Nav.Item>
+
               <Nav.Item>
                 <Nav.Link eventKey="add" className="notes-tab" role="tab">
                   Add Notes
@@ -78,7 +86,13 @@ export default function NotesN() {
           {/* Tab Content */}
           <div className="tab-panel">
             <div className="panel-inner">
-              {activeTab === "add" ? <AddNote /> : <GetNote />}
+              {activeTab === "notes" ? (
+                <Notes />
+              ) : activeTab === "add" ? (
+                <AddNote />
+              ) : (
+                <GetNote />
+              )}
             </div>
           </div>
         </Container>
@@ -227,7 +241,6 @@ const css = `
     color:#fff !important;
     border-color: rgba(245,158,11,.55) !important;
 
-    /* fresh gradient: orange → pink → violet */
     background: linear-gradient(135deg, rgba(245,158,11,1), rgba(236,72,153,1), rgba(124,58,237,1)) !important;
 
     box-shadow:
@@ -237,7 +250,6 @@ const css = `
     transform: translateY(-1px);
   }
 
-  /* ✅ glow wave inside active tab */
   .notes-tabs .nav-link.active::before{
     content:"";
     position:absolute;
@@ -250,7 +262,6 @@ const css = `
     z-index: -1;
   }
 
-  /* ✅ tiny bottom shimmer bar for active */
   .notes-tabs .nav-link.active::after{
     content:"";
     position:absolute;

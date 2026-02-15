@@ -1,19 +1,15 @@
-// src/components/Notes/GetNote.jsx
+// src/components/Notes/GetNote.jsx (EDGE-TO-EDGE + MOBILE: IMG LEFT + BUTTON RIGHT SAME ROW)
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../../context/AuthContext";
 
-// ✅ UPDATED API (notes_myapp)
 const API_BASE = "https://express-backend-myapp.onrender.com/api/notes-myapp";
 
 export default function GetNote() {
   const { user, loading: authLoading } = useAuth();
 
-  // ✅ SAME AS Document.jsx: token only from AuthContext
   const token = user?.token || "";
 
-  // ✅ SAME AS Document.jsx: userId from user object only
-  // ✅ IMPORTANT: notes_myapp expects INTEGER user_id
   const userIdRaw = user?.user_id ?? user?.id ?? null;
   const userId = useMemo(() => {
     const n = Number(userIdRaw);
@@ -22,7 +18,6 @@ export default function GetNote() {
 
   const isAuthenticated = !!token && !!user;
 
-  // ✅ SAME as your AddNote final: Bearer header only
   const authHeaders = useMemo(() => {
     const h = {};
     if (token) h.Authorization = `Bearer ${token}`;
@@ -32,7 +27,6 @@ export default function GetNote() {
   const [notes, setNotes] = useState([]);
   const [notesLoading, setNotesLoading] = useState(false);
 
-  // ✅ Center modal
   const [centerModal, setCenterModal] = useState({
     open: false,
     type: "info",
@@ -49,7 +43,6 @@ export default function GetNote() {
   const closeCenterModal = () =>
     setCenterModal((p) => ({ ...p, open: false, onConfirm: null }));
 
-  // ✅ Edit modal
   const [editModal, setEditModal] = useState({
     open: false,
     saving: false,
@@ -59,7 +52,7 @@ export default function GetNote() {
     note_info: "",
     note_date: "",
     note_time: "",
-    has_image: false,
+    has_image: false, // kept for data integrity, but UI won't show image
   });
 
   const openEditModal = (note) => {
@@ -81,7 +74,6 @@ export default function GetNote() {
 
   const safeText = (v) => (v == null || v === "" ? "—" : String(v));
 
-  // ✅ Backend expects user_id query for GET/DELETE/IMAGE
   const withUserQuery = (url) => {
     const join = url.includes("?") ? "&" : "?";
     return `${url}${join}user_id=${encodeURIComponent(String(userId ?? ""))}`;
@@ -89,13 +81,13 @@ export default function GetNote() {
 
   const getImageUrl = (noteId) => withUserQuery(`${API_BASE}/${noteId}/image`);
 
-  // ✅ Image viewer
+  // Image viewer (used from main list "View Image" button)
   const [imgViewer, setImgViewer] = useState({ open: false, src: "", alt: "" });
   const openImage = (src, alt = "note") =>
     setImgViewer({ open: true, src, alt });
   const closeImage = () => setImgViewer({ open: false, src: "", alt: "" });
 
-  // ✅ Reset edit modal scroll TOP
+  // Reset edit modal scroll TOP
   const editCardRef = useRef(null);
   useEffect(() => {
     if (!editModal.open) return;
@@ -104,7 +96,7 @@ export default function GetNote() {
     });
   }, [editModal.open, editModal.noteId]);
 
-  // ✅ Lock background scroll when any modal open
+  // Lock background scroll when any modal open
   useEffect(() => {
     const anyOpen =
       imgViewer.open || editModal.open || centerModal.open || authLoading;
@@ -122,7 +114,6 @@ export default function GetNote() {
     };
   }, [imgViewer.open, editModal.open, centerModal.open, authLoading]);
 
-  // ✅ Fetch Notes (GET /api/notes-myapp?user_id=INTEGER)
   const fetchNotes = async () => {
     if (!userId) return;
 
@@ -160,7 +151,6 @@ export default function GetNote() {
     });
   };
 
-  // ✅ DELETE /api/notes-myapp/:note_id?user_id=INTEGER
   const deleteNote = async (noteId) => {
     closeCenterModal();
     if (!userId) return;
@@ -195,8 +185,7 @@ export default function GetNote() {
     }
   };
 
-  // ✅ UPDATE (must be multipart for this backend, because route uses multer)
-  // PUT /api/notes-myapp/:note_id  (body: FormData including user_id)
+  // UPDATE (multipart)
   const updateNote = async () => {
     if (!userId || !editModal.noteId) return;
 
@@ -213,7 +202,7 @@ export default function GetNote() {
 
       const res = await fetch(`${API_BASE}/${editModal.noteId}`, {
         method: "PUT",
-        headers: { ...authHeaders }, // ✅ DO NOT set Content-Type for FormData
+        headers: { ...authHeaders },
         body: fd,
       });
 
@@ -247,12 +236,8 @@ export default function GetNote() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, userId]);
 
-  const orderedNotes = useMemo(
-    () => (Array.isArray(notes) ? notes : []),
-    [notes]
-  );
+  const orderedNotes = useMemo(() => (Array.isArray(notes) ? notes : []), [notes]);
 
-  // ✅ Timestamp formatter: dd/mm/yyyy + hh:mm AM/PM
   const pad2 = (n) => String(n).padStart(2, "0");
 
   const normalizeDate = (s) => {
@@ -288,11 +273,8 @@ export default function GetNote() {
   };
 
   const getStamp = (note) => {
-    const dRaw = note?.note_date || "";
-    const tRaw = note?.note_time || "";
-    const d = normalizeDate(dRaw);
-    const t = normalizeTime(tRaw);
-
+    const d = normalizeDate(note?.note_date || "");
+    const t = normalizeTime(note?.note_time || "");
     if (d && t) return `${d} • ${t}`;
     if (d) return d;
     if (t) return t;
@@ -303,7 +285,7 @@ export default function GetNote() {
     <div className="getnotePage">
       <style>{css}</style>
 
-      {/* ✅ PORTAL: Global Loading */}
+      {/* Global Loading */}
       {authLoading &&
         createPortal(
           <div className="overlay">
@@ -316,7 +298,7 @@ export default function GetNote() {
           document.body
         )}
 
-      {/* ✅ PORTAL: Center Modal */}
+      {/* Center Modal */}
       {centerModal.open &&
         createPortal(
           <div className="modalOverlay" onClick={closeCenterModal}>
@@ -376,7 +358,7 @@ export default function GetNote() {
           document.body
         )}
 
-      {/* ✅ PORTAL: Update Modal */}
+      {/* Update Modal (NO IMAGE SECTION) */}
       {editModal.open &&
         createPortal(
           <div className="editOverlay" onClick={closeEditModal}>
@@ -399,10 +381,7 @@ export default function GetNote() {
                     className="input"
                     value={editModal.note_title}
                     onChange={(e) =>
-                      setEditModal((p) => ({
-                        ...p,
-                        note_title: e.target.value,
-                      }))
+                      setEditModal((p) => ({ ...p, note_title: e.target.value }))
                     }
                     placeholder="Eg. Meeting points"
                   />
@@ -414,10 +393,7 @@ export default function GetNote() {
                     className="input"
                     value={editModal.note_info}
                     onChange={(e) =>
-                      setEditModal((p) => ({
-                        ...p,
-                        note_info: e.target.value,
-                      }))
+                      setEditModal((p) => ({ ...p, note_info: e.target.value }))
                     }
                     placeholder="Eg. Name / number / details"
                   />
@@ -445,10 +421,7 @@ export default function GetNote() {
                       className="input"
                       value={editModal.note_date}
                       onChange={(e) =>
-                        setEditModal((p) => ({
-                          ...p,
-                          note_date: e.target.value,
-                        }))
+                        setEditModal((p) => ({ ...p, note_date: e.target.value }))
                       }
                       placeholder="dd/mm/yyyy"
                     />
@@ -460,41 +433,12 @@ export default function GetNote() {
                       className="input"
                       value={editModal.note_time}
                       onChange={(e) =>
-                        setEditModal((p) => ({
-                          ...p,
-                          note_time: e.target.value,
-                        }))
+                        setEditModal((p) => ({ ...p, note_time: e.target.value }))
                       }
                       placeholder="hh:mm AM/PM"
                     />
                   </div>
                 </div>
-
-                {editModal.has_image ? (
-                  <div className="imagePreview">
-                    <div className="imagePreviewTop">
-                      <div className="imagePreviewTitle">Image</div>
-                      <button
-                        type="button"
-                        className="btn mini primary"
-                        onClick={() =>
-                          openImage(getImageUrl(editModal.noteId), "note")
-                        }
-                      >
-                        View
-                      </button>
-                    </div>
-
-                    <img
-                      className="imgSmall"
-                      src={getImageUrl(editModal.noteId)}
-                      alt="note"
-                      loading="lazy"
-                    />
-                  </div>
-                ) : (
-                  <div className="noImageBox">No image attached</div>
-                )}
               </div>
 
               <div className="editActions">
@@ -518,7 +462,7 @@ export default function GetNote() {
           document.body
         )}
 
-      {/* ✅ PORTAL: Image Viewer */}
+      {/* Image Viewer (center popup) */}
       {imgViewer.open &&
         createPortal(
           <div className="imgOverlay" onClick={closeImage}>
@@ -592,9 +536,7 @@ export default function GetNote() {
 
                   <div className="stampBar">
                     <span className="stampIcon">🕒</span>
-                    <span className="stampText">
-                      {stamp || "01/01/2026 • 12:00 AM"}
-                    </span>
+                    <span className="stampText">{stamp}</span>
                   </div>
 
                   <div className="titleBadge">{title}</div>
@@ -620,9 +562,10 @@ export default function GetNote() {
                           })
                         }
                       />
+
                       <button
                         type="button"
-                        className="btn mini ghost"
+                        className="btn mini ghost viewBtn"
                         onClick={() => openImage(getImageUrl(n.note_id), "note")}
                       >
                         View Image
@@ -641,26 +584,19 @@ export default function GetNote() {
   );
 }
 
-/* ✅ FULL CSS (Same UI) + ✅ Darker text everywhere for clear reading */
 const css = `
   *{ box-sizing:border-box; }
   html, body { margin:0; padding:0; width:100%; height:100%; overflow-x:hidden; }
 
   :root{
-    /* ✅ Stronger blacks */
     --text:#000000;
     --muted: rgba(0,0,0,.70);
-
     --blue:#2563eb;
     --red:#ef4444;
     --amber:#f59e0b;
     --green:#22c55e;
-
-    --border: rgba(0,0,0,.14);
-    --shadow: 0 18px 55px rgba(0,0,0,.12);
     --shadow2: 0 26px 90px rgba(0,0,0,.18);
-
-    --pad: clamp(12px, 3.2vw, 18px);
+    --in: clamp(12px, 3.2vw, 18px);
   }
 
   .getnotePage{
@@ -675,7 +611,7 @@ const css = `
   }
 
   .pageTitle{
-    padding: 14px var(--pad) 10px;
+    padding: 14px var(--in) 10px;
     font-size: 18px;
     font-weight: 1100;
     color: var(--text);
@@ -685,18 +621,23 @@ const css = `
     width:100%;
     display:flex;
     flex-direction:column;
-    gap: 12px;
-    padding: 0 var(--pad) calc(var(--pad) + env(safe-area-inset-bottom));
+    gap: 0;
+    padding: 0;
+    margin: 0;
   }
 
   .noteCard{
     width:100%;
-    border: 2px solid rgba(0,0,0,.90);
+    border-top: 1px solid rgba(0,0,0,.18);
+    border-bottom: 1px solid rgba(0,0,0,.18);
+    border-left: 0;
+    border-right: 0;
     background: rgba(255,255,255,.96);
-    border-radius: 14px;
-    padding: var(--pad);
-    box-shadow: 0 10px 22px rgba(0,0,0,.10);
+    border-radius: 0;
+    padding: var(--in);
+    box-shadow: none;
   }
+  .noteCard + .noteCard{ border-top: 0; }
 
   .noteHead{
     display:flex;
@@ -779,13 +720,35 @@ const css = `
   }
   .muted{ color: var(--muted); font-weight: 1100; }
 
-  .imgRow{ margin-top: 12px; display:flex; align-items:center; gap: 10px; flex-wrap: wrap; }
+  /* ✅ IMAGE ROW: always same row (img left, button right) */
+  .imgRow{
+    margin-top: 12px;
+    display:flex;
+    align-items:center;
+    gap: 10px;
+    flex-wrap: nowrap;       /* ✅ stop wrapping */
+  }
+
   .imgThumb{
-    width: 74px; height: 74px;
+    width: 74px;
+    height: 74px;
     border-radius: 14px;
     object-fit: cover;
     border: 1px solid rgba(0,0,0,.16);
     box-shadow: 0 10px 24px rgba(0,0,0,.12);
+    flex: 0 0 auto;
+  }
+
+  /* ✅ button takes remaining space on mobile, stays right side */
+  .viewBtn{
+    flex: 1 1 auto;
+    text-align: center;
+    min-width: 120px;
+  }
+
+  @media (max-width: 576px){
+    .imgThumb{ width: 66px; height: 66px; border-radius: 12px; }
+    .viewBtn{ width: 100%; }
   }
 
   .noImg{ margin-top: 12px; font-size: 12px; font-weight: 1200; color: rgba(0,0,0,.72); }
@@ -803,14 +766,13 @@ const css = `
   .btn:disabled{ opacity:.65; cursor:not-allowed; }
 
   .btn.mini{ padding: 10px 12px; border-radius: 12px; font-size: 12px; }
-
   .btn.primary{ color:#fff; background: linear-gradient(135deg, var(--blue), #60a5fa); box-shadow: 0 12px 24px rgba(37,99,235,.18); }
   .btn.ghost{ color: #000; background: rgba(37,99,235,.08); border: 1px solid rgba(37,99,235,.18); }
   .btn.warn{ color: #000; background: linear-gradient(135deg, rgba(245,158,11,.20), rgba(245,158,11,.10)); border: 1px solid rgba(245,158,11,.28); }
   .btn.danger{ color:#fff; background: linear-gradient(135deg, var(--red), #fb7185); box-shadow: 0 12px 24px rgba(239,68,68,.18); }
 
   .miniLoadingRow{
-    padding: 0 var(--pad) 12px;
+    padding: 12px var(--in);
     display:flex;
     align-items:center;
     gap: 8px;
@@ -828,15 +790,18 @@ const css = `
   }
 
   .fullCard{
-    width: calc(100% - (var(--pad) * 2));
-    margin: 0 var(--pad);
-    border: 1px solid rgba(0,0,0,.14);
-    border-radius: 14px;
+    width: 100%;
+    margin: 0;
+    border-top: 1px solid rgba(0,0,0,.14);
+    border-bottom: 1px solid rgba(0,0,0,.14);
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
     background: rgba(255,255,255,.96);
-    padding: var(--pad);
+    padding: var(--in);
     color: #000;
   }
-  .warnCard{ background: rgba(245,158,11,.10); border: 1px dashed rgba(245,158,11,.35); }
+  .warnCard{ background: rgba(245,158,11,.10); border-top: 1px dashed rgba(245,158,11,.35); border-bottom: 1px dashed rgba(245,158,11,.35); }
   .warnTitle{ font-weight: 1400; color: #000; }
   .warnSub{ margin-top: 6px; font-weight: 1200; color: rgba(0,0,0,.78); }
   .emptyCard{ display:flex; flex-direction:column; gap: 10px; align-items:flex-start; }
@@ -852,14 +817,11 @@ const css = `
     width: 100%;
     height: 100dvh;
     z-index: 99999;
-
     display:flex;
     align-items:center;
     justify-content:center;
-
-    padding: var(--pad);
-    padding-bottom: calc(var(--pad) + env(safe-area-inset-bottom));
-
+    padding: var(--in);
+    padding-bottom: calc(var(--in) + env(safe-area-inset-bottom));
     overflow: auto;
     -webkit-overflow-scrolling: touch;
   }
@@ -871,7 +833,7 @@ const css = `
 
   .modalCard{
     width: min(460px, 100%);
-    max-height: calc(100dvh - (var(--pad) * 2) - env(safe-area-inset-bottom));
+    max-height: calc(100dvh - (var(--in) * 2) - env(safe-area-inset-bottom));
     overflow: auto;
     background: #fff;
     border: 1px solid rgba(0,0,0,.14);
@@ -904,7 +866,7 @@ const css = `
 
   .editCard{
     width: min(820px, 100%);
-    max-height: calc(100dvh - (var(--pad) * 2) - env(safe-area-inset-bottom));
+    max-height: calc(100dvh - (var(--in) * 2) - env(safe-area-inset-bottom));
     overflow: auto;
     background: #fff;
     border: 1px solid rgba(0,0,0,.16);
@@ -941,23 +903,15 @@ const css = `
     outline:none;
     color: #000;
     font-weight: 1100;
+    line-height: 1.2;
+    min-height: 46px;
+    height: auto;
+    font: inherit;
   }
-  .textarea{ min-height: 92px; resize: vertical; }
+  .textarea{ min-height: 92px; resize: vertical; line-height: 1.45; }
 
   .grid2{ display:grid; grid-template-columns: 1fr; gap: 12px; }
   @media (min-width: 720px){ .grid2{ grid-template-columns: 1fr 1fr; } }
-
-  .imagePreview{
-    border: 1px solid rgba(0,0,0,.12);
-    background: rgba(0,0,0,.03);
-    border-radius: 18px;
-    padding: 12px;
-  }
-  .imagePreviewTop{ display:flex; align-items:center; justify-content:space-between; gap: 10px; margin-bottom: 10px; }
-  .imagePreviewTitle{ font-weight: 1300; font-size: 12.5px; color: #000; }
-
-  .imgSmall{ width: 100%; max-width: 280px; border-radius: 16px; border: 1px solid rgba(0,0,0,.12); display:block; }
-  .noImageBox{ border: 1px dashed rgba(0,0,0,.22); background: rgba(0,0,0,.04); border-radius: 18px; padding: 12px; font-weight: 1200; color: rgba(0,0,0,.78); }
 
   .editActions{
     padding: 12px 16px 14px;
@@ -974,7 +928,7 @@ const css = `
 
   .imgFrame{
     width: min(1100px, 100%);
-    max-height: calc(100dvh - (var(--pad) * 2) - env(safe-area-inset-bottom));
+    max-height: calc(100dvh - (var(--in) * 2) - env(safe-area-inset-bottom));
     position: relative;
     display:flex;
     align-items:center;
@@ -1001,7 +955,7 @@ const css = `
   }
   .imgFull{
     max-width: 100%;
-    max-height: calc(100dvh - (var(--pad) * 2) - env(safe-area-inset-bottom));
+    max-height: calc(100dvh - (var(--in) * 2) - env(safe-area-inset-bottom));
     object-fit: contain;
     border-radius: 18px;
     box-shadow: 0 30px 120px rgba(0,0,0,.35);

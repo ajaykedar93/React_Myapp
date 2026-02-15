@@ -44,6 +44,9 @@ import UserTabs from "./Pages/User_Personal/User_Tabs.jsx";
 // Notes pages 
 import NotesTab from "./Pages/Notes/NotesN.jsx";
 
+
+import NewFeature from "./Pages/NewFeatures/NewFeatureTab.jsx";
+
 // ✅ Private Route Wrapper
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
@@ -231,6 +234,17 @@ function AppRoutes() {
         element={
           <PrivateRoute>
             <NotesTab />
+          </PrivateRoute>
+        }
+      />
+
+
+      {/* Notes (protected) */}
+      <Route
+        path="/new-features"
+        element={
+          <PrivateRoute>
+            <NewFeature />
           </PrivateRoute>
         }
       />
