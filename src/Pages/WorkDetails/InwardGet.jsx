@@ -32,6 +32,21 @@ export default function InwardGet({ refreshToken = 0 }) {
   const [selectedDate, setSelectedDate] = useState("");
   const [appliedDate, setAppliedDate] = useState(""); // when applied, this controls filtering
 
+  // ✅ Month selection for PDF (default: latest month on screen)
+  const [selectedMonthYM, setSelectedMonthYM] = useState(""); // "YYYY-MM"
+
+  const getMonthRange = (ym) => {
+    const [yStr, mStr] = String(ym || "").split("-");
+    const y = Number(yStr);
+    const m = Number(mStr);
+    if (!y || !m || m < 1 || m > 12) return { from: "", to: "" };
+
+    const from = `${yStr}-${String(m).padStart(2, "0")}-01`;
+    const lastDay = new Date(y, m, 0).getDate();
+    const to = `${yStr}-${String(m).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+    return { from, to };
+  };
+
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState([]);
 
@@ -226,12 +241,21 @@ export default function InwardGet({ refreshToken = 0 }) {
   }, [location?.state]);
 
   const downloadPdf = () => {
-    const qs = new URLSearchParams();
-    if (appliedDate) {
-      qs.set("from", appliedDate);
-      qs.set("to", appliedDate);
+    // ✅ ONLY selected month PDF
+    const ym = selectedMonthYM;
+    if (!ym) {
+      openDlg({ type: "info", title: "Select Month", message: "Please select a month to download PDF." });
+      return;
     }
-    const url = qs.toString() ? `${PDF_API}?${qs.toString()}` : PDF_API;
+    const { from, to } = getMonthRange(ym);
+    if (!from || !to) {
+      openDlg({ type: "error", title: "Invalid Month", message: "Month value is invalid." });
+      return;
+    }
+    const qs = new URLSearchParams();
+    qs.set("from", from);
+    qs.set("to", to);
+    const url = `${PDF_API}?${qs.toString()}`;
     window.open(url, "_blank");
   };
 
@@ -406,6 +430,17 @@ export default function InwardGet({ refreshToken = 0 }) {
     return months;
   }, [filteredRows]);
 
+  // ✅ month options for dropdown
+  const monthOptions = useMemo(() => groupedByMonth.map((m) => m.ym), [groupedByMonth]);
+
+  // ✅ default month select: latest month
+  useEffect(() => {
+    if (!selectedMonthYM && monthOptions.length > 0) {
+      setSelectedMonthYM(monthOptions[0]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monthOptions]);
+
   return (
     <div className="igPage">
       <div className="igTopbar">
@@ -415,10 +450,25 @@ export default function InwardGet({ refreshToken = 0 }) {
         </div>
 
         <div className="igTopbarActions">
+          {/* ✅ Month dropdown near Download (full page same, only added small control) */}
+          <select
+            className="igMonthSelect"
+            value={selectedMonthYM}
+            onChange={(e) => setSelectedMonthYM(e.target.value)}
+            title="Select month for PDF"
+          >
+            {monthOptions.length === 0 ? <option value="">No months</option> : null}
+            {monthOptions.map((ym) => (
+              <option key={ym} value={ym}>
+                {formatMonthTitle(ym)}
+              </option>
+            ))}
+          </select>
+
           <button type="button" className="igBtn igBtn--outline igRipple" onPointerDown={setRipplePoint} onClick={() => fetchList({ dateISO: appliedDate || "" })}>
             Refresh
           </button>
-          <button type="button" className="igBtn igBtn--primary igRipple" onPointerDown={setRipplePoint} onClick={downloadPdf}>
+          <button type="button" className="igBtn igBtn--primary igRipple" onPointerDown={setRipplePoint} onClick={downloadPdf} disabled={!selectedMonthYM}>
             Download PDF
           </button>
         </div>
@@ -703,7 +753,20 @@ const css = `
 }
 .igTopbar__title{font-size:18px;font-weight:900;letter-spacing:0.2px;}
 .igTopbar__sub{margin-top:4px;font-size:12px;font-weight:800;opacity:.85;}
-.igTopbarActions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;}
+.igTopbarActions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;align-items:center;}
+
+/* ✅ month select (added) */
+.igMonthSelect{
+  height:36px;
+  padding:8px 10px;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,0.25);
+  background:rgba(255,255,255,0.10);
+  color:#fff;
+  font-weight:900;
+  outline:none;
+}
+.igMonthSelect option{color:#0b1220;}
 
 /* filter */
 .igFilters{
@@ -880,15 +943,11 @@ const css = `
 
 .igMobileActions{display:none;padding:12px;gap:10px;background:#fff;justify-content:flex-end;border-top:1px solid rgba(0,0,0,0.06);}
 
-
-
-  @media (max-width: 720px){
+@media (max-width: 720px){
   .igList{
     padding-left:  calc(20px + var(--safe-left));
     padding-right: calc(20px + var(--safe-right));
-    
   }
-}
 
   .igTopbar{padding-left: calc(12px + var(--safe-left)); padding-right: calc(12px + var(--safe-right));}
   .igFilters{padding-left: calc(12px + var(--safe-left)); padding-right: calc(12px + var(--safe-right));}
@@ -903,6 +962,8 @@ const css = `
   .igBtn{padding:8px 10px;font-size:12px;border-radius:11px;}
   .igBtn--small{padding:6px 9px;font-size:11.5px;border-radius:10px;}
   .igBtnTiny{padding:7px 9px;font-size:12px;border-radius:11px;}
+
+  .igMonthSelect{width:100%; height:40px;}
 }
 
 /* overlays */

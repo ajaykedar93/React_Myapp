@@ -1,19 +1,19 @@
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import Investmentcatsub from "./Investmentcatsub";
-import InvestmentPlan from "./InvestmentPlan";
-import TradingJournal from "./TradingJournal";
-import InvestmentReports from "./InvestmentReports";
-import DipWid from "./DipWid";
-import GetTradingJournal from "./GetTradingJournal";
+import Investmentcatsub from "./Investment_platform_segment";
+import InvestmentPlan from "./Investment_plan";
+import TradingJournal from "./Investment_tradingjournal";
+import InvestmentReports from "./Investment_report";
+import DipWid from "./Investment_dipwid";
+import GetTradingJournal from "./Investment_getview_trandingjouranal";
 
 export default function Investment_DashboardTab() {
   const navigate = useNavigate();
 
   const tabs = useMemo(
     () => [
-      { key: "catsub", label: "Category & Subcategory", render: Investmentcatsub },
+      { key: "catsub", label: "Platform & Segment", render: Investmentcatsub },
       { key: "plan", label: "Trading Plan", render: InvestmentPlan },
       { key: "journal", label: "Trading Journal", render: TradingJournal },
       { key: "getjournal", label: "Get Trading Journal", render: GetTradingJournal },
@@ -30,48 +30,51 @@ export default function Investment_DashboardTab() {
     <div className="id3-root">
       <style>{styles}</style>
 
-      {/* NAVBAR */}
-      <header className="id3-nav">
-        <div className="id3-left">
-          <div className="id3-logo" aria-hidden>
-            💼
+      {/* ✅ Sticky container: Navbar + Tabs always visible */}
+      <div className="id3-stickyWrap">
+        {/* NAVBAR */}
+        <header className="id3-nav">
+          <div className="id3-left">
+            <div className="id3-logo" aria-hidden>
+              💼
+            </div>
+
+            <div className="id3-titleWrap">
+              <div className="id3-title">Investment Management</div>
+              <div className="id3-sub">MY PERSONAL</div>
+            </div>
           </div>
 
-          <div className="id3-titleWrap">
-            <div className="id3-title">Investment Management</div>
-            <div className="id3-sub">MY PERSONAL</div>
+          <button className="id3-dashBtn" onClick={() => navigate("/dashboard")}>
+            Dashboard
+          </button>
+        </header>
+
+        {/* TABS */}
+        <div className="id3-tabsBar">
+          <div className="id3-tabsScroll" role="tablist" aria-label="Investment Tabs">
+            {tabs.map((t) => {
+              const active = t.key === activeTab;
+              return (
+                <button
+                  key={t.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  className={`id3-tab ${active ? "id3-tabActive" : ""}`}
+                  onClick={() => setActiveTab(t.key)}
+                >
+                  <span className="id3-tabText">{t.label}</span>
+                  {active ? <span className="id3-tabGlow" /> : null}
+                </button>
+              );
+            })}
           </div>
-        </div>
-
-        <button className="id3-dashBtn" onClick={() => navigate("/dashboard")}>
-          Dashboard
-        </button>
-      </header>
-
-      {/* TABS */}
-      <div className="id3-tabsBar">
-        <div className="id3-tabsScroll" role="tablist" aria-label="Investment Tabs">
-          {tabs.map((t) => {
-            const active = t.key === activeTab;
-            return (
-              <button
-                key={t.key}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                className={`id3-tab ${active ? "id3-tabActive" : ""}`}
-                onClick={() => setActiveTab(t.key)}
-              >
-                <span className="id3-tabText">{t.label}</span>
-                {active ? <span className="id3-tabGlow" /> : null}
-              </button>
-            );
-          })}
         </div>
       </div>
 
-      {/* CONTENT (STRICT: ONLY ACTIVE TAB RENDERS) */}
-      <main className="id3-content">
+      {/* ✅ ONLY this area scrolls (below navbar+tabs) */}
+      <main className="id3-scrollArea">
         <div key={activeTab} className="id3-view">
           {ActiveComponent ? <ActiveComponent /> : null}
         </div>
@@ -99,25 +102,33 @@ const styles = `
 
   *{ box-sizing:border-box; }
 
+  /* ✅ root becomes fixed-height app shell */
   .id3-root{
-    min-height: 100vh;
+    height: 100vh;
     width: 100%;
-    padding: 0;
     margin: 0;
-    overflow-x: hidden;
+    padding: 0;
+    overflow: hidden; /* ✅ prevent page scroll above navbar */
 
     background:
       radial-gradient(900px 520px at 12% 10%, rgba(255,61,141,.26), transparent 60%),
       radial-gradient(900px 520px at 92% 18%, rgba(255,183,3,.18), transparent 60%),
       radial-gradient(900px 520px at 40% 92%, rgba(0,212,255,.18), transparent 60%),
       linear-gradient(135deg, rgba(124,58,237,.92), rgba(255,61,141,.88));
+
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ✅ sticky wrap always visible */
+  .id3-stickyWrap{
+    position: sticky;
+    top: 0;
+    z-index: 80;
   }
 
   /* NAVBAR */
   .id3-nav{
-    position: sticky;
-    top: 0;
-    z-index: 60;
     height: 150px;
     display: flex;
     align-items: center;
@@ -202,14 +213,9 @@ const styles = `
 
   /* TABS BAR */
   .id3-tabsBar{
-    position: sticky;
-    top: 150px;          /* ✅ MUST match navbar height */
-    z-index: 55;
-
     background: var(--glass2);
     border-bottom: 1px solid rgba(255,255,255,.45);
     backdrop-filter: blur(12px);
-
     padding: 8px 8px;
   }
 
@@ -278,15 +284,22 @@ const styles = `
     100%{ transform: translateX(-10px) rotate(10deg); opacity:.75; }
   }
 
-  /* CONTENT */
-  .id3-content{
+  /* ✅ ONLY CONTENT SCROLLS */
+  .id3-scrollArea{
+    flex: 1 1 auto;
+    min-height: 0;             /* ✅ required for nested scroll */
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+
     padding: 0;
     margin: 0;
   }
 
   .id3-view{
     width: 100%;
-    min-height: calc(100vh - 150px - 52px);
+    min-height: 100%;
     animation: viewIn .22s ease-out;
   }
   @keyframes viewIn{
@@ -296,35 +309,33 @@ const styles = `
 
   /* DESKTOP */
   @media (min-width: 980px){
+    .id3-stickyWrap{
+      padding: 16px 16px 0;
+    }
+
     .id3-nav{
-      margin: 16px 16px 0;
       border-radius: var(--radius);
       box-shadow: var(--shadow2);
       border: 1px solid rgba(255,255,255,.40);
       padding: 14px 16px;
-      height: 150px; /* keep same */
+      height: 150px;
     }
 
     .id3-title{ font-size: 18px; }
     .id3-sub{ max-width: none; }
 
     .id3-tabsBar{
-      margin: 10px 16px 0;
+      margin-top: 10px;
       border-radius: var(--radius);
       box-shadow: var(--shadow2);
       border: 1px solid rgba(255,255,255,.40);
-      top: calc(16px + 150px); /* ✅ navbar (with margin) safe */
       padding: 10px 10px;
     }
 
     .id3-dashBtn{ font-size: 13px; padding: 10px 14px; }
 
-    .id3-content{
-      margin: 12px 16px 16px;
-    }
-
-    .id3-view{
-      min-height: calc(100vh - 150px - 60px - 28px);
+    .id3-scrollArea{
+      padding: 12px 16px 16px;
     }
   }
 `;

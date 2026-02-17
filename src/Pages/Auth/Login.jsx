@@ -9,7 +9,7 @@ export default function Login() {
   const { login } = useAuth();
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false); // 👁️ toggle
+  const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [showModal, setShowModal] = useState(false);
@@ -19,7 +19,7 @@ export default function Login() {
 
   const API_BASE_URL = "https://express-backend-myapp.onrender.com/api/admin";
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!loginId || !password) {
@@ -36,45 +36,55 @@ export default function Login() {
 
     setIsSubmitting(true);
 
-    axios
-      .post(`${API_BASE_URL}/login`, loginData)
-      .then((response) => {
-        setIsSubmitting(false);
+    try {
+      const response = await axios.post(`${API_BASE_URL}/login`, loginData);
 
-        if (response?.data?.admin) {
-          const admin = response.data.admin;
+      setIsSubmitting(false);
 
-          // ✅ Keep a flat object (user_id at root) to match your consumers
-          login({
-            user_id: admin.user_id,
-            admin_name: admin.admin_name,
-            role: admin.role,
-            token: admin.token,
-            email: admin.email,
-          });
+      if (response?.data?.admin) {
+        const admin = response.data.admin;
 
-          setSuccessMessage("Login successful!");
-          setModalType("success");
-          setShowModal(true);
+        // ✅ TOKEN pick: support both "admin.token" or "response.data.token"
+        const token = admin.token || response.data.token || "";
 
-          setTimeout(() => {
-            setShowModal(false);
-            navigate("/dashboard");
-          }, 800);
-        } else {
-          setErrorMessage("Unexpected response from server.");
+        if (!token) {
+          setErrorMessage("Token missing in server response.");
           setModalType("error");
           setShowModal(true);
+          return;
         }
-      })
-      .catch((error) => {
-        setIsSubmitting(false);
-        setErrorMessage(
-          error?.response?.data?.error || "Login failed. Please try again."
-        );
+
+        // ✅ Save token where your other pages can read it (localStorage)
+        localStorage.setItem("token", token);
+
+        // ✅ Keep a flat object (user_id at root) to match your consumers
+        login({
+          user_id: admin.user_id,
+          admin_name: admin.admin_name,
+          role: admin.role,
+          token, // keep in context too
+          email: admin.email,
+        });
+
+        setSuccessMessage("Login successful!");
+        setModalType("success");
+        setShowModal(true);
+
+        setTimeout(() => {
+          setShowModal(false);
+          navigate("/dashboard");
+        }, 800);
+      } else {
+        setErrorMessage("Unexpected response from server.");
         setModalType("error");
         setShowModal(true);
-      });
+      }
+    } catch (error) {
+      setIsSubmitting(false);
+      setErrorMessage(error?.response?.data?.error || "Login failed. Please try again.");
+      setModalType("error");
+      setShowModal(true);
+    }
   };
 
   const handleCloseModal = () => {
@@ -84,7 +94,6 @@ export default function Login() {
 
   return (
     <div className="page">
-      {/* ✅ Simple, clear developer line just above the card */}
       <div className="dev-inline" aria-label="Developer credit">
         <i className="fa-solid fa-code" /> <span>Developed by <strong>Ajay Kedar</strong></span>
       </div>
@@ -108,7 +117,6 @@ export default function Login() {
               aria-label="Email or Mobile"
             />
 
-            {/* 👁️ Password with visibility toggle */}
             <div className="password-wrap">
               <input
                 type={showPassword ? "text" : "password"}
@@ -153,15 +161,14 @@ export default function Login() {
 @import url("https://fonts.googleapis.com/css?family=Poppins:200,300,400,500,600,700,800,900&display=swap");
 @import url("https://use.fontawesome.com/releases/v6.5.1/css/all.css");
 
-/* Page wrapper: stack developer line above card */
 .page {
   position: relative;
   display: flex;
-  flex-direction: column;        /* stack vertically */
+  flex-direction: column;
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  gap: 12px;                     /* small gap between dev line and card */
+  gap: 12px;
   background: linear-gradient(135deg, #e0f2fe 0%, #faf5ff 50%, #fffbeb 100%);
 }
 
@@ -169,7 +176,6 @@ export default function Login() {
 
 @property --a { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
 
-/* 🔹 Developer line (non-sticky, just above card) */
 .dev-inline {
   width: min(92vw, 640px);
   display: flex;
@@ -187,7 +193,6 @@ export default function Login() {
 }
 .dev-inline i { color: #0ea5e9; }
 
-/* Card wrapper */
 .box {
   position: relative;
   width: min(90vw, 400px);
@@ -321,7 +326,6 @@ input:focus { border-color: #94a3ff; }
 .group a { color: #0f172a; text-decoration: none; }
 .group a:nth-child(2) { color: #ff2770; font-weight: 600; }
 
-/* Error banner */
 .error-banner {
   width: 100%;
   background: rgba(255, 39, 112, 0.1);
@@ -332,7 +336,6 @@ input:focus { border-color: #94a3ff; }
   text-align: center;
 }
 
-/* 👁️ Password field wrap & eye button */
 .password-wrap {
   position: relative;
   width: 100%;
@@ -356,7 +359,6 @@ input:focus { border-color: #94a3ff; }
 .eye-btn:focus-visible { box-shadow: 0 0 0 3px rgba(59,130,246,.45); }
 .eye-btn i { font-size: 1rem; color: #334155; line-height: 1; pointer-events: none; }
 
-/* Responsiveness tweaks */
 @media (max-width: 480px) {
   .login { inset: 30px; }
   .loginBx { width: 85%; }
@@ -364,14 +366,12 @@ input:focus { border-color: #94a3ff; }
 }
 
 @media (hover: none) {
-  /* On touch devices, show expanded state by default */
   .box { height: min(70vh, 480px); }
   .login { inset: 40px; }
   .loginBx { transform: translateY(0); }
 }
       `}</style>
 
-      {/* Success/Error Modal */}
       <Modal show={showModal} onHide={handleCloseModal} centered>
         <Modal.Body className="text-center">
           <h5>{modalType === "success" ? "Success" : "Error"}</h5>
