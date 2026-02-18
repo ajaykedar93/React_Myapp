@@ -85,14 +85,13 @@ export default function Investment_DashboardTab() {
 
 const styles = `
   :root{
-    --g1:#ff3d8d;      /* pink */
-    --g2:#ffb703;      /* yellow */
-    --g3:#7c3aed;      /* violet */
-    --g4:#00d4ff;      /* cyan */
+    --g1:#ff3d8d;
+    --g2:#ffb703;
+    --g3:#7c3aed;
+    --g4:#00d4ff;
 
     --glass: rgba(255,255,255,.90);
     --glass2: rgba(255,255,255,.78);
-    --line: rgba(0,0,0,.08);
     --text: rgba(17,24,39,.96);
     --muted: rgba(75,85,99,.92);
 
@@ -102,22 +101,26 @@ const styles = `
 
   *{ box-sizing:border-box; }
 
-  /* ✅ root becomes fixed-height app shell */
+  /* ✅ (Important) remove default body margin if any page uses it */
+  body { margin: 0; }
+
+  /* ✅ Full height (mobile fix) */
   .id3-root{
-    height: 100vh;
+    height: 100vh;    /* fallback */
+    height: 100dvh;   /* ✅ perfect full height on mobile */
     width: 100%;
     margin: 0;
     padding: 0;
-    overflow: hidden; /* ✅ prevent page scroll above navbar */
+
+    overflow: hidden; /* ✅ stop page scroll, only inner scroll */
+    display: flex;
+    flex-direction: column;
 
     background:
       radial-gradient(900px 520px at 12% 10%, rgba(255,61,141,.26), transparent 60%),
       radial-gradient(900px 520px at 92% 18%, rgba(255,183,3,.18), transparent 60%),
       radial-gradient(900px 520px at 40% 92%, rgba(0,212,255,.18), transparent 60%),
       linear-gradient(135deg, rgba(124,58,237,.92), rgba(255,61,141,.88));
-
-    display: flex;
-    flex-direction: column;
   }
 
   /* ✅ sticky wrap always visible */
@@ -224,6 +227,7 @@ const styles = `
     gap: 8px;
     overflow-x: auto;
     overflow-y: hidden;
+
     padding: 2px 2px;
     scroll-behavior: smooth;
     scrollbar-width: none;
@@ -278,30 +282,35 @@ const styles = `
     pointer-events: none;
     mix-blend-mode: overlay;
   }
+
   @keyframes glowMove{
     0%{ transform: translateX(-10px) rotate(10deg); opacity:.75; }
     50%{ transform: translateX(10px) rotate(10deg); opacity:1; }
     100%{ transform: translateX(-10px) rotate(10deg); opacity:.75; }
   }
 
-  /* ✅ ONLY CONTENT SCROLLS */
+  /* ✅ Full remaining height scroll area */
   .id3-scrollArea{
     flex: 1 1 auto;
-    min-height: 0;             /* ✅ required for nested scroll */
+    min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
-    scroll-behavior: smooth;
 
+    /* ✅ mobile full width: no left/right padding */
     padding: 0;
     margin: 0;
+
+    /* ✅ prevent bottom cut + avoid blank */
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
   }
 
+  /* ✅ IMPORTANT: remove min-height:100% to avoid extra bottom space */
   .id3-view{
     width: 100%;
-    min-height: 100%;
     animation: viewIn .22s ease-out;
   }
+
   @keyframes viewIn{
     from{ opacity: 0; transform: translateY(6px); }
     to{ opacity: 1; transform: translateY(0); }
@@ -334,8 +343,9 @@ const styles = `
 
     .id3-dashBtn{ font-size: 13px; padding: 10px 14px; }
 
+    /* ✅ Desktop padding looks nice, mobile is full width */
     .id3-scrollArea{
-      padding: 12px 16px 16px;
+      padding: 12px 16px calc(16px + env(safe-area-inset-bottom));
     }
   }
 `;

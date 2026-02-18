@@ -1,5 +1,6 @@
 // src/pages/Investment_getview_trandingjouranal.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import "bootstrap/dist/css/bootstrap.min.css";
 
 const BASE_URL = "https://express-backend-myapp.onrender.com";
 
@@ -11,42 +12,18 @@ export default function Investment_getview_trandingjouranal() {
     return h;
   }, [token]);
 
-  // -------------------- UI state --------------------
-  const [loading, setLoading] = useState(false);
-  const [busy, setBusy] = useState("");
+  // ---------- UI ----------
+  const [initialLoading, setInitialLoading] = useState(true); // ONLY first page load
+  const [busy, setBusy] = useState(""); // "refresh" | `details-${id}`
 
-  const [modal, setModal] = useState({
-    open: false,
-    type: "info", // success | error | confirm | info
-    title: "",
-    message: "",
-    confirmText: "OK",
-    cancelText: "Cancel",
-    onConfirm: null,
-  });
+  const [modal, setModal] = useState({ open: false, title: "", message: "" });
+  const openError = (message) =>
+    setModal({ open: true, title: "Error", message: message || "Something went wrong" });
+  const closeModal = () => setModal({ open: false, title: "", message: "" });
 
-  const openModal = (p) =>
-    setModal((m) => ({
-      ...m,
-      open: true,
-      type: p.type || "info",
-      title: p.title || "",
-      message: p.message || "",
-      confirmText: p.confirmText || "OK",
-      cancelText: p.cancelText || "Cancel",
-      onConfirm: p.onConfirm || null,
-    }));
-
-  const closeModal = () =>
-    setModal((m) => ({ ...m, open: false, onConfirm: null, title: "", message: "" }));
-
-  const toast = (msg) => openModal({ type: "success", title: "Success", message: msg });
-  const fail = (msg) => openModal({ type: "error", title: "Error", message: msg });
-
-  // -------------------- Master data --------------------
+  // ---------- Master data ----------
   const [platforms, setPlatforms] = useState([]);
   const [segments, setSegments] = useState([]);
-
   const [platformId, setPlatformId] = useState("");
   const [segmentId, setSegmentId] = useState("");
 
@@ -58,24 +35,44 @@ export default function Investment_getview_trandingjouranal() {
     return `${yyyy}-${mm}-01`;
   });
 
-  // data from views
-  const [dailySummary, setDailySummary] = useState([]);
-  const [detailsMap, setDetailsMap] = useState({}); // journal_id -> detail rows
+  // ---------- Data ----------
+  const [dailySummary, setDailySummary] = useState([]); // ✅ show ALL rows
+  const [detailsMap, setDetailsMap] = useState({});
   const [openJournalId, setOpenJournalId] = useState(null);
 
-  // -------------------- click / tap effect --------------------
-  const press = (e) => (e.currentTarget.style.transform = "scale(0.98)");
-  const release = (e) => (e.currentTarget.style.transform = "scale(1)");
-
-  // -------------------- Responsive --------------------
-  const [wide, setWide] = useState(typeof window !== "undefined" ? window.innerWidth >= 1100 : false);
+  // responsive
+  const [isMobile, setIsMobile] = useState(typeof window !== "undefined" ? window.innerWidth < 768 : true);
   useEffect(() => {
-    const onR = () => setWide(window.innerWidth >= 1100);
+    const onR = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener("resize", onR);
     return () => window.removeEventListener("resize", onR);
   }, []);
 
-  // -------------------- API --------------------
+  // ---------- Helpers ----------
+  const formatDate = (value) => {
+    if (!value) return "-";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value);
+    return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(d);
+  };
+
+  const formatNumber = (v) => {
+    if (v === null || v === undefined || v === "") return "-";
+    const s = String(v).replace(/,/g, "").trim();
+    const n = Number(s);
+    if (!Number.isFinite(n)) return s;
+    let out = n.toFixed(10);
+    out = out.replace(/\.?0+$/, "");
+    return out;
+  };
+
+  const netTone = (v) => {
+    const n = Number(String(v ?? 0).replace(/,/g, ""));
+    if (!Number.isFinite(n)) return "secondary";
+    return n > 0 ? "success" : n < 0 ? "danger" : "secondary";
+  };
+
+  // ---------- API ----------
   const api = {
     async getPlatforms() {
       const res = await fetch(`${BASE_URL}/api/investment/platform-segment/platform`, { headers });
@@ -85,56 +82,55 @@ export default function Investment_getview_trandingjouranal() {
     },
     async getSegments(pid) {
       if (!pid) return [];
-      const res = await fetch(
-        `${BASE_URL}/api/investment/platform-segment/segment?platform_id=${pid}`,
-        { headers }
-      );
+      const res = await fetch(`${BASE_URL}/api/investment/platform-segment/segment?platform_id=${pid}`, { headers });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message || "Segment fetch failed");
       return Array.isArray(data?.data) ? data.data : [];
     },
-
     async getDailySummary({ platform_name, segment_name, month }) {
       const qs = new URLSearchParams();
       if (platform_name) qs.set("platform_name", platform_name);
       if (segment_name) qs.set("segment_name", segment_name);
       if (month) qs.set("month", month);
 
-      const res = await fetch(
-        `${BASE_URL}/api/investment/tradingjournal-view/daily-summary?${qs.toString()}`,
-        { headers }
-      );
+      const res = await fetch(`${BASE_URL}/api/investment/tradingjournal-view/daily-summary?${qs.toString()}`, {
+        headers,
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message || "Daily summary fetch failed");
       return Array.isArray(data?.data) ? data.data : [];
     },
-
     async getEntryDetails({ journal_id, month }) {
       const qs = new URLSearchParams();
       if (journal_id) qs.set("journal_id", String(journal_id));
       if (month) qs.set("month", month);
 
-      const res = await fetch(
-        `${BASE_URL}/api/investment/tradingjournal-view/entry-details?${qs.toString()}`,
-        { headers }
-      );
+      const res = await fetch(`${BASE_URL}/api/investment/tradingjournal-view/entry-details?${qs.toString()}`, {
+        headers,
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message || "Entry details fetch failed");
       return Array.isArray(data?.data) ? data.data : [];
     },
   };
 
-  // -------------------- Load platforms on mount --------------------
+  // avoid double initial load in StrictMode
+  const didInit = useRef(false);
+
+  // ---------- Initial load (ONLY once) ----------
   useEffect(() => {
+    if (didInit.current) return;
+    didInit.current = true;
+
     (async () => {
       try {
-        setLoading(true);
+        setInitialLoading(true);
         const p = await api.getPlatforms();
         setPlatforms(p);
       } catch (e) {
-        fail(e.message);
+        openError(e.message);
       } finally {
-        setLoading(false);
+        setInitialLoading(false);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -150,18 +146,16 @@ export default function Investment_getview_trandingjouranal() {
         const s = await api.getSegments(platformId);
         setSegments(s);
       } catch (e) {
-        fail(e.message);
+        openError(e.message);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [platformId]);
 
-  // -------------------- Refresh daily summary --------------------
+  // ---------- Refresh (silent) ----------
   const refresh = async () => {
     try {
-      setLoading(true);
       setBusy("refresh");
-
       const platform_name =
         platforms.find((p) => String(p.platform_id) === String(platformId))?.platform_name || "";
       const segment_name =
@@ -173,22 +167,21 @@ export default function Investment_getview_trandingjouranal() {
         month,
       });
 
-      setDailySummary(rows);
-      toast("Loaded");
+      // ✅ show ALL rows (do not de-duplicate)
+      setDailySummary(Array.isArray(rows) ? rows : []);
     } catch (e) {
-      fail(e.message);
+      openError(e.message);
     } finally {
       setBusy("");
-      setLoading(false);
     }
   };
 
   useEffect(() => {
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [month, platformId, segmentId]);
+  }, [month, platformId, segmentId, platforms.length, segments.length]);
 
-  // -------------------- Details toggle --------------------
+  // ---------- Details toggle ----------
   const toggleDetails = async (journal_id) => {
     if (openJournalId === journal_id) {
       setOpenJournalId(null);
@@ -202,404 +195,464 @@ export default function Investment_getview_trandingjouranal() {
         const d = await api.getEntryDetails({ journal_id, month });
         setDetailsMap((prev) => ({ ...prev, [journal_id]: d }));
       } catch (e) {
-        fail(e.message);
+        openError(e.message);
       } finally {
         setBusy("");
       }
     }
   };
 
-  // -------------------- UI Styles (mobile-first, clean, full width) --------------------
-  const styles = {
-    page: {
-      width: "100vw",
-      minHeight: "100vh",
-      margin: 0,
-      padding: 0,
-      background: "#ffffff",
-      color: "#0f172a",
-      fontFamily: '"Times New Roman", Times, serif',
-    },
-    topbar: {
-      width: "100%",
-      borderBottom: "1px solid #e5e7eb",
-      background: "#ffffff",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      gap: 12,
-      padding: "12px 12px",
-      position: "sticky",
-      top: 0,
-      zIndex: 5,
-    },
-    title: { margin: 0, fontSize: 16, fontWeight: 900 },
-
-    grid: {
-      width: "100%",
-      display: "grid",
-      gridTemplateColumns: wide ? "360px 1fr" : "1fr",
-      gap: 12,
-      padding: "12px",
-      boxSizing: "border-box",
-    },
-
-    card: {
-      border: "1px solid #e5e7eb",
-      background: "#fff",
-      borderRadius: 14,
-      overflow: "hidden",
-      boxShadow: "0 6px 18px rgba(15,23,42,0.06)",
-    },
-    cardHeader: {
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-      borderBottom: "1px solid #e5e7eb",
-      background: "#fbfbfd",
-    },
-    cardTitle: { margin: "10px 12px", fontSize: 14, fontWeight: 900 },
-    small: { margin: "10px 12px", fontSize: 12, color: "#475569" },
-
-    form: { margin: "12px 12px 14px", display: "grid", gap: 10 },
-    row2: { display: "grid", gridTemplateColumns: wide ? "1fr auto" : "1fr", gap: 10 },
-
-    input: {
-      height: 44,
-      borderRadius: 12,
-      border: "1px solid #cbd5e1",
-      padding: "0 12px",
-      outline: "none",
-      background: "#fff",
-      color: "#0f172a",
-      fontSize: 14,
-      boxSizing: "border-box",
-    },
-    select: {
-      height: 44,
-      borderRadius: 12,
-      border: "1px solid #cbd5e1",
-      padding: "0 12px",
-      outline: "none",
-      background: "#fff",
-      color: "#0f172a",
-      fontSize: 14,
-      boxSizing: "border-box",
-    },
-
-    btn: (variant, small) => ({
-      height: small ? 34 : 42,
-      padding: small ? "0 10px" : "0 14px",
-      borderRadius: 12,
-      border: "1px solid #cbd5e1",
-      background: variant === "primary" ? "#0f172a" : "#ffffff",
-      color: variant === "primary" ? "#ffffff" : "#0f172a",
-      cursor: "pointer",
-      fontWeight: 900,
-      boxShadow: "0 2px 8px rgba(15,23,42,0.10)",
-      transition: "transform 0.06s ease, box-shadow 0.12s ease",
-      userSelect: "none",
-      whiteSpace: "nowrap",
-    }),
-    btnDisabled: { opacity: 0.6, cursor: "not-allowed", transform: "none", boxShadow: "none" },
-
-    tableWrap: { width: "100%", overflowX: "auto" },
-    table: { width: "100%", borderCollapse: "collapse", minWidth: 980 },
-    th: {
-      textAlign: "left",
-      fontSize: 12,
-      color: "#475569",
-      borderBottom: "1px solid #e5e7eb",
-      padding: "10px 12px",
-      background: "#f8fafc",
-      position: "sticky",
-      top: 0,
-      zIndex: 1,
-      whiteSpace: "nowrap",
-    },
-    td: { borderBottom: "1px solid #f1f5f9", padding: "10px 12px", fontSize: 13, verticalAlign: "top" },
-
-    pillNet: (v) => ({
-      display: "inline-block",
-      padding: "4px 10px",
-      borderRadius: 999,
-      border: "1px solid #e5e7eb",
-      fontSize: 12,
-      fontWeight: 900,
-      background: v > 0 ? "#ecfdf5" : v < 0 ? "#fff1f2" : "#f8fafc",
-      color: v > 0 ? "#065f46" : v < 0 ? "#9f1239" : "#0f172a",
-    }),
-
-    subTable: { width: "100%", borderCollapse: "collapse", marginTop: 10, minWidth: 600 },
-    subTd: { borderBottom: "1px solid #eef2ff", padding: "8px 10px", fontSize: 12 },
-    hint: { margin: "12px 12px 14px", fontSize: 12, color: "#64748b" },
-
-    // Modal
-    overlay: {
-      position: "fixed",
-      inset: 0,
-      background: "rgba(0,0,0,0.35)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: 12,
-      zIndex: 50,
-    },
-    modal: {
-      width: "min(92vw, 420px)",
-      background: "#ffffff",
-      borderRadius: 16,
-      border: "1px solid #e5e7eb",
-      boxShadow: "0 18px 45px rgba(0,0,0,0.25)",
-      overflow: "hidden",
-      fontFamily: '"Times New Roman", Times, serif',
-    },
-    modalHead: {
-      padding: "12px 14px",
-      borderBottom: "1px solid #e5e7eb",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      gap: 10,
-    },
-    modalTitle: { margin: 0, fontSize: 14, fontWeight: 900, color: "#0f172a" },
-    modalBody: { padding: "12px 14px", fontSize: 13, color: "#0f172a" },
-    modalFoot: {
-      padding: "12px 14px",
-      borderTop: "1px solid #e5e7eb",
-      display: "flex",
-      gap: 10,
-      justifyContent: "flex-end",
-      flexWrap: "wrap",
-    },
-    xBtn: {
-      border: "1px solid #e5e7eb",
-      background: "#ffffff",
-      borderRadius: 10,
-      height: 34,
-      width: 34,
-      cursor: "pointer",
-      fontWeight: 900,
-      lineHeight: "32px",
-      userSelect: "none",
-    },
-  };
-
-  const Btn = ({ variant, small, disabled, onClick, children, type = "button" }) => (
-    <button
-      type={type}
-      onClick={onClick}
-      disabled={disabled}
-      onMouseDown={disabled ? undefined : press}
-      onMouseUp={disabled ? undefined : release}
-      onMouseLeave={disabled ? undefined : release}
-      onTouchStart={disabled ? undefined : press}
-      onTouchEnd={disabled ? undefined : release}
-      style={{
-        ...styles.btn(variant, small),
-        ...(disabled ? styles.btnDisabled : null),
-      }}
-    >
-      {children}
-    </button>
+  // ---------- UI parts ----------
+  const BadgeSquare = ({ tone, children }) => (
+    <span className={`badge badge-square bg-${tone} bg-opacity-10 text-${tone}`}>{children}</span>
   );
 
+  const rowsToShow = dailySummary; // ✅ ALL rows
+
   return (
-    <div style={styles.page}>
+    <div className="page-root">
+      <style>{`
+        .page-root{
+          min-height:100vh;
+          width:100%;
+          background:#fff;
+          color:#0f172a;
+          font-family:"Times New Roman", Times, serif;
+          padding-bottom:70px;
+        }
+        .topbar{
+          position:sticky;
+          top:0;
+          z-index:20;
+          background:#fff;
+          border-bottom:1px solid #e5e7eb;
+        }
+        .app-title{ font-weight:900; letter-spacing:.2px; }
+        .card-pro{
+          border:1px solid #e5e7eb;
+          border-radius:16px;
+          box-shadow:0 10px 26px rgba(15,23,42,0.08);
+          overflow:hidden;
+          background:#fff;
+        }
+        .card-head{
+          background:#fbfbfd;
+          border-bottom:1px solid #e5e7eb;
+        }
+        .badge-square{
+          border:1px solid #e5e7eb;
+          border-radius:8px;
+          padding:8px 10px;
+          font-weight:900;
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          min-width:82px;
+          white-space:nowrap;
+        }
+        .mistake-pill{
+          background:rgba(220,38,38,0.08);
+          border:1px solid rgba(220,38,38,0.18);
+          color:#b91c1c;
+          border-radius:12px;
+          padding:6px 10px;
+          font-weight:700;
+          font-size:13px;
+          display:inline-block;
+          line-height:1.25;
+        }
+        .logic-text{
+          font-size:14px;
+          font-weight:700;
+          line-height:1.35;
+        }
+        .btn-pro{ font-weight:900; border-radius:12px; }
+        .table thead th{
+          position:sticky;
+          top:0;
+          background:#f8fafc !important;
+          z-index:1;
+          font-size:13px;
+          white-space:nowrap;
+        }
+        .subrow{ background:#ffffff; }
+        .subbox{
+          border:1px solid #eef2f7;
+          border-radius:14px;
+          padding:12px;
+          background:#fff;
+        }
+        .sublabel{
+          font-size:12px;
+          color:#64748b;
+          font-weight:900;
+          margin-bottom:4px;
+        }
+        .mobile-meta{
+          font-size:12px;
+          color:#64748b;
+          font-weight:800;
+          line-height:1.2;
+        }
+      `}</style>
+
       {/* Header */}
-      <div style={styles.topbar}>
-        <h1 style={styles.title}>Investment Trading Journal View</h1>
-        <Btn small variant="primary" disabled={busy === "refresh" || loading} onClick={refresh}>
-          {busy === "refresh" || loading ? "..." : "Refresh"}
-        </Btn>
+      <div className="topbar">
+        <div className="container-fluid py-2 px-3 d-flex align-items-center justify-content-between">
+          <div className="app-title">Trading Journal Get</div>
+
+          <button
+            className="btn btn-dark btn-pro btn-sm px-3"
+            disabled={busy === "refresh"}
+            onClick={refresh}
+            type="button"
+          >
+            {busy === "refresh" ? "..." : "Refresh"}
+          </button>
+        </div>
       </div>
 
-      <div style={styles.grid}>
-        {/* LEFT FILTERS */}
-        <section style={styles.card}>
-          <div style={styles.cardHeader}>
-            <div style={styles.cardTitle}>Filters</div>
-            <div style={styles.small}>Optional</div>
+      {/* FIRST TIME loading only */}
+      {initialLoading ? (
+        <div className="container-fluid px-3 py-4">
+          <div className="card-pro p-4 d-flex align-items-center justify-content-between flex-wrap gap-3">
+            <div>
+              <div className="fw-bold" style={{ fontWeight: 900 }}>
+                Loading...
+              </div>
+              <div className="small text-muted fw-bold">Please wait</div>
+            </div>
+            <div className="spinner-border" role="status" aria-label="Loading" />
           </div>
+        </div>
+      ) : (
+        <div className="container-fluid px-3 py-3">
+          <div className="row g-3">
+            {/* Filters */}
+            <div className="col-12 col-lg-4">
+              <div className="card-pro">
+                <div className="card-head px-3 py-2 d-flex align-items-center justify-content-between">
+                  <div className="fw-bold" style={{ fontWeight: 900 }}>
+                    Filters
+                  </div>
+                  <div className="small text-muted fw-bold">Optional</div>
+                </div>
 
-          <div style={styles.form}>
-            <select style={styles.select} value={platformId} onChange={(e) => setPlatformId(e.target.value)}>
-              <option value="">All Platforms</option>
-              {platforms.map((p) => (
-                <option key={p.platform_id} value={p.platform_id}>
-                  {p.platform_name}
-                </option>
-              ))}
-            </select>
+                <div className="p-3">
+                  <div className="mb-2">
+                    <label className="form-label fw-bold small">Platform</label>
+                    <select className="form-select" value={platformId} onChange={(e) => setPlatformId(e.target.value)}>
+                      <option value="">All Platforms</option>
+                      {platforms.map((p) => (
+                        <option key={p.platform_id} value={p.platform_id}>
+                          {p.platform_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-            <select
-              style={styles.select}
-              value={segmentId}
-              onChange={(e) => setSegmentId(e.target.value)}
-              disabled={!platformId}
-            >
-              <option value="">All Segments</option>
-              {segments.map((s) => (
-                <option key={s.segment_id} value={s.segment_id}>
-                  {s.segment_name}
-                </option>
-              ))}
-            </select>
+                  <div className="mb-2">
+                    <label className="form-label fw-bold small">Segment</label>
+                    <select
+                      className="form-select"
+                      value={segmentId}
+                      onChange={(e) => setSegmentId(e.target.value)}
+                      disabled={!platformId}
+                    >
+                      <option value="">All Segments</option>
+                      {segments.map((s) => (
+                        <option key={s.segment_id} value={s.segment_id}>
+                          {s.segment_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-            <input
-              style={styles.input}
-              type="month"
-              value={month.slice(0, 7)}
-              onChange={(e) => setMonth(`${e.target.value}-01`)}
-            />
+                  <div className="mb-2">
+                    <label className="form-label fw-bold small">Month</label>
+                    <input
+                      className="form-control"
+                      type="month"
+                      value={month.slice(0, 7)}
+                      onChange={(e) => setMonth(`${e.target.value}-01`)}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
 
-            <div style={styles.hint}>
-              Click <b>Details</b> to see entry rows from <b>entry-details</b> view.
+            {/* Data */}
+            <div className="col-12 col-lg-8">
+              <div className="card-pro">
+                <div className="card-head px-3 py-2 d-flex align-items-center justify-content-between">
+                  <div className="fw-bold" style={{ fontWeight: 900 }}>
+                    Daily Summary
+                  </div>
+                  <div className="small text-muted fw-bold">{rowsToShow.length} rows</div>
+                </div>
+
+                {/* Desktop */}
+                {!isMobile ? (
+                  <div className="table-responsive">
+                    <table className="table table-hover mb-0">
+                      <thead>
+                        <tr className="text-muted">
+                          <th className="py-3 px-3">Date</th>
+                          <th className="py-3 px-3">Platform</th>
+                          <th className="py-3 px-3">Segment</th>
+                          <th className="py-3 px-3">Profit</th>
+                          <th className="py-3 px-3">Loss</th>
+                          <th className="py-3 px-3">Brokerage</th>
+                          <th className="py-3 px-3">Net</th>
+                          <th className="py-3 px-3">Actions</th>
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        {rowsToShow.map((r) => {
+                          const opened = openJournalId === r.journal_id;
+                          const netT = netTone(r.net_total);
+
+                          return (
+                            <React.Fragment key={r.journal_id}>
+                              <tr>
+                                <td className="px-3 py-3">
+                                  <div className="fw-bold" style={{ fontWeight: 900 }}>
+                                    {formatDate(r.trade_date)}
+                                  </div>
+                                  <div className="small text-muted fw-bold">#{r.journal_id}</div>
+                                </td>
+
+                                <td className="px-3 py-3 fw-bold">{r.platform_name}</td>
+                                <td className="px-3 py-3 fw-bold">{r.segment_name}</td>
+
+                                <td className="px-3 py-3">
+                                  <BadgeSquare tone="success">{formatNumber(r.profit)}</BadgeSquare>
+                                </td>
+                                <td className="px-3 py-3">
+                                  <BadgeSquare tone="danger">{formatNumber(r.loss)}</BadgeSquare>
+                                </td>
+                                <td className="px-3 py-3">
+                                  <BadgeSquare tone="warning">{formatNumber(r.brokerage)}</BadgeSquare>
+                                </td>
+
+                                <td className="px-3 py-3">
+                                  <span className={`badge badge-square bg-${netT} bg-opacity-10 text-${netT}`}>
+                                    {formatNumber(r.net_total)}
+                                  </span>
+                                </td>
+
+                                <td className="px-3 py-3">
+                                  <button
+                                    className="btn btn-outline-dark btn-pro btn-sm"
+                                    onClick={() => toggleDetails(r.journal_id)}
+                                    disabled={busy === `details-${r.journal_id}`}
+                                    type="button"
+                                  >
+                                    {busy === `details-${r.journal_id}` ? "..." : opened ? "Hide" : "Details"}
+                                  </button>
+                                </td>
+                              </tr>
+
+                              <tr className="subrow">
+                                <td className="px-3 pb-3" colSpan={8}>
+                                  <div className="d-flex flex-column gap-2">
+                                    <div className="subbox">
+                                      <div className="sublabel">Logic</div>
+                                      <div className="logic-text">{r.trade_logic || "-"}</div>
+                                    </div>
+
+                                    <div className="subbox">
+                                      <div className="sublabel">Mistakes</div>
+                                      <div>{r.mistakes ? <span className="mistake-pill">{r.mistakes}</span> : "-"}</div>
+                                    </div>
+                                  </div>
+
+                                  {opened ? (
+                                    <div className="mt-3 subbox">
+                                      <div className="fw-bold mb-2" style={{ fontWeight: 900 }}>
+                                        Entry Details
+                                      </div>
+
+                                      <div className="table-responsive">
+                                        <table className="table table-sm mb-0">
+                                          <thead>
+                                            <tr className="text-muted">
+                                              <th className="py-2">Type</th>
+                                              <th className="py-2">Symbol / Name</th>
+                                              <th className="py-2">CE/PE</th>
+                                              <th className="py-2">Entry</th>
+                                              <th className="py-2">Exit</th>
+                                              <th className="py-2">Qty</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {(detailsMap[r.journal_id] || []).map((d, idx) => (
+                                              <tr key={idx}>
+                                                <td className="fw-bold">{d.trade_type}</td>
+                                                <td className="fw-bold">{d.trade_type === "OPTIONS" ? d.symbol : d.stock_name}</td>
+                                                <td className="fw-bold">{d.option_type ?? "-"}</td>
+                                                <td className="fw-bold">{formatNumber(d.entry_price)}</td>
+                                                <td className="fw-bold">{formatNumber(d.exit_price)}</td>
+                                                <td className="fw-bold">{formatNumber(d.quantity)}</td>
+                                              </tr>
+                                            ))}
+
+                                            {(detailsMap[r.journal_id] || []).length === 0 ? (
+                                              <tr>
+                                                <td colSpan={6} className="text-muted fw-bold">
+                                                  No details found.
+                                                </td>
+                                              </tr>
+                                            ) : null}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    </div>
+                                  ) : null}
+                                </td>
+                              </tr>
+                            </React.Fragment>
+                          );
+                        })}
+
+                        {rowsToShow.length === 0 ? (
+                          <tr>
+                            <td colSpan={8} className="px-3 py-4 text-muted fw-bold">
+                              No rows found for this month/filter.
+                            </td>
+                          </tr>
+                        ) : null}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  // Mobile
+                  <div className="p-3">
+                    {rowsToShow.map((r) => {
+                      const opened = openJournalId === r.journal_id;
+                      const netT = netTone(r.net_total);
+
+                      return (
+                        <div key={r.journal_id} className="card-pro mb-3">
+                          <div className="p-3 d-flex align-items-start justify-content-between gap-2">
+                            <div>
+                              <div className="fw-bold" style={{ fontWeight: 900, fontSize: 15 }}>
+                                {formatDate(r.trade_date)}
+                              </div>
+
+                              <div className="mobile-meta">#{r.journal_id}</div>
+                              <div className="fw-bold" style={{ fontWeight: 900 }}>
+                                {r.platform_name}
+                              </div>
+                              <div className="mobile-meta">{r.segment_name}</div>
+                            </div>
+
+                            <button
+                              className="btn btn-outline-dark btn-pro btn-sm"
+                              onClick={() => toggleDetails(r.journal_id)}
+                              disabled={busy === `details-${r.journal_id}`}
+                              type="button"
+                            >
+                              {busy === `details-${r.journal_id}` ? "..." : opened ? "Hide" : "Details"}
+                            </button>
+                          </div>
+
+                          <div className="px-3 pb-3">
+                            <div className="d-flex flex-wrap gap-2">
+                              <BadgeSquare tone="success">Profit: {formatNumber(r.profit)}</BadgeSquare>
+                              <BadgeSquare tone="danger">Loss: {formatNumber(r.loss)}</BadgeSquare>
+                              <BadgeSquare tone="warning">Brokerage: {formatNumber(r.brokerage)}</BadgeSquare>
+                              <span className={`badge badge-square bg-${netT} bg-opacity-10 text-${netT}`}>
+                                Net: {formatNumber(r.net_total)}
+                              </span>
+                            </div>
+
+                            <div className="mt-3" style={{ borderTop: "1px solid #eef2f7", paddingTop: 12 }}>
+                              <div className="sublabel">Logic</div>
+                              <div className="logic-text">{r.trade_logic || "-"}</div>
+
+                              <div className="sublabel mt-2">Mistakes</div>
+                              <div>{r.mistakes ? <span className="mistake-pill">{r.mistakes}</span> : "-"}</div>
+                            </div>
+
+                            {opened ? (
+                              <div className="mt-3 subbox">
+                                <div className="fw-bold mb-2" style={{ fontWeight: 900 }}>
+                                  Entry Details
+                                </div>
+
+                                <div className="table-responsive">
+                                  <table className="table table-sm mb-0">
+                                    <thead>
+                                      <tr className="text-muted">
+                                        <th className="py-2">Type</th>
+                                        <th className="py-2">Symbol/Name</th>
+                                        <th className="py-2">CE/PE</th>
+                                        <th className="py-2">Entry</th>
+                                        <th className="py-2">Exit</th>
+                                        <th className="py-2">Qty</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {(detailsMap[r.journal_id] || []).map((d, idx) => (
+                                        <tr key={idx}>
+                                          <td className="fw-bold">{d.trade_type}</td>
+                                          <td className="fw-bold">{d.trade_type === "OPTIONS" ? d.symbol : d.stock_name}</td>
+                                          <td className="fw-bold">{d.option_type ?? "-"}</td>
+                                          <td className="fw-bold">{formatNumber(d.entry_price)}</td>
+                                          <td className="fw-bold">{formatNumber(d.exit_price)}</td>
+                                          <td className="fw-bold">{formatNumber(d.quantity)}</td>
+                                        </tr>
+                                      ))}
+                                      {(detailsMap[r.journal_id] || []).length === 0 ? (
+                                        <tr>
+                                          <td colSpan={6} className="text-muted fw-bold">
+                                            No details found.
+                                          </td>
+                                        </tr>
+                                      ) : null}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {rowsToShow.length === 0 ? <div className="text-muted fw-bold">No rows found for this month/filter.</div> : null}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </section>
+        </div>
+      )}
 
-        {/* RIGHT TABLE */}
-        <section style={styles.card}>
-          <div style={styles.cardHeader}>
-            <div style={styles.cardTitle}>Daily Summary</div>
-            <div style={styles.small}>{loading ? "Loading..." : `${dailySummary.length} rows`}</div>
-          </div>
-
-          <div style={styles.tableWrap}>
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>Date</th>
-                  <th style={styles.th}>Platform</th>
-                  <th style={styles.th}>Segment</th>
-                  <th style={styles.th}>Profit</th>
-                  <th style={styles.th}>Loss</th>
-                  <th style={styles.th}>Brokerage</th>
-                  <th style={styles.th}>Net</th>
-                  <th style={styles.th}>Logic</th>
-                  <th style={styles.th}>Mistakes</th>
-                  <th style={styles.th}>Actions</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {dailySummary.map((r) => {
-                  const opened = openJournalId === r.journal_id;
-                  const net = Number(r.net_total ?? 0);
-
-                  return (
-                    <React.Fragment key={r.journal_id}>
-                      <tr>
-                        <td style={styles.td}>
-                          <div style={{ fontWeight: 900 }}>{r.trade_date}</div>
-                          <div style={{ fontSize: 12, color: "#64748b" }}>#{r.journal_id}</div>
-                        </td>
-                        <td style={styles.td}>{r.platform_name}</td>
-                        <td style={styles.td}>{r.segment_name}</td>
-                        <td style={styles.td}>{r.profit}</td>
-                        <td style={styles.td}>{r.loss}</td>
-                        <td style={styles.td}>{r.brokerage}</td>
-                        <td style={styles.td}>
-                          <span style={styles.pillNet(net)}>{r.net_total}</span>
-                        </td>
-                        <td style={styles.td}>
-                          <div style={{ fontSize: 12 }}>{r.trade_logic}</div>
-                        </td>
-                        <td style={styles.td}>
-                          <div style={{ fontSize: 12, color: "#64748b" }}>{r.mistakes ? r.mistakes : "-"}</div>
-                        </td>
-                        <td style={styles.td}>
-                          <Btn
-                            small
-                            onClick={() => toggleDetails(r.journal_id)}
-                            disabled={busy === `details-${r.journal_id}`}
-                          >
-                            {busy === `details-${r.journal_id}` ? "..." : opened ? "Hide" : "Details"}
-                          </Btn>
-                        </td>
-                      </tr>
-
-                      {opened ? (
-                        <tr>
-                          <td style={styles.td} colSpan={10}>
-                            <div style={{ fontWeight: 900, marginBottom: 8 }}>Entry Details</div>
-
-                            <div style={styles.tableWrap}>
-                              <table style={styles.subTable}>
-                                <thead>
-                                  <tr>
-                                    <th style={styles.th}>Type</th>
-                                    <th style={styles.th}>Symbol / Name</th>
-                                    <th style={styles.th}>CE/PE</th>
-                                    <th style={styles.th}>Entry</th>
-                                    <th style={styles.th}>Exit</th>
-                                    <th style={styles.th}>Qty</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {(detailsMap[r.journal_id] || []).map((d, idx) => (
-                                    <tr key={idx}>
-                                      <td style={styles.subTd}>{d.trade_type}</td>
-                                      <td style={styles.subTd}>
-                                        {d.trade_type === "OPTIONS" ? d.symbol : d.stock_name}
-                                      </td>
-                                      <td style={styles.subTd}>{d.option_type ?? "-"}</td>
-                                      <td style={styles.subTd}>{d.entry_price}</td>
-                                      <td style={styles.subTd}>{d.exit_price}</td>
-                                      <td style={styles.subTd}>{d.quantity}</td>
-                                    </tr>
-                                  ))}
-
-                                  {(detailsMap[r.journal_id] || []).length === 0 ? (
-                                    <tr>
-                                      <td style={styles.subTd} colSpan={6}>
-                                        No details found.
-                                      </td>
-                                    </tr>
-                                  ) : null}
-                                </tbody>
-                              </table>
-                            </div>
-                          </td>
-                        </tr>
-                      ) : null}
-                    </React.Fragment>
-                  );
-                })}
-
-                {!loading && dailySummary.length === 0 ? (
-                  <tr>
-                    <td style={styles.td} colSpan={10}>
-                      No rows found for this month/filter.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-
-          <div style={styles.hint}>
-            Read-only views page. Create trades from <b>Trading Journal</b> page.
-          </div>
-        </section>
-      </div>
-
-      {/* Center Modal (success/error) */}
+      {/* Error Modal ONLY */}
       {modal.open ? (
-        <div style={styles.overlay} role="dialog" aria-modal="true">
-          <div style={styles.modal}>
-            <div style={styles.modalHead}>
-              <h3 style={styles.modalTitle}>{modal.title}</h3>
-              <button style={styles.xBtn} onClick={closeModal} aria-label="Close">
-                ×
+        <div
+          className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+          style={{ background: "rgba(0,0,0,0.35)", zIndex: 9999, padding: 12 }}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="card-pro" style={{ width: "min(92vw, 420px)" }}>
+            <div className="card-head px-3 py-2 d-flex align-items-center justify-content-between">
+              <div className="fw-bold" style={{ fontWeight: 900 }}>
+                {modal.title}
+              </div>
+              <button className="btn btn-light btn-sm btn-pro" onClick={closeModal} type="button">
+                ✕
               </button>
             </div>
-            <div style={styles.modalBody}>{modal.message}</div>
-            <div style={styles.modalFoot}>
-              <Btn variant="primary" onClick={closeModal}>
-                {modal.confirmText}
-              </Btn>
+            <div className="p-3 fw-bold">{modal.message}</div>
+            <div className="p-3 pt-0 d-flex justify-content-end">
+              <button className="btn btn-dark btn-pro" onClick={closeModal} type="button">
+                OK
+              </button>
             </div>
           </div>
         </div>

@@ -1,4 +1,4 @@
-// src/components/NotesN.jsx (FINAL: same page + NEW "Notes" tab + clean imports)
+// src/components/NotesN.jsx (FINAL: same page + NEW "Notes" tab + MOBILE EDGE-TO-EDGE panel)
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Container, Button, Nav } from "react-bootstrap";
@@ -47,15 +47,16 @@ export default function NotesN() {
 
       {/* Content */}
       <main className="notes-main">
-        <Container className="px-3 px-md-4">
+        {/* ✅ IMPORTANT: remove container side padding on MOBILE (edge-to-edge) */}
+        <Container className="notes-container px-0 px-md-4">
           {/* ONLY 2 LINES */}
-          <div className="notes-info">
+          <div className="notes-info notes-pad">
             <div className="notes-info-line">{infoLines[0]}</div>
             <div className="notes-info-line">{infoLines[1]}</div>
           </div>
 
           {/* Tabs */}
-          <div className="tabs-wrap">
+          <div className="tabs-wrap notes-pad">
             <Nav
               variant="pills"
               className="notes-tabs"
@@ -84,6 +85,7 @@ export default function NotesN() {
           </div>
 
           {/* Tab Content */}
+          {/* ✅ MOBILE: no outside padding, no rounded corners, no border gap */}
           <div className="tab-panel">
             <div className="panel-inner">
               {activeTab === "notes" ? (
@@ -112,6 +114,11 @@ const css = `
     color: #0f172a;
     font-family: "Times New Roman", Times, Georgia, serif;
   }
+
+  /* ✅ HARD EDGE RESET (no accidental outer spacing) */
+  html, body { margin:0; padding:0; width:100%; overflow-x:hidden; }
+  .notes-page { width:100%; }
+  .notes-main { width:100%; }
 
   /* ✅ IMPORTANT: remove any underline from Nav.Link */
   .notes-tabs .nav-link,
@@ -192,6 +199,12 @@ const css = `
 
   /* Main */
   .notes-main{ padding: 16px 0 28px; }
+
+  /* ✅ pad only where needed (info + tabs). panel remains edge-to-edge on mobile */
+  .notes-pad{
+    padding-left: 12px;
+    padding-right: 12px;
+  }
 
   .notes-info{ margin-top: 12px; margin-bottom: 12px; }
   .notes-info-line{
@@ -291,10 +304,30 @@ const css = `
     .panel-inner{ padding: 18px; }
     .notes-title{ font-size: 20px; }
     .notes-info-line{ font-size: 16px; }
+    .notes-pad{ padding-left: 0; padding-right: 0; } /* desktop uses container padding */
   }
 
-  /* Mobile */
+  /* ✅ MOBILE EDGE-TO-EDGE: remove ALL outside padding of panel/card */
   @media (max-width: 576px){
+    /* container already px-0, but keep safety */
+    .notes-container{ padding-left: 0 !important; padding-right: 0 !important; }
+
+    /* panel should be full width, no rounded corners, no border gaps */
+    .tab-panel{
+      border-radius: 0 !important;
+      border-left: 0 !important;
+      border-right: 0 !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+      box-shadow: 0 10px 24px rgba(0,0,0,.08);
+    }
+
+    /* IMPORTANT: inner padding should be 0 so inside component (Notes/Add/Get) can do its own edge */
+    .panel-inner{ padding: 0 !important; }
+
+    /* keep small padding only for info + tabs */
+    .notes-pad{ padding-left: 12px; padding-right: 12px; }
+
     .notes-nav-inner{ gap: 8px; }
     .notes-title{ font-size: 18px; }
     .btn-dashboard{ padding: 8px 10px !important; border-radius: 12px !important; font-size: 14px; }

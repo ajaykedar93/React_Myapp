@@ -47,9 +47,7 @@ export default function Investment_tradingjournal() {
   const [optionRows, setOptionRows] = useState([
     { strike_price: "", option_type: "CE", entry_price: "", exit_price: "", quantity: "" },
   ]);
-  const [stockRows, setStockRows] = useState([
-    { stock_name: "", entry_price: "", exit_price: "", quantity: "" },
-  ]);
+  const [stockRows, setStockRows] = useState([{ stock_name: "", entry_price: "", exit_price: "", quantity: "" }]);
 
   // -------------------- list/view --------------------
   const [monthFilter, setMonthFilter] = useState(() => {
@@ -89,8 +87,7 @@ export default function Investment_tradingjournal() {
       onConfirm: p.onConfirm || null,
     }));
 
-  const closeModal = () =>
-    setModal((m) => ({ ...m, open: false, onConfirm: null, title: "", message: "" }));
+  const closeModal = () => setModal((m) => ({ ...m, open: false, onConfirm: null, title: "", message: "" }));
 
   const toast = (msg) => openModal({ type: "success", title: "Success", message: msg });
   const fail = (msg) => openModal({ type: "error", title: "Error", message: msg });
@@ -98,6 +95,14 @@ export default function Investment_tradingjournal() {
   // -------------------- helpers --------------------
   const toIntStr = (v) => String(v ?? "").replace(/[^\d]/g, "");
   const toNum = (v) => (v === "" ? NaN : Number(v));
+
+  // Date format: "1 Jan 2026"
+  const formatDate = (value) => {
+    if (!value) return "-";
+    const d = new Date(value); // supports YYYY-MM-DD
+    if (Number.isNaN(d.getTime())) return String(value);
+    return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(d);
+  };
 
   // click/tap effect
   const press = (e) => (e.currentTarget.style.transform = "scale(0.98)");
@@ -132,10 +137,7 @@ export default function Investment_tradingjournal() {
     },
     async getSegments(pid) {
       if (!pid) return [];
-      const res = await fetch(
-        `${BASE_URL}/api/investment/platform-segment/segment?platform_id=${pid}`,
-        { headers }
-      );
+      const res = await fetch(`${BASE_URL}/api/investment/platform-segment/segment?platform_id=${pid}`, { headers });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message || "Segment fetch failed");
       return Array.isArray(data?.data) ? data.data : [];
@@ -167,10 +169,9 @@ export default function Investment_tradingjournal() {
       if (segment_name) qs.set("segment_name", segment_name);
       if (plan_id) qs.set("plan_id", String(plan_id));
       if (month) qs.set("month", month);
-      const res = await fetch(
-        `${BASE_URL}/api/investment/tradingjournal-view/daily-summary?${qs.toString()}`,
-        { headers }
-      );
+      const res = await fetch(`${BASE_URL}/api/investment/tradingjournal-view/daily-summary?${qs.toString()}`, {
+        headers,
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message || "Daily summary fetch failed");
       return Array.isArray(data?.data) ? data.data : [];
@@ -180,10 +181,9 @@ export default function Investment_tradingjournal() {
       const qs = new URLSearchParams();
       if (journal_id) qs.set("journal_id", String(journal_id));
       if (month) qs.set("month", month);
-      const res = await fetch(
-        `${BASE_URL}/api/investment/tradingjournal-view/entry-details?${qs.toString()}`,
-        { headers }
-      );
+      const res = await fetch(`${BASE_URL}/api/investment/tradingjournal-view/entry-details?${qs.toString()}`, {
+        headers,
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message || "Entry details fetch failed");
       return Array.isArray(data?.data) ? data.data : [];
@@ -261,10 +261,8 @@ export default function Investment_tradingjournal() {
     try {
       setLoading(true);
 
-      const pName =
-        platforms.find((p) => String(p.platform_id) === String(platformId))?.platform_name || "";
-      const sName =
-        segments.find((s) => String(s.segment_id) === String(segmentId))?.segment_name || "";
+      const pName = platforms.find((p) => String(p.platform_id) === String(platformId))?.platform_name || "";
+      const sName = segments.find((s) => String(s.segment_id) === String(segmentId))?.segment_name || "";
 
       const rows = await api.getDailySummary({
         platform_name: platformId ? pName : null,
@@ -464,10 +462,7 @@ export default function Investment_tradingjournal() {
     });
   };
   const addOptionRow = () =>
-    setOptionRows((prev) => [
-      ...prev,
-      { strike_price: "", option_type: "CE", entry_price: "", exit_price: "", quantity: "" },
-    ]);
+    setOptionRows((prev) => [...prev, { strike_price: "", option_type: "CE", entry_price: "", exit_price: "", quantity: "" }]);
   const removeOptionRow = (i) => setOptionRows((prev) => prev.filter((_, idx) => idx !== i));
 
   const updateStockRow = (i, key, val) => {
@@ -477,8 +472,7 @@ export default function Investment_tradingjournal() {
       return copy;
     });
   };
-  const addStockRow = () =>
-    setStockRows((prev) => [...prev, { stock_name: "", entry_price: "", exit_price: "", quantity: "" }]);
+  const addStockRow = () => setStockRows((prev) => [...prev, { stock_name: "", entry_price: "", exit_price: "", quantity: "" }]);
   const removeStockRow = (i) => setStockRows((prev) => prev.filter((_, idx) => idx !== i));
 
   // -------------------- responsive --------------------
@@ -489,7 +483,7 @@ export default function Investment_tradingjournal() {
     return () => window.removeEventListener("resize", onR);
   }, []);
 
-  // -------------------- styles (mobile-first, clean, edge-to-edge) --------------------
+  // -------------------- styles --------------------
   const styles = {
     page: {
       width: "100vw",
@@ -499,6 +493,8 @@ export default function Investment_tradingjournal() {
       background: "#ffffff",
       color: "#0f172a",
       fontFamily: '"Times New Roman", Times, serif',
+      paddingBottom: 90, // ✅ space at bottom so mobile button not touch
+      boxSizing: "border-box",
     },
     topbar: {
       width: "100%",
@@ -586,8 +582,7 @@ export default function Investment_tradingjournal() {
       padding: small ? "0 10px" : "0 14px",
       borderRadius: 12,
       border: "1px solid #cbd5e1",
-      background:
-        variant === "primary" ? "#0f172a" : variant === "danger" ? "#b91c1c" : "#ffffff",
+      background: variant === "primary" ? "#0f172a" : variant === "danger" ? "#b91c1c" : "#ffffff",
       color: variant === "primary" || variant === "danger" ? "#ffffff" : "#0f172a",
       cursor: "pointer",
       fontWeight: 900,
@@ -599,17 +594,6 @@ export default function Investment_tradingjournal() {
     btnDisabled: { opacity: 0.6, cursor: "not-allowed", transform: "none", boxShadow: "none" },
 
     divider: { height: 1, background: "#e5e7eb", margin: "6px 0" },
-
-    pill: {
-      display: "inline-block",
-      padding: "4px 10px",
-      borderRadius: 999,
-      border: "1px solid #e5e7eb",
-      background: "#f8fafc",
-      fontSize: 12,
-      color: "#0f172a",
-      fontWeight: 700,
-    },
 
     tableWrap: { width: "100%", overflowX: "auto" },
     table: { width: "100%", borderCollapse: "collapse", minWidth: 980 },
@@ -633,7 +617,11 @@ export default function Investment_tradingjournal() {
       background: "#fff",
     },
 
-    // Net pill colors
+    // ✅ profit/loss/brokerage colors (text only)
+    profitText: { fontWeight: 900, color: "#166534" },
+    lossText: { fontWeight: 900, color: "#b91c1c" },
+    brokerageText: { fontWeight: 900, color: "#a16207" }, // dark yellow
+
     netPill: (v) => ({
       display: "inline-block",
       padding: "4px 10px",
@@ -645,11 +633,9 @@ export default function Investment_tradingjournal() {
       color: v > 0 ? "#065f46" : v < 0 ? "#9f1239" : "#0f172a",
     }),
 
-    // Sub table
     subTable: { width: "100%", borderCollapse: "collapse", marginTop: 10, minWidth: 600 },
     subTd: { borderBottom: "1px solid #eef2ff", padding: "8px 10px", fontSize: 12 },
 
-    // Modal
     overlay: {
       position: "fixed",
       inset: 0,
@@ -803,15 +789,20 @@ export default function Investment_tradingjournal() {
 
             <div style={styles.divider} />
 
-            {/* OPTIONS EDITOR */}
             {isOptionsSegment ? (
               <div>
-                <div style={{ fontWeight: 900, marginBottom: 8 }}>
-                  Options Entries <span style={styles.pill}>Multiple</span>
-                </div>
+                <div style={{ fontWeight: 900, marginBottom: 8 }}>Options Entries</div>
 
                 {optionRows.map((r, i) => (
-                  <div key={i} style={{ display: "grid", gridTemplateColumns: wide ? "1fr .7fr .7fr 1fr 1fr auto" : "1fr", gap: 10, marginBottom: 10 }}>
+                  <div
+                    key={i}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: wide ? "1fr .7fr .7fr 1fr 1fr auto" : "1fr",
+                      gap: 10,
+                      marginBottom: 10,
+                    }}
+                  >
                     <input
                       style={styles.input}
                       value={r.strike_price}
@@ -853,11 +844,7 @@ export default function Investment_tradingjournal() {
                       inputMode="decimal"
                     />
 
-                    <Btn
-                      variant="danger"
-                      disabled={optionRows.length === 1}
-                      onClick={() => removeOptionRow(i)}
-                    >
+                    <Btn variant="danger" disabled={optionRows.length === 1} onClick={() => removeOptionRow(i)}>
                       Remove
                     </Btn>
                   </div>
@@ -868,14 +855,19 @@ export default function Investment_tradingjournal() {
                 </div>
               </div>
             ) : (
-              // STOCKS EDITOR
               <div>
-                <div style={{ fontWeight: 900, marginBottom: 8 }}>
-                  Stock / Gold / Currency Entries <span style={styles.pill}>Multiple</span>
-                </div>
+                <div style={{ fontWeight: 900, marginBottom: 8 }}>Stock / Gold / Currency Entries</div>
 
                 {stockRows.map((r, i) => (
-                  <div key={i} style={{ display: "grid", gridTemplateColumns: wide ? "1.3fr .7fr 1fr 1fr auto" : "1fr", gap: 10, marginBottom: 10 }}>
+                  <div
+                    key={i}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: wide ? "1.3fr .7fr 1fr 1fr auto" : "1fr",
+                      gap: 10,
+                      marginBottom: 10,
+                    }}
+                  >
                     <input
                       style={styles.input}
                       value={r.stock_name}
@@ -907,11 +899,7 @@ export default function Investment_tradingjournal() {
                       inputMode="decimal"
                     />
 
-                    <Btn
-                      variant="danger"
-                      disabled={stockRows.length === 1}
-                      onClick={() => removeStockRow(i)}
-                    >
+                    <Btn variant="danger" disabled={stockRows.length === 1} onClick={() => removeStockRow(i)}>
                       Remove
                     </Btn>
                   </div>
@@ -973,37 +961,41 @@ export default function Investment_tradingjournal() {
                     <React.Fragment key={r.journal_id}>
                       <tr>
                         <td style={styles.td}>
-                          <div style={{ fontWeight: 900 }}>{r.trade_date}</div>
+                          <div style={{ fontWeight: 900 }}>{formatDate(r.trade_date)}</div>
                           <div style={{ fontSize: 12, color: "#64748b" }}>#{r.journal_id}</div>
                         </td>
                         <td style={styles.td}>{r.platform_name}</td>
                         <td style={styles.td}>{r.segment_name}</td>
-                        <td style={styles.td}>{r.profit}</td>
-                        <td style={styles.td}>{r.loss}</td>
-                        <td style={styles.td}>{r.brokerage}</td>
+
+                        <td style={styles.td}>
+                          <span style={styles.profitText}>{r.profit}</span>
+                        </td>
+                        <td style={styles.td}>
+                          <span style={styles.lossText}>{r.loss}</span>
+                        </td>
+                        <td style={styles.td}>
+                          <span style={styles.brokerageText}>{r.brokerage}</span>
+                        </td>
+
                         <td style={styles.td}>
                           <span style={styles.netPill(net)}>{r.net_total}</span>
                         </td>
+
                         <td style={styles.td}>
                           <div style={{ fontSize: 12 }}>{r.trade_logic}</div>
                         </td>
                         <td style={styles.td}>
                           <div style={{ fontSize: 12, color: "#64748b" }}>{r.mistakes ? r.mistakes : "-"}</div>
                         </td>
+
                         <td style={styles.td}>
                           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                            <Btn
-                              onClick={() => toggleDetails(r.journal_id)}
-                              disabled={busy === `details-${r.journal_id}`}
-                            >
-                              {busy === `details-${r.journal_id}` ? "Loading..." : opened ? "Hide" : "Details"}
+                            <Btn onClick={() => toggleDetails(r.journal_id)} disabled={busy === `details-${r.journal_id}`}>
+                              {busy === `details-${r.journal_id}` ? "..." : opened ? "Hide" : "Details"}
                             </Btn>
-                            <Btn
-                              variant="danger"
-                              onClick={() => onDelete(r.journal_id)}
-                              disabled={busy === `del-${r.journal_id}`}
-                            >
-                              {busy === `del-${r.journal_id}` ? "Deleting..." : "Delete"}
+
+                            <Btn variant="danger" onClick={() => onDelete(r.journal_id)} disabled={busy === `del-${r.journal_id}`}>
+                              {busy === `del-${r.journal_id}` ? "..." : "Delete"}
                             </Btn>
                           </div>
                         </td>
@@ -1030,9 +1022,7 @@ export default function Investment_tradingjournal() {
                                   {(detailsMap[r.journal_id] || []).map((d, idx) => (
                                     <tr key={idx}>
                                       <td style={styles.subTd}>{d.trade_type}</td>
-                                      <td style={styles.subTd}>
-                                        {d.trade_type === "OPTIONS" ? d.symbol : d.stock_name}
-                                      </td>
+                                      <td style={styles.subTd}>{d.trade_type === "OPTIONS" ? d.symbol : d.stock_name}</td>
                                       <td style={styles.subTd}>{d.option_type ?? "-"}</td>
                                       <td style={styles.subTd}>{d.entry_price}</td>
                                       <td style={styles.subTd}>{d.exit_price}</td>

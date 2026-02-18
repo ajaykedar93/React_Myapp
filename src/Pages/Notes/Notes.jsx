@@ -7,14 +7,26 @@ const BASE_URL = "https://express-backend-myapp.onrender.com/api/notes";
 
 /* ====== Date helpers (pretty: "2 Oct 2025") ====== */
 const MONTHS = [
-  { short: "Jan", num: 1 }, { short: "Feb", num: 2 }, { short: "Mar", num: 3 },
-  { short: "Apr", num: 4 }, { short: "May", num: 5 }, { short: "Jun", num: 6 },
-  { short: "Jul", num: 7 }, { short: "Aug", num: 8 }, { short: "Sep", num: 9 },
-  { short: "Oct", num: 10 }, { short: "Nov", num: 11 }, { short: "Dec", num: 12 },
+  { short: "Jan", num: 1 },
+  { short: "Feb", num: 2 },
+  { short: "Mar", num: 3 },
+  { short: "Apr", num: 4 },
+  { short: "May", num: 5 },
+  { short: "Jun", num: 6 },
+  { short: "Jul", num: 7 },
+  { short: "Aug", num: 8 },
+  { short: "Sep", num: 9 },
+  { short: "Oct", num: 10 },
+  { short: "Nov", num: 11 },
+  { short: "Dec", num: 12 },
 ];
 
-function daysInMonth(m, y) { return new Date(y, m, 0).getDate(); }
-function toDMY(day, monthShort, year) { return `${Number(day)} ${monthShort} ${Number(year)}`; }
+function daysInMonth(m, y) {
+  return new Date(y, m, 0).getDate();
+}
+function toDMY(day, monthShort, year) {
+  return `${Number(day)} ${monthShort} ${Number(year)}`;
+}
 
 function parseDMY(str) {
   if (!str) return null;
@@ -38,7 +50,9 @@ function toPrettyDate(val) {
   if (typeof val === "string") {
     const m = val.match(/^(\d{4})-(\d{2})-(\d{2})/);
     if (m) {
-      const y = +m[1], mo = +m[2], d = +m[3];
+      const y = +m[1],
+        mo = +m[2],
+        d = +m[3];
       const monthShort = MONTHS[mo - 1]?.short || "Jan";
       return `${d} ${monthShort} ${y}`;
     }
@@ -120,7 +134,11 @@ function DateSelect({ value, onChange, label, idPrefix = "ds", required = false 
   useEffect(() => {
     const pretty = toPrettyDate(value);
     const p = parseDMY(pretty);
-    if (p) { setDay(p.day); setMonthShort(p.monthShort); setYear(p.year); }
+    if (p) {
+      setDay(p.day);
+      setMonthShort(p.monthShort);
+      setYear(p.year);
+    }
   }, [value]);
 
   const totalDays = daysInMonth(MONTHS.find((m) => m.short === monthShort)?.num || 1, year);
@@ -151,7 +169,11 @@ function DateSelect({ value, onChange, label, idPrefix = "ds", required = false 
           required={required}
           style={{ maxWidth: 110 }}
         >
-          {dayOptions.map((d) => <option key={d} value={d}>{d}</option>)}
+          {dayOptions.map((d) => (
+            <option key={d} value={d}>
+              {d}
+            </option>
+          ))}
         </select>
 
         <select
@@ -162,7 +184,11 @@ function DateSelect({ value, onChange, label, idPrefix = "ds", required = false 
           required={required}
           style={{ maxWidth: 140 }}
         >
-          {MONTHS.map((m) => <option key={m.short} value={m.short}>{m.short}</option>)}
+          {MONTHS.map((m) => (
+            <option key={m.short} value={m.short}>
+              {m.short}
+            </option>
+          ))}
         </select>
 
         <select
@@ -173,7 +199,11 @@ function DateSelect({ value, onChange, label, idPrefix = "ds", required = false 
           required={required}
           style={{ maxWidth: 130 }}
         >
-          {years.map((y) => <option key={y} value={y}>{y}</option>)}
+          {years.map((y) => (
+            <option key={y} value={y}>
+              {y}
+            </option>
+          ))}
         </select>
       </div>
 
@@ -194,7 +224,10 @@ function useOverflowMap(ids, depKey) {
       const next = {};
       ids.forEach((id) => {
         const el = refs.current[id];
-        if (!el) { next[id] = false; return; }
+        if (!el) {
+          next[id] = false;
+          return;
+        }
 
         el.classList.add("no-clamp");
         const full = el.scrollHeight;
@@ -243,6 +276,7 @@ export default function NotesProfessional() {
   const [expandedIds, setExpandedIds] = useState(() => new Set());
 
   // ✅ Edge-to-edge + professional theme CSS (no bootstrap blue)
+  // ✅ MOBILE: no outer padding at all + no gutters in cards grid
   useEffect(() => {
     const id = "notes-pro-style-edge-pro";
     if (document.getElementById(id)) return;
@@ -481,9 +515,28 @@ export default function NotesProfessional() {
       .np-edgeBlock{ margin: 0; border-radius: 0; border-left: 0; border-right: 0; }
       .np-edgeGap{ padding: clamp(10px, 3.2vw, 16px); }
 
+      /* ✅ KILL bootstrap gutters when we want true edge-to-edge grid */
+      .np-gridEdge.row,
+      .np-gridEdge .row{
+        --bs-gutter-x: 0 !important;
+        --bs-gutter-y: 0 !important;
+      }
+      .np-gridEdge > [class*="col-"]{
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+      }
+
       @media (max-width: 575px){
+        /* ✅ MOBILE: no outside padding anywhere */
+        .np-edgeGap{ padding: 0 !important; }
         .np-fab{ right: 12px; bottom: 12px; }
-        .np-edgeGap{ padding: 12px; }
+
+        /* Optional: make cards flush like full-width strips on mobile */
+        .np-card{
+          border-radius: 0 !important;
+          border-left: 0 !important;
+          border-right: 0 !important;
+        }
       }
     `;
     document.head.appendChild(s);
@@ -520,7 +573,9 @@ export default function NotesProfessional() {
     }
   };
 
-  useEffect(() => { fetchNotes(); }, []);
+  useEffect(() => {
+    fetchNotes();
+  }, []);
 
   const addNote = async () => {
     if (!form.title.trim()) return showCenterMsg("error", "Title is required.");
@@ -646,7 +701,9 @@ export default function NotesProfessional() {
   const showingFrom = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const showingTo = Math.min(page * PAGE_SIZE, total);
 
-  useEffect(() => { setPage(1); }, [search, monthFilter]);
+  useEffect(() => {
+    setPage(1);
+  }, [search, monthFilter]);
 
   const isExpanded = (id) => expandedIds.has(id);
   const toggleExpand = (id) => {
@@ -659,10 +716,7 @@ export default function NotesProfessional() {
   };
 
   const currentIds = pageItems.map((n) => n.id);
-  const { refs: detailsRefs, needMore } = useOverflowMap(
-    currentIds,
-    `${page}|${search}|${monthFilter}`
-  );
+  const { refs: detailsRefs, needMore } = useOverflowMap(currentIds, `${page}|${search}|${monthFilter}`);
 
   const scrollToRef = (r) => r.current?.scrollIntoView({ behavior: "smooth", block: "start" });
 
@@ -701,9 +755,7 @@ export default function NotesProfessional() {
               <h4 className="m-0 np-title" style={{ fontSize: "var(--txt-16-20)" }}>
                 Notes Manager
               </h4>
-              <div className="text-muted fs-11-13">
-                Add unlimited notes (same date allowed) • Professional UI
-              </div>
+              <div className="text-muted fs-11-13">Add unlimited notes (same date allowed) • Professional UI</div>
             </div>
           </div>
 
@@ -743,11 +795,7 @@ export default function NotesProfessional() {
 
           <div style={{ width: 170, minWidth: 160 }}>
             <label className="form-label mb-1 fs-12-14">Month</label>
-            <select
-              className="form-select np-input"
-              value={monthFilter}
-              onChange={(e) => setMonthFilter(e.target.value)}
-            >
+            <select className="form-select np-input" value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)}>
               <option value="All">All</option>
               {MONTHS.map((m) => (
                 <option key={m.short} value={m.short}>
@@ -813,12 +861,7 @@ export default function NotesProfessional() {
           </div>
 
           <div className="mt-3 d-flex gap-2 flex-wrap">
-            <button
-              className="btn np-btnGrad btn-lg px-5 py-2 w-100 w-md-auto"
-              onClick={addNote}
-              disabled={busy}
-              type="button"
-            >
+            <button className="btn np-btnGrad btn-lg px-5 py-2 w-100 w-md-auto" onClick={addNote} disabled={busy} type="button">
               {busy ? "Saving…" : "Add Note"}
             </button>
 
@@ -842,7 +885,8 @@ export default function NotesProfessional() {
           ) : pageItems.length === 0 ? (
             <div className="text-center py-4 text-muted fs-12-14">No notes found.</div>
           ) : (
-            <div className="row g-3">
+            // ✅ TRUE EDGE-TO-EDGE GRID: no gutters, no outer padding on mobile
+            <div className="row g-0 np-gridEdge">
               {pageItems.map((n, idx) => {
                 const datePretty = toPrettyDate(n.note_date);
                 const badgeClass = getBadgeClassForDate(datePretty);
@@ -854,7 +898,7 @@ export default function NotesProfessional() {
                 const showMore = needMore[n.id] && !expanded;
 
                 return (
-                  <div className="col-12 col-sm-6 col-lg-4 col-xl-3" key={n.id}>
+                  <div className="col-12 col-sm-6 col-lg-4 col-xl-3 p-0" key={n.id}>
                     <div
                       className="np-card h-100 p-3"
                       style={{
@@ -878,16 +922,14 @@ export default function NotesProfessional() {
                       </div>
 
                       <div className="np-prBadge">
-                        <h6
-                          className="fw-bold mb-1"
-                          title={n.title}
-                          style={{ wordBreak: "break-word", fontWeight: 950 }}
-                        >
+                        <h6 className="fw-bold mb-1" title={n.title} style={{ wordBreak: "break-word", fontWeight: 950 }}>
                           {n.title}
                         </h6>
 
                         <div
-                          ref={(el) => { if (el) detailsRefs.current[n.id] = el; }}
+                          ref={(el) => {
+                            if (el) detailsRefs.current[n.id] = el;
+                          }}
                           className={`text-secondary ${expanded ? "" : "truncate-3"}`}
                           title={details}
                           style={{ fontSize: "var(--txt-12-14)", lineHeight: 1.52 }}
@@ -915,11 +957,7 @@ export default function NotesProfessional() {
                         >
                           Edit
                         </button>
-                        <button
-                          className="btn btn-sm np-chipBtn np-chipDelete fs-12-14"
-                          onClick={() => deleteNote(n.id)}
-                          type="button"
-                        >
+                        <button className="btn btn-sm np-chipBtn np-chipDelete fs-12-14" onClick={() => deleteNote(n.id)} type="button">
                           Delete
                         </button>
                       </div>
@@ -962,12 +1000,7 @@ export default function NotesProfessional() {
         </div>
 
         {/* Floating Add */}
-        <button
-          className="np-fab btn np-btnGrad"
-          onClick={() => scrollToRef(addFormRef)}
-          type="button"
-          aria-label="Add Note"
-        >
+        <button className="np-fab btn np-btnGrad" onClick={() => scrollToRef(addFormRef)} type="button" aria-label="Add Note">
           +
         </button>
 
@@ -976,8 +1009,12 @@ export default function NotesProfessional() {
           <div className="np-overlay" onClick={(e) => e.target.classList.contains("np-overlay") && setEditItem(null)}>
             <div className="np-overlayCard">
               <div className="d-flex align-items-center justify-content-between mb-2">
-                <h5 className="mb-0 fs-14-16" style={{ fontWeight: 950 }}>Edit Note</h5>
-                <button className="btn np-btnSoft btn-sm" onClick={() => setEditItem(null)} type="button">✕</button>
+                <h5 className="mb-0 fs-14-16" style={{ fontWeight: 950 }}>
+                  Edit Note
+                </h5>
+                <button className="btn np-btnSoft btn-sm" onClick={() => setEditItem(null)} type="button">
+                  ✕
+                </button>
               </div>
 
               <label className="form-label fs-12-14">Title</label>
@@ -1006,7 +1043,9 @@ export default function NotesProfessional() {
               />
 
               <div className="d-flex justify-content-end gap-2 flex-wrap">
-                <button className="btn np-btnSoft" onClick={() => setEditItem(null)} type="button">Cancel</button>
+                <button className="btn np-btnSoft" onClick={() => setEditItem(null)} type="button">
+                  Cancel
+                </button>
                 <button className="btn np-btnGrad px-4" onClick={updateNote} type="button" disabled={busy}>
                   {busy ? "Updating…" : "Update"}
                 </button>

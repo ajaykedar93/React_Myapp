@@ -3,9 +3,6 @@ import React, { useEffect, useMemo, useState } from "react";
 
 const BASE_URL = "https://express-backend-myapp.onrender.com";
 
-//http://localhost:5000
-
-
 export default function Investment_dipwid() {
   const token = useMemo(() => localStorage.getItem("token") || "", []);
   const headers = useMemo(() => {
@@ -67,8 +64,7 @@ export default function Investment_dipwid() {
       onConfirm: p.onConfirm || null,
     }));
 
-  const closeModal = () =>
-    setModal((m) => ({ ...m, open: false, title: "", message: "", onConfirm: null }));
+  const closeModal = () => setModal((m) => ({ ...m, open: false, title: "", message: "", onConfirm: null }));
 
   const toast = (msg) => openModal({ type: "success", title: "Success", message: msg });
   const fail = (msg) => openModal({ type: "error", title: "Error", message: msg });
@@ -76,6 +72,14 @@ export default function Investment_dipwid() {
   // click/tap effect
   const press = (e) => (e.currentTarget.style.transform = "scale(0.98)");
   const release = (e) => (e.currentTarget.style.transform = "scale(1)");
+
+  // -------------------- responsive --------------------
+  const [wide, setWide] = useState(typeof window !== "undefined" ? window.innerWidth >= 1100 : false);
+  useEffect(() => {
+    const onR = () => setWide(window.innerWidth >= 1100);
+    window.addEventListener("resize", onR);
+    return () => window.removeEventListener("resize", onR);
+  }, []);
 
   const Btn = ({ variant, small, disabled, onClick, children, type = "button" }) => (
     <button
@@ -106,10 +110,7 @@ export default function Investment_dipwid() {
     },
     async getSegments(pid) {
       if (!pid) return [];
-      const res = await fetch(
-        `${BASE_URL}/api/investment/platform-segment/segment?platform_id=${pid}`,
-        { headers }
-      );
+      const res = await fetch(`${BASE_URL}/api/investment/platform-segment/segment?platform_id=${pid}`, { headers });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message || "Segment fetch failed");
       return Array.isArray(data?.data) ? data.data : [];
@@ -158,23 +159,12 @@ export default function Investment_dipwid() {
     },
 
     async deleteDipWid(id) {
-      const res = await fetch(`${BASE_URL}/api/investment/dipwid/${id}`, {
-        method: "DELETE",
-        headers,
-      });
+      const res = await fetch(`${BASE_URL}/api/investment/dipwid/${id}`, { method: "DELETE", headers });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message || "Delete failed");
       return true;
     },
   };
-
-  // -------------------- responsive --------------------
-  const [wide, setWide] = useState(typeof window !== "undefined" ? window.innerWidth >= 1100 : false);
-  useEffect(() => {
-    const onR = () => setWide(window.innerWidth >= 1100);
-    window.addEventListener("resize", onR);
-    return () => window.removeEventListener("resize", onR);
-  }, []);
 
   // -------------------- mount: platforms --------------------
   useEffect(() => {
@@ -317,8 +307,8 @@ export default function Investment_dipwid() {
   // -------------------- helpers --------------------
   const money = (v) => {
     if (v === null || v === undefined) return "-";
-    const s = String(v);
-    return s.trim() ? s : "-";
+    const s = String(v).trim();
+    return s ? s : "-";
   };
 
   const fmtMonth = (val) => {
@@ -326,12 +316,21 @@ export default function Investment_dipwid() {
     try {
       const d = new Date(val);
       if (Number.isNaN(d.getTime())) return "-";
-      const m = d.toLocaleString("en-GB", { month: "short" });
-      const y = d.getFullYear();
-      return `1 ${m} ${y}`;
+      return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(d).replace(/^\d+/, "1");
     } catch {
       return "-";
     }
+  };
+
+  const fmtDateTime = (val) => {
+    // ledger time: keep readable, but if API sends string just show it
+    if (!val) return "-";
+    const d = new Date(val);
+    if (Number.isNaN(d.getTime())) return String(val);
+    // "18 Feb 2026, 10:30"
+    const datePart = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(d);
+    const timePart = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" }).format(d);
+    return `${datePart}, ${timePart}`;
   };
 
   return (
@@ -349,7 +348,7 @@ export default function Investment_dipwid() {
         <section style={styles.card}>
           <div style={styles.cardHeader}>
             <div style={styles.cardTitle}>Add Entry</div>
-            <div style={styles.cardMeta}>{loading ? "Loading..." : ""}</div>
+            <div style={styles.cardMeta}>{/* no extra text */}</div>
           </div>
 
           <form style={styles.form} onSubmit={onSubmit} noValidate>
@@ -362,12 +361,7 @@ export default function Investment_dipwid() {
               ))}
             </select>
 
-            <select
-              style={styles.select}
-              value={segmentId}
-              onChange={(e) => setSegmentId(e.target.value)}
-              disabled={!platformId}
-            >
+            <select style={styles.select} value={segmentId} onChange={(e) => setSegmentId(e.target.value)} disabled={!platformId}>
               <option value="">Select Segment</option>
               {segments.map((s) => (
                 <option key={s.segment_id} value={s.segment_id}>
@@ -376,12 +370,7 @@ export default function Investment_dipwid() {
               ))}
             </select>
 
-            <select
-              style={styles.select}
-              value={planId}
-              onChange={(e) => setPlanId(e.target.value)}
-              disabled={!platformId || !segmentId}
-            >
+            <select style={styles.select} value={planId} onChange={(e) => setPlanId(e.target.value)} disabled={!platformId || !segmentId}>
               <option value="">Plan (Optional)</option>
               {plans.map((p) => (
                 <option key={p.plan_id} value={p.plan_id}>
@@ -405,18 +394,20 @@ export default function Investment_dipwid() {
               />
             </div>
 
-            <textarea
-              style={styles.textarea}
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Note (optional)"
-            />
+            <textarea style={styles.textarea} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" />
 
             <div style={styles.btnRow}>
               <Btn variant="primary" type="submit" disabled={busy === "save"}>
                 {busy === "save" ? "Saving..." : "Save"}
               </Btn>
-              <Btn onClick={() => { setTxnType("DEPOSIT"); setAmount(""); setNote(""); }} disabled={busy === "save"}>
+              <Btn
+                onClick={() => {
+                  setTxnType("DEPOSIT");
+                  setAmount("");
+                  setNote("");
+                }}
+                disabled={busy === "save"}
+              >
                 Clear
               </Btn>
             </div>
@@ -455,20 +446,16 @@ export default function Investment_dipwid() {
                   return (
                     <tr key={r.dipwid_id}>
                       <td style={styles.td}>
-                        <div style={{ fontWeight: 900 }}>{r.txn_at}</div>
+                        <div style={{ fontWeight: 900 }}>{fmtDateTime(r.txn_at)}</div>
                         <div style={{ fontSize: 12, color: "#64748b" }}>#{r.dipwid_id}</div>
                       </td>
 
                       <td style={styles.td}>
-                        <span style={isDep ? styles.pillGreen : styles.pillRed}>
-                          {isDep ? "Deposit" : "Withdraw"}
-                        </span>
+                        <span style={isDep ? styles.pillGreen : styles.pillRed}>{isDep ? "Deposit" : "Withdraw"}</span>
                       </td>
 
                       <td style={styles.td}>
-                        <span style={isDep ? styles.amountDeposit : styles.amountWithdraw}>
-                          {money(r.amount)}
-                        </span>
+                        <span style={isDep ? styles.amountDeposit : styles.amountWithdraw}>{money(r.amount)}</span>
                       </td>
 
                       <td style={styles.td}>
@@ -478,12 +465,7 @@ export default function Investment_dipwid() {
                       <td style={styles.td}>{r.note ? r.note : "-"}</td>
 
                       <td style={styles.td}>
-                        <Btn
-                          variant="danger"
-                          small
-                          onClick={() => onDelete(r.dipwid_id)}
-                          disabled={busy === `del-${r.dipwid_id}`}
-                        >
+                        <Btn variant="danger" small onClick={() => onDelete(r.dipwid_id)} disabled={busy === `del-${r.dipwid_id}`}>
                           {busy === `del-${r.dipwid_id}` ? "..." : "Delete"}
                         </Btn>
                       </td>
@@ -506,7 +488,7 @@ export default function Investment_dipwid() {
 
           <div style={styles.cardHeader}>
             <div style={styles.cardTitle}>Monthly Summary</div>
-            <div style={styles.cardMeta}>{monthSummaryRows.length ? "" : ""}</div>
+            <div style={styles.cardMeta} />
           </div>
 
           <div style={styles.tableWrap}>
@@ -554,6 +536,9 @@ export default function Investment_dipwid() {
         </section>
       </div>
 
+      {/* Bottom safe space for mobile */}
+      <div style={{ height: 90 }} />
+
       {/* Center Modal */}
       {modal.open ? (
         <div style={styles.overlay} role="dialog" aria-modal="true">
@@ -592,7 +577,7 @@ export default function Investment_dipwid() {
   );
 }
 
-// -------------------- styles (mobile-first, clean) --------------------
+// -------------------- styles (mobile-first, clean, responsive) --------------------
 const styles = {
   page: {
     width: "100vw",
@@ -602,6 +587,8 @@ const styles = {
     background: "#ffffff",
     color: "#0f172a",
     fontFamily: '"Times New Roman", Times, serif',
+    paddingBottom: 70, // ✅ prevent touching bottom UI
+    boxSizing: "border-box",
   },
   topbar: {
     width: "100%",
@@ -688,8 +675,7 @@ const styles = {
     padding: small ? "0 10px" : "0 14px",
     borderRadius: 12,
     border: "1px solid #cbd5e1",
-    background:
-      variant === "primary" ? "#0f172a" : variant === "danger" ? "#b91c1c" : "#ffffff",
+    background: variant === "primary" ? "#0f172a" : variant === "danger" ? "#b91c1c" : "#ffffff",
     color: variant === "primary" || variant === "danger" ? "#ffffff" : "#0f172a",
     cursor: "pointer",
     fontWeight: 900,

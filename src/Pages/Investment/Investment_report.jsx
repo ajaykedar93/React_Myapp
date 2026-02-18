@@ -1,5 +1,6 @@
 // src/pages/Investment_report.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import "bootstrap/dist/css/bootstrap.min.css";
 
 const BASE_URL = "https://express-backend-myapp.onrender.com";
 
@@ -18,7 +19,7 @@ export default function Investment_report() {
 
   const [platformId, setPlatformId] = useState("");
   const [segmentId, setSegmentId] = useState("");
-  const [planId, setPlanId] = useState(""); // optional
+  const [planId, setPlanId] = useState("");
 
   // month filter
   const [month, setMonth] = useState(() => {
@@ -32,36 +33,15 @@ export default function Investment_report() {
   const [monthReport, setMonthReport] = useState([]);
   const [mistakeRepeats, setMistakeRepeats] = useState([]);
 
-  // ui
-  const [loading, setLoading] = useState(false);
-  const [busy, setBusy] = useState("");
+  // ui (NO success popups)
+  const [initialLoading, setInitialLoading] = useState(true); // only first load spinner
+  const [busy, setBusy] = useState(""); // "refresh"
 
-  // modal (center)
-  const [modal, setModal] = useState({
-    open: false,
-    type: "info", // success | error | info
-    title: "",
-    message: "",
-    confirmText: "OK",
-  });
-
-  const openModal = (p) =>
-    setModal((m) => ({
-      ...m,
-      open: true,
-      type: p.type || "info",
-      title: p.title || "",
-      message: p.message || "",
-      confirmText: p.confirmText || "OK",
-    }));
-
-  const closeModal = () => setModal((m) => ({ ...m, open: false, title: "", message: "" }));
-  const toast = (msg) => openModal({ type: "success", title: "Success", message: msg });
-  const fail = (msg) => openModal({ type: "error", title: "Error", message: msg });
-
-  // click/tap effect
-  const press = (e) => (e.currentTarget.style.transform = "scale(0.98)");
-  const release = (e) => (e.currentTarget.style.transform = "scale(1)");
+  // error modal only
+  const [modal, setModal] = useState({ open: false, title: "", message: "" });
+  const openError = (message) =>
+    setModal({ open: true, title: "Error", message: message || "Something went wrong" });
+  const closeModal = () => setModal({ open: false, title: "", message: "" });
 
   // -------------------- API --------------------
   const api = {
@@ -73,10 +53,7 @@ export default function Investment_report() {
     },
     async getSegments(pid) {
       if (!pid) return [];
-      const res = await fetch(
-        `${BASE_URL}/api/investment/platform-segment/segment?platform_id=${pid}`,
-        { headers }
-      );
+      const res = await fetch(`${BASE_URL}/api/investment/platform-segment/segment?platform_id=${pid}`, { headers });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message || "Segment fetch failed");
       return Array.isArray(data?.data) ? data.data : [];
@@ -117,26 +94,20 @@ export default function Investment_report() {
   };
 
   // -------------------- responsive --------------------
-  const [wide, setWide] = useState(typeof window !== "undefined" ? window.innerWidth >= 1100 : false);
+  const [isMobile, setIsMobile] = useState(typeof window !== "undefined" ? window.innerWidth < 768 : true);
   useEffect(() => {
-    const onR = () => setWide(window.innerWidth >= 1100);
+    const onR = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener("resize", onR);
     return () => window.removeEventListener("resize", onR);
   }, []);
 
   // -------------------- helpers --------------------
-  const fmtMonth = (val) => {
-    // expects "YYYY-MM-01" or any ISO; show "1 Jan 2026"
-    try {
-      const d = new Date(val);
-      if (Number.isNaN(d.getTime())) return "-";
-      const dd = 1; // always 1st for month start
-      const m = d.toLocaleString("en-GB", { month: "short" });
-      const y = d.getFullYear();
-      return `${dd} ${m} ${y}`;
-    } catch {
-      return "-";
-    }
+  const formatDate = (value) => {
+    // Only DB date shown; no default date
+    if (!value) return "-";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value);
+    return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(d);
   };
 
   const safeText = (v) => {
@@ -144,21 +115,14 @@ export default function Investment_report() {
     return s ? s : "-";
   };
 
-  const num = (v) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  };
-
   const rrPretty = (v) => {
     const s = String(v ?? "").trim();
-    if (!s) return "-";
-    // already "1:2" format
-    return s;
+    return s ? s : "-";
   };
 
   const rrFollowedText = (v) => {
     if (v === null || v === undefined) return "-";
-    return v ? "Yes" : "No";
+    return v ? "Follow" : "Not Follow";
   };
 
   const statusBadge = (status) => {
@@ -171,17 +135,46 @@ export default function Investment_report() {
     return { bg: "#eef2ff", fg: "#3730a3", bd: "#c7d2fe", text: String(status) };
   };
 
-  // -------------------- load platforms on mount --------------------
+  // WARNING column rule (as you asked):
+  // - if rr_followed == true => "Good"
+  // - if rr_followed == false => "Bad"
+  // - if null => "-"
+  const followWarning = (rr_followed) => {
+    if (rr_followed === true) return { kind: "good", text: "Good" };
+    if (rr_followed === false) return { kind: "bad", text: "Bad" };
+    return { kind: "na", text: "-" };
+  };
+
+  // show ONLY repeated mistakes (count > 1) and unique per month+mistake
+  const filteredMistakes = useMemo(() => {
+    const seen = new Set();
+    const out = [];
+    for (const m of mistakeRepeats || []) {
+      const count = Number(m.repeat_count);
+      if (!Number.isFinite(count) || count <= 1) continue; // only repeated
+      const key = `${m.month_start}__${String(m.mistake_text ?? "").trim().toLowerCase()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(m);
+    }
+    return out;
+  }, [mistakeRepeats]);
+
+  // -------------------- load platforms ONCE --------------------
+  const didInit = useRef(false);
   useEffect(() => {
+    if (didInit.current) return;
+    didInit.current = true;
+
     (async () => {
       try {
-        setLoading(true);
+        setInitialLoading(true);
         const p = await api.getPlatforms();
         setPlatforms(p);
       } catch (e) {
-        fail(e.message);
+        openError(e.message);
       } finally {
-        setLoading(false);
+        setInitialLoading(false);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -199,7 +192,7 @@ export default function Investment_report() {
         const s = await api.getSegments(platformId);
         setSegments(s);
       } catch (e) {
-        fail(e.message);
+        openError(e.message);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -215,16 +208,15 @@ export default function Investment_report() {
         const pl = await api.getPlans(platformId, segmentId);
         setPlans(pl);
       } catch (e) {
-        fail(e.message);
+        openError(e.message);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [platformId, segmentId]);
 
-  // refresh report
+  // refresh report (NO "Report updated" popups)
   const refresh = async () => {
     try {
-      setLoading(true);
       setBusy("refresh");
 
       const mr = await api.getMonthReport({
@@ -241,13 +233,11 @@ export default function Investment_report() {
         month,
       });
 
-      setMonthReport(mr);
-      setMistakeRepeats(mm);
-      toast("Report updated");
+      setMonthReport(Array.isArray(mr) ? mr : []);
+      setMistakeRepeats(Array.isArray(mm) ? mm : []);
     } catch (e) {
-      fail(e.message);
+      openError(e.message);
     } finally {
-      setLoading(false);
       setBusy("");
     }
   };
@@ -258,457 +248,456 @@ export default function Investment_report() {
   }, [month, platformId, segmentId, planId]);
 
   // -------------------- UI --------------------
-  const styles = {
-    page: {
-      width: "100vw",
-      minHeight: "100vh",
-      margin: 0,
-      padding: 0,
-      background: "#ffffff",
-      color: "#0f172a",
-      fontFamily: '"Times New Roman", Times, serif',
-    },
-    topbar: {
-      width: "100%",
-      borderBottom: "1px solid #e5e7eb",
-      background: "#ffffff",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      gap: 12,
-      padding: "12px 12px",
-      position: "sticky",
-      top: 0,
-      zIndex: 5,
-    },
-    title: { margin: 0, fontSize: 16, fontWeight: 900 },
-
-    grid: {
-      width: "100%",
-      display: "grid",
-      gridTemplateColumns: wide ? "420px 1fr" : "1fr",
-      gap: 12,
-      padding: 12,
-      boxSizing: "border-box",
-    },
-
-    card: {
-      border: "1px solid #e5e7eb",
-      background: "#fff",
-      borderRadius: 14,
-      overflow: "hidden",
-      boxShadow: "0 6px 18px rgba(15,23,42,0.06)",
-    },
-    cardHeader: {
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-      borderBottom: "1px solid #e5e7eb",
-      background: "#fbfbfd",
-    },
-    cardTitle: { margin: "10px 12px", fontSize: 14, fontWeight: 900 },
-    small: { margin: "10px 12px", fontSize: 12, color: "#475569" },
-
-    form: { margin: "12px 12px 14px", display: "grid", gap: 10 },
-    row2: { display: "grid", gridTemplateColumns: wide ? "1fr 1fr" : "1fr", gap: 10 },
-
-    input: {
-      height: 44,
-      borderRadius: 12,
-      border: "1px solid #cbd5e1",
-      padding: "0 12px",
-      outline: "none",
-      background: "#fff",
-      color: "#0f172a",
-      fontSize: 14,
-      boxSizing: "border-box",
-    },
-    select: {
-      height: 44,
-      borderRadius: 12,
-      border: "1px solid #cbd5e1",
-      padding: "0 12px",
-      outline: "none",
-      background: "#fff",
-      color: "#0f172a",
-      fontSize: 14,
-      boxSizing: "border-box",
-    },
-
-    btn: (variant, smallBtn) => ({
-      height: smallBtn ? 34 : 42,
-      padding: smallBtn ? "0 10px" : "0 14px",
-      borderRadius: 12,
-      border: "1px solid #cbd5e1",
-      background: variant === "primary" ? "#0f172a" : "#ffffff",
-      color: variant === "primary" ? "#ffffff" : "#0f172a",
-      cursor: "pointer",
-      fontWeight: 900,
-      boxShadow: "0 2px 8px rgba(15,23,42,0.10)",
-      transition: "transform 0.06s ease, box-shadow 0.12s ease",
-      userSelect: "none",
-      whiteSpace: "nowrap",
-    }),
-    btnDisabled: { opacity: 0.6, cursor: "not-allowed", transform: "none", boxShadow: "none" },
-
-    tableWrap: { width: "100%", overflowX: "auto" },
-    table: { width: "100%", borderCollapse: "collapse", minWidth: 1100 },
-    th: {
-      textAlign: "left",
-      fontSize: 12,
-      color: "#475569",
-      borderBottom: "1px solid #e5e7eb",
-      padding: "10px 12px",
-      background: "#f8fafc",
-      position: "sticky",
-      top: 0,
-      zIndex: 1,
-      whiteSpace: "nowrap",
-    },
-    td: { borderBottom: "1px solid #f1f5f9", padding: "10px 12px", fontSize: 13, verticalAlign: "top" },
-
-    // colored numbers
-    profit: { fontWeight: 900, color: "#166534" }, // green
-    loss: { fontWeight: 900, color: "#b91c1c" }, // red
-    brokerage: { fontWeight: 900, color: "#0f172a" }, // black bold
-    overall: { fontWeight: 900, color: "#9a3412" }, // dark orange
-    fund: { fontWeight: 900, color: "#a16207" }, // dark yellow
-    rrFollowYes: { fontWeight: 900, color: "#065f46" },
-    rrFollowNo: { fontWeight: 900, color: "#9f1239" },
-    violetLogic: { color: "#4c1d95", fontWeight: 700 }, // violet
-    mistakeRed: { color: "#b91c1c", fontWeight: 800 },
-
-    pill: (style) => ({
-      display: "inline-block",
-      padding: "4px 10px",
-      borderRadius: 999,
-      border: `1px solid ${style.bd}`,
-      background: style.bg,
-      color: style.fg,
-      fontSize: 12,
-      fontWeight: 900,
-      whiteSpace: "nowrap",
-    }),
-
-    warn: {
-      display: "inline-block",
-      padding: "6px 10px",
-      borderRadius: 10,
-      border: "1px solid #fecaca",
-      background: "#fff1f2",
-      color: "#9f1239",
-      fontSize: 12,
-      fontWeight: 900,
-      marginTop: 6,
-    },
-
-    // Modal
-    overlay: {
-      position: "fixed",
-      inset: 0,
-      background: "rgba(0,0,0,0.35)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: 12,
-      zIndex: 50,
-    },
-    modal: {
-      width: "min(92vw, 420px)",
-      background: "#ffffff",
-      borderRadius: 16,
-      border: "1px solid #e5e7eb",
-      boxShadow: "0 18px 45px rgba(0,0,0,0.25)",
-      overflow: "hidden",
-      fontFamily: '"Times New Roman", Times, serif',
-    },
-    modalHead: {
-      padding: "12px 14px",
-      borderBottom: "1px solid #e5e7eb",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      gap: 10,
-    },
-    modalTitle: { margin: 0, fontSize: 14, fontWeight: 900, color: "#0f172a" },
-    modalBody: { padding: "12px 14px", fontSize: 13, color: "#0f172a" },
-    modalFoot: {
-      padding: "12px 14px",
-      borderTop: "1px solid #e5e7eb",
-      display: "flex",
-      gap: 10,
-      justifyContent: "flex-end",
-      flexWrap: "wrap",
-    },
-    xBtn: {
-      border: "1px solid #e5e7eb",
-      background: "#ffffff",
-      borderRadius: 10,
-      height: 34,
-      width: 34,
-      cursor: "pointer",
-      fontWeight: 900,
-      lineHeight: "32px",
-      userSelect: "none",
-    },
-  };
-
-  const Btn = ({ variant, small, disabled, onClick, children, type = "button" }) => (
-    <button
-      type={type}
-      onClick={onClick}
-      disabled={disabled}
-      onMouseDown={disabled ? undefined : press}
-      onMouseUp={disabled ? undefined : release}
-      onMouseLeave={disabled ? undefined : release}
-      onTouchStart={disabled ? undefined : press}
-      onTouchEnd={disabled ? undefined : release}
-      style={{
-        ...styles.btn(variant, small),
-        ...(disabled ? styles.btnDisabled : null),
-      }}
-    >
-      {children}
-    </button>
-  );
-
   return (
-    <div style={styles.page}>
-      {/* Header */}
-      <div style={styles.topbar}>
-        <h1 style={styles.title}>Investment Report</h1>
-        <Btn small variant="primary" onClick={refresh} disabled={busy === "refresh" || loading}>
-          {busy === "refresh" || loading ? "..." : "Refresh"}
-        </Btn>
+    <div className="page-root">
+      <style>{`
+        .page-root{
+          min-height:100vh;
+          width:100%;
+          background:#fff;
+          color:#0f172a;
+          font-family:"Times New Roman", Times, serif;
+        }
+        .topbar{
+          position:sticky;
+          top:0;
+          z-index:20;
+          background:#fff;
+          border-bottom:1px solid #e5e7eb;
+        }
+        .app-title{ font-weight:900; letter-spacing:.2px; }
+        .card-pro{
+          border:1px solid #e5e7eb;
+          border-radius:16px;
+          box-shadow:0 10px 26px rgba(15,23,42,0.08);
+          overflow:hidden;
+          background:#fff;
+        }
+        .card-head{
+          background:#fbfbfd;
+          border-bottom:1px solid #e5e7eb;
+        }
+        .btn-pro{ font-weight:900; border-radius:12px; }
+        .table thead th{
+          position:sticky;
+          top:0;
+          background:#f8fafc !important;
+          z-index:1;
+          font-size:13px;
+          white-space:nowrap;
+        }
+        .pill{
+          display:inline-block;
+          padding:6px 10px;
+          border-radius:999px;
+          border:1px solid #e5e7eb;
+          font-size:12px;
+          font-weight:900;
+          white-space:nowrap;
+        }
+        .good-pill{
+          background:rgba(22,163,74,0.10);
+          border-color:rgba(22,163,74,0.25);
+          color:#166534;
+        }
+        .bad-pill{
+          background:rgba(220,38,38,0.10);
+          border-color:rgba(220,38,38,0.25);
+          color:#b91c1c;
+        }
+        .mistake-red{
+          color:#b91c1c;
+          font-weight:900;
+          line-height:1.25;
+        }
+        .num-green{ color:#166534; font-weight:900; }
+        .num-red{ color:#b91c1c; font-weight:900; }
+        .num-dark{ color:#0f172a; font-weight:900; }
+        .num-orange{ color:#9a3412; font-weight:900; }
+        .num-yellow{ color:#a16207; font-weight:900; }
+        .mobile-label{ font-size:12px; color:#64748b; font-weight:900; margin-bottom:3px; }
+        .mobile-value{ font-weight:900; font-size:14px; }
+      `}</style>
+
+      {/* Header: only Trading Report + small Refresh */}
+      <div className="topbar">
+        <div className="container-fluid py-2 px-3 d-flex align-items-center justify-content-between">
+          <div className="app-title">Trading Report</div>
+          <button
+            className="btn btn-dark btn-pro btn-sm px-3"
+            disabled={busy === "refresh"}
+            onClick={refresh}
+            type="button"
+          >
+            {busy === "refresh" ? "..." : "Refresh"}
+          </button>
+        </div>
       </div>
 
-      <div style={styles.grid}>
-        {/* LEFT: FILTERS */}
-        <section style={styles.card}>
-          <div style={styles.cardHeader}>
-            <div style={styles.cardTitle}>Filters</div>
-            <div style={styles.small}>{loading ? "Loading..." : "Optional"}</div>
+      {/* FIRST TIME loading only */}
+      {initialLoading ? (
+        <div className="container-fluid px-3 py-4">
+          <div className="card-pro p-4 d-flex align-items-center justify-content-between flex-wrap gap-3">
+            <div>
+              <div className="fw-bold" style={{ fontWeight: 900 }}>
+                Loading...
+              </div>
+              <div className="small text-muted fw-bold">Please wait</div>
+            </div>
+            <div className="spinner-border" role="status" aria-label="Loading" />
           </div>
+        </div>
+      ) : (
+        <div className="container-fluid px-3 py-3">
+          <div className="row g-3">
+            {/* Filters */}
+            <div className="col-12 col-lg-4">
+              <div className="card-pro">
+                <div className="card-head px-3 py-2 d-flex align-items-center justify-content-between">
+                  <div className="fw-bold" style={{ fontWeight: 900 }}>
+                    Filters
+                  </div>
+                  <div className="small text-muted fw-bold">Optional</div>
+                </div>
 
-          <div style={styles.form}>
-            <select style={styles.select} value={platformId} onChange={(e) => setPlatformId(e.target.value)}>
-              <option value="">All Platforms</option>
-              {platforms.map((p) => (
-                <option key={p.platform_id} value={p.platform_id}>
-                  {p.platform_name}
-                </option>
-              ))}
-            </select>
+                <div className="p-3">
+                  <div className="mb-2">
+                    <label className="form-label fw-bold small">Platform</label>
+                    <select className="form-select" value={platformId} onChange={(e) => setPlatformId(e.target.value)}>
+                      <option value="">All Platforms</option>
+                      {platforms.map((p) => (
+                        <option key={p.platform_id} value={p.platform_id}>
+                          {p.platform_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-            <select
-              style={styles.select}
-              value={segmentId}
-              onChange={(e) => setSegmentId(e.target.value)}
-              disabled={!platformId}
-            >
-              <option value="">All Segments</option>
-              {segments.map((s) => (
-                <option key={s.segment_id} value={s.segment_id}>
-                  {s.segment_name}
-                </option>
-              ))}
-            </select>
+                  <div className="mb-2">
+                    <label className="form-label fw-bold small">Segment</label>
+                    <select
+                      className="form-select"
+                      value={segmentId}
+                      onChange={(e) => setSegmentId(e.target.value)}
+                      disabled={!platformId}
+                    >
+                      <option value="">All Segments</option>
+                      {segments.map((s) => (
+                        <option key={s.segment_id} value={s.segment_id}>
+                          {s.segment_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-            <select
-              style={styles.select}
-              value={planId}
-              onChange={(e) => setPlanId(e.target.value)}
-              disabled={!platformId || !segmentId}
-            >
-              <option value="">Plan (Optional)</option>
-              {plans.map((p) => (
-                <option key={p.plan_id} value={p.plan_id}>
-                  {p.plan_name ? p.plan_name : `Plan #${p.plan_id}`} • RR {p.rr_ratio}
-                </option>
-              ))}
-            </select>
+                  <div className="mb-2">
+                    <label className="form-label fw-bold small">Plan (Optional)</label>
+                    <select
+                      className="form-select"
+                      value={planId}
+                      onChange={(e) => setPlanId(e.target.value)}
+                      disabled={!platformId || !segmentId}
+                    >
+                      <option value="">All Plans</option>
+                      {plans.map((p) => (
+                        <option key={p.plan_id} value={p.plan_id}>
+                          {p.plan_name ? p.plan_name : `Plan #${p.plan_id}`} • RR {p.rr_ratio}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-            <input
-              style={styles.input}
-              type="month"
-              value={month.slice(0, 7)}
-              onChange={(e) => setMonth(`${e.target.value}-01`)}
-            />
+                  <div>
+                    <label className="form-label fw-bold small">Month</label>
+                    <input
+                      className="form-control"
+                      type="month"
+                      value={month.slice(0, 7)}
+                      onChange={(e) => setMonth(`${e.target.value}-01`)}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Report */}
+            <div className="col-12 col-lg-8">
+              <div className="card-pro">
+                <div className="card-head px-3 py-2 d-flex align-items-center justify-content-between">
+                  <div className="fw-bold" style={{ fontWeight: 900 }}>
+                    Monthly Summary
+                  </div>
+                  <div className="small text-muted fw-bold">{monthReport.length} rows</div>
+                </div>
+
+                {/* Desktop table */}
+                {!isMobile ? (
+                  <div className="table-responsive">
+                    <table className="table table-hover mb-0">
+                      <thead>
+                        <tr className="text-muted">
+                          <th className="py-3 px-3">Month</th>
+                          <th className="py-3 px-3">Profit</th>
+                          <th className="py-3 px-3">Loss</th>
+                          <th className="py-3 px-3">Brokerage</th>
+                          <th className="py-3 px-3">Overall</th>
+                          <th className="py-3 px-3">Status</th>
+                          <th className="py-3 px-3">Target R:R</th>
+                          <th className="py-3 px-3">Achieved R:R</th>
+                          <th className="py-3 px-3">R:R Follow</th>
+                          <th className="py-3 px-3">Fund</th>
+                          <th className="py-3 px-3">Remaining</th>
+                          <th className="py-3 px-3">Warning</th>
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        {monthReport.map((r, idx) => {
+                          const st = statusBadge(r.month_status);
+                          const followTxt = rrFollowedText(r.rr_followed);
+                          const warn = followWarning(r.rr_followed);
+
+                          return (
+                            <tr key={idx}>
+                              <td className="px-3 py-3 fw-bold">{formatDate(r.month_start)}</td>
+
+                              <td className="px-3 py-3">
+                                <span className="num-green">{safeText(r.total_month_profit)}</span>
+                              </td>
+
+                              <td className="px-3 py-3">
+                                <span className="num-red">{safeText(r.total_month_loss)}</span>
+                              </td>
+
+                              <td className="px-3 py-3">
+                                <span className="num-dark">{safeText(r.total_month_brokerage)}</span>
+                              </td>
+
+                              <td className="px-3 py-3">
+                                <span className="num-orange">{safeText(r.overall_month_pnl)}</span>
+                              </td>
+
+                              <td className="px-3 py-3">
+                                <span className="pill" style={{ background: st.bg, color: st.fg, borderColor: st.bd }}>
+                                  {st.text}
+                                </span>
+                              </td>
+
+                              <td className="px-3 py-3 fw-bold">{rrPretty(r.target_rr_ratio)}</td>
+                              <td className="px-3 py-3 fw-bold">{rrPretty(r.achieved_rr)}</td>
+
+                              <td className="px-3 py-3 fw-bold">
+                                {followTxt === "Follow" ? (
+                                  <span className="good-pill pill">Follow</span>
+                                ) : followTxt === "Not Follow" ? (
+                                  <span className="bad-pill pill">Not Follow</span>
+                                ) : (
+                                  "-"
+                                )}
+                              </td>
+
+                              <td className="px-3 py-3">
+                                <span className="num-yellow">{safeText(r.plan_fund)}</span>
+                              </td>
+
+                              <td className="px-3 py-3 fw-bold">{safeText(r.fund_remaining)}</td>
+
+                              {/* WARNING: ONLY based on rr_followed */}
+                              <td className="px-3 py-3">
+                                {warn.kind === "good" ? (
+                                  <span className="good-pill pill">Good</span>
+                                ) : warn.kind === "bad" ? (
+                                  <span className="bad-pill pill">Bad</span>
+                                ) : (
+                                  "-"
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+
+                        {monthReport.length === 0 ? (
+                          <tr>
+                            <td colSpan={12} className="px-3 py-4 text-muted fw-bold">
+                              No report rows found for this filter/month.
+                            </td>
+                          </tr>
+                        ) : null}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  // Mobile cards
+                  <div className="p-3">
+                    {monthReport.map((r, idx) => {
+                      const st = statusBadge(r.month_status);
+                      const warn = followWarning(r.rr_followed);
+                      const followTxt = rrFollowedText(r.rr_followed);
+
+                      return (
+                        <div key={idx} className="card-pro mb-3">
+                          <div className="p-3">
+                            <div className="fw-bold" style={{ fontWeight: 900, fontSize: 15 }}>
+                              {formatDate(r.month_start)}
+                            </div>
+
+                            <div className="mt-2 d-flex flex-wrap gap-2">
+                              <span className="pill" style={{ background: st.bg, color: st.fg, borderColor: st.bd }}>
+                                {st.text}
+                              </span>
+
+                              {followTxt === "Follow" ? (
+                                <span className="good-pill pill">Follow</span>
+                              ) : followTxt === "Not Follow" ? (
+                                <span className="bad-pill pill">Not Follow</span>
+                              ) : (
+                                <span className="pill">-</span>
+                              )}
+
+                              {warn.kind === "good" ? (
+                                <span className="good-pill pill">Good</span>
+                              ) : warn.kind === "bad" ? (
+                                <span className="bad-pill pill">Bad</span>
+                              ) : (
+                                <span className="pill">-</span>
+                              )}
+                            </div>
+
+                            <div className="mt-3 row g-2">
+                              <div className="col-6">
+                                <div className="mobile-label">Profit</div>
+                                <div className="mobile-value num-green">{safeText(r.total_month_profit)}</div>
+                              </div>
+                              <div className="col-6">
+                                <div className="mobile-label">Loss</div>
+                                <div className="mobile-value num-red">{safeText(r.total_month_loss)}</div>
+                              </div>
+                              <div className="col-6">
+                                <div className="mobile-label">Brokerage</div>
+                                <div className="mobile-value num-dark">{safeText(r.total_month_brokerage)}</div>
+                              </div>
+                              <div className="col-6">
+                                <div className="mobile-label">Overall</div>
+                                <div className="mobile-value num-orange">{safeText(r.overall_month_pnl)}</div>
+                              </div>
+
+                              <div className="col-6">
+                                <div className="mobile-label">Target R:R</div>
+                                <div className="mobile-value">{rrPretty(r.target_rr_ratio)}</div>
+                              </div>
+                              <div className="col-6">
+                                <div className="mobile-label">Achieved R:R</div>
+                                <div className="mobile-value">{rrPretty(r.achieved_rr)}</div>
+                              </div>
+
+                              <div className="col-6">
+                                <div className="mobile-label">Fund</div>
+                                <div className="mobile-value num-yellow">{safeText(r.plan_fund)}</div>
+                              </div>
+                              <div className="col-6">
+                                <div className="mobile-label">Remaining</div>
+                                <div className="mobile-value">{safeText(r.fund_remaining)}</div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {monthReport.length === 0 ? (
+                      <div className="text-muted fw-bold">No report rows found for this filter/month.</div>
+                    ) : null}
+                  </div>
+                )}
+
+                {/* Mistakes Repeat */}
+                <div className="card-head px-3 py-2 d-flex align-items-center justify-content-between border-top">
+                  <div className="fw-bold" style={{ fontWeight: 900 }}>
+                    Mistakes Repeat
+                  </div>
+                  <div className="small text-muted fw-bold">{filteredMistakes.length} rows</div>
+                </div>
+
+                {!isMobile ? (
+                  <div className="table-responsive">
+                    <table className="table table-hover mb-0">
+                      <thead>
+                        <tr className="text-muted">
+                          <th className="py-3 px-3">Month</th>
+                          <th className="py-3 px-3">Repeated Mistake</th>
+                          <th className="py-3 px-3">Count</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredMistakes.map((m, idx) => (
+                          <tr key={idx}>
+                            <td className="px-3 py-3 fw-bold">{formatDate(m.month_start)}</td>
+                            <td className="px-3 py-3">
+                              <span className="mistake-red">{safeText(m.mistake_text)}</span>
+                            </td>
+                            <td className="px-3 py-3 fw-bold">{safeText(m.repeat_count)}</td>
+                          </tr>
+                        ))}
+
+                        {filteredMistakes.length === 0 ? (
+                          <tr>
+                            <td colSpan={3} className="px-3 py-4 text-muted fw-bold">
+                              No repeated mistakes found (count &gt; 1).
+                            </td>
+                          </tr>
+                        ) : null}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="p-3">
+                    {filteredMistakes.map((m, idx) => (
+                      <div key={idx} className="card-pro mb-3">
+                        <div className="p-3">
+                          <div className="fw-bold" style={{ fontWeight: 900 }}>
+                            {formatDate(m.month_start)}
+                          </div>
+                          <div className="mt-2 mistake-red">{safeText(m.mistake_text)}</div>
+                          <div className="mt-2">
+                            <span className="pill">Count: {safeText(m.repeat_count)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    {filteredMistakes.length === 0 ? (
+                      <div className="text-muted fw-bold">No repeated mistakes found (count &gt; 1).</div>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-        </section>
+        </div>
+      )}
 
-        {/* RIGHT: REPORT */}
-        <section style={styles.card}>
-          <div style={styles.cardHeader}>
-            <div style={styles.cardTitle}>Monthly Summary</div>
-            <div style={styles.small}>{loading ? "Loading..." : `${monthReport.length} rows`}</div>
-          </div>
-
-          <div style={styles.tableWrap}>
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>Month</th>
-                  <th style={styles.th}>Profit</th>
-                  <th style={styles.th}>Loss</th>
-                  <th style={styles.th}>Brokerage</th>
-                  <th style={styles.th}>Overall</th>
-                  <th style={styles.th}>Status</th>
-                  <th style={styles.th}>Target R:R</th>
-                  <th style={styles.th}>Achieved R:R</th>
-                  <th style={styles.th}>R:R Follow</th>
-                  <th style={styles.th}>Fund</th>
-                  <th style={styles.th}>Remaining</th>
-                  <th style={styles.th}>Warning</th>
-                </tr>
-              </thead>
-              <tbody>
-                {monthReport.map((r, idx) => {
-                  const st = statusBadge(r.month_status);
-                  const followed = rrFollowedText(r.rr_followed);
-                  return (
-                    <tr key={idx}>
-                      <td style={styles.td}>
-                        <b>{fmtMonth(r.month_start)}</b>
-                      </td>
-
-                      <td style={styles.td}>
-                        <span style={styles.profit}>{safeText(r.total_month_profit)}</span>
-                      </td>
-
-                      <td style={styles.td}>
-                        <span style={styles.loss}>{safeText(r.total_month_loss)}</span>
-                      </td>
-
-                      <td style={styles.td}>
-                        <span style={styles.brokerage}>{safeText(r.total_month_brokerage)}</span>
-                      </td>
-
-                      <td style={styles.td}>
-                        <span style={styles.overall}>{safeText(r.overall_month_pnl)}</span>
-                      </td>
-
-                      <td style={styles.td}>
-                        <span style={styles.pill(st)}>{st.text}</span>
-                      </td>
-
-                      <td style={styles.td}>
-                        <b>{rrPretty(r.target_rr_ratio)}</b>
-                      </td>
-
-                      <td style={styles.td}>
-                        <b>{rrPretty(r.achieved_rr)}</b>
-                      </td>
-
-                      <td style={styles.td}>
-                        <span
-                          style={
-                            followed === "Yes"
-                              ? styles.rrFollowYes
-                              : followed === "No"
-                              ? styles.rrFollowNo
-                              : { fontWeight: 900 }
-                          }
-                        >
-                          {followed}
-                        </span>
-                      </td>
-
-                      <td style={styles.td}>
-                        <span style={styles.fund}>{safeText(r.plan_fund)}</span>
-                      </td>
-
-                      <td style={styles.td}>
-                        <b>{safeText(r.fund_remaining)}</b>
-                      </td>
-
-                      <td style={styles.td}>
-                        {String(r.fund_warning || "").trim() ? (
-                          <div style={styles.warn}>{r.fund_warning}</div>
-                        ) : (
-                          "-"
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-
-                {!loading && monthReport.length === 0 ? (
-                  <tr>
-                    <td style={styles.td} colSpan={12}>
-                      No report rows found for this filter/month.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Mistakes */}
-          <div style={{ height: 12 }} />
-
-          <div style={styles.cardHeader}>
-            <div style={styles.cardTitle}>Mistakes Repeat</div>
-            <div style={styles.small}>{loading ? "Loading..." : `${mistakeRepeats.length} rows`}</div>
-          </div>
-
-          <div style={styles.tableWrap}>
-            <table style={{ ...styles.table, minWidth: 860 }}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>Month</th>
-                  <th style={styles.th}>Mistake</th>
-                  <th style={styles.th}>Count</th>
-                </tr>
-              </thead>
-              <tbody>
-                {mistakeRepeats.map((m, idx) => (
-                  <tr key={idx}>
-                    <td style={styles.td}>
-                      <b>{fmtMonth(m.month_start)}</b>
-                    </td>
-                    <td style={styles.td}>
-                      <span style={styles.mistakeRed}>{safeText(m.mistake_text)}</span>
-                    </td>
-                    <td style={styles.td}>
-                      <b style={{ color: "#0f172a" }}>{safeText(m.repeat_count)}</b>
-                    </td>
-                  </tr>
-                ))}
-
-                {!loading && mistakeRepeats.length === 0 ? (
-                  <tr>
-                    <td style={styles.td} colSpan={3}>
-                      No repeated mistakes for this filter/month.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-
-          {/* small hint */}
-          <div style={{ padding: "10px 12px", fontSize: 12, color: "#64748b" }}>
-            Note: “Logic” text is shown in Trading Journal View page. Here we show monthly summary + repeated mistakes.
-          </div>
-        </section>
-      </div>
-
-      {/* Center Modal */}
+      {/* Error Modal ONLY (no “Report updated” popup) */}
       {modal.open ? (
-        <div style={styles.overlay} role="dialog" aria-modal="true">
-          <div style={styles.modal}>
-            <div style={styles.modalHead}>
-              <h3 style={styles.modalTitle}>{modal.title}</h3>
-              <button style={styles.xBtn} onClick={closeModal} aria-label="Close">
-                ×
+        <div
+          className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+          style={{ background: "rgba(0,0,0,0.35)", zIndex: 9999, padding: 12 }}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="card-pro" style={{ width: "min(92vw, 420px)" }}>
+            <div className="card-head px-3 py-2 d-flex align-items-center justify-content-between">
+              <div className="fw-bold" style={{ fontWeight: 900 }}>
+                {modal.title}
+              </div>
+              <button className="btn btn-light btn-sm btn-pro" onClick={closeModal} type="button">
+                ✕
               </button>
             </div>
-            <div style={styles.modalBody}>{modal.message}</div>
-            <div style={styles.modalFoot}>
-              <Btn variant="primary" onClick={closeModal}>
-                {modal.confirmText}
-              </Btn>
+            <div className="p-3 fw-bold">{modal.message}</div>
+            <div className="p-3 pt-0 d-flex justify-content-end">
+              <button className="btn btn-dark btn-pro" onClick={closeModal} type="button">
+                OK
+              </button>
             </div>
           </div>
         </div>
