@@ -1,11 +1,11 @@
-// src/components/NotesN.jsx (FINAL: same page + NEW "Notes" tab + MOBILE EDGE-TO-EDGE panel)
+// src/components/NotesN.jsx (FINAL + MOBILE bottom safe space so end details won't hide)
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Container, Button, Nav } from "react-bootstrap";
 
 import AddNote from "../Notes/AddNote";
 import GetNote from "../Notes/GetNote";
-import Notes from "./Notes"; // ✅ your new component
+import Notes from "./Notes";
 
 export default function NotesN() {
   const navigate = useNavigate();
@@ -47,7 +47,6 @@ export default function NotesN() {
 
       {/* Content */}
       <main className="notes-main">
-        {/* ✅ IMPORTANT: remove container side padding on MOBILE (edge-to-edge) */}
         <Container className="notes-container px-0 px-md-4">
           {/* ONLY 2 LINES */}
           <div className="notes-info notes-pad">
@@ -63,7 +62,6 @@ export default function NotesN() {
               activeKey={activeTab}
               onSelect={(k) => k && setActiveTab(k)}
             >
-              {/* ✅ NEW TAB */}
               <Nav.Item>
                 <Nav.Link eventKey="notes" className="notes-tab" role="tab">
                   Notes
@@ -85,7 +83,6 @@ export default function NotesN() {
           </div>
 
           {/* Tab Content */}
-          {/* ✅ MOBILE: no outside padding, no rounded corners, no border gap */}
           <div className="tab-panel">
             <div className="panel-inner">
               {activeTab === "notes" ? (
@@ -115,12 +112,12 @@ const css = `
     font-family: "Times New Roman", Times, Georgia, serif;
   }
 
-  /* ✅ HARD EDGE RESET (no accidental outer spacing) */
+  /* ✅ HARD EDGE RESET */
   html, body { margin:0; padding:0; width:100%; overflow-x:hidden; }
   .notes-page { width:100%; }
   .notes-main { width:100%; }
 
-  /* ✅ IMPORTANT: remove any underline from Nav.Link */
+  /* ✅ remove underline */
   .notes-tabs .nav-link,
   .notes-tabs .nav-link:hover,
   .notes-tabs .nav-link:focus,
@@ -144,7 +141,7 @@ const css = `
     align-items:center;
     justify-content:space-between;
     gap: 10px;
-    padding: 35px 0 14px; /* keep your same height */
+    padding: 35px 0 14px;
   }
 
   .notes-title-wrap{
@@ -200,7 +197,7 @@ const css = `
   /* Main */
   .notes-main{ padding: 16px 0 28px; }
 
-  /* ✅ pad only where needed (info + tabs). panel remains edge-to-edge on mobile */
+  /* ✅ pad only where needed */
   .notes-pad{
     padding-left: 12px;
     padding-right: 12px;
@@ -224,7 +221,6 @@ const css = `
     align-items: center;
   }
 
-  /* ✅ base tab: clean pill, no underline, professional */
   .notes-tab{
     border-radius: 14px !important;
     padding: 10px 16px !important;
@@ -233,7 +229,6 @@ const css = `
     border: 1px solid rgba(0,0,0,.08) !important;
     background: rgba(255,255,255,.92) !important;
     color: rgba(17,24,39,.88) !important;
-
     box-shadow: 0 10px 22px rgba(0,0,0,.06);
     transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
     position: relative;
@@ -241,7 +236,6 @@ const css = `
     isolation: isolate;
   }
 
-  /* ✅ subtle hover */
   .notes-tab:hover{
     transform: translateY(-2px);
     box-shadow: 0 14px 26px rgba(0,0,0,.10);
@@ -249,17 +243,13 @@ const css = `
   }
   .notes-tab:active{ transform: translateY(0px); }
 
-  /* ✅ attractive active effect (NO underline) */
   .notes-tabs .nav-link.active{
     color:#fff !important;
     border-color: rgba(245,158,11,.55) !important;
-
     background: linear-gradient(135deg, rgba(245,158,11,1), rgba(236,72,153,1), rgba(124,58,237,1)) !important;
-
     box-shadow:
       0 18px 36px rgba(0,0,0,.16),
       0 0 0 4px rgba(236,72,153,.14);
-
     transform: translateY(-1px);
   }
 
@@ -304,15 +294,13 @@ const css = `
     .panel-inner{ padding: 18px; }
     .notes-title{ font-size: 20px; }
     .notes-info-line{ font-size: 16px; }
-    .notes-pad{ padding-left: 0; padding-right: 0; } /* desktop uses container padding */
+    .notes-pad{ padding-left: 0; padding-right: 0; }
   }
 
-  /* ✅ MOBILE EDGE-TO-EDGE: remove ALL outside padding of panel/card */
+  /* ✅ MOBILE EDGE-TO-EDGE + BOTTOM SAFE SPACE (so last details won't hide) */
   @media (max-width: 576px){
-    /* container already px-0, but keep safety */
     .notes-container{ padding-left: 0 !important; padding-right: 0 !important; }
 
-    /* panel should be full width, no rounded corners, no border gaps */
     .tab-panel{
       border-radius: 0 !important;
       border-left: 0 !important;
@@ -322,16 +310,19 @@ const css = `
       box-shadow: 0 10px 24px rgba(0,0,0,.08);
     }
 
-    /* IMPORTANT: inner padding should be 0 so inside component (Notes/Add/Get) can do its own edge */
     .panel-inner{ padding: 0 !important; }
 
-    /* keep small padding only for info + tabs */
     .notes-pad{ padding-left: 12px; padding-right: 12px; }
 
     .notes-nav-inner{ gap: 8px; }
     .notes-title{ font-size: 18px; }
     .btn-dashboard{ padding: 8px 10px !important; border-radius: 12px !important; font-size: 14px; }
     .notes-tab{ padding: 9px 12px !important; }
+
+    /* ✅ THE FIX: keep small blank space at bottom for mobile nav bars */
+    .notes-main{
+      padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 70px) !important;
+    }
   }
 
   @media (max-width: 360px){
