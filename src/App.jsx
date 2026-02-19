@@ -46,6 +46,9 @@ import NotesTab from "./Pages/Notes/NotesN.jsx";
 
 
 import NewFeature from "./Pages/NewFeatures/NewFeatureTab.jsx";
+import TryNewPageTabs from "./Pages/NewFeatures/TryNewPageTabs.jsx";
+
+
 
 // ✅ Private Route Wrapper
 function PrivateRoute({ children }) {
@@ -239,15 +242,25 @@ function AppRoutes() {
       />
 
 
-      {/* Notes (protected) */}
-      <Route
-        path="/new-features"
-        element={
-          <PrivateRoute>
-            <NewFeature />
-          </PrivateRoute>
-        }
-      />
+      {/* New Features (protected) */}
+<Route
+  path="/new-features"
+  element={
+    <PrivateRoute>
+      <NewFeature />   {/* ✅ make sure this is the SAME component you export */}
+    </PrivateRoute>
+  }
+/>
+
+<Route
+  path="/try-new-look"
+  element={
+    <PrivateRoute>
+      <TryNewPageTabs />  {/* ✅ opens when you do navigate("/try-new-look") */}
+    </PrivateRoute>
+  }
+/>
+
 
       {/* Logout */}
       <Route path="/logout" element={<Logout />} />

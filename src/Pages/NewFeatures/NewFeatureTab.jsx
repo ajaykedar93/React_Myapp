@@ -26,10 +26,13 @@ export default function NewFeatureTab() {
 
         --nf-ink: #1f2937;
 
-        /* dashboard-like button colors */
         --dash-yellow: #ffeb3b;
         --dash-yellow-hover: #f7df24;
         --dash-dark: #0f172a;
+
+        --tryA:#14b8a6;
+        --tryB:#22c55e;
+        --tryC:#8b5cf6;
       }
 
       html, body { height: 100%; }
@@ -77,10 +80,11 @@ export default function NewFeatureTab() {
         display:flex;
         align-items:center;
         justify-content:center;
+        gap: 10px;
         margin-bottom: 10px;
+        flex-wrap: wrap;
       }
 
-      /* Yellow dark dashboard button */
       .nf-dashboardBtn{
         appearance: none;
         border: 0;
@@ -92,6 +96,7 @@ export default function NewFeatureTab() {
         background: var(--dash-yellow);
         box-shadow: 0 14px 26px rgba(2,6,23,.10);
         transition: transform .12s ease, filter .12s ease, box-shadow .12s ease;
+        min-width: 160px;
       }
       .nf-dashboardBtn:hover{
         background: var(--dash-yellow-hover);
@@ -99,10 +104,25 @@ export default function NewFeatureTab() {
         box-shadow: 0 16px 34px rgba(2,6,23,.14);
       }
       .nf-dashboardBtn:active{ transform: scale(.985); }
-      .nf-dashboardBtn:focus-visible{
-        outline: none;
-        box-shadow: 0 0 0 4px rgba(255,235,59,.55), 0 16px 34px rgba(2,6,23,.14);
+
+      .nf-tryBtn{
+        appearance: none;
+        border: 0;
+        border-radius: 14px;
+        padding: 10px 16px;
+        font-weight: 950;
+        letter-spacing: .2px;
+        color: #fff;
+        background: linear-gradient(90deg, var(--tryA), var(--tryB), var(--tryC));
+        box-shadow: 0 14px 26px rgba(2,6,23,.10);
+        transition: transform .12s ease, filter .12s ease, box-shadow .12s ease;
+        min-width: 160px;
       }
+      .nf-tryBtn:hover{
+        filter: brightness(1.03) saturate(1.05);
+        box-shadow: 0 16px 34px rgba(2,6,23,.14);
+      }
+      .nf-tryBtn:active{ transform: scale(.985); }
 
       .nf-badge{
         display:inline-flex;
@@ -227,7 +247,7 @@ export default function NewFeatureTab() {
       @media (max-width: 576px){
         .nf-card{ border-radius: 18px; }
         .nf-badge{ font-size: 11px; }
-        .nf-dashboardBtn{ width: 100%; }
+        .nf-dashboardBtn, .nf-tryBtn{ width: 100%; min-width: 0; }
       }
 
       @media (prefers-reduced-motion: reduce){
@@ -247,15 +267,14 @@ export default function NewFeatureTab() {
           <span className="nf-dot" />
         </div>
 
-        {/* ✅ Top Center Dashboard Button */}
         <div className="nf-topbar">
-          <button
-            type="button"
-            className="nf-dashboardBtn"
-            onClick={() => navigate("/dashboard")}
-            aria-label="Go to Dashboard"
-          >
+          <button type="button" className="nf-dashboardBtn" onClick={() => navigate("/dashboard")}>
             ⬅ Dashboard
+          </button>
+
+          {/* ✅ MUST navigate to ROUTE PATH (not component name) */}
+          <button type="button" className="nf-tryBtn" onClick={() => navigate("/try-new-look")}>
+            ✨ Try New
           </button>
         </div>
 
@@ -266,9 +285,7 @@ export default function NewFeatureTab() {
             <span>New Features</span>
           </div>
 
-          <div className="nf-sub">
-            We’re building something fresh for you. This section will be live soon.
-          </div>
+          <div className="nf-sub">We’re building something fresh for you. This section will be live soon.</div>
 
           <div className="nf-coming">
             <div className="nf-comingText">New Features Coming Soon…..</div>

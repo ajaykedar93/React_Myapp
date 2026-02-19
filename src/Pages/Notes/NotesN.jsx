@@ -1,14 +1,22 @@
-// src/components/NotesN.jsx (FINAL + MOBILE bottom safe space so end details won't hide)
+// src/components/NotesN.jsx (UPDATED: remove Notes import + add 2 new tabs)
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Container, Button, Nav } from "react-bootstrap";
 
 import AddNote from "../Notes/AddNote";
 import GetNote from "../Notes/GetNote";
-import Notes from "./Notes";
+
+// ✅ NEW imports
+import AddNoteProfessional from "../Notes/AddNoteProfessional.jsx";
+import Getallnotes from "../Notes/Getallnotes.jsx";
+
+// ❌ REMOVE this
+// import Notes from "./Notes";
 
 export default function NotesN() {
   const navigate = useNavigate();
+
+  // ✅ default tab (you can change)
   const [activeTab, setActiveTab] = useState("add");
 
   const infoLines = useMemo(
@@ -62,12 +70,7 @@ export default function NotesN() {
               activeKey={activeTab}
               onSelect={(k) => k && setActiveTab(k)}
             >
-              <Nav.Item>
-                <Nav.Link eventKey="notes" className="notes-tab" role="tab">
-                  Notes
-                </Nav.Link>
-              </Nav.Item>
-
+              {/* ✅ OLD 2 */}
               <Nav.Item>
                 <Nav.Link eventKey="add" className="notes-tab" role="tab">
                   Add Notes
@@ -79,18 +82,33 @@ export default function NotesN() {
                   Get Notes
                 </Nav.Link>
               </Nav.Item>
+
+              {/* ✅ NEW 2 */}
+              <Nav.Item>
+                <Nav.Link eventKey="addpro" className="notes-tab" role="tab">
+                  Add Pro Note
+                </Nav.Link>
+              </Nav.Item>
+
+              <Nav.Item>
+                <Nav.Link eventKey="allnotes" className="notes-tab" role="tab">
+                  All Notes
+                </Nav.Link>
+              </Nav.Item>
             </Nav>
           </div>
 
           {/* Tab Content */}
           <div className="tab-panel">
             <div className="panel-inner">
-              {activeTab === "notes" ? (
-                <Notes />
-              ) : activeTab === "add" ? (
+              {activeTab === "add" ? (
                 <AddNote />
-              ) : (
+              ) : activeTab === "get" ? (
                 <GetNote />
+              ) : activeTab === "addpro" ? (
+                <AddNoteProfessional />
+              ) : (
+                <Getallnotes />
               )}
             </div>
           </div>
@@ -297,7 +315,7 @@ const css = `
     .notes-pad{ padding-left: 0; padding-right: 0; }
   }
 
-  /* ✅ MOBILE EDGE-TO-EDGE + BOTTOM SAFE SPACE (so last details won't hide) */
+  /* ✅ MOBILE EDGE-TO-EDGE + BOTTOM SAFE SPACE */
   @media (max-width: 576px){
     .notes-container{ padding-left: 0 !important; padding-right: 0 !important; }
 
@@ -319,7 +337,6 @@ const css = `
     .btn-dashboard{ padding: 8px 10px !important; border-radius: 12px !important; font-size: 14px; }
     .notes-tab{ padding: 9px 12px !important; }
 
-    /* ✅ THE FIX: keep small blank space at bottom for mobile nav bars */
     .notes-main{
       padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 70px) !important;
     }
