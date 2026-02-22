@@ -11,6 +11,10 @@ import AddInward from "./AddInward";
 import InwardGet from "./InwardGet";
 import InwardViewOnly from "./InwardViewOnly";
 
+const GAP_1 = 6;
+const TABS_H = 53;
+const GAP_2 = 10;
+
 export default function Worknewtab() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -42,16 +46,13 @@ export default function Worknewtab() {
     const tabKey = location?.state?.tabKey;
     const refreshInward = location?.state?.refreshInward;
 
-    // ✅ tab switch
     if (tabKey) setActiveKey(tabKey);
 
-    // ✅ refresh token bump (InwardGet refresh)
     if (refreshInward) {
-      setActiveKey("getinward"); // safety: always open GET INWARD on refresh
+      setActiveKey("getinward");
       setInwardRefreshToken((x) => x + 1);
     }
 
-    // ✅ VERY IMPORTANT: state consume (otherwise back/refresh ला repeated trigger होऊ शकतो)
     if (tabKey || refreshInward) {
       navigate(location.pathname, { replace: true, state: {} });
     }
@@ -70,7 +71,6 @@ export default function Worknewtab() {
   // ✅ Render InwardGet with refreshToken
   const renderTabComponent = () => {
     if (activeKey === "getinward") {
-      // ✅ RefreshToken props pass
       return <InwardGet refreshToken={inwardRefreshToken} />;
     }
     return activeTab?.component || null;
@@ -90,16 +90,27 @@ export default function Worknewtab() {
           --navHDesktop: 85px;
           --navHMobile: 85px;
 
-          --overlayTopPad: 140px;
+          /* total header height = navbar + gaps + tabs */
+          --headerTotalDesktop: calc(
+            var(--safeTop) + var(--navTopGap) + var(--navHDesktop) + ${GAP_1}px + ${TABS_H}px + ${GAP_2}px
+          );
+          --headerTotalMobile: calc(
+            var(--safeTop) + var(--navTopGap) + var(--navHMobile) + ${GAP_1}px + ${TABS_H}px + ${GAP_2}px
+          );
+
+          /* for overlays - default desktop */
+          --overlayTopPad: var(--headerTotalDesktop);
         }
 
         @media (max-width: 768px){
           :root{
             --navTopGap: 48px;
             --navHMobile: 80px;
+            --overlayTopPad: var(--headerTotalMobile);
           }
         }
 
+        /* IMPORTANT: stop transform stacking issues (fixed overlays bug) */
         .worknewtab-page, .worknewtab-scroll, .worknewtab-contentWrap, .worknewtab-navbar, .worknewtab-tabs-row{
           transform: none !important;
           filter: none !important;
@@ -110,32 +121,48 @@ export default function Worknewtab() {
 
         .worknewtab-page{ position: relative; z-index: 0; }
 
-        /* global overlay helpers (if any modal uses these classes) */
-        .globalModalOverlay{
+        /* ✅ MAIN FIX: Any popup/modal overlay inside child pages should START below tabs
+           and center inside remaining visible area */
+        .worknewtab-page .popup-overlay-center,
+        .worknewtab-page .globalModalOverlay{
           position: fixed !important;
-          inset: 0 !important;
-          z-index: 999999 !important;
-          display: flex !important;
-          justify-content: center !important;
-          align-items: flex-start !important;
+          left: 0 !important;
+          right: 0 !important;
+          top: var(--overlayTopPad) !important;
+          bottom: 0 !important;
+
+          width: 100% !important;
+          height: auto !important;
+
+          display: grid !important;
+          place-items: center !important;
+
           padding:
-            calc(16px + var(--overlayTopPad)) 16px
-            calc(16px + var(--safeBottom)) 16px !important;
+            calc(14px + var(--safeTop)) 14px
+            calc(14px + var(--safeBottom)) 14px !important;
+
           overflow: auto !important;
           -webkit-overflow-scrolling: touch !important;
+          z-index: 9000 !important; /* above content, below header is already safe due to top offset */
+          background: rgba(0,0,0,.55) !important;
+          backdrop-filter: blur(4px) !important;
         }
 
-        @media (min-width: 769px){
-          .globalModalOverlay{ align-items: center !important; padding: 16px !important; }
+        /* dynamic viewport height fix (mobile address bar) */
+        @supports (height: 100dvh){
+          .worknewtab-page .popup-overlay-center,
+          .worknewtab-page .globalModalOverlay{
+            height: calc(100dvh - var(--overlayTopPad)) !important;
+          }
         }
 
-        .globalModalCard{
-          width: 100% !important;
+        .worknewtab-page .popup-card,
+        .worknewtab-page .globalModalCard{
+          width: min(920px, 100%) !important;
           max-width: 920px !important;
-          max-height: calc(100vh - 32px - var(--overlayTopPad)) !important;
-          display: flex !important;
-          flex-direction: column !important;
-          overflow: hidden !important;
+          max-height: calc(100% - 8px) !important;
+          overflow: auto !important;
+          border-radius: 14px !important;
         }
 
         .globalModalBodyScroll{
@@ -150,6 +177,30 @@ export default function Worknewtab() {
         }
 
         @keyframes spin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }
+
+        /* navbar height setup */
+        .worknewtab-navbar{
+          padding-top: calc(var(--safeTop) + var(--navTopGap));
+          padding-left: 12px;
+          padding-right: 12px;
+          height: calc(var(--navHDesktop) + var(--safeTop) + var(--navTopGap));
+        }
+        @media (max-width: 768px){
+          .worknewtab-navbar{
+            height: calc(var(--navHMobile) + var(--safeTop) + var(--navTopGap));
+          }
+        }
+
+        /* ✅ scroll area should start below header total */
+        .worknewtab-scroll{
+          top: var(--headerTotalDesktop);
+          padding-bottom: var(--safeBottom);
+        }
+        @media (max-width: 768px){
+          .worknewtab-scroll{
+            top: var(--headerTotalMobile);
+          }
+        }
       `}</style>
 
       <div style={styles.headerFixed}>
@@ -159,7 +210,11 @@ export default function Worknewtab() {
             <div style={styles.subtitle}>Expenses & Reports</div>
           </div>
 
-          <button style={styles.dashboardBtn} onClick={() => navigate("/dashboard")} type="button">
+          <button
+            style={styles.dashboardBtn}
+            onClick={() => navigate("/dashboard")}
+            type="button"
+          >
             Dashboard →
           </button>
         </div>
@@ -170,7 +225,9 @@ export default function Worknewtab() {
           <div style={styles.tabsRow} className="worknewtab-tabs-row">
             {tabs.map((tab) => {
               const active = tab.key === activeKey;
-              const activeStyle = active ? { ...styles.tabActive, border: "1px solid #2563EB" } : {};
+              const activeStyle = active
+                ? { ...styles.tabActive, border: "1px solid #2563EB" }
+                : {};
 
               return (
                 <button
@@ -220,58 +277,26 @@ export default function Worknewtab() {
           </motion.div>
         )}
       </div>
-
-      <style>{`
-        .worknewtab-navbar{
-          padding-top: calc(var(--safeTop) + var(--navTopGap));
-          padding-left: 12px;
-          padding-right: 12px;
-          height: calc(var(--navHDesktop) + var(--safeTop) + var(--navTopGap));
-        }
-
-        @media (max-width: 768px){
-          .worknewtab-navbar{
-            height: calc(var(--navHMobile) + var(--safeTop) + var(--navTopGap));
-          }
-        }
-
-        :root{
-          --headerTotalDesktop: calc(
-            var(--safeTop) + var(--navTopGap) + var(--navHDesktop) + ${GAP_1}px + ${TABS_H}px + ${GAP_2}px
-          );
-          --headerTotalMobile: calc(
-            var(--safeTop) + var(--navTopGap) + var(--navHMobile) + ${GAP_1}px + ${TABS_H}px + ${GAP_2}px
-          );
-          --overlayTopPad: var(--headerTotalDesktop);
-        }
-
-        @media (max-width: 768px){
-          :root{
-            --overlayTopPad: var(--headerTotalMobile);
-          }
-        }
-
-        .worknewtab-scroll{
-          top: var(--headerTotalDesktop);
-          padding-bottom: var(--safeBottom);
-        }
-        @media (max-width: 768px){
-          .worknewtab-scroll{
-            top: var(--headerTotalMobile);
-          }
-        }
-      `}</style>
     </div>
   );
 }
 
-const GAP_1 = 6;
-const TABS_H = 53;
-const GAP_2 = 10;
-
 const styles = {
-  page: { height: "100vh", width: "100%", background: "#F8FAFF", overflow: "hidden", position: "relative" },
-  headerFixed: { position: "fixed", top: 0, left: 0, right: 0, zIndex: 5000, background: "#F8FAFF" },
+  page: {
+    height: "100vh",
+    width: "100%",
+    background: "#F8FAFF",
+    overflow: "hidden",
+    position: "relative",
+  },
+  headerFixed: {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 5000,
+    background: "#F8FAFF",
+  },
   navbar: {
     background: "linear-gradient(90deg, #2563EB, #06B6D4)",
     display: "flex",
@@ -293,8 +318,21 @@ const styles = {
     cursor: "pointer",
   },
   gapBetweenNavbarAndTabs: { height: GAP_1 },
-  tabsBar: { height: TABS_H, background: "#fff", borderBottom: "1px solid #E5E7EB", display: "flex", alignItems: "center" },
-  tabsRow: { width: "100%", display: "flex", gap: 8, padding: "8px", overflowX: "auto", WebkitOverflowScrolling: "touch" },
+  tabsBar: {
+    height: TABS_H,
+    background: "#fff",
+    borderBottom: "1px solid #E5E7EB",
+    display: "flex",
+    alignItems: "center",
+  },
+  tabsRow: {
+    width: "100%",
+    display: "flex",
+    gap: 8,
+    padding: "8px",
+    overflowX: "auto",
+    WebkitOverflowScrolling: "touch",
+  },
   tabBtn: {
     border: "1px solid #E5E7EB",
     background: "#F1F5F9",
@@ -307,9 +345,25 @@ const styles = {
     position: "relative",
   },
   tabActive: { background: "#2563EB", color: "#fff" },
-  underline: { position: "absolute", bottom: -6, left: "25%", right: "25%", height: 3, background: "#22C55E", borderRadius: 999 },
+  underline: {
+    position: "absolute",
+    bottom: -6,
+    left: "25%",
+    right: "25%",
+    height: 3,
+    background: "#22C55E",
+    borderRadius: 999,
+  },
   gapBelowTabs: { height: GAP_2 },
-  scrollArea: { position: "fixed", left: 0, right: 0, bottom: 0, overflowY: "auto", background: "#F8FAFF", zIndex: 1 },
+  scrollArea: {
+    position: "fixed",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    overflowY: "auto",
+    background: "#F8FAFF",
+    zIndex: 1,
+  },
   content: { width: "100%" },
   loaderOverlay: {
     position: "absolute",
@@ -320,7 +374,21 @@ const styles = {
     justifyContent: "center",
     zIndex: 6000,
   },
-  loaderBox: { background: "#fff", padding: 20, borderRadius: 14, textAlign: "center", boxShadow: "0 10px 40px rgba(0,0,0,0.15)" },
-  spinner: { width: 40, height: 40, border: "4px solid #DBEAFE", borderTopColor: "#2563EB", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto" },
+  loaderBox: {
+    background: "#fff",
+    padding: 20,
+    borderRadius: 14,
+    textAlign: "center",
+    boxShadow: "0 10px 40px rgba(0,0,0,0.15)",
+  },
+  spinner: {
+    width: 40,
+    height: 40,
+    border: "4px solid #DBEAFE",
+    borderTopColor: "#2563EB",
+    borderRadius: "50%",
+    animation: "spin 0.8s linear infinite",
+    margin: "0 auto",
+  },
   loadingText: { marginTop: 10, fontWeight: 900, fontSize: 14 },
 };

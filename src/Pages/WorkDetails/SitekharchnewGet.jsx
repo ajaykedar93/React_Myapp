@@ -81,6 +81,28 @@ export default function SitekharchGet() {
   const [deleteKharch, setDeleteKharch] = useState(null);
   const [deleteReceived, setDeleteReceived] = useState(null);
 
+  // ---- Lock background scroll when any modal is open (mobile fix)
+  const isAnyModalOpen =
+    !!editKharch ||
+    !!editReceived ||
+    !!deleteKharch ||
+    !!deleteReceived ||
+    popup.show;
+
+  useEffect(() => {
+    if (isAnyModalOpen) {
+      document.body.style.overflow = "hidden";
+      document.documentElement.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+      document.documentElement.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+      document.documentElement.style.overflow = "";
+    };
+  }, [isAnyModalOpen]);
+
   const showPopup = (type, message) => {
     setPopup({ show: true, type, message });
     setTimeout(() => {
@@ -115,13 +137,11 @@ export default function SitekharchGet() {
         return row;
       });
 
-      // pagination clamp: if we deleted something on the last page, go back 1
+      // pagination clamp
       const totalRows = normalized.length;
       const totalPages = Math.ceil(totalRows / pageSize) || 1;
       let newPage = currentPage;
-      if (newPage >= totalPages) {
-        newPage = totalPages - 1;
-      }
+      if (newPage >= totalPages) newPage = totalPages - 1;
       if (newPage < 0) newPage = 0;
 
       setKharchRows(normalized);
@@ -152,6 +172,7 @@ export default function SitekharchGet() {
   // initial + month change
   useEffect(() => {
     fetchData(month, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month]);
 
   // computed
@@ -176,17 +197,13 @@ export default function SitekharchGet() {
       return;
     }
 
+    // ✅ ONLY date + amount + details (no extra fields)
     const payload = {
       kharch_date: editKharch.kharch_date
         ? editKharch.kharch_date.slice(0, 10)
         : null,
       amount: safeNum(editKharch.amount),
       details: editKharch.details || null,
-      extra_amount: safeNum(editKharch.extra_amount),
-      extra_details: editKharch.extra_details || null,
-      extra_items: Array.isArray(editKharch.extra_items)
-        ? editKharch.extra_items
-        : [],
     };
 
     try {
@@ -200,7 +217,6 @@ export default function SitekharchGet() {
 
       showPopup("success", "Kharch updated ✔");
       setEditKharch(null);
-      // stay on same page
       fetchData(month, page);
     } catch (err) {
       console.error(err);
@@ -225,7 +241,6 @@ export default function SitekharchGet() {
 
       showPopup("success", "Kharch deleted ✅");
       setDeleteKharch(null);
-      // stay on same page (but fetch will clamp if page got empty)
       fetchData(month, page);
     } catch (err) {
       console.error(err);
@@ -265,7 +280,6 @@ export default function SitekharchGet() {
 
       showPopup("success", "Received updated ✔");
       setEditReceived(null);
-      // even for received keep the same kharch page
       fetchData(month, page);
     } catch (err) {
       console.error(err);
@@ -315,17 +329,15 @@ export default function SitekharchGet() {
           margin:0;
           font-family: Inter, "Segoe UI", system-ui, -apple-system, Roboto, Arial, "Noto Sans", sans-serif;
           color:var(--ink);
-          /* small, responsive text for the whole page */
           font-size: clamp(12.5px, 1.6vw, 14.5px);
           -webkit-font-smoothing: antialiased;
           -moz-osx-font-smoothing: grayscale;
         }
 
-        /* Utility to make any text show fully and wrap nicely */
         .text-wrap{
-          white-space: pre-wrap;      /* preserve \\n from DB */
-          overflow-wrap: anywhere;    /* break very long tokens/URLs */
-          word-break: break-word;     /* fallback for older engines */
+          white-space: pre-wrap;
+          overflow-wrap: anywhere;
+          word-break: break-word;
           line-height: 1.4;
         }
 
@@ -345,7 +357,6 @@ export default function SitekharchGet() {
           box-shadow: 0 18px 35px rgba(0,0,0,0.18);
         }
 
-        /* Responsive controls (month + download) */
         .top-controls{
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -356,7 +367,7 @@ export default function SitekharchGet() {
         .top-controls .btn{
           width: 100%;
           min-height: 36px;
-          font-size: inherit;    /* use global clamp size */
+          font-size: inherit;
           padding: 8px 10px;
           border-radius: 10px;
         }
@@ -408,22 +419,39 @@ export default function SitekharchGet() {
           color: #92400e;
           font-size: .72rem;
         }
+
+        /* ✅ FIX: Always true center on mobile (dynamic viewport + grid center) */
         .popup-overlay-center {
           position: fixed;
           inset: 0;
-          background: rgba(0,0,0,.45);
-          backdrop-filter: blur(4px);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 9999;
-          padding: 1rem;
-        }
-        .popup-card {
-          max-width: 360px;
           width: 100%;
+          height: 100vh;
+          display: grid;
+          place-items: center;
+          background: rgba(0,0,0,.55);
+          backdrop-filter: blur(4px);
+          z-index: 9999;
+
+          /* safe-area (notch) support */
+          padding:
+            calc(14px + env(safe-area-inset-top))
+            calc(14px + env(safe-area-inset-right))
+            calc(14px + env(safe-area-inset-bottom))
+            calc(14px + env(safe-area-inset-left));
+        }
+
+        /* Use modern dynamic viewport height when available */
+        @supports (height: 100dvh) {
+          .popup-overlay-center { height: 100dvh; }
+        }
+
+        .popup-card {
+          width: min(430px, 100%);
+          max-height: calc(100% - 10px);
+          overflow: auto;
           border-radius: 1rem;
         }
+
         .received-card {
           border: 1px solid rgba(248,113,113,.15);
           border-radius: .8rem;
@@ -479,20 +507,22 @@ export default function SitekharchGet() {
         </div>
       )}
 
-      {/* EDIT KHARCH MODAL */}
+      {/* EDIT KHARCH MODAL (✅ ONLY Date, Amount, Details) */}
       {editKharch && (
         <div className="popup-overlay-center">
-          <div className="card popup-card" style={{ maxWidth: 430 }}>
+          <div className="card popup-card">
             <div className="card-body">
               <div className="d-flex justify-content-between mb-2">
                 <h6 className="mb-0">Edit Kharch</h6>
                 <button
                   className="btn btn-sm btn-outline-secondary"
                   onClick={() => setEditKharch(null)}
+                  type="button"
                 >
                   ✕
                 </button>
               </div>
+
               <form onSubmit={handleUpdateKharchSubmit}>
                 <div className="mb-2">
                   <label className="form-label small mb-1">Date</label>
@@ -512,6 +542,7 @@ export default function SitekharchGet() {
                     }
                   />
                 </div>
+
                 <div className="mb-2">
                   <label className="form-label small mb-1">Amount (₹)</label>
                   <input
@@ -525,7 +556,8 @@ export default function SitekharchGet() {
                     }
                   />
                 </div>
-                <div className="mb-2">
+
+                <div className="mb-3">
                   <label className="form-label small mb-1">Details</label>
                   <textarea
                     className="form-control text-wrap"
@@ -537,42 +569,7 @@ export default function SitekharchGet() {
                     rows={3}
                   />
                 </div>
-                <div className="row g-2 mb-2">
-                  <div className="col-6">
-                    <label className="form-label small mb-1">
-                      Extra Amount
-                    </label>
-                    <input
-                      type="number"
-                      className="form-control"
-                      min="0"
-                      step="0.01"
-                      value={editKharch.extra_amount ?? ""}
-                      onChange={(e) =>
-                        setEditKharch((p) => ({
-                          ...p,
-                          extra_amount: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="col-6">
-                    <label className="form-label small mb-1">
-                      Extra Details
-                    </label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      value={editKharch.extra_details || ""}
-                      onChange={(e) =>
-                        setEditKharch((p) => ({
-                          ...p,
-                          extra_details: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                </div>
+
                 <button type="submit" className="btn btn-primary w-100">
                   Save
                 </button>
@@ -582,16 +579,17 @@ export default function SitekharchGet() {
         </div>
       )}
 
-      {/* EDIT RECEIVED MODAL */}
+      {/* EDIT RECEIVED MODAL (same as before) */}
       {editReceived && (
         <div className="popup-overlay-center">
-          <div className="card popup-card" style={{ maxWidth: 430 }}>
+          <div className="card popup-card">
             <div className="card-body">
               <div className="d-flex justify-content-between mb-2">
                 <h6 className="mb-0">Edit Received</h6>
                 <button
                   className="btn btn-sm btn-outline-secondary"
                   onClick={() => setEditReceived(null)}
+                  type="button"
                 >
                   ✕
                 </button>
@@ -684,12 +682,14 @@ export default function SitekharchGet() {
                 <button
                   className="btn btn-sm btn-outline-secondary"
                   onClick={() => setDeleteKharch(null)}
+                  type="button"
                 >
                   Cancel
                 </button>
                 <button
                   className="btn btn-sm btn-danger"
                   onClick={handleDeleteKharch}
+                  type="button"
                 >
                   Yes, delete
                 </button>
@@ -713,12 +713,14 @@ export default function SitekharchGet() {
                 <button
                   className="btn btn-sm btn-outline-secondary"
                   onClick={() => setDeleteReceived(null)}
+                  type="button"
                 >
                   Cancel
                 </button>
                 <button
                   className="btn btn-sm btn-danger"
                   onClick={handleDeleteReceived}
+                  type="button"
                 >
                   Yes, delete
                 </button>
@@ -813,7 +815,7 @@ export default function SitekharchGet() {
               <div className="d-flex flex-column gap-3">
                 {pagedKharch.map((row, idx) => {
                   const total = calcRowTotal(row);
-                  const displayIndex = start + idx + 1; // auto numbering
+                  const displayIndex = start + idx + 1;
                   return (
                     <div
                       key={row.id}
@@ -835,7 +837,6 @@ export default function SitekharchGet() {
                           ) : null}
                         </div>
 
-                        {/* FULL WRAPPED TEXT */}
                         <p className="mb-1 fw-semibold text-wrap">
                           {row.details || "—"}
                         </p>
@@ -848,10 +849,14 @@ export default function SitekharchGet() {
 
                         {Array.isArray(row.extra_items) &&
                           row.extra_items.length > 0 && (
-                            <ul className="mb-1 small text-muted text-wrap" style={{ paddingLeft: "1.1rem" }}>
+                            <ul
+                              className="mb-1 small text-muted text-wrap"
+                              style={{ paddingLeft: "1.1rem" }}
+                            >
                               {row.extra_items.map((x, i2) => (
                                 <li key={i2} className="text-wrap">
-                                  ₹{Number(x.amount || 0).toFixed(2)} {x.details ? `(${x.details})` : ""}
+                                  ₹{Number(x.amount || 0).toFixed(2)}{" "}
+                                  {x.details ? `(${x.details})` : ""}
                                 </li>
                               ))}
                             </ul>
@@ -867,6 +872,7 @@ export default function SitekharchGet() {
                           className="btn btn-sm btn-outline-primary"
                           onClick={() => setEditKharch(row)}
                           style={{ minHeight: 32, fontSize: "inherit" }}
+                          type="button"
                         >
                           Edit
                         </button>
@@ -874,6 +880,7 @@ export default function SitekharchGet() {
                           className="btn btn-sm btn-outline-danger"
                           onClick={() => setDeleteKharch(row)}
                           style={{ minHeight: 32, fontSize: "inherit" }}
+                          type="button"
                         >
                           Delete
                         </button>
@@ -895,6 +902,7 @@ export default function SitekharchGet() {
                   style={{ minHeight: 32, fontSize: "inherit" }}
                   disabled={page === 0}
                   onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  type="button"
                 >
                   Prev
                 </button>
@@ -905,6 +913,7 @@ export default function SitekharchGet() {
                   onClick={() =>
                     setPage((p) => (p + 1 < totalPages ? p + 1 : p))
                   }
+                  type="button"
                 >
                   Next
                 </button>
@@ -964,6 +973,7 @@ export default function SitekharchGet() {
                         className="btn btn-sm btn-outline-primary"
                         onClick={() => setEditReceived(r)}
                         style={{ minHeight: 30, fontSize: "inherit" }}
+                        type="button"
                       >
                         Edit
                       </button>
@@ -971,6 +981,7 @@ export default function SitekharchGet() {
                         className="btn btn-sm btn-outline-danger"
                         onClick={() => setDeleteReceived(r)}
                         style={{ minHeight: 30, fontSize: "inherit" }}
+                        type="button"
                       >
                         Del
                       </button>
