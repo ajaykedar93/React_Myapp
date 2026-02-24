@@ -309,6 +309,9 @@ export default function InwardViewOnly() {
                 ))}
               </tbody>
             </table>
+
+            {/* ✅ ADDED: small bottom space so last row is never hidden */}
+            <div className="ivBottomSpace" aria-hidden="true" />
           </div>
         </>
       )}
@@ -475,16 +478,18 @@ body { overflow: hidden; }
 
 /* ✅ THE MAIN FIX */
 .ivTableWrap{
-  flex:1;                 /* ✅ takes remaining height */
-  min-height: 0;          /* ✅ IMPORTANT for flex scroll */
+  flex:1;                 
+  min-height: 0;          
   background:#fff;
   border-radius:14px;
-  overflow: auto;         /* ✅ both vertical + horizontal */
+  overflow: auto;         
   box-shadow:0 12px 30px rgba(0,0,0,.08);
-  -webkit-overflow-scrolling: touch; /* ✅ iOS momentum */
-  overscroll-behavior: auto;         /* ✅ allow up/down smoothly */
-  /* removed touch-action that was blocking */
+  -webkit-overflow-scrolling: touch; 
+  overscroll-behavior: auto;         
   padding-bottom: 10px;
+
+  /* ✅ EXTRA bottom space for mobile safe-area */
+  scroll-padding-bottom: calc(14px + env(safe-area-inset-bottom));
 }
 
 .ivTable{
@@ -524,6 +529,13 @@ body { overflow: hidden; }
 .ivStoreSepRow td{ padding:0 !important; border-bottom:none !important; background:#fff; }
 .ivStoreSepTd{ padding:0 !important; border-bottom:none !important; }
 .ivStoreSepLine{ width:100%; border-top:2px dotted #94a3b8; margin:10px 0; }
+
+/* ✅ ADDED: bottom spacer height */
+.ivBottomSpace{
+  height: calc(14px + env(safe-area-inset-bottom));
+  width: 100%;
+  background: transparent;
+}
 
 /* Toast */
 .ivToastBackdrop{
