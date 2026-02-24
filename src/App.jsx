@@ -30,6 +30,9 @@ import DocumentTab from "./Pages/Document/DocumentTab.jsx";
 // Work Details pages
 import WorkDetails from "./Pages/WorkDetails/Worknewtab.jsx";// ✅ PUBLIC PAGE
 import InwardViewOnly from "./Pages/WorkDetails/InwardViewOnly";
+import CheckInwardView from "./Pages/WorkDetails/CheckInwardView.jsx";    //OPTIONAL PAGE NOT ADD ONLY PUBLIC LINK ADD CHECK 
+
+
 
 import InwardUpdate from "./Pages/WorkDetails/InwardUpdate";
 
@@ -73,9 +76,10 @@ function AppRoutes() {
       {/* ✅ PUBLIC: Inward View Only (share link page) */}
     
       <Route path="/inward-view" element={<InwardViewOnly />} />
+    <Route path="/Check-inward-view" element={<CheckInwardView />} />    
 
       {/* ✅ PROTECTED: Inward Update (full page) */}
-   <Route path="/work-details/inward/update/:id" element={<InwardUpdate />} />
+   <Route path="/work-details/inward/update/:id" element={<InwardUpdate />} /> 
 
 
       {/* Default route → always go to login if not logged in */}

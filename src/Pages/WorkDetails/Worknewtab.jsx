@@ -10,6 +10,7 @@ import Measure from "./Measure";
 import AddInward from "./AddInward";
 import InwardGet from "./InwardGet";
 import InwardViewOnly from "./InwardViewOnly";
+import CheckInwardView from "./CheckInwardView";    //OPTIONAL PAGE FOR CHECK NOT ADD TAB 
 
 const GAP_1 = 6;
 const TABS_H = 53;
