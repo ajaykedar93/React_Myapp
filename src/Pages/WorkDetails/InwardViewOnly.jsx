@@ -532,7 +532,7 @@ body { overflow: hidden; }
 
 /* ✅ ADDED: bottom spacer height */
 .ivBottomSpace{
-  height: calc(14px + env(safe-area-inset-bottom));
+  height: calc(30px + env(safe-area-inset-bottom));
   width: 100%;
   background: transparent;
 }
