@@ -15,8 +15,8 @@ export default function Investment_getview_trandingjouranal() {
   // ---------- UI ----------
   const [initialLoading, setInitialLoading] = useState(true); // ONLY first page load
   const [busy, setBusy] = useState(""); // "refresh" | `details-${id}`
-
   const [modal, setModal] = useState({ open: false, title: "", message: "" });
+
   const openError = (message) =>
     setModal({ open: true, title: "Error", message: message || "Something went wrong" });
   const closeModal = () => setModal({ open: false, title: "", message: "" });
@@ -36,14 +36,14 @@ export default function Investment_getview_trandingjouranal() {
   });
 
   // ---------- Data ----------
-  const [dailySummary, setDailySummary] = useState([]); // ✅ show ALL rows
+  const [dailySummary, setDailySummary] = useState([]);
   const [detailsMap, setDetailsMap] = useState({});
   const [openJournalId, setOpenJournalId] = useState(null);
 
   // responsive
-  const [isMobile, setIsMobile] = useState(typeof window !== "undefined" ? window.innerWidth < 768 : true);
+  const [isMobile, setIsMobile] = useState(typeof window !== "undefined" ? window.innerWidth < 992 : true);
   useEffect(() => {
-    const onR = () => setIsMobile(window.innerWidth < 768);
+    const onR = () => setIsMobile(window.innerWidth < 992);
     window.addEventListener("resize", onR);
     return () => window.removeEventListener("resize", onR);
   }, []);
@@ -57,7 +57,7 @@ export default function Investment_getview_trandingjouranal() {
   };
 
   const formatNumber = (v) => {
-    if (v === null || v === undefined || v === "") return "-";
+    if (v === null || v === undefined || v === "") return "0";
     const s = String(v).replace(/,/g, "").trim();
     const n = Number(s);
     if (!Number.isFinite(n)) return s;
@@ -66,10 +66,31 @@ export default function Investment_getview_trandingjouranal() {
     return out;
   };
 
-  const netTone = (v) => {
+  const toNumber = (v) => {
     const n = Number(String(v ?? 0).replace(/,/g, ""));
-    if (!Number.isFinite(n)) return "secondary";
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  const netTone = (v) => {
+    const n = toNumber(v);
     return n > 0 ? "success" : n < 0 ? "danger" : "secondary";
+  };
+
+  const pillTone = (v) => {
+    const n = toNumber(v);
+    return n > 0 ? { bg: "rgba(22,163,74,.10)", fg: "#15803d", label: "Profit" } : n < 0
+      ? { bg: "rgba(225,29,72,.10)", fg: "#be123c", label: "Loss" }
+      : { bg: "rgba(37,99,235,.10)", fg: "#1d4ed8", label: "Breakeven" };
+  };
+
+  const monthLabel = (yyyyMM01) => {
+    try {
+      const [y, m] = yyyyMM01.split("-").map((x) => Number(x));
+      const d = new Date(y, (m || 1) - 1, 1);
+      return d.toLocaleString(undefined, { month: "long", year: "numeric" });
+    } catch {
+      return yyyyMM01;
+    }
   };
 
   // ---------- API ----------
@@ -87,10 +108,13 @@ export default function Investment_getview_trandingjouranal() {
       if (!res.ok) throw new Error(data?.message || "Segment fetch failed");
       return Array.isArray(data?.data) ? data.data : [];
     },
-    async getDailySummary({ platform_name, segment_name, month }) {
+
+    // ✅ IMPORTANT: Your backend (latest) expects platform_id/segment_id/plan_id (IDs)
+    // If your current backend still expects names, change below accordingly.
+    async getDailySummary({ platform_id, segment_id, month }) {
       const qs = new URLSearchParams();
-      if (platform_name) qs.set("platform_name", platform_name);
-      if (segment_name) qs.set("segment_name", segment_name);
+      if (platform_id) qs.set("platform_id", String(platform_id));
+      if (segment_id) qs.set("segment_id", String(segment_id));
       if (month) qs.set("month", month);
 
       const res = await fetch(`${BASE_URL}/api/investment/tradingjournal-view/daily-summary?${qs.toString()}`, {
@@ -100,6 +124,7 @@ export default function Investment_getview_trandingjouranal() {
       if (!res.ok) throw new Error(data?.message || "Daily summary fetch failed");
       return Array.isArray(data?.data) ? data.data : [];
     },
+
     async getEntryDetails({ journal_id, month }) {
       const qs = new URLSearchParams();
       if (journal_id) qs.set("journal_id", String(journal_id));
@@ -117,7 +142,7 @@ export default function Investment_getview_trandingjouranal() {
   // avoid double initial load in StrictMode
   const didInit = useRef(false);
 
-  // ---------- Initial load (ONLY once) ----------
+  // ---------- Initial load ----------
   useEffect(() => {
     if (didInit.current) return;
     didInit.current = true;
@@ -136,7 +161,7 @@ export default function Investment_getview_trandingjouranal() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load segments when platform changes
+  // segments
   useEffect(() => {
     (async () => {
       try {
@@ -152,22 +177,17 @@ export default function Investment_getview_trandingjouranal() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [platformId]);
 
-  // ---------- Refresh (silent) ----------
+  // ---------- Refresh ----------
   const refresh = async () => {
     try {
       setBusy("refresh");
-      const platform_name =
-        platforms.find((p) => String(p.platform_id) === String(platformId))?.platform_name || "";
-      const segment_name =
-        segments.find((s) => String(s.segment_id) === String(segmentId))?.segment_name || "";
 
       const rows = await api.getDailySummary({
-        platform_name: platformId ? platform_name : null,
-        segment_name: segmentId ? segment_name : null,
+        platform_id: platformId ? platformId : null,
+        segment_id: segmentId ? segmentId : null,
         month,
       });
 
-      // ✅ show ALL rows (do not de-duplicate)
       setDailySummary(Array.isArray(rows) ? rows : []);
     } catch (e) {
       openError(e.message);
@@ -202,125 +222,241 @@ export default function Investment_getview_trandingjouranal() {
     }
   };
 
+  // ---------- Summary KPIs (calculated from rows) ----------
+  const totals = useMemo(() => {
+    const arr = Array.isArray(dailySummary) ? dailySummary : [];
+    const t = arr.reduce(
+      (acc, r) => {
+        acc.trades += 1;
+        acc.profit += toNumber(r.profit);
+        acc.loss += toNumber(r.loss);
+        acc.brokerage += toNumber(r.brokerage);
+        acc.net += toNumber(r.net_total);
+        return acc;
+      },
+      { trades: 0, profit: 0, loss: 0, brokerage: 0, net: 0 }
+    );
+    // monthly P&L: profit - (loss + brokerage)
+    t.pnl = t.profit - (t.loss + t.brokerage);
+    return t;
+  }, [dailySummary]);
+
+  const monthTone = pillTone(totals.pnl);
+
   // ---------- UI parts ----------
   const BadgeSquare = ({ tone, children }) => (
     <span className={`badge badge-square bg-${tone} bg-opacity-10 text-${tone}`}>{children}</span>
   );
 
-  const rowsToShow = dailySummary; // ✅ ALL rows
+  const rowsToShow = dailySummary;
 
   return (
-    <div className="page-root">
+    <div className="ij2-root">
       <style>{`
-        .page-root{
+        .ij2-root{
           min-height:100vh;
           width:100%;
-          background:#fff;
           color:#0f172a;
-          font-family:"Times New Roman", Times, serif;
-          padding-bottom:70px;
+          font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji","Segoe UI Emoji";
+          background:
+            radial-gradient(900px 520px at 10% 10%, rgba(124,58,237,.10), transparent 60%),
+            radial-gradient(900px 520px at 90% 15%, rgba(6,182,212,.10), transparent 60%),
+            radial-gradient(900px 520px at 40% 95%, rgba(245,158,11,.10), transparent 60%),
+            linear-gradient(135deg, #f6f8ff, #fff7f1);
+          padding-bottom:72px;
         }
-        .topbar{
+
+        .ij2-topbar{
           position:sticky;
           top:0;
-          z-index:20;
-          background:#fff;
-          border-bottom:1px solid #e5e7eb;
+          z-index:30;
+          background:rgba(255,255,255,.72);
+          border-bottom:1px solid rgba(15,23,42,.10);
+          backdrop-filter: blur(14px);
         }
-        .app-title{ font-weight:900; letter-spacing:.2px; }
-        .card-pro{
-          border:1px solid #e5e7eb;
-          border-radius:16px;
-          box-shadow:0 10px 26px rgba(15,23,42,0.08);
+
+        .ij2-title{
+          font-weight:1000;
+          letter-spacing:.2px;
+          margin:0;
+          font-size: 16px;
+        }
+        .ij2-sub{
+          margin:0;
+          color: rgba(15,23,42,.62);
+          font-weight: 800;
+          font-size: 12px;
+        }
+
+        .ij2-proCard{
+          border:1px solid rgba(15,23,42,.10);
+          border-radius:18px;
+          box-shadow:0 14px 34px rgba(15,23,42,0.08);
           overflow:hidden;
-          background:#fff;
+          background:rgba(255,255,255,.82);
         }
-        .card-head{
-          background:#fbfbfd;
-          border-bottom:1px solid #e5e7eb;
+
+        .ij2-cardHead{
+          background:rgba(255,255,255,.62);
+          border-bottom:1px solid rgba(15,23,42,.10);
         }
-        .badge-square{
-          border:1px solid #e5e7eb;
-          border-radius:8px;
+
+        .ij2-pill{
+          display:inline-flex;
+          align-items:center;
+          gap:8px;
+          border-radius:999px;
           padding:8px 10px;
-          font-weight:900;
+          border:1px solid rgba(15,23,42,.10);
+          font-weight:950;
+          font-size:12px;
+          white-space:nowrap;
+        }
+        .ij2-dot{ width:8px; height:8px; border-radius:999px; }
+
+        .badge-square{
+          border:1px solid rgba(15,23,42,.10);
+          border-radius:10px;
+          padding:8px 10px;
+          font-weight:950;
           display:inline-flex;
           align-items:center;
           justify-content:center;
-          min-width:82px;
+          min-width:92px;
           white-space:nowrap;
         }
-        .mistake-pill{
-          background:rgba(220,38,38,0.08);
-          border:1px solid rgba(220,38,38,0.18);
-          color:#b91c1c;
-          border-radius:12px;
-          padding:6px 10px;
-          font-weight:700;
-          font-size:13px;
-          display:inline-block;
-          line-height:1.25;
+
+        .ij2-btn{
+          border-radius:14px !important;
+          font-weight:950 !important;
+          letter-spacing:.15px;
         }
-        .logic-text{
-          font-size:14px;
-          font-weight:700;
-          line-height:1.35;
+
+        .ij2-table thead th{
+          position: sticky;
+          top: 0;
+          background: rgba(248,250,252,.92) !important;
+          z-index: 2;
+          font-size: 12.5px;
+          white-space: nowrap;
+          color: rgba(15,23,42,.70);
+          border-bottom:1px solid rgba(15,23,42,.10) !important;
         }
-        .btn-pro{ font-weight:900; border-radius:12px; }
-        .table thead th{
-          position:sticky;
-          top:0;
-          background:#f8fafc !important;
-          z-index:1;
-          font-size:13px;
-          white-space:nowrap;
+
+        .ij2-subrow{
+          background:rgba(255,255,255,.62);
         }
-        .subrow{ background:#ffffff; }
-        .subbox{
-          border:1px solid #eef2f7;
-          border-radius:14px;
+
+        .ij2-subbox{
+          border:1px solid rgba(15,23,42,.10);
+          border-radius:16px;
           padding:12px;
-          background:#fff;
+          background:rgba(255,255,255,.78);
         }
-        .sublabel{
+
+        .ij2-sublabel{
           font-size:12px;
-          color:#64748b;
-          font-weight:900;
-          margin-bottom:4px;
+          color: rgba(15,23,42,.60);
+          font-weight:950;
+          margin-bottom:6px;
+          letter-spacing:.2px;
         }
-        .mobile-meta{
+
+        .ij2-logic{
+          font-size:14px;
+          font-weight:850;
+          line-height:1.4;
+        }
+
+        .ij2-mistake{
+          background: rgba(225,29,72,.08);
+          border: 1px solid rgba(225,29,72,.18);
+          color: #be123c;
+          border-radius: 14px;
+          padding: 7px 10px;
+          font-weight: 850;
+          font-size: 13px;
+          display:inline-block;
+          line-height: 1.25;
+        }
+
+        .ij2-kpi{
+          border:1px solid rgba(15,23,42,.10);
+          border-radius:18px;
+          background:rgba(255,255,255,.78);
+          padding:12px;
+          min-height:92px;
+          display:flex;
+          flex-direction:column;
+          justify-content:center;
+        }
+        .ij2-kpiLabel{
+          margin:0;
           font-size:12px;
-          color:#64748b;
-          font-weight:800;
-          line-height:1.2;
+          font-weight:950;
+          color: rgba(15,23,42,.62);
+        }
+        .ij2-kpiVal{
+          margin:6px 0 0 0;
+          font-size:20px;
+          font-weight:1000;
+          letter-spacing:.2px;
+        }
+
+        .ij2-stickyFilters{
+          position: sticky;
+          top: 66px; /* under topbar */
+          z-index: 10;
+        }
+
+        @media (min-width: 992px){
+          .ij2-title{ font-size: 18px; }
+          .ij2-stickyFilters{ top: 72px; }
         }
       `}</style>
 
       {/* Header */}
-      <div className="topbar">
-        <div className="container-fluid py-2 px-3 d-flex align-items-center justify-content-between">
-          <div className="app-title">Trading Journal Get</div>
+      <div className="ij2-topbar">
+        <div className="container-fluid py-2 px-3 d-flex align-items-center justify-content-between gap-3">
+          <div className="d-flex flex-column">
+            <p className="ij2-title">Trading Journal</p>
+            <p className="ij2-sub">View your month trades with profit, loss, brokerage and net</p>
+          </div>
 
-          <button
-            className="btn btn-dark btn-pro btn-sm px-3"
-            disabled={busy === "refresh"}
-            onClick={refresh}
-            type="button"
-          >
-            {busy === "refresh" ? "..." : "Refresh"}
-          </button>
+          <div className="d-flex align-items-center gap-2">
+            <div
+              className="ij2-pill"
+              style={{ background: monthTone.bg, color: monthTone.fg }}
+              title="Monthly status based on P&L"
+            >
+              <span className="ij2-dot" style={{ background: monthTone.fg }} />
+              {monthTone.label}
+            </div>
+
+            <button
+              className="btn btn-dark ij2-btn btn-sm px-3"
+              disabled={busy === "refresh"}
+              onClick={refresh}
+              type="button"
+              title="Refresh data"
+            >
+              {busy === "refresh" ? "..." : "Refresh"}
+            </button>
+          </div>
         </div>
       </div>
 
       {/* FIRST TIME loading only */}
       {initialLoading ? (
         <div className="container-fluid px-3 py-4">
-          <div className="card-pro p-4 d-flex align-items-center justify-content-between flex-wrap gap-3">
+          <div className="ij2-proCard p-4 d-flex align-items-center justify-content-between flex-wrap gap-3">
             <div>
-              <div className="fw-bold" style={{ fontWeight: 900 }}>
-                Loading...
+              <div className="fw-bold" style={{ fontWeight: 950 }}>
+                Loading…
               </div>
-              <div className="small text-muted fw-bold">Please wait</div>
+              <div className="small" style={{ color: "rgba(15,23,42,.62)", fontWeight: 850 }}>
+                Please wait
+              </div>
             </div>
             <div className="spinner-border" role="status" aria-label="Loading" />
           </div>
@@ -330,52 +466,123 @@ export default function Investment_getview_trandingjouranal() {
           <div className="row g-3">
             {/* Filters */}
             <div className="col-12 col-lg-4">
-              <div className="card-pro">
-                <div className="card-head px-3 py-2 d-flex align-items-center justify-content-between">
-                  <div className="fw-bold" style={{ fontWeight: 900 }}>
-                    Filters
-                  </div>
-                  <div className="small text-muted fw-bold">Optional</div>
-                </div>
-
-                <div className="p-3">
-                  <div className="mb-2">
-                    <label className="form-label fw-bold small">Platform</label>
-                    <select className="form-select" value={platformId} onChange={(e) => setPlatformId(e.target.value)}>
-                      <option value="">All Platforms</option>
-                      {platforms.map((p) => (
-                        <option key={p.platform_id} value={p.platform_id}>
-                          {p.platform_name}
-                        </option>
-                      ))}
-                    </select>
+              <div className="ij2-stickyFilters">
+                <div className="ij2-proCard">
+                  <div className="ij2-cardHead px-3 py-2 d-flex align-items-center justify-content-between">
+                    <div className="fw-bold" style={{ fontWeight: 950 }}>
+                      Filters
+                    </div>
+                    <div className="small" style={{ color: "rgba(15,23,42,.62)", fontWeight: 850 }}>
+                      Optional
+                    </div>
                   </div>
 
-                  <div className="mb-2">
-                    <label className="form-label fw-bold small">Segment</label>
-                    <select
-                      className="form-select"
-                      value={segmentId}
-                      onChange={(e) => setSegmentId(e.target.value)}
-                      disabled={!platformId}
-                    >
-                      <option value="">All Segments</option>
-                      {segments.map((s) => (
-                        <option key={s.segment_id} value={s.segment_id}>
-                          {s.segment_name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <div className="p-3">
+                    <div className="mb-2">
+                      <label className="form-label fw-bold small">Platform</label>
+                      <select className="form-select" value={platformId} onChange={(e) => setPlatformId(e.target.value)}>
+                        <option value="">All Platforms</option>
+                        {platforms.map((p) => (
+                          <option key={p.platform_id} value={p.platform_id}>
+                            {p.platform_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                  <div className="mb-2">
-                    <label className="form-label fw-bold small">Month</label>
-                    <input
-                      className="form-control"
-                      type="month"
-                      value={month.slice(0, 7)}
-                      onChange={(e) => setMonth(`${e.target.value}-01`)}
-                    />
+                    <div className="mb-2">
+                      <label className="form-label fw-bold small">Segment</label>
+                      <select
+                        className="form-select"
+                        value={segmentId}
+                        onChange={(e) => setSegmentId(e.target.value)}
+                        disabled={!platformId}
+                      >
+                        <option value="">All Segments</option>
+                        {segments.map((s) => (
+                          <option key={s.segment_id} value={s.segment_id}>
+                            {s.segment_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="mb-1">
+                      <label className="form-label fw-bold small">Month</label>
+                      <input
+                        className="form-control"
+                        type="month"
+                        value={month.slice(0, 7)}
+                        onChange={(e) => setMonth(`${e.target.value}-01`)}
+                      />
+                    </div>
+
+                    <div className="mt-3" style={{ borderTop: "1px solid rgba(15,23,42,.10)", paddingTop: 12 }}>
+                      <div className="small" style={{ fontWeight: 950, color: "rgba(15,23,42,.70)" }}>
+                        Summary ({monthLabel(month)})
+                      </div>
+
+                      <div className="mt-2 d-grid" style={{ gridTemplateColumns: isMobile ? "repeat(2,1fr)" : "repeat(2,1fr)", gap: 10 }}>
+                        <div className="ij2-kpi">
+                          <p className="ij2-kpiLabel">Trades</p>
+                          <p className="ij2-kpiVal">{formatNumber(totals.trades)}</p>
+                        </div>
+
+                        <div className="ij2-kpi">
+                          <p className="ij2-kpiLabel">P&amp;L</p>
+                          <p
+                            className="ij2-kpiVal"
+                            style={{ color: totals.pnl > 0 ? "#15803d" : totals.pnl < 0 ? "#be123c" : "#1d4ed8" }}
+                          >
+                            {totals.pnl > 0 ? "+" : ""}
+                            {formatNumber(totals.pnl)}
+                          </p>
+                        </div>
+
+                        <div className="ij2-kpi">
+                          <p className="ij2-kpiLabel">Profit</p>
+                          <p className="ij2-kpiVal" style={{ color: "#15803d" }}>
+                            {formatNumber(totals.profit)}
+                          </p>
+                        </div>
+
+                        <div className="ij2-kpi">
+                          <p className="ij2-kpiLabel">Loss + Brokerage</p>
+                          <p className="ij2-kpiVal" style={{ color: "#be123c" }}>
+                            {formatNumber(totals.loss + totals.brokerage)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div
+                        className="mt-3"
+                        style={{
+                          border: "1px solid rgba(15,23,42,.10)",
+                          borderRadius: 16,
+                          background: "linear-gradient(135deg, rgba(124,58,237,.07), rgba(6,182,212,.06))",
+                          padding: 12,
+                          fontWeight: 900,
+                          lineHeight: 1.35,
+                          fontSize: 13,
+                        }}
+                      >
+                        {totals.pnl > 0 ? (
+                          <>
+                            Your month is in <span style={{ color: "#15803d" }}>profit</span> of{" "}
+                            <span style={{ color: "#15803d" }}>{formatNumber(totals.pnl)}</span>.
+                          </>
+                        ) : totals.pnl < 0 ? (
+                          <>
+                            Your month is in <span style={{ color: "#be123c" }}>loss</span> of{" "}
+                            <span style={{ color: "#be123c" }}>{formatNumber(Math.abs(totals.pnl))}</span>. Try reducing overtrading.
+                          </>
+                        ) : (
+                          <>
+                            Your month is <span style={{ color: "#1d4ed8" }}>breakeven</span>. Focus on consistency.
+                          </>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -383,20 +590,22 @@ export default function Investment_getview_trandingjouranal() {
 
             {/* Data */}
             <div className="col-12 col-lg-8">
-              <div className="card-pro">
-                <div className="card-head px-3 py-2 d-flex align-items-center justify-content-between">
-                  <div className="fw-bold" style={{ fontWeight: 900 }}>
+              <div className="ij2-proCard">
+                <div className="ij2-cardHead px-3 py-2 d-flex align-items-center justify-content-between">
+                  <div className="fw-bold" style={{ fontWeight: 950 }}>
                     Daily Summary
                   </div>
-                  <div className="small text-muted fw-bold">{rowsToShow.length} rows</div>
+                  <div className="small" style={{ color: "rgba(15,23,42,.62)", fontWeight: 850 }}>
+                    {rowsToShow.length} rows
+                  </div>
                 </div>
 
                 {/* Desktop */}
                 {!isMobile ? (
-                  <div className="table-responsive">
-                    <table className="table table-hover mb-0">
+                  <div className="table-responsive ij2-table" style={{ maxHeight: "70vh" }}>
+                    <table className="table table-hover mb-0 align-middle">
                       <thead>
-                        <tr className="text-muted">
+                        <tr>
                           <th className="py-3 px-3">Date</th>
                           <th className="py-3 px-3">Platform</th>
                           <th className="py-3 px-3">Segment</th>
@@ -417,10 +626,12 @@ export default function Investment_getview_trandingjouranal() {
                             <React.Fragment key={r.journal_id}>
                               <tr>
                                 <td className="px-3 py-3">
-                                  <div className="fw-bold" style={{ fontWeight: 900 }}>
+                                  <div className="fw-bold" style={{ fontWeight: 1000 }}>
                                     {formatDate(r.trade_date)}
                                   </div>
-                                  <div className="small text-muted fw-bold">#{r.journal_id}</div>
+                                  <div className="small" style={{ color: "rgba(15,23,42,.62)", fontWeight: 850 }}>
+                                    #{r.journal_id}
+                                  </div>
                                 </td>
 
                                 <td className="px-3 py-3 fw-bold">{r.platform_name}</td>
@@ -444,7 +655,7 @@ export default function Investment_getview_trandingjouranal() {
 
                                 <td className="px-3 py-3">
                                   <button
-                                    className="btn btn-outline-dark btn-pro btn-sm"
+                                    className="btn btn-outline-dark ij2-btn btn-sm"
                                     onClick={() => toggleDetails(r.journal_id)}
                                     disabled={busy === `details-${r.journal_id}`}
                                     type="button"
@@ -454,30 +665,31 @@ export default function Investment_getview_trandingjouranal() {
                                 </td>
                               </tr>
 
-                              <tr className="subrow">
-                                <td className="px-3 pb-3" colSpan={8}>
-                                  <div className="d-flex flex-column gap-2">
-                                    <div className="subbox">
-                                      <div className="sublabel">Logic</div>
-                                      <div className="logic-text">{r.trade_logic || "-"}</div>
+                              {/* Expanded */}
+                              {opened ? (
+                                <tr className="ij2-subrow">
+                                  <td className="px-3 pb-3" colSpan={8}>
+                                    <div className="d-grid" style={{ gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                                      <div className="ij2-subbox">
+                                        <div className="ij2-sublabel">Logic</div>
+                                        <div className="ij2-logic">{r.trade_logic || "-"}</div>
+                                      </div>
+
+                                      <div className="ij2-subbox">
+                                        <div className="ij2-sublabel">Mistakes</div>
+                                        <div>{r.mistakes ? <span className="ij2-mistake">{r.mistakes}</span> : "-"}</div>
+                                      </div>
                                     </div>
 
-                                    <div className="subbox">
-                                      <div className="sublabel">Mistakes</div>
-                                      <div>{r.mistakes ? <span className="mistake-pill">{r.mistakes}</span> : "-"}</div>
-                                    </div>
-                                  </div>
-
-                                  {opened ? (
-                                    <div className="mt-3 subbox">
-                                      <div className="fw-bold mb-2" style={{ fontWeight: 900 }}>
+                                    <div className="mt-3 ij2-subbox">
+                                      <div className="fw-bold mb-2" style={{ fontWeight: 950 }}>
                                         Entry Details
                                       </div>
 
                                       <div className="table-responsive">
-                                        <table className="table table-sm mb-0">
+                                        <table className="table table-sm mb-0 align-middle">
                                           <thead>
-                                            <tr className="text-muted">
+                                            <tr style={{ color: "rgba(15,23,42,.70)" }}>
                                               <th className="py-2">Type</th>
                                               <th className="py-2">Symbol / Name</th>
                                               <th className="py-2">CE/PE</th>
@@ -500,7 +712,7 @@ export default function Investment_getview_trandingjouranal() {
 
                                             {(detailsMap[r.journal_id] || []).length === 0 ? (
                                               <tr>
-                                                <td colSpan={6} className="text-muted fw-bold">
+                                                <td colSpan={6} style={{ color: "rgba(15,23,42,.62)", fontWeight: 850 }}>
                                                   No details found.
                                                 </td>
                                               </tr>
@@ -509,16 +721,16 @@ export default function Investment_getview_trandingjouranal() {
                                         </table>
                                       </div>
                                     </div>
-                                  ) : null}
-                                </td>
-                              </tr>
+                                  </td>
+                                </tr>
+                              ) : null}
                             </React.Fragment>
                           );
                         })}
 
                         {rowsToShow.length === 0 ? (
                           <tr>
-                            <td colSpan={8} className="px-3 py-4 text-muted fw-bold">
+                            <td colSpan={8} className="px-3 py-4" style={{ color: "rgba(15,23,42,.62)", fontWeight: 850 }}>
                               No rows found for this month/filter.
                             </td>
                           </tr>
@@ -527,29 +739,34 @@ export default function Investment_getview_trandingjouranal() {
                     </table>
                   </div>
                 ) : (
-                  // Mobile
+                  // Mobile cards
                   <div className="p-3">
                     {rowsToShow.map((r) => {
                       const opened = openJournalId === r.journal_id;
                       const netT = netTone(r.net_total);
 
                       return (
-                        <div key={r.journal_id} className="card-pro mb-3">
+                        <div key={r.journal_id} className="ij2-proCard mb-3">
                           <div className="p-3 d-flex align-items-start justify-content-between gap-2">
                             <div>
-                              <div className="fw-bold" style={{ fontWeight: 900, fontSize: 15 }}>
+                              <div className="fw-bold" style={{ fontWeight: 1000, fontSize: 15 }}>
                                 {formatDate(r.trade_date)}
                               </div>
 
-                              <div className="mobile-meta">#{r.journal_id}</div>
-                              <div className="fw-bold" style={{ fontWeight: 900 }}>
+                              <div className="small" style={{ color: "rgba(15,23,42,.62)", fontWeight: 850 }}>
+                                #{r.journal_id}
+                              </div>
+
+                              <div className="fw-bold" style={{ fontWeight: 950 }}>
                                 {r.platform_name}
                               </div>
-                              <div className="mobile-meta">{r.segment_name}</div>
+                              <div className="small" style={{ color: "rgba(15,23,42,.62)", fontWeight: 850 }}>
+                                {r.segment_name}
+                              </div>
                             </div>
 
                             <button
-                              className="btn btn-outline-dark btn-pro btn-sm"
+                              className="btn btn-outline-dark ij2-btn btn-sm"
                               onClick={() => toggleDetails(r.journal_id)}
                               disabled={busy === `details-${r.journal_id}`}
                               type="button"
@@ -568,24 +785,24 @@ export default function Investment_getview_trandingjouranal() {
                               </span>
                             </div>
 
-                            <div className="mt-3" style={{ borderTop: "1px solid #eef2f7", paddingTop: 12 }}>
-                              <div className="sublabel">Logic</div>
-                              <div className="logic-text">{r.trade_logic || "-"}</div>
+                            <div className="mt-3" style={{ borderTop: "1px solid rgba(15,23,42,.10)", paddingTop: 12 }}>
+                              <div className="ij2-sublabel">Logic</div>
+                              <div className="ij2-logic">{r.trade_logic || "-"}</div>
 
-                              <div className="sublabel mt-2">Mistakes</div>
-                              <div>{r.mistakes ? <span className="mistake-pill">{r.mistakes}</span> : "-"}</div>
+                              <div className="ij2-sublabel mt-2">Mistakes</div>
+                              <div>{r.mistakes ? <span className="ij2-mistake">{r.mistakes}</span> : "-"}</div>
                             </div>
 
                             {opened ? (
-                              <div className="mt-3 subbox">
-                                <div className="fw-bold mb-2" style={{ fontWeight: 900 }}>
+                              <div className="mt-3 ij2-subbox">
+                                <div className="fw-bold mb-2" style={{ fontWeight: 950 }}>
                                   Entry Details
                                 </div>
 
                                 <div className="table-responsive">
-                                  <table className="table table-sm mb-0">
+                                  <table className="table table-sm mb-0 align-middle">
                                     <thead>
-                                      <tr className="text-muted">
+                                      <tr style={{ color: "rgba(15,23,42,.70)" }}>
                                         <th className="py-2">Type</th>
                                         <th className="py-2">Symbol/Name</th>
                                         <th className="py-2">CE/PE</th>
@@ -607,7 +824,7 @@ export default function Investment_getview_trandingjouranal() {
                                       ))}
                                       {(detailsMap[r.journal_id] || []).length === 0 ? (
                                         <tr>
-                                          <td colSpan={6} className="text-muted fw-bold">
+                                          <td colSpan={6} style={{ color: "rgba(15,23,42,.62)", fontWeight: 850 }}>
                                             No details found.
                                           </td>
                                         </tr>
@@ -622,7 +839,11 @@ export default function Investment_getview_trandingjouranal() {
                       );
                     })}
 
-                    {rowsToShow.length === 0 ? <div className="text-muted fw-bold">No rows found for this month/filter.</div> : null}
+                    {rowsToShow.length === 0 ? (
+                      <div style={{ color: "rgba(15,23,42,.62)", fontWeight: 850 }}>
+                        No rows found for this month/filter.
+                      </div>
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -635,22 +856,24 @@ export default function Investment_getview_trandingjouranal() {
       {modal.open ? (
         <div
           className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
-          style={{ background: "rgba(0,0,0,0.35)", zIndex: 9999, padding: 12 }}
+          style={{ background: "rgba(15,23,42,0.35)", zIndex: 9999, padding: 12 }}
           role="dialog"
           aria-modal="true"
         >
-          <div className="card-pro" style={{ width: "min(92vw, 420px)" }}>
-            <div className="card-head px-3 py-2 d-flex align-items-center justify-content-between">
-              <div className="fw-bold" style={{ fontWeight: 900 }}>
+          <div className="ij2-proCard" style={{ width: "min(92vw, 420px)" }}>
+            <div className="ij2-cardHead px-3 py-2 d-flex align-items-center justify-content-between">
+              <div className="fw-bold" style={{ fontWeight: 1000 }}>
                 {modal.title}
               </div>
-              <button className="btn btn-light btn-sm btn-pro" onClick={closeModal} type="button">
+              <button className="btn btn-light btn-sm ij2-btn" onClick={closeModal} type="button">
                 ✕
               </button>
             </div>
-            <div className="p-3 fw-bold">{modal.message}</div>
+            <div className="p-3" style={{ fontWeight: 850 }}>
+              {modal.message}
+            </div>
             <div className="p-3 pt-0 d-flex justify-content-end">
-              <button className="btn btn-dark btn-pro" onClick={closeModal} type="button">
+              <button className="btn btn-dark ij2-btn" onClick={closeModal} type="button">
                 OK
               </button>
             </div>

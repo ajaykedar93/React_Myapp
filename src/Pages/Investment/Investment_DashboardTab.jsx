@@ -7,6 +7,7 @@ import TradingJournal from "./Investment_tradingjournal";
 import InvestmentReports from "./Investment_report";
 import DipWid from "./Investment_dipwid";
 import GetTradingJournal from "./Investment_getview_trandingjouranal";
+import InvestmentOverall from "./Investment_Overall"; // ✅ NEW (Overall Report)
 
 export default function Investment_DashboardTab() {
   const navigate = useNavigate();
@@ -18,6 +19,10 @@ export default function Investment_DashboardTab() {
       { key: "journal", label: "Trading Journal", render: TradingJournal },
       { key: "getjournal", label: "Get Trading Journal", render: GetTradingJournal },
       { key: "reports", label: "Reports", render: InvestmentReports },
+
+      // ✅ NEW TAB
+      { key: "overall", label: "Overall Report", render: InvestmentOverall },
+
       { key: "dipwid", label: "Deposit / Withdraw", render: DipWid },
     ],
     []
@@ -305,7 +310,6 @@ const styles = `
     padding-bottom: calc(12px + env(safe-area-inset-bottom));
   }
 
-  /* ✅ IMPORTANT: remove min-height:100% to avoid extra bottom space */
   .id3-view{
     width: 100%;
     animation: viewIn .22s ease-out;
