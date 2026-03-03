@@ -4,7 +4,6 @@ import { useNavigate } from "react-router-dom";
 import Investmentcatsub from "./Investment_platform_segment";
 import InvestmentPlan from "./Investment_plan";
 import TradingJournal from "./Investment_tradingjournal";
-import InvestmentReports from "./Investment_report";
 import DipWid from "./Investment_dipwid";
 import GetTradingJournal from "./Investment_getview_trandingjouranal";
 import InvestmentOverall from "./Investment_Overall"; // ✅ NEW (Overall Report)
@@ -18,8 +17,7 @@ export default function Investment_DashboardTab() {
       { key: "plan", label: "Trading Plan", render: InvestmentPlan },
       { key: "journal", label: "Trading Journal", render: TradingJournal },
       { key: "getjournal", label: "Get Trading Journal", render: GetTradingJournal },
-      { key: "reports", label: "Reports", render: InvestmentReports },
-
+     
       // ✅ NEW TAB
       { key: "overall", label: "Overall Report", render: InvestmentOverall },
 

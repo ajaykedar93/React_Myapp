@@ -1,60 +1,16 @@
 // src/pages/Investment_tradingjournal.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 
 const BASE_URL = "https://express-backend-myapp.onrender.com";
 
 export default function Investment_tradingjournal() {
-  const navigate = useNavigate();
-
-  // ✅ Always fresh token (do NOT memoize with [])
-  const getToken = () => localStorage.getItem("token") || "";
-
-  // ✅ Always create headers fresh
-  const getHeaders = () => {
-    const token = getToken();
+  // ✅ Token from login page localStorage
+  const token = useMemo(() => localStorage.getItem("token") || "", []);
+  const headers = useMemo(() => {
     const h = { "Content-Type": "application/json" };
     if (token) h.Authorization = `Bearer ${token}`;
     return h;
-  };
-
-  // ✅ common request wrapper (handles 401/403)
-  const request = async (url, options = {}) => {
-    const token = getToken();
-    if (!token) {
-      navigate("/login");
-      throw new Error("Please login again.");
-    }
-
-    const res = await fetch(url, {
-      ...options,
-      headers: {
-        ...getHeaders(),
-        ...(options.headers || {}),
-      },
-    });
-
-    let data = {};
-    try {
-      data = await res.json();
-    } catch {
-      data = {};
-    }
-
-    if (res.status === 401 || res.status === 403) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("auth");
-      localStorage.removeItem("user");
-      navigate("/login");
-      throw new Error(data?.message || "Session expired. Please login again.");
-    }
-
-    if (!res.ok) {
-      throw new Error(data?.message || "Request failed");
-    }
-
-    return data;
-  };
+  }, [token]);
 
   // -------------------- master data --------------------
   const [platforms, setPlatforms] = useState([]);
@@ -65,11 +21,8 @@ export default function Investment_tradingjournal() {
   const [segmentId, setSegmentId] = useState("");
   const [planId, setPlanId] = useState(""); // optional
 
-  const selectedSegment = useMemo(
-    () => segments.find((s) => String(s.segment_id) === String(segmentId)) || null,
-    [segments, segmentId]
-  );
-  const isOptionsSegment = !!selectedSegment?.is_options;
+  // -------------------- NEW: Trade name (Index/Company/Symbol) --------------------
+  const [tradeName, setTradeName] = useState("");
 
   // -------------------- form fields --------------------
   const todayISO = useMemo(() => {
@@ -84,27 +37,8 @@ export default function Investment_tradingjournal() {
   const [profit, setProfit] = useState("0");
   const [loss, setLoss] = useState("0");
   const [brokerage, setBrokerage] = useState("0");
-
   const [tradeLogic, setTradeLogic] = useState("");
   const [mistakes, setMistakes] = useState("");
-
-  // multiple rows
-  const [optionRows, setOptionRows] = useState([
-    { strike_price: "", option_type: "CE", entry_price: "", exit_price: "", quantity: "" },
-  ]);
-  const [stockRows, setStockRows] = useState([{ stock_name: "", entry_price: "", exit_price: "", quantity: "" }]);
-
-  // -------------------- list/view --------------------
-  const [monthFilter, setMonthFilter] = useState(() => {
-    const d = new Date();
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    return `${yyyy}-${mm}-01`;
-  });
-
-  const [dailyRows, setDailyRows] = useState([]);
-  const [detailsMap, setDetailsMap] = useState({});
-  const [openJournalId, setOpenJournalId] = useState(null);
 
   // -------------------- UI state --------------------
   const [loading, setLoading] = useState(false);
@@ -132,7 +66,8 @@ export default function Investment_tradingjournal() {
       onConfirm: p.onConfirm || null,
     }));
 
-  const closeModal = () => setModal((m) => ({ ...m, open: false, onConfirm: null, title: "", message: "" }));
+  const closeModal = () =>
+    setModal((m) => ({ ...m, open: false, onConfirm: null, title: "", message: "" }));
 
   const toast = (msg) => openModal({ type: "success", title: "Success", message: msg });
   const fail = (msg) => openModal({ type: "error", title: "Error", message: msg });
@@ -141,95 +76,41 @@ export default function Investment_tradingjournal() {
   const toIntStr = (v) => String(v ?? "").replace(/[^\d]/g, "");
   const toNum = (v) => (v === "" ? NaN : Number(v));
 
-  // Date format: "1 Jan 2026"
-  const formatDate = (value) => {
-    if (!value) return "-";
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return String(value);
-    return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(d);
-  };
-
-  // click/tap effect
-  const press = (e) => (e.currentTarget.style.transform = "scale(0.98)");
-  const release = (e) => (e.currentTarget.style.transform = "scale(1)");
-
-  const Btn = ({ variant, small, disabled, onClick, children, type = "button" }) => (
-    <button
-      type={type}
-      onClick={onClick}
-      disabled={disabled}
-      onMouseDown={disabled ? undefined : press}
-      onMouseUp={disabled ? undefined : release}
-      onMouseLeave={disabled ? undefined : release}
-      onTouchStart={disabled ? undefined : press}
-      onTouchEnd={disabled ? undefined : release}
-      style={{
-        ...styles.btn(variant, small),
-        ...(disabled ? styles.btnDisabled : null),
-      }}
-    >
-      {children}
-    </button>
-  );
-
   // -------------------- API --------------------
   const api = {
     async getPlatforms() {
-      const data = await request(`${BASE_URL}/api/investment/platform-segment/platform`, { method: "GET" });
+      const res = await fetch(`${BASE_URL}/api/investment/platform-segment/platform`, { headers });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || "Platform fetch failed");
       return Array.isArray(data?.data) ? data.data : [];
     },
-
     async getSegments(pid) {
       if (!pid) return [];
-      const data = await request(`${BASE_URL}/api/investment/platform-segment/segment?platform_id=${pid}`, {
-        method: "GET",
-      });
+      const res = await fetch(`${BASE_URL}/api/investment/platform-segment/segment?platform_id=${pid}`, { headers });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || "Segment fetch failed");
       return Array.isArray(data?.data) ? data.data : [];
     },
-
     async getPlans(pid, sid) {
       const qs = new URLSearchParams();
       if (pid) qs.set("platform_id", String(pid));
       if (sid) qs.set("segment_id", String(sid));
-      const data = await request(`${BASE_URL}/api/investment/plan?${qs.toString()}`, { method: "GET" });
+      const res = await fetch(`${BASE_URL}/api/investment/plan?${qs.toString()}`, { headers });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || "Plan fetch failed");
       return Array.isArray(data?.data) ? data.data : [];
     },
 
+    // ✅ create journal for new API (trade_name only)
     async createJournal(payload) {
-      const data = await request(`${BASE_URL}/api/investment/tradingjournal`, {
+      const res = await fetch(`${BASE_URL}/api/investment/tradingjournal`, {
         method: "POST",
+        headers,
         body: JSON.stringify(payload),
       });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || data?.error || "Journal create failed");
       return data?.data;
-    },
-
-    async getDailySummary({ platform_name, segment_name, plan_id, month }) {
-      const qs = new URLSearchParams();
-      if (platform_name) qs.set("platform_name", platform_name);
-      if (segment_name) qs.set("segment_name", segment_name);
-      if (plan_id) qs.set("plan_id", String(plan_id));
-      if (month) qs.set("month", month);
-
-      const data = await request(`${BASE_URL}/api/investment/tradingjournal-view/daily-summary?${qs.toString()}`, {
-        method: "GET",
-      });
-      return Array.isArray(data?.data) ? data.data : [];
-    },
-
-    async getEntryDetails({ journal_id, month }) {
-      const qs = new URLSearchParams();
-      if (journal_id) qs.set("journal_id", String(journal_id));
-      if (month) qs.set("month", month);
-
-      const data = await request(`${BASE_URL}/api/investment/tradingjournal-view/entry-details?${qs.toString()}`, {
-        method: "GET",
-      });
-      return Array.isArray(data?.data) ? data.data : [];
-    },
-
-    async deleteJournal(journal_id) {
-      await request(`${BASE_URL}/api/investment/tradingjournal/${journal_id}`, { method: "DELETE" });
-      return true;
     },
   };
 
@@ -283,45 +164,13 @@ export default function Investment_tradingjournal() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [platformId, segmentId]);
 
-  // -------------------- reset rows when segment changes --------------------
-  useEffect(() => {
-    setOptionRows([{ strike_price: "", option_type: "CE", entry_price: "", exit_price: "", quantity: "" }]);
-    setStockRows([{ stock_name: "", entry_price: "", exit_price: "", quantity: "" }]);
-  }, [isOptionsSegment]);
-
-  // -------------------- load daily summary list --------------------
-  const refreshDaily = async () => {
-    try {
-      setLoading(true);
-
-      const pName = platforms.find((p) => String(p.platform_id) === String(platformId))?.platform_name || "";
-      const sName = segments.find((s) => String(s.segment_id) === String(segmentId))?.segment_name || "";
-
-      const rows = await api.getDailySummary({
-        platform_name: platformId ? pName : null,
-        segment_name: segmentId ? sName : null,
-        plan_id: planId ? Number(planId) : null,
-        month: monthFilter,
-      });
-
-      setDailyRows(rows);
-    } catch (e) {
-      fail(e.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    refreshDaily();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [monthFilter, platformId, segmentId, planId, platforms, segments]);
-
   // -------------------- validation --------------------
   const validateMain = () => {
     if (!platformId) return "Select platform";
     if (!segmentId) return "Select segment";
     if (!tradeDate) return "Trade date required";
+
+    if (!String(tradeName || "").trim()) return "Trade name (Index/Company) required";
     if (!tradeLogic.trim()) return "Trade logic required";
 
     const p = toNum(profit);
@@ -334,39 +183,8 @@ export default function Investment_tradingjournal() {
 
     const ok = (p === 0 && l > 0) || (l === 0 && p > 0) || (p === 0 && l === 0);
     if (!ok) return "Either Profit OR Loss should be > 0 (both cannot be > 0 together)";
-    return "";
-  };
+    if (p === 0 && l === 0 && b > 0) return "Brokerage not allowed when profit=loss=0";
 
-  const validateRows = () => {
-    if (isOptionsSegment) {
-      if (!optionRows.length) return "Add at least one options row";
-      for (let i = 0; i < optionRows.length; i++) {
-        const r = optionRows[i];
-        const sp = Number(r.strike_price);
-        const ep = Number(r.entry_price);
-        const xp = Number(r.exit_price);
-        const q = Number(r.quantity);
-
-        if (!Number.isFinite(sp) || sp <= 0) return `Row ${i + 1}: strike_price required`;
-        if (!["CE", "PE"].includes(r.option_type)) return `Row ${i + 1}: option_type must be CE/PE`;
-        if (!Number.isFinite(ep) || ep <= 0) return `Row ${i + 1}: entry_price required`;
-        if (!Number.isFinite(xp) || xp <= 0) return `Row ${i + 1}: exit_price required`;
-        if (!Number.isFinite(q) || q <= 0) return `Row ${i + 1}: quantity required`;
-      }
-    } else {
-      if (!stockRows.length) return "Add at least one row";
-      for (let i = 0; i < stockRows.length; i++) {
-        const r = stockRows[i];
-        const ep = Number(r.entry_price);
-        const xp = Number(r.exit_price);
-        const q = Number(r.quantity);
-
-        if (!String(r.stock_name || "").trim()) return `Row ${i + 1}: name required`;
-        if (!Number.isFinite(ep) || ep <= 0) return `Row ${i + 1}: entry_price required`;
-        if (!Number.isFinite(xp) || xp <= 0) return `Row ${i + 1}: exit_price required`;
-        if (!Number.isFinite(q) || q <= 0) return `Row ${i + 1}: quantity required`;
-      }
-    }
     return "";
   };
 
@@ -377,14 +195,13 @@ export default function Investment_tradingjournal() {
     const v1 = validateMain();
     if (v1) return fail(v1);
 
-    const v2 = validateRows();
-    if (v2) return fail(v2);
-
     const payload = {
       platform_id: Number(platformId),
       segment_id: Number(segmentId),
       plan_id: planId ? Number(planId) : null,
       trade_date: tradeDate,
+
+      trade_name: String(tradeName).trim(),
 
       profit: Number(profit),
       loss: Number(loss),
@@ -392,24 +209,6 @@ export default function Investment_tradingjournal() {
 
       trade_logic: tradeLogic.trim(),
       mistakes: mistakes?.trim() ? mistakes.trim() : null,
-
-      options: isOptionsSegment
-        ? optionRows.map((r) => ({
-            strike_price: Number(r.strike_price),
-            option_type: r.option_type,
-            entry_price: Number(r.entry_price),
-            exit_price: Number(r.exit_price),
-            quantity: Number(r.quantity),
-          }))
-        : [],
-      stocks: !isOptionsSegment
-        ? stockRows.map((r) => ({
-            stock_name: String(r.stock_name).trim(),
-            entry_price: Number(r.entry_price),
-            exit_price: Number(r.exit_price),
-            quantity: Number(r.quantity),
-          }))
-        : [],
     };
 
     try {
@@ -417,16 +216,13 @@ export default function Investment_tradingjournal() {
       await api.createJournal(payload);
       toast("Trade saved");
 
+      // reset form
+      setTradeName("");
       setTradeLogic("");
       setMistakes("");
       setProfit("0");
       setLoss("0");
       setBrokerage("0");
-
-      setOptionRows([{ strike_price: "", option_type: "CE", entry_price: "", exit_price: "", quantity: "" }]);
-      setStockRows([{ stock_name: "", entry_price: "", exit_price: "", quantity: "" }]);
-
-      await refreshDaily();
     } catch (e2) {
       fail(e2.message);
     } finally {
@@ -434,700 +230,524 @@ export default function Investment_tradingjournal() {
     }
   };
 
-  // -------------------- details toggle --------------------
-  const toggleDetails = async (journal_id) => {
-    if (openJournalId === journal_id) {
-      setOpenJournalId(null);
-      return;
-    }
-    setOpenJournalId(journal_id);
-
-    if (!detailsMap[journal_id]) {
-      try {
-        setBusy(`details-${journal_id}`);
-        const d = await api.getEntryDetails({ journal_id, month: monthFilter });
-        setDetailsMap((prev) => ({ ...prev, [journal_id]: d }));
-      } catch (e) {
-        fail(e.message);
-      } finally {
-        setBusy("");
-      }
-    }
-  };
-
-  const onDelete = (journal_id) => {
-    openModal({
-      type: "confirm",
-      title: "Delete Entry?",
-      message: "This journal entry will be deleted permanently.",
-      confirmText: "Delete",
-      cancelText: "Cancel",
-      onConfirm: async () => {
-        try {
-          setBusy(`del-${journal_id}`);
-          await api.deleteJournal(journal_id);
-          toast("Deleted");
-
-          setOpenJournalId(null);
-          setDetailsMap((prev) => {
-            const copy = { ...prev };
-            delete copy[journal_id];
-            return copy;
-          });
-
-          await refreshDaily();
-        } catch (e) {
-          fail(e.message);
-        } finally {
-          setBusy("");
-          closeModal();
-        }
-      },
-    });
-  };
-
-  // -------------------- row editors --------------------
-  const updateOptionRow = (i, key, val) => {
-    setOptionRows((prev) => {
-      const copy = [...prev];
-      copy[i] = { ...copy[i], [key]: val };
-      return copy;
-    });
-  };
-  const addOptionRow = () =>
-    setOptionRows((prev) => [...prev, { strike_price: "", option_type: "CE", entry_price: "", exit_price: "", quantity: "" }]);
-  const removeOptionRow = (i) => setOptionRows((prev) => prev.filter((_, idx) => idx !== i));
-
-  const updateStockRow = (i, key, val) => {
-    setStockRows((prev) => {
-      const copy = [...prev];
-      copy[i] = { ...copy[i], [key]: val };
-      return copy;
-    });
-  };
-  const addStockRow = () => setStockRows((prev) => [...prev, { stock_name: "", entry_price: "", exit_price: "", quantity: "" }]);
-  const removeStockRow = (i) => setStockRows((prev) => prev.filter((_, idx) => idx !== i));
-
   // -------------------- responsive --------------------
-  const [wide, setWide] = useState(typeof window !== "undefined" ? window.innerWidth >= 1100 : false);
+  const [wide, setWide] = useState(typeof window !== "undefined" ? window.innerWidth >= 1024 : false);
   useEffect(() => {
-    const onR = () => setWide(window.innerWidth >= 1100);
+    const onR = () => setWide(window.innerWidth >= 1024);
     window.addEventListener("resize", onR);
     return () => window.removeEventListener("resize", onR);
   }, []);
 
-  // -------------------- styles (same as your existing) --------------------
+  // -------------------- styles --------------------
   const styles = {
     page: {
-      width: "100vw",
+      width: "100%",
       minHeight: "100vh",
       margin: 0,
       padding: 0,
-      background: "#ffffff",
-      color: "#0f172a",
-      fontFamily: '"Times New Roman", Times, serif',
-      paddingBottom: 90,
+      fontFamily: '"Plus Jakarta Sans", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+      color: "#0b1220",
+      background:
+        "radial-gradient(1200px 600px at 10% 0%, rgba(99,102,241,0.16), transparent 60%), radial-gradient(900px 500px at 100% 30%, rgba(34,197,94,0.14), transparent 55%), linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+      paddingBottom: 40,
       boxSizing: "border-box",
     },
+
     topbar: {
       width: "100%",
-      borderBottom: "1px solid #e5e7eb",
-      background: "#ffffff",
+      position: "sticky",
+      top: 0,
+      zIndex: 10,
+      backdropFilter: "blur(10px)",
+      background: "rgba(255,255,255,0.75)",
+      borderBottom: "1px solid rgba(148,163,184,0.35)",
+    },
+    topbarInner: {
+      maxWidth: 900,
+      margin: "0 auto",
+      padding: "14px 14px",
       display: "flex",
       alignItems: "center",
       justifyContent: "space-between",
       gap: 12,
-      padding: "12px 12px",
-      position: "sticky",
-      top: 0,
-      zIndex: 5,
     },
-    title: { margin: 0, fontSize: 16, fontWeight: 900 },
+    titleWrap: { display: "flex", flexDirection: "column", gap: 2 },
+    title: { margin: 0, fontSize: 16, fontWeight: 900, letterSpacing: 0.2 },
+    subtitle: { margin: 0, fontSize: 12, color: "#475569", fontWeight: 600 },
 
     grid: {
-      width: "100%",
+      maxWidth: 900,
+      margin: "0 auto",
       display: "grid",
-      gridTemplateColumns: wide ? "1.1fr 1.5fr" : "1fr",
-      gap: 12,
-      padding: "12px",
+      gridTemplateColumns: wide ? "1fr" : "1fr",
+      gap: 14,
+      padding: 14,
       boxSizing: "border-box",
     },
 
     card: {
-      border: "1px solid #e5e7eb",
-      background: "#fff",
-      borderRadius: 14,
+      border: "1px solid rgba(148,163,184,0.35)",
+      background: "rgba(255,255,255,0.88)",
+      borderRadius: 16,
       overflow: "hidden",
-      boxShadow: "0 6px 18px rgba(15,23,42,0.06)",
+      boxShadow: "0 10px 25px rgba(2,6,23,0.06)",
+      transition: "transform .18s ease, box-shadow .18s ease",
+    },
+    cardHover: {
+      transform: "translateY(-1px)",
+      boxShadow: "0 18px 38px rgba(2,6,23,0.10)",
     },
     cardHeader: {
       display: "flex",
       justifyContent: "space-between",
       alignItems: "center",
-      borderBottom: "1px solid #e5e7eb",
-      background: "#fbfbfd",
+      borderBottom: "1px solid rgba(148,163,184,0.25)",
+      background: "linear-gradient(180deg, rgba(248,250,252,0.9), rgba(255,255,255,0.6))",
+      padding: "12px 12px",
     },
-    cardTitle: { margin: "10px 12px", fontSize: 14, fontWeight: 900 },
-    small: { margin: "10px 12px", fontSize: 12, color: "#475569" },
+    cardTitle: { margin: 0, fontSize: 13, fontWeight: 900, letterSpacing: 0.2 },
+    small: { margin: 0, fontSize: 12, color: "#64748b", fontWeight: 700 },
 
-    form: { margin: "12px 12px 14px", display: "grid", gap: 10 },
+    form: { padding: 12, display: "grid", gap: 10 },
     row2: { display: "grid", gridTemplateColumns: wide ? "1fr 1fr" : "1fr", gap: 10 },
     row3: { display: "grid", gridTemplateColumns: wide ? "1fr 1fr 1fr" : "1fr", gap: 10 },
 
+    label: { fontSize: 12, color: "#475569", fontWeight: 800, marginBottom: 6 },
+    field: { display: "flex", flexDirection: "column" },
+
     input: {
-      height: 44,
+      height: 42,
       borderRadius: 12,
-      border: "1px solid #cbd5e1",
+      border: "1px solid rgba(148,163,184,0.55)",
       padding: "0 12px",
       outline: "none",
       background: "#fff",
-      color: "#0f172a",
-      fontSize: 14,
+      color: "#0b1220",
+      fontSize: 13,
       boxSizing: "border-box",
+      transition: "box-shadow .16s ease, border-color .16s ease, transform .06s ease",
     },
     textarea: {
       minHeight: 92,
       borderRadius: 12,
-      border: "1px solid #cbd5e1",
+      border: "1px solid rgba(148,163,184,0.55)",
       padding: "10px 12px",
       outline: "none",
       background: "#fff",
-      color: "#0f172a",
+      color: "#0b1220",
       resize: "vertical",
-      fontSize: 14,
+      fontSize: 13,
       boxSizing: "border-box",
+      transition: "box-shadow .16s ease, border-color .16s ease",
     },
     select: {
-      height: 44,
+      height: 42,
       borderRadius: 12,
-      border: "1px solid #cbd5e1",
+      border: "1px solid rgba(148,163,184,0.55)",
       padding: "0 12px",
       outline: "none",
       background: "#fff",
-      color: "#0f172a",
-      fontSize: 14,
+      color: "#0b1220",
+      fontSize: 13,
       boxSizing: "border-box",
+      transition: "box-shadow .16s ease, border-color .16s ease",
     },
 
-    btnRow: { display: "flex", gap: 10, flexWrap: "wrap" },
+    focus: {
+      borderColor: "rgba(99,102,241,0.7)",
+      boxShadow: "0 0 0 4px rgba(99,102,241,0.12)",
+    },
+
+    divider: { height: 1, background: "rgba(148,163,184,0.25)", margin: "6px 0" },
+
+    btnRow: { display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" },
     btn: (variant, small) => ({
-      height: small ? 34 : 42,
-      padding: small ? "0 10px" : "0 14px",
+      height: small ? 32 : 38,
+      padding: small ? "0 10px" : "0 12px",
       borderRadius: 12,
-      border: "1px solid #cbd5e1",
-      background: variant === "primary" ? "#0f172a" : variant === "danger" ? "#b91c1c" : "#ffffff",
-      color: variant === "primary" || variant === "danger" ? "#ffffff" : "#0f172a",
+      border: "1px solid rgba(148,163,184,0.5)",
+      background:
+        variant === "primary"
+          ? "linear-gradient(135deg, #111827 0%, #334155 100%)"
+          : variant === "danger"
+          ? "linear-gradient(135deg, #991b1b 0%, #ef4444 100%)"
+          : "rgba(255,255,255,0.95)",
+      color: variant === "primary" || variant === "danger" ? "#ffffff" : "#0b1220",
       cursor: "pointer",
       fontWeight: 900,
-      boxShadow: "0 2px 8px rgba(15,23,42,0.10)",
-      transition: "transform 0.06s ease, box-shadow 0.12s ease",
+      fontSize: 12,
+      letterSpacing: 0.2,
+      boxShadow: "0 8px 18px rgba(2,6,23,0.10)",
+      transition: "transform .12s ease, box-shadow .12s ease, filter .12s ease",
       userSelect: "none",
       whiteSpace: "nowrap",
     }),
-    btnDisabled: { opacity: 0.6, cursor: "not-allowed", transform: "none", boxShadow: "none" },
+    btnDisabled: { opacity: 0.55, cursor: "not-allowed", transform: "none", boxShadow: "none" },
 
-    divider: { height: 1, background: "#e5e7eb", margin: "6px 0" },
-
-    tableWrap: { width: "100%", overflowX: "auto" },
-    table: { width: "100%", borderCollapse: "collapse", minWidth: 980 },
-    th: {
-      textAlign: "left",
-      fontSize: 12,
-      color: "#475569",
-      borderBottom: "1px solid #e5e7eb",
-      padding: "10px 12px",
-      background: "#f8fafc",
-      position: "sticky",
-      top: 0,
-      zIndex: 1,
-      whiteSpace: "nowrap",
-    },
-    td: {
-      borderBottom: "1px solid #f1f5f9",
-      padding: "10px 12px",
-      fontSize: 13,
-      verticalAlign: "top",
-      background: "#fff",
-    },
-
-    profitText: { fontWeight: 900, color: "#166534" },
-    lossText: { fontWeight: 900, color: "#b91c1c" },
-    brokerageText: { fontWeight: 900, color: "#a16207" },
-
-    netPill: (v) => ({
-      display: "inline-block",
-      padding: "4px 10px",
+    pill: {
+      display: "inline-flex",
+      gap: 8,
+      alignItems: "center",
+      padding: "6px 10px",
       borderRadius: 999,
-      border: "1px solid #e5e7eb",
+      border: "1px solid rgba(148,163,184,0.35)",
+      background: "rgba(255,255,255,0.7)",
       fontSize: 12,
       fontWeight: 900,
-      background: v > 0 ? "#ecfdf5" : v < 0 ? "#fff1f2" : "#f8fafc",
-      color: v > 0 ? "#065f46" : v < 0 ? "#9f1239" : "#0f172a",
-    }),
-
-    subTable: { width: "100%", borderCollapse: "collapse", marginTop: 10, minWidth: 600 },
-    subTd: { borderBottom: "1px solid #eef2ff", padding: "8px 10px", fontSize: 12 },
+      color: "#0b1220",
+    },
 
     overlay: {
       position: "fixed",
       inset: 0,
-      background: "rgba(0,0,0,0.35)",
+      background: "rgba(2,6,23,0.45)",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
       padding: 12,
       zIndex: 50,
+      animation: "fadeIn .14s ease",
     },
     modal: {
       width: "min(92vw, 420px)",
       background: "#ffffff",
-      borderRadius: 16,
-      border: "1px solid #e5e7eb",
-      boxShadow: "0 18px 45px rgba(0,0,0,0.25)",
+      borderRadius: 18,
+      border: "1px solid rgba(148,163,184,0.35)",
+      boxShadow: "0 22px 60px rgba(0,0,0,0.30)",
       overflow: "hidden",
-      fontFamily: '"Times New Roman", Times, serif',
+      animation: "popIn .16s ease",
     },
     modalHead: {
       padding: "12px 14px",
-      borderBottom: "1px solid #e5e7eb",
+      borderBottom: "1px solid rgba(148,163,184,0.25)",
       display: "flex",
       alignItems: "center",
       justifyContent: "space-between",
       gap: 10,
+      background: "rgba(248,250,252,0.9)",
     },
-    modalTitle: { margin: 0, fontSize: 14, fontWeight: 900, color: "#0f172a" },
-    modalBody: { padding: "12px 14px", fontSize: 13, color: "#0f172a" },
+    modalTitle: { margin: 0, fontSize: 14, fontWeight: 900, color: "#0b1220" },
+    modalBody: { padding: "12px 14px", fontSize: 13, color: "#0b1220" },
     modalFoot: {
       padding: "12px 14px",
-      borderTop: "1px solid #e5e7eb",
+      borderTop: "1px solid rgba(148,163,184,0.25)",
       display: "flex",
       gap: 10,
       justifyContent: "flex-end",
       flexWrap: "wrap",
+      background: "rgba(255,255,255,0.9)",
     },
     xBtn: {
-      border: "1px solid #e5e7eb",
+      border: "1px solid rgba(148,163,184,0.45)",
       background: "#ffffff",
       borderRadius: 10,
-      height: 34,
-      width: 34,
+      height: 32,
+      width: 32,
       cursor: "pointer",
       fontWeight: 900,
-      lineHeight: "32px",
+      lineHeight: "30px",
       userSelect: "none",
+      transition: "transform .12s ease",
     },
   };
 
-  
+  // -------- button with micro animation ----------
+  const press = (e) => (e.currentTarget.style.transform = "translateY(1px) scale(0.99)");
+  const release = (e) => (e.currentTarget.style.transform = "translateY(0px) scale(1)");
+
+  const Btn = ({ variant, small, disabled, onClick, children, type = "button" }) => (
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      onMouseDown={disabled ? undefined : press}
+      onMouseUp={disabled ? undefined : release}
+      onMouseLeave={disabled ? undefined : release}
+      onTouchStart={disabled ? undefined : press}
+      onTouchEnd={disabled ? undefined : release}
+      style={{
+        ...styles.btn(variant, small),
+        ...(disabled ? styles.btnDisabled : null),
+      }}
+      onMouseEnter={(e) => {
+        if (disabled) return;
+        e.currentTarget.style.filter = "brightness(1.03)";
+        e.currentTarget.style.boxShadow = "0 12px 24px rgba(2,6,23,0.16)";
+      }}
+      onMouseOut={(e) => {
+        if (disabled) return;
+        e.currentTarget.style.filter = "none";
+        e.currentTarget.style.boxShadow = "0 8px 18px rgba(2,6,23,0.10)";
+      }}
+    >
+      {children}
+    </button>
+  );
+
+  // minimal helper for focus ring
+  const useFocusStyle = () => {
+    const [focused, setFocused] = useState(false);
+    return {
+      focused,
+      onFocus: () => setFocused(true),
+      onBlur: () => setFocused(false),
+    };
+  };
+
+  const withFocus = (baseStyle) => ({
+    ...baseStyle,
+    ...(baseStyle._focused ? styles.focus : null),
+  });
+
+  const Field = ({ label, children }) => (
+    <div style={styles.field}>
+      {label ? <div style={styles.label}>{label}</div> : null}
+      {children}
+    </div>
+  );
+
+  // focus hooks
+  const fPlatform = useFocusStyle();
+  const fSegment = useFocusStyle();
+  const fPlan = useFocusStyle();
+  const fDate = useFocusStyle();
+  const fProfit = useFocusStyle();
+  const fLoss = useFocusStyle();
+  const fBroker = useFocusStyle();
+  const fLogic = useFocusStyle();
+  const fMist = useFocusStyle();
+  const fName = useFocusStyle();
 
   return (
     <div style={styles.page}>
+      {/* Fonts + animations */}
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap');
+        @keyframes popIn { from { transform: translateY(8px) scale(0.98); opacity: 0; } to { transform: translateY(0) scale(1); opacity: 1; } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+      `}</style>
+
       {/* Header */}
       <div style={styles.topbar}>
-        <h1 style={styles.title}>Investment Trading Journal</h1>
+        <div style={styles.topbarInner}>
+          <div style={styles.titleWrap}>
+            <h1 style={styles.title}>Investment Trading Journal</h1>
+            <p style={styles.subtitle}>Only Add Entry (No list below)</p>
+          </div>
 
-        <Btn small variant="primary" disabled={loading} onClick={refreshDaily}>
-          {loading ? "..." : "Refresh"}
-        </Btn>
+          <div style={styles.btnRow}>
+            <span style={styles.pill}>
+              <span style={{ width: 8, height: 8, borderRadius: 99, background: token ? "#22c55e" : "#ef4444" }} />
+              {token ? "Authorized" : "No Token"}
+            </span>
+          </div>
+        </div>
       </div>
 
       <div style={styles.grid}>
-        {/* LEFT: ADD TRADE */}
-        <section style={styles.card}>
-          <div style={styles.cardHeader}>
-            <div style={styles.cardTitle}>Add Trade</div>
-            <div style={styles.small}>{isOptionsSegment ? "Options" : "Stocks / Gold / Currency"}</div>
-          </div>
-
-          <form style={styles.form} onSubmit={onSubmit} noValidate>
-            <div style={styles.row2}>
-              <select style={styles.select} value={platformId} onChange={(e) => setPlatformId(e.target.value)}>
-                <option value="">Select Platform</option>
-                {platforms.map((p) => (
-                  <option key={p.platform_id} value={p.platform_id}>
-                    {p.platform_name}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                style={styles.select}
-                value={segmentId}
-                onChange={(e) => setSegmentId(e.target.value)}
-                disabled={!platformId}
-              >
-                <option value="">Select Segment</option>
-                {segments.map((s) => (
-                  <option key={s.segment_id} value={s.segment_id}>
-                    {s.segment_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div style={styles.row2}>
-              <select
-                style={styles.select}
-                value={planId}
-                onChange={(e) => setPlanId(e.target.value)}
-                disabled={!platformId || !segmentId}
-              >
-                <option value="">Plan (Optional)</option>
-                {plans.map((p) => (
-                  <option key={p.plan_id} value={p.plan_id}>
-                    {p.plan_name ? p.plan_name : `Plan #${p.plan_id}`} • RR {p.rr_ratio}
-                  </option>
-                ))}
-              </select>
-
-              <input style={styles.input} type="date" value={tradeDate} onChange={(e) => setTradeDate(e.target.value)} />
-            </div>
-
-            <div style={styles.row3}>
-              <input
-                style={styles.input}
-                value={profit}
-                onChange={(e) => setProfit(toIntStr(e.target.value))}
-                inputMode="numeric"
-                placeholder="Profit"
-              />
-              <input
-                style={styles.input}
-                value={loss}
-                onChange={(e) => setLoss(toIntStr(e.target.value))}
-                inputMode="numeric"
-                placeholder="Loss"
-              />
-              <input
-                style={styles.input}
-                value={brokerage}
-                onChange={(e) => setBrokerage(toIntStr(e.target.value))}
-                inputMode="numeric"
-                placeholder="Brokerage"
-              />
-            </div>
-
-            <textarea
-              style={styles.textarea}
-              value={tradeLogic}
-              onChange={(e) => setTradeLogic(e.target.value)}
-              placeholder="Trade Logic (required)"
-            />
-
-            <textarea
-              style={styles.textarea}
-              value={mistakes}
-              onChange={(e) => setMistakes(e.target.value)}
-              placeholder="Mistakes (optional)"
-            />
-
-            <div style={styles.divider} />
-
-            {isOptionsSegment ? (
+        {/* ONLY: ADD TRADE */}
+        <HoverCard styles={styles}>
+          <section>
+            <div style={styles.cardHeader}>
               <div>
-                <div style={{ fontWeight: 900, marginBottom: 8 }}>Options Entries</div>
-
-                {optionRows.map((r, i) => (
-                  <div
-                    key={i}
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: wide ? "1fr .7fr .7fr 1fr 1fr auto" : "1fr",
-                      gap: 10,
-                      marginBottom: 10,
-                    }}
-                  >
-                    <input
-                      style={styles.input}
-                      value={r.strike_price}
-                      onChange={(e) => updateOptionRow(i, "strike_price", e.target.value.replace(/[^\d.]/g, ""))}
-                      placeholder="Strike (e.g., 25500)"
-                      inputMode="decimal"
-                    />
-
-                    <select
-                      style={styles.select}
-                      value={r.option_type}
-                      onChange={(e) => updateOptionRow(i, "option_type", e.target.value)}
-                    >
-                      <option value="CE">CE</option>
-                      <option value="PE">PE</option>
-                    </select>
-
-                    <input
-                      style={styles.input}
-                      value={r.quantity}
-                      onChange={(e) => updateOptionRow(i, "quantity", toIntStr(e.target.value))}
-                      placeholder="Qty"
-                      inputMode="numeric"
-                    />
-
-                    <input
-                      style={styles.input}
-                      value={r.entry_price}
-                      onChange={(e) => updateOptionRow(i, "entry_price", e.target.value.replace(/[^\d.]/g, ""))}
-                      placeholder="Entry (e.g., 20)"
-                      inputMode="decimal"
-                    />
-
-                    <input
-                      style={styles.input}
-                      value={r.exit_price}
-                      onChange={(e) => updateOptionRow(i, "exit_price", e.target.value.replace(/[^\d.]/g, ""))}
-                      placeholder="Exit (e.g., 25)"
-                      inputMode="decimal"
-                    />
-
-                    <Btn variant="danger" disabled={optionRows.length === 1} onClick={() => removeOptionRow(i)}>
-                      Remove
-                    </Btn>
-                  </div>
-                ))}
-
-                <div style={styles.btnRow}>
-                  <Btn onClick={addOptionRow}>+ Add Row</Btn>
-                </div>
+                <div style={styles.cardTitle}>Add Trade</div>
+                <div style={styles.small}>Platform + Segment + Trade Name</div>
               </div>
-            ) : (
-              <div>
-                <div style={{ fontWeight: 900, marginBottom: 8 }}>Stock / Gold / Currency Entries</div>
+              <div style={styles.small}>Single Entry</div>
+            </div>
 
-                {stockRows.map((r, i) => (
-                  <div
-                    key={i}
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: wide ? "1.3fr .7fr 1fr 1fr auto" : "1fr",
-                      gap: 10,
-                      marginBottom: 10,
-                    }}
+            <form style={styles.form} onSubmit={onSubmit} noValidate>
+              <div style={styles.row2}>
+                <Field label="Platform">
+                  <select
+                    style={withFocus({ ...styles.select, _focused: fPlatform.focused })}
+                    value={platformId}
+                    onChange={(e) => setPlatformId(e.target.value)}
+                    onFocus={fPlatform.onFocus}
+                    onBlur={fPlatform.onBlur}
                   >
-                    <input
-                      style={styles.input}
-                      value={r.stock_name}
-                      onChange={(e) => updateStockRow(i, "stock_name", e.target.value)}
-                      placeholder="Name (e.g., RELIANCE / GOLD / USDINR)"
-                    />
+                    <option value="">Select Platform</option>
+                    {platforms.map((p) => (
+                      <option key={p.platform_id} value={p.platform_id}>
+                        {p.platform_name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
 
-                    <input
-                      style={styles.input}
-                      value={r.quantity}
-                      onChange={(e) => updateStockRow(i, "quantity", toIntStr(e.target.value))}
-                      placeholder="Qty"
-                      inputMode="numeric"
-                    />
-
-                    <input
-                      style={styles.input}
-                      value={r.entry_price}
-                      onChange={(e) => updateStockRow(i, "entry_price", e.target.value.replace(/[^\d.]/g, ""))}
-                      placeholder="Entry (e.g., 1200)"
-                      inputMode="decimal"
-                    />
-
-                    <input
-                      style={styles.input}
-                      value={r.exit_price}
-                      onChange={(e) => updateStockRow(i, "exit_price", e.target.value.replace(/[^\d.]/g, ""))}
-                      placeholder="Exit (e.g., 1210)"
-                      inputMode="decimal"
-                    />
-
-                    <Btn variant="danger" disabled={stockRows.length === 1} onClick={() => removeStockRow(i)}>
-                      Remove
-                    </Btn>
-                  </div>
-                ))}
-
-                <div style={styles.btnRow}>
-                  <Btn onClick={addStockRow}>+ Add Row</Btn>
-                </div>
+                <Field label="Segment">
+                  <select
+                    style={withFocus({ ...styles.select, _focused: fSegment.focused })}
+                    value={segmentId}
+                    onChange={(e) => setSegmentId(e.target.value)}
+                    disabled={!platformId}
+                    onFocus={fSegment.onFocus}
+                    onBlur={fSegment.onBlur}
+                  >
+                    <option value="">Select Segment</option>
+                    {segments.map((s) => (
+                      <option key={s.segment_id} value={s.segment_id}>
+                        {s.segment_name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
               </div>
-            )}
 
-            <div style={styles.divider} />
+              <div style={styles.row2}>
+                <Field label="Plan (Optional)">
+                  <select
+                    style={withFocus({ ...styles.select, _focused: fPlan.focused })}
+                    value={planId}
+                    onChange={(e) => setPlanId(e.target.value)}
+                    disabled={!platformId || !segmentId}
+                    onFocus={fPlan.onFocus}
+                    onBlur={fPlan.onBlur}
+                  >
+                    <option value="">Plan (Optional)</option>
+                    {plans.map((p) => (
+                      <option key={p.plan_id} value={p.plan_id}>
+                        {p.plan_name ? p.plan_name : `Plan #${p.plan_id}`} • RR {p.rr_ratio}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
 
-            <div style={styles.btnRow}>
-              <Btn type="submit" variant="primary" disabled={busy === "save"}>
-                {busy === "save" ? "Saving..." : "Save Trade"}
-              </Btn>
-            </div>
-          </form>
-        </section>
+                <Field label="Trade Date">
+                  <input
+                    style={withFocus({ ...styles.input, _focused: fDate.focused })}
+                    type="date"
+                    value={tradeDate}
+                    onChange={(e) => setTradeDate(e.target.value)}
+                    onFocus={fDate.onFocus}
+                    onBlur={fDate.onBlur}
+                  />
+                </Field>
+              </div>
 
-        {/* RIGHT: LIST + DETAILS */}
-        <section style={styles.card}>
-          <div style={styles.cardHeader}>
-            <div style={styles.cardTitle}>Trades (Monthly)</div>
-            <div style={styles.small}>
-              <input
-                style={{ ...styles.input, height: 36, width: 170 }}
-                type="month"
-                value={monthFilter.slice(0, 7)}
-                onChange={(e) => setMonthFilter(`${e.target.value}-01`)}
-              />
-            </div>
-          </div>
+              {/* Trade Name */}
+              <Field label="Trade Name (Index / Company / Symbol)">
+                <input
+                  style={withFocus({ ...styles.input, _focused: fName.focused })}
+                  value={tradeName}
+                  onChange={(e) => setTradeName(e.target.value)}
+                  placeholder="e.g., NIFTY / BANKNIFTY / RELIANCE / GOLD / USDINR"
+                  onFocus={fName.onFocus}
+                  onBlur={fName.onBlur}
+                />
+              </Field>
 
-          <div style={styles.tableWrap}>
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>Date</th>
-                  <th style={styles.th}>Platform</th>
-                  <th style={styles.th}>Segment</th>
-                  <th style={styles.th}>Profit</th>
-                  <th style={styles.th}>Loss</th>
-                  <th style={styles.th}>Brokerage</th>
-                  <th style={styles.th}>Net</th>
-                  <th style={styles.th}>Logic</th>
-                  <th style={styles.th}>Mistakes</th>
-                  <th style={styles.th}>Actions</th>
-                </tr>
-              </thead>
+              <div style={styles.row3}>
+                <Field label="Profit">
+                  <input
+                    style={withFocus({ ...styles.input, _focused: fProfit.focused })}
+                    value={profit}
+                    onChange={(e) => setProfit(toIntStr(e.target.value))}
+                    inputMode="numeric"
+                    placeholder="0"
+                    onFocus={fProfit.onFocus}
+                    onBlur={fProfit.onBlur}
+                  />
+                </Field>
 
-              <tbody>
-                {dailyRows.map((r) => {
-                  const opened = openJournalId === r.journal_id;
-                  const net = Number(r.net_total ?? 0);
+                <Field label="Loss">
+                  <input
+                    style={withFocus({ ...styles.input, _focused: fLoss.focused })}
+                    value={loss}
+                    onChange={(e) => setLoss(toIntStr(e.target.value))}
+                    inputMode="numeric"
+                    placeholder="0"
+                    onFocus={fLoss.onFocus}
+                    onBlur={fLoss.onBlur}
+                  />
+                </Field>
 
-                  return (
-                    <React.Fragment key={r.journal_id}>
-                      <tr>
-                        <td style={styles.td}>
-                          <div style={{ fontWeight: 900 }}>{formatDate(r.trade_date)}</div>
-                          <div style={{ fontSize: 12, color: "#64748b" }}>#{r.journal_id}</div>
-                        </td>
-                        <td style={styles.td}>{r.platform_name}</td>
-                        <td style={styles.td}>{r.segment_name}</td>
+                <Field label="Brokerage">
+                  <input
+                    style={withFocus({ ...styles.input, _focused: fBroker.focused })}
+                    value={brokerage}
+                    onChange={(e) => setBrokerage(toIntStr(e.target.value))}
+                    inputMode="numeric"
+                    placeholder="0"
+                    onFocus={fBroker.onFocus}
+                    onBlur={fBroker.onBlur}
+                  />
+                </Field>
+              </div>
 
-                        <td style={styles.td}>
-                          <span style={styles.profitText}>{r.profit}</span>
-                        </td>
-                        <td style={styles.td}>
-                          <span style={styles.lossText}>{r.loss}</span>
-                        </td>
-                        <td style={styles.td}>
-                          <span style={styles.brokerageText}>{r.brokerage}</span>
-                        </td>
+              <Field label="Trade Logic (Required)">
+                <textarea
+                  style={withFocus({ ...styles.textarea, _focused: fLogic.focused })}
+                  value={tradeLogic}
+                  onChange={(e) => setTradeLogic(e.target.value)}
+                  placeholder="Example: Breakout + volume confirmation..."
+                  onFocus={fLogic.onFocus}
+                  onBlur={fLogic.onBlur}
+                />
+              </Field>
 
-                        <td style={styles.td}>
-                          <span style={styles.netPill(net)}>{r.net_total}</span>
-                        </td>
+              <Field label="Mistakes (Optional)">
+                <textarea
+                  style={withFocus({ ...styles.textarea, _focused: fMist.focused })}
+                  value={mistakes}
+                  onChange={(e) => setMistakes(e.target.value)}
+                  placeholder="Example: entered early / ignored SL..."
+                  onFocus={fMist.onFocus}
+                  onBlur={fMist.onBlur}
+                />
+              </Field>
 
-                        <td style={styles.td}>
-                          <div style={{ fontSize: 12 }}>{r.trade_logic}</div>
-                        </td>
-                        <td style={styles.td}>
-                          <div style={{ fontSize: 12, color: "#64748b" }}>{r.mistakes ? r.mistakes : "-"}</div>
-                        </td>
+              <div style={styles.divider} />
 
-                        <td style={styles.td}>
-                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                            <Btn onClick={() => toggleDetails(r.journal_id)} disabled={busy === `details-${r.journal_id}`}>
-                              {busy === `details-${r.journal_id}` ? "..." : opened ? "Hide" : "Details"}
-                            </Btn>
-
-                            <Btn variant="danger" onClick={() => onDelete(r.journal_id)} disabled={busy === `del-${r.journal_id}`}>
-                              {busy === `del-${r.journal_id}` ? "..." : "Delete"}
-                            </Btn>
-                          </div>
-                        </td>
-                      </tr>
-
-                      {opened ? (
-                        <tr>
-                          <td style={styles.td} colSpan={10}>
-                            <div style={{ fontWeight: 900, marginBottom: 8 }}>Entry Details</div>
-
-                            <div style={styles.tableWrap}>
-                              <table style={styles.subTable}>
-                                <thead>
-                                  <tr>
-                                    <th style={styles.th}>Type</th>
-                                    <th style={styles.th}>Symbol / Name</th>
-                                    <th style={styles.th}>CE/PE</th>
-                                    <th style={styles.th}>Entry</th>
-                                    <th style={styles.th}>Exit</th>
-                                    <th style={styles.th}>Qty</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {(detailsMap[r.journal_id] || []).map((d, idx) => (
-                                    <tr key={idx}>
-                                      <td style={styles.subTd}>{d.trade_type}</td>
-                                      <td style={styles.subTd}>{d.trade_type === "OPTIONS" ? d.symbol : d.stock_name}</td>
-                                      <td style={styles.subTd}>{d.option_type ?? "-"}</td>
-                                      <td style={styles.subTd}>{d.entry_price}</td>
-                                      <td style={styles.subTd}>{d.exit_price}</td>
-                                      <td style={styles.subTd}>{d.quantity}</td>
-                                    </tr>
-                                  ))}
-
-                                  {(detailsMap[r.journal_id] || []).length === 0 ? (
-                                    <tr>
-                                      <td style={styles.subTd} colSpan={6}>
-                                        No details found.
-                                      </td>
-                                    </tr>
-                                  ) : null}
-                                </tbody>
-                              </table>
-                            </div>
-                          </td>
-                        </tr>
-                      ) : null}
-                    </React.Fragment>
-                  );
-                })}
-
-                {!loading && dailyRows.length === 0 ? (
-                  <tr>
-                    <td style={styles.td} colSpan={10}>
-                      No trades found for this month.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </section>
+              <div style={styles.btnRow}>
+                <Btn type="submit" variant="primary" disabled={busy === "save"}>
+                  {busy === "save" ? "Saving..." : "Save Trade"}
+                </Btn>
+              </div>
+            </form>
+          </section>
+        </HoverCard>
       </div>
 
-      {/* Center Modal */}
+      {/* Modal */}
       {modal.open ? (
         <div style={styles.overlay} role="dialog" aria-modal="true">
           <div style={styles.modal}>
             <div style={styles.modalHead}>
               <h3 style={styles.modalTitle}>{modal.title}</h3>
-              <button style={styles.xBtn} onClick={closeModal} aria-label="Close">
+              <button
+                style={styles.xBtn}
+                onClick={closeModal}
+                aria-label="Close"
+                onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.05)")}
+                onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+              >
                 ×
               </button>
             </div>
             <div style={styles.modalBody}>{modal.message}</div>
             <div style={styles.modalFoot}>
-              {modal.type === "confirm" ? (
-                <>
-                  <Btn onClick={closeModal}>{modal.cancelText}</Btn>
-                  <Btn
-                    variant="danger"
-                    onClick={() => {
-                      if (typeof modal.onConfirm === "function") modal.onConfirm();
-                      else closeModal();
-                    }}
-                  >
-                    {modal.confirmText}
-                  </Btn>
-                </>
-              ) : (
-                <Btn variant="primary" onClick={closeModal}>
-                  {modal.confirmText}
-                </Btn>
-              )}
+              <Btn variant="primary" onClick={closeModal}>
+                {modal.confirmText}
+              </Btn>
             </div>
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/** Small helper: hover-lift card wrapper */
+function HoverCard({ styles, children }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <div
+      style={{ ...styles.card, ...(hover ? styles.cardHover : null) }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      {children}
     </div>
   );
 }
