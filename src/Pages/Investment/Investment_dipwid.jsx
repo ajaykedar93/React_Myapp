@@ -1,15 +1,22 @@
 // src/pages/Investment_dipwid.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 const BASE_URL = "https://express-backend-myapp.onrender.com";
 
 export default function Investment_dipwid() {
-  const token = useMemo(() => localStorage.getItem("token") || "", []);
-  const headers = useMemo(() => {
+  const navigate = useNavigate();
+
+  // ✅ Always get fresh token (do NOT memoize with [])
+  const getToken = () => localStorage.getItem("token") || "";
+
+  // ✅ Always build fresh headers for every request
+  const getHeaders = () => {
+    const token = getToken();
     const h = { "Content-Type": "application/json" };
     if (token) h.Authorization = `Bearer ${token}`;
     return h;
-  }, [token]);
+  };
 
   // -------------------- master data --------------------
   const [platforms, setPlatforms] = useState([]);
@@ -64,7 +71,8 @@ export default function Investment_dipwid() {
       onConfirm: p.onConfirm || null,
     }));
 
-  const closeModal = () => setModal((m) => ({ ...m, open: false, title: "", message: "", onConfirm: null }));
+  const closeModal = () =>
+    setModal((m) => ({ ...m, open: false, title: "", message: "", onConfirm: null }));
 
   const toast = (msg) => openModal({ type: "success", title: "Success", message: msg });
   const fail = (msg) => openModal({ type: "error", title: "Error", message: msg });
@@ -100,39 +108,74 @@ export default function Investment_dipwid() {
     </button>
   );
 
-  // -------------------- API --------------------
+  // -------------------- API helper (with 401 handling) --------------------
+  const request = async (url, options = {}) => {
+    const token = getToken();
+    if (!token) {
+      // ✅ If no token, go login (same device refresh works, but token removed -> login)
+      navigate("/login");
+      throw new Error("Please login again.");
+    }
+
+    const res = await fetch(url, {
+      ...options,
+      headers: {
+        ...getHeaders(),
+        ...(options.headers || {}),
+      },
+    });
+
+    let data = {};
+    try {
+      data = await res.json();
+    } catch {
+      data = {};
+    }
+
+    // ✅ if token invalid/expired -> logout behavior (remove token + go login)
+    if (res.status === 401 || res.status === 403) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("auth");
+      localStorage.removeItem("user");
+      navigate("/login");
+      throw new Error(data?.message || "Session expired. Please login again.");
+    }
+
+    if (!res.ok) {
+      throw new Error(data?.message || "Request failed");
+    }
+
+    return data;
+  };
+
   const api = {
     async getPlatforms() {
-      const res = await fetch(`${BASE_URL}/api/investment/platform-segment/platform`, { headers });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message || "Platform fetch failed");
+      const data = await request(`${BASE_URL}/api/investment/platform-segment/platform`, { method: "GET" });
       return Array.isArray(data?.data) ? data.data : [];
     },
+
     async getSegments(pid) {
       if (!pid) return [];
-      const res = await fetch(`${BASE_URL}/api/investment/platform-segment/segment?platform_id=${pid}`, { headers });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message || "Segment fetch failed");
+      const data = await request(
+        `${BASE_URL}/api/investment/platform-segment/segment?platform_id=${pid}`,
+        { method: "GET" }
+      );
       return Array.isArray(data?.data) ? data.data : [];
     },
+
     async getPlans(pid, sid) {
       const qs = new URLSearchParams();
       if (pid) qs.set("platform_id", String(pid));
       if (sid) qs.set("segment_id", String(sid));
-      const res = await fetch(`${BASE_URL}/api/investment/plan?${qs.toString()}`, { headers });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message || "Plan fetch failed");
+      const data = await request(`${BASE_URL}/api/investment/plan?${qs.toString()}`, { method: "GET" });
       return Array.isArray(data?.data) ? data.data : [];
     },
 
     async createDipWid(payload) {
-      const res = await fetch(`${BASE_URL}/api/investment/dipwid`, {
+      const data = await request(`${BASE_URL}/api/investment/dipwid`, {
         method: "POST",
-        headers,
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message || "Save failed");
       return data?.data;
     },
 
@@ -141,9 +184,8 @@ export default function Investment_dipwid() {
       if (platform_id) qs.set("platform_id", String(platform_id));
       if (segment_id) qs.set("segment_id", String(segment_id));
       if (plan_id) qs.set("plan_id", String(plan_id));
-      const res = await fetch(`${BASE_URL}/api/investment/dipwid/ledger?${qs.toString()}`, { headers });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message || "Ledger fetch failed");
+
+      const data = await request(`${BASE_URL}/api/investment/dipwid/ledger?${qs.toString()}`, { method: "GET" });
       return Array.isArray(data?.data) ? data.data : [];
     },
 
@@ -152,16 +194,15 @@ export default function Investment_dipwid() {
       if (platform_id) qs.set("platform_id", String(platform_id));
       if (segment_id) qs.set("segment_id", String(segment_id));
       if (month) qs.set("month", month);
-      const res = await fetch(`${BASE_URL}/api/investment/dipwid/month-summary?${qs.toString()}`, { headers });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message || "Month summary fetch failed");
+
+      const data = await request(`${BASE_URL}/api/investment/dipwid/month-summary?${qs.toString()}`, {
+        method: "GET",
+      });
       return Array.isArray(data?.data) ? data.data : [];
     },
 
     async deleteDipWid(id) {
-      const res = await fetch(`${BASE_URL}/api/investment/dipwid/${id}`, { method: "DELETE", headers });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message || "Delete failed");
+      await request(`${BASE_URL}/api/investment/dipwid/${id}`, { method: "DELETE" });
       return true;
     },
   };
@@ -312,22 +353,21 @@ export default function Investment_dipwid() {
   };
 
   const fmtMonth = (val) => {
-    // show "1 Jan 2026"
     try {
       const d = new Date(val);
       if (Number.isNaN(d.getTime())) return "-";
-      return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(d).replace(/^\d+/, "1");
+      return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" })
+        .format(d)
+        .replace(/^\d+/, "1");
     } catch {
       return "-";
     }
   };
 
   const fmtDateTime = (val) => {
-    // ledger time: keep readable, but if API sends string just show it
     if (!val) return "-";
     const d = new Date(val);
     if (Number.isNaN(d.getTime())) return String(val);
-    // "18 Feb 2026, 10:30"
     const datePart = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(d);
     const timePart = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" }).format(d);
     return `${datePart}, ${timePart}`;
@@ -348,7 +388,7 @@ export default function Investment_dipwid() {
         <section style={styles.card}>
           <div style={styles.cardHeader}>
             <div style={styles.cardTitle}>Add Entry</div>
-            <div style={styles.cardMeta}>{/* no extra text */}</div>
+            <div style={styles.cardMeta} />
           </div>
 
           <form style={styles.form} onSubmit={onSubmit} noValidate>
@@ -361,7 +401,12 @@ export default function Investment_dipwid() {
               ))}
             </select>
 
-            <select style={styles.select} value={segmentId} onChange={(e) => setSegmentId(e.target.value)} disabled={!platformId}>
+            <select
+              style={styles.select}
+              value={segmentId}
+              onChange={(e) => setSegmentId(e.target.value)}
+              disabled={!platformId}
+            >
               <option value="">Select Segment</option>
               {segments.map((s) => (
                 <option key={s.segment_id} value={s.segment_id}>
@@ -370,7 +415,12 @@ export default function Investment_dipwid() {
               ))}
             </select>
 
-            <select style={styles.select} value={planId} onChange={(e) => setPlanId(e.target.value)} disabled={!platformId || !segmentId}>
+            <select
+              style={styles.select}
+              value={planId}
+              onChange={(e) => setPlanId(e.target.value)}
+              disabled={!platformId || !segmentId}
+            >
               <option value="">Plan (Optional)</option>
               {plans.map((p) => (
                 <option key={p.plan_id} value={p.plan_id}>
@@ -394,7 +444,12 @@ export default function Investment_dipwid() {
               />
             </div>
 
-            <textarea style={styles.textarea} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" />
+            <textarea
+              style={styles.textarea}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Note (optional)"
+            />
 
             <div style={styles.btnRow}>
               <Btn variant="primary" type="submit" disabled={busy === "save"}>
@@ -451,7 +506,9 @@ export default function Investment_dipwid() {
                       </td>
 
                       <td style={styles.td}>
-                        <span style={isDep ? styles.pillGreen : styles.pillRed}>{isDep ? "Deposit" : "Withdraw"}</span>
+                        <span style={isDep ? styles.pillGreen : styles.pillRed}>
+                          {isDep ? "Deposit" : "Withdraw"}
+                        </span>
                       </td>
 
                       <td style={styles.td}>
@@ -465,7 +522,12 @@ export default function Investment_dipwid() {
                       <td style={styles.td}>{r.note ? r.note : "-"}</td>
 
                       <td style={styles.td}>
-                        <Btn variant="danger" small onClick={() => onDelete(r.dipwid_id)} disabled={busy === `del-${r.dipwid_id}`}>
+                        <Btn
+                          variant="danger"
+                          small
+                          onClick={() => onDelete(r.dipwid_id)}
+                          disabled={busy === `del-${r.dipwid_id}`}
+                        >
                           {busy === `del-${r.dipwid_id}` ? "..." : "Delete"}
                         </Btn>
                       </td>
@@ -536,7 +598,6 @@ export default function Investment_dipwid() {
         </section>
       </div>
 
-      {/* Bottom safe space for mobile */}
       <div style={{ height: 90 }} />
 
       {/* Center Modal */}
@@ -577,7 +638,7 @@ export default function Investment_dipwid() {
   );
 }
 
-// -------------------- styles (mobile-first, clean, responsive) --------------------
+// -------------------- styles (same as your original) --------------------
 const styles = {
   page: {
     width: "100vw",
@@ -587,7 +648,7 @@ const styles = {
     background: "#ffffff",
     color: "#0f172a",
     fontFamily: '"Times New Roman", Times, serif',
-    paddingBottom: 70, // ✅ prevent touching bottom UI
+    paddingBottom: 70,
     boxSizing: "border-box",
   },
   topbar: {
@@ -702,11 +763,9 @@ const styles = {
   },
   td: { borderBottom: "1px solid #f1f5f9", padding: "10px 12px", fontSize: 13, verticalAlign: "top" },
 
-  // Amount colors
-  amountDeposit: { fontWeight: 900, color: "#166534" }, // green
-  amountWithdraw: { fontWeight: 900, color: "#b91c1c" }, // red
+  amountDeposit: { fontWeight: 900, color: "#166534" },
+  amountWithdraw: { fontWeight: 900, color: "#b91c1c" },
 
-  // Pills
   pillGreen: {
     display: "inline-block",
     padding: "4px 10px",
@@ -738,7 +797,6 @@ const styles = {
     fontWeight: 900,
   },
 
-  // Modal
   overlay: {
     position: "fixed",
     inset: 0,

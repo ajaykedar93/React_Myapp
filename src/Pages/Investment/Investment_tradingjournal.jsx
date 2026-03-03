@@ -1,15 +1,60 @@
 // src/pages/Investment_tradingjournal.jsx
 import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 const BASE_URL = "https://express-backend-myapp.onrender.com";
 
 export default function Investment_tradingjournal() {
-  const token = useMemo(() => localStorage.getItem("token") || "", []);
-  const headers = useMemo(() => {
+  const navigate = useNavigate();
+
+  // ✅ Always fresh token (do NOT memoize with [])
+  const getToken = () => localStorage.getItem("token") || "";
+
+  // ✅ Always create headers fresh
+  const getHeaders = () => {
+    const token = getToken();
     const h = { "Content-Type": "application/json" };
     if (token) h.Authorization = `Bearer ${token}`;
     return h;
-  }, [token]);
+  };
+
+  // ✅ common request wrapper (handles 401/403)
+  const request = async (url, options = {}) => {
+    const token = getToken();
+    if (!token) {
+      navigate("/login");
+      throw new Error("Please login again.");
+    }
+
+    const res = await fetch(url, {
+      ...options,
+      headers: {
+        ...getHeaders(),
+        ...(options.headers || {}),
+      },
+    });
+
+    let data = {};
+    try {
+      data = await res.json();
+    } catch {
+      data = {};
+    }
+
+    if (res.status === 401 || res.status === 403) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("auth");
+      localStorage.removeItem("user");
+      navigate("/login");
+      throw new Error(data?.message || "Session expired. Please login again.");
+    }
+
+    if (!res.ok) {
+      throw new Error(data?.message || "Request failed");
+    }
+
+    return data;
+  };
 
   // -------------------- master data --------------------
   const [platforms, setPlatforms] = useState([]);
@@ -99,7 +144,7 @@ export default function Investment_tradingjournal() {
   // Date format: "1 Jan 2026"
   const formatDate = (value) => {
     if (!value) return "-";
-    const d = new Date(value); // supports YYYY-MM-DD
+    const d = new Date(value);
     if (Number.isNaN(d.getTime())) return String(value);
     return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(d);
   };
@@ -130,36 +175,31 @@ export default function Investment_tradingjournal() {
   // -------------------- API --------------------
   const api = {
     async getPlatforms() {
-      const res = await fetch(`${BASE_URL}/api/investment/platform-segment/platform`, { headers });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message || "Platform fetch failed");
+      const data = await request(`${BASE_URL}/api/investment/platform-segment/platform`, { method: "GET" });
       return Array.isArray(data?.data) ? data.data : [];
     },
+
     async getSegments(pid) {
       if (!pid) return [];
-      const res = await fetch(`${BASE_URL}/api/investment/platform-segment/segment?platform_id=${pid}`, { headers });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message || "Segment fetch failed");
+      const data = await request(`${BASE_URL}/api/investment/platform-segment/segment?platform_id=${pid}`, {
+        method: "GET",
+      });
       return Array.isArray(data?.data) ? data.data : [];
     },
+
     async getPlans(pid, sid) {
       const qs = new URLSearchParams();
       if (pid) qs.set("platform_id", String(pid));
       if (sid) qs.set("segment_id", String(sid));
-      const res = await fetch(`${BASE_URL}/api/investment/plan?${qs.toString()}`, { headers });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message || "Plan fetch failed");
+      const data = await request(`${BASE_URL}/api/investment/plan?${qs.toString()}`, { method: "GET" });
       return Array.isArray(data?.data) ? data.data : [];
     },
 
     async createJournal(payload) {
-      const res = await fetch(`${BASE_URL}/api/investment/tradingjournal`, {
+      const data = await request(`${BASE_URL}/api/investment/tradingjournal`, {
         method: "POST",
-        headers,
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message || "Journal create failed");
       return data?.data;
     },
 
@@ -169,11 +209,10 @@ export default function Investment_tradingjournal() {
       if (segment_name) qs.set("segment_name", segment_name);
       if (plan_id) qs.set("plan_id", String(plan_id));
       if (month) qs.set("month", month);
-      const res = await fetch(`${BASE_URL}/api/investment/tradingjournal-view/daily-summary?${qs.toString()}`, {
-        headers,
+
+      const data = await request(`${BASE_URL}/api/investment/tradingjournal-view/daily-summary?${qs.toString()}`, {
+        method: "GET",
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message || "Daily summary fetch failed");
       return Array.isArray(data?.data) ? data.data : [];
     },
 
@@ -181,21 +220,15 @@ export default function Investment_tradingjournal() {
       const qs = new URLSearchParams();
       if (journal_id) qs.set("journal_id", String(journal_id));
       if (month) qs.set("month", month);
-      const res = await fetch(`${BASE_URL}/api/investment/tradingjournal-view/entry-details?${qs.toString()}`, {
-        headers,
+
+      const data = await request(`${BASE_URL}/api/investment/tradingjournal-view/entry-details?${qs.toString()}`, {
+        method: "GET",
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message || "Entry details fetch failed");
       return Array.isArray(data?.data) ? data.data : [];
     },
 
     async deleteJournal(journal_id) {
-      const res = await fetch(`${BASE_URL}/api/investment/tradingjournal/${journal_id}`, {
-        method: "DELETE",
-        headers,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message || "Journal delete failed");
+      await request(`${BASE_URL}/api/investment/tradingjournal/${journal_id}`, { method: "DELETE" });
       return true;
     },
   };
@@ -282,7 +315,7 @@ export default function Investment_tradingjournal() {
   useEffect(() => {
     refreshDaily();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [monthFilter, platformId, segmentId, planId]);
+  }, [monthFilter, platformId, segmentId, planId, platforms, segments]);
 
   // -------------------- validation --------------------
   const validateMain = () => {
@@ -483,7 +516,7 @@ export default function Investment_tradingjournal() {
     return () => window.removeEventListener("resize", onR);
   }, []);
 
-  // -------------------- styles --------------------
+  // -------------------- styles (same as your existing) --------------------
   const styles = {
     page: {
       width: "100vw",
@@ -493,7 +526,7 @@ export default function Investment_tradingjournal() {
       background: "#ffffff",
       color: "#0f172a",
       fontFamily: '"Times New Roman", Times, serif',
-      paddingBottom: 90, // ✅ space at bottom so mobile button not touch
+      paddingBottom: 90,
       boxSizing: "border-box",
     },
     topbar: {
@@ -617,10 +650,9 @@ export default function Investment_tradingjournal() {
       background: "#fff",
     },
 
-    // ✅ profit/loss/brokerage colors (text only)
     profitText: { fontWeight: 900, color: "#166534" },
     lossText: { fontWeight: 900, color: "#b91c1c" },
-    brokerageText: { fontWeight: 900, color: "#a16207" }, // dark yellow
+    brokerageText: { fontWeight: 900, color: "#a16207" },
 
     netPill: (v) => ({
       display: "inline-block",
@@ -685,6 +717,8 @@ export default function Investment_tradingjournal() {
       userSelect: "none",
     },
   };
+
+  
 
   return (
     <div style={styles.page}>
