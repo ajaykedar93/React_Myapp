@@ -19,8 +19,7 @@ export default function Investment_getview_trandingjouranal() {
 
   const openError = (message) =>
     setModal({ open: true, title: "Error", message: message || "Something went wrong", kind: "error" });
-  const openInfo = (message) =>
-    setModal({ open: true, title: "Success", message: message || "Done", kind: "info" });
+  const openInfo = (message) => setModal({ open: true, title: "Success", message: message || "Done", kind: "info" });
   const closeModal = () => setModal({ open: false, title: "", message: "", kind: "error" });
 
   // ---------- Master data ----------
@@ -79,6 +78,18 @@ export default function Investment_getview_trandingjouranal() {
     window.addEventListener("resize", onR);
     return () => window.removeEventListener("resize", onR);
   }, []);
+
+  // ✅ lock page scroll when modal open (edit or info modal)
+  useEffect(() => {
+    const shouldLock = !!edit.open || !!modal.open;
+    if (shouldLock) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = prev || "";
+      };
+    }
+  }, [edit.open, modal.open]);
 
   // ---------- Helpers ----------
   const formatDate = (value) => {
@@ -139,7 +150,7 @@ export default function Investment_getview_trandingjouranal() {
       return Array.isArray(data?.data) ? data.data : [];
     },
 
-    // ✅ View API (correct mount)
+    // ✅ View API
     async getDailySummary({ platform_id, segment_id, month }) {
       const qs = new URLSearchParams();
       if (platform_id) qs.set("platform_id", String(platform_id));
@@ -154,7 +165,7 @@ export default function Investment_getview_trandingjouranal() {
       return Array.isArray(data?.data) ? data.data : [];
     },
 
-    // ✅ UPDATE (correct mount)
+    // ✅ UPDATE
     async updateJournal(journal_id, payload) {
       const res = await fetch(`${BASE_URL}/api/investment/tradingjournal-view/${journal_id}`, {
         method: "PUT",
@@ -166,7 +177,7 @@ export default function Investment_getview_trandingjouranal() {
       return data?.data;
     },
 
-    // ✅ DELETE (correct mount)
+    // ✅ DELETE
     async deleteJournal(journal_id) {
       const res = await fetch(`${BASE_URL}/api/investment/tradingjournal-view/${journal_id}`, {
         method: "DELETE",
@@ -301,12 +312,12 @@ export default function Investment_getview_trandingjouranal() {
   };
 
   // ---------- Small UI ----------
-  const SmallBtn = ({ variant = "dark", outline = false, disabled, onClick, children }) => (
+  const SmallBtn = ({ variant = "dark", outline = false, disabled, onClick, children, className = "" }) => (
     <button
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className={`btn ${outline ? `btn-outline-${variant}` : `btn-${variant}`} btn-sm ijv-btn`}
+      className={`btn ${outline ? `btn-outline-${variant}` : `btn-${variant}`} btn-sm ijv-btn ${className}`}
     >
       {children}
     </button>
@@ -317,14 +328,19 @@ export default function Investment_getview_trandingjouranal() {
     return <span className={`ijv-pill ijv-${t}`}>{formatNumber(value)}</span>;
   };
 
-  // text helpers
   const renderLogic = (txt) => (String(txt || "").trim() ? String(txt) : "-");
   const renderMistake = (txt) => (String(txt || "").trim() ? String(txt) : "-");
 
   return (
     <div className="ijv-root">
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800;900&display=swap');
+
+        /* ✅ FULL EDGE-TO-EDGE RESET */
+        html, body { width:100%; margin:0; padding:0; }
+        .container-fluid { padding-left: 0 !important; padding-right: 0 !important; }
+        .row { margin-left: 0 !important; margin-right: 0 !important; }
+        [class^="col-"], [class*=" col-"] { padding-left: 0 !important; padding-right: 0 !important; }
 
         .ijv-root{
           min-height:100vh;
@@ -336,7 +352,7 @@ export default function Investment_getview_trandingjouranal() {
             radial-gradient(900px 520px at 90% 14%, rgba(6,182,212,.12), transparent 60%),
             radial-gradient(900px 520px at 40% 96%, rgba(245,158,11,.10), transparent 60%),
             linear-gradient(135deg, #f6f8ff, #fff7f1);
-          padding-bottom:72px;
+          padding-bottom: 72px;
         }
 
         .ijv-topbar{
@@ -347,21 +363,60 @@ export default function Investment_getview_trandingjouranal() {
           border-bottom:1px solid rgba(15,23,42,.10);
           backdrop-filter: blur(14px);
         }
-        .ijv-title{ margin:0; font-weight:1000; letter-spacing:.2px; font-size:16px; line-height:1.2; }
-        .ijv-sub{ margin:0; color:rgba(15,23,42,.62); font-weight:800; font-size:12px; }
+        .ijv-topbarInner{
+          width: 100%;
+          padding: 10px 12px;
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          gap:12px;
+        }
+        .ijv-title{
+          margin:0;
+          font-weight:1000;
+          letter-spacing:.2px;
+          font-size:16px;
+          line-height:1.2;
+        }
+        .ijv-sub{
+          margin:0;
+          color:rgba(15,23,42,.62);
+          font-weight:850;
+          font-size:12px;
+        }
 
+        /* ✅ FULL WIDTH CARD */
         .ijv-card{
-          border:1px solid rgba(15,23,42,.10);
-          border-radius:18px;
+          width: 100%;
+          border-top:1px solid rgba(15,23,42,.10);
+          border-bottom:1px solid rgba(15,23,42,.10);
+          border-left:0;
+          border-right:0;
+          border-radius: 0;
           overflow:hidden;
-          background:rgba(255,255,255,.85);
+          background:rgba(255,255,255,.88);
           box-shadow:0 14px 34px rgba(15,23,42,0.08);
         }
-        .ijv-head{ background:rgba(255,255,255,.66); border-bottom:1px solid rgba(15,23,42,.10); }
 
-        .ijv-label{ font-size:12px; color:rgba(15,23,42,.62); font-weight:900; margin-bottom:6px; }
+        @media (min-width: 992px){
+          .ijv-wrap{ padding: 12px; }
+          .ijv-card{ border:1px solid rgba(15,23,42,.10); border-radius:18px; }
+          .ijv-title{ font-size:18px; }
+        }
 
-        .ijv-form .form-select, .ijv-form .form-control{
+        .ijv-head{
+          background:rgba(255,255,255,.66);
+          border-bottom:1px solid rgba(15,23,42,.10);
+        }
+        .ijv-label{
+          font-size:12px;
+          color:rgba(15,23,42,.62);
+          font-weight:900;
+          margin-bottom:6px;
+        }
+
+        .ijv-form .form-select,
+        .ijv-form .form-control{
           border-radius:14px;
           border:1px solid rgba(15,23,42,.14);
           font-weight:850;
@@ -373,34 +428,54 @@ export default function Investment_getview_trandingjouranal() {
           letter-spacing:.15px;
           padding:.33rem .55rem !important;
           box-shadow:0 8px 18px rgba(15,23,42,0.08);
+          white-space: nowrap;              /* ✅ no half text */
+          min-width: 86px;                  /* ✅ Update / Cancel / Delete fully visible */
+        }
+        @media (max-width: 420px){
+          .ijv-btn{ min-width: 78px; }
         }
 
         .ijv-table thead th{
-          position:sticky; top:0; z-index:2;
-          background:rgba(248,250,252,.95) !important;
-          border-bottom:1px solid rgba(15,23,42,.10) !important;
-          font-size:12px;
-          color:rgba(15,23,42,.66);
-          font-weight:950;
-          white-space:nowrap;
+          position: sticky;
+          top: 0;
+          z-index: 2;
+          background: rgba(248,250,252,.95) !important;
+          border-bottom: 1px solid rgba(15,23,42,.10) !important;
+          font-size: 12px;
+          color: rgba(15,23,42,.66);
+          font-weight: 950;
+          white-space: nowrap;
         }
-        .ijv-table td{ vertical-align:top; font-size:13px; font-weight:850; }
-        .ijv-meta{ font-size:11px; font-weight:900; color:rgba(15,23,42,.50); }
+        .ijv-table td{
+          vertical-align: top;
+          font-size: 13px;
+          font-weight: 850;
+        }
+
+        .ijv-meta{
+          font-size:11px;
+          font-weight:900;
+          color:rgba(15,23,42,.50);
+        }
 
         .ijv-pill{
-          display:inline-flex; align-items:center; justify-content:center;
-          padding:6px 10px; border-radius:999px;
-          font-weight:1000; font-size:12px;
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          padding:6px 10px;
+          border-radius:999px;
+          font-weight:1000;
+          font-size:12px;
           border:1px solid rgba(15,23,42,.12);
-          min-width:88px; white-space:nowrap;
+          min-width:88px;
+          white-space:nowrap;
         }
         .ijv-pos{ background:rgba(22,163,74,.10); color:#15803d; }
         .ijv-neg{ background:rgba(225,29,72,.10); color:#be123c; }
         .ijv-neu{ background:rgba(37,99,235,.10); color:#1d4ed8; }
 
-        /* ✅ New text styles */
         .ijv-logic{
-          color:#1d4ed8; /* blue */
+          color:#1d4ed8;
           font-weight:900;
           max-width: 420px;
           white-space: normal;
@@ -408,7 +483,7 @@ export default function Investment_getview_trandingjouranal() {
           line-height: 1.25;
         }
         .ijv-mistake{
-          color:#dc2626; /* red */
+          color:#dc2626;
           font-weight:950;
           max-width: 420px;
           white-space: normal;
@@ -418,13 +493,21 @@ export default function Investment_getview_trandingjouranal() {
 
         /* Mobile cards */
         .ijv-mcard{
-          border:1px solid rgba(15,23,42,.10);
-          border-radius:18px;
-          background:rgba(255,255,255,.85);
+          width: 100%;
+          border-top:1px solid rgba(15,23,42,.10);
+          border-bottom:1px solid rgba(15,23,42,.10);
+          border-left:0;
+          border-right:0;
+          border-radius:0;
+          background:rgba(255,255,255,.88);
           box-shadow:0 14px 34px rgba(15,23,42,0.08);
           overflow:hidden;
-          margin-bottom: 12px;
+          margin-bottom: 10px;
         }
+        @media (min-width: 992px){
+          .ijv-mcard{ border:1px solid rgba(15,23,42,.10); border-radius:18px; }
+        }
+
         .ijv-mcardHead{
           padding: 12px 14px;
           border-bottom:1px solid rgba(15,23,42,.10);
@@ -436,36 +519,65 @@ export default function Investment_getview_trandingjouranal() {
         .ijv-mcardBody{ padding: 12px 14px; }
         .ijv-row2{ display:flex; gap:10px; flex-wrap:wrap; }
         .ijv-kv{ font-size:12px; font-weight:950; color:rgba(15,23,42,.60); }
-        .ijv-val{ font-size:13px; font-weight:950; color:#0f172a; }
         .ijv-block{ margin-top: 10px; }
 
+        /* ✅ MODAL: always center, fully visible top-to-bottom, scroll if content more */
         .ijv-modalOverlay{
-          position:fixed; inset:0;
+          position:fixed;
+          inset:0;
           background:rgba(15,23,42,0.38);
-          display:flex; align-items:center; justify-content:center;
-          padding:12px; z-index:9999;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          padding:12px;
+          z-index:9999;
+          overflow:auto;                   /* ✅ if small device, overlay can scroll */
+          -webkit-overflow-scrolling: touch;
         }
         .ijv-modal{
-          width:min(92vw, 520px);
+          width:min(92vw, 760px);
+          max-height: calc(100vh - 24px);  /* ✅ never hide under screen */
+          display:flex;
+          flex-direction:column;
           border-radius:18px;
           border:1px solid rgba(15,23,42,.12);
-          background:#fff; overflow:hidden;
+          background:#fff;
+          overflow:hidden;
           box-shadow:0 22px 60px rgba(0,0,0,0.30);
         }
+        @media (max-width: 520px){
+          .ijv-modal{ width: min(96vw, 760px); border-radius:16px; }
+        }
 
-        @media (min-width: 992px){
-          .ijv-title{ font-size:18px; }
+        .ijv-modalBody{
+          padding: 12px;
+          overflow:auto;                   /* ✅ scroll inside modal */
+          -webkit-overflow-scrolling: touch;
+        }
+        .ijv-modalFooter{
+          padding: 12px;
+          padding-top: 8px;
+          display:flex;
+          justify-content:flex-end;
+          gap:10px;
+          border-top:1px solid rgba(15,23,42,.10);
+          background: rgba(255,255,255,.92);
+        }
+
+        /* ✅ Make table area full width */
+        .ijv-tableWrap{
+          width: 100%;
+          max-height: 72vh;
         }
       `}</style>
 
       {/* Header */}
       <div className="ijv-topbar">
-        <div className="container-fluid py-2 px-3 d-flex align-items-center justify-content-between gap-3">
+        <div className="ijv-topbarInner">
           <div className="d-flex flex-column">
             <p className="ijv-title">Trading Journal</p>
             <p className="ijv-sub">View monthly trades • Update / Delete</p>
           </div>
-
           <div className="d-flex align-items-center gap-2">
             <SmallBtn variant="dark" disabled={busy === "refresh"} onClick={refresh}>
               {busy === "refresh" ? "..." : "Refresh"}
@@ -474,9 +586,10 @@ export default function Investment_getview_trandingjouranal() {
         </div>
       </div>
 
-      {/* Initial Loading */}
-      {initialLoading ? (
-        <div className="container-fluid px-3 py-4">
+      {/* Body wrapper (desktop only padding) */}
+      <div className="ijv-wrap">
+        {/* Initial Loading */}
+        {initialLoading ? (
           <div className="ijv-card p-3 d-flex align-items-center justify-content-between gap-3 flex-wrap">
             <div>
               <div style={{ fontWeight: 1000 }}>Loading…</div>
@@ -484,224 +597,219 @@ export default function Investment_getview_trandingjouranal() {
             </div>
             <div className="spinner-border" role="status" aria-label="Loading" />
           </div>
-        </div>
-      ) : (
-        <div className="container-fluid px-3 py-3">
-          <div className="row g-3">
-            {/* Filters */}
-            <div className="col-12 col-lg-4">
-              <div className="ijv-card ijv-form">
-                <div className="ijv-head px-3 py-2 d-flex align-items-center justify-content-between">
-                  <div style={{ fontWeight: 1000 }}>Filters</div>
-                  <div className="ijv-meta">Optional</div>
-                </div>
-
-                <div className="p-3">
-                  <div className="mb-2">
-                    <div className="ijv-label">Platform</div>
-                    <select className="form-select" value={platformId} onChange={(e) => setPlatformId(e.target.value)}>
-                      <option value="">All Platforms</option>
-                      {platforms.map((p) => (
-                        <option key={p.platform_id} value={p.platform_id}>
-                          {p.platform_name}
-                        </option>
-                      ))}
-                    </select>
+        ) : (
+          <div className="container-fluid">
+            <div className="row g-0">
+              {/* Filters */}
+              <div className="col-12 col-lg-4">
+                <div className="ijv-card ijv-form">
+                  <div className="ijv-head px-3 py-2 d-flex align-items-center justify-content-between">
+                    <div style={{ fontWeight: 1000 }}>Filters</div>
+                    <div className="ijv-meta">Optional</div>
                   </div>
+                  <div className="p-3">
+                    <div className="mb-2">
+                      <div className="ijv-label">Platform</div>
+                      <select className="form-select" value={platformId} onChange={(e) => setPlatformId(e.target.value)}>
+                        <option value="">All Platforms</option>
+                        {platforms.map((p) => (
+                          <option key={p.platform_id} value={p.platform_id}>
+                            {p.platform_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                  <div className="mb-2">
-                    <div className="ijv-label">Segment</div>
-                    <select
-                      className="form-select"
-                      value={segmentId}
-                      onChange={(e) => setSegmentId(e.target.value)}
-                      disabled={!platformId}
-                    >
-                      <option value="">All Segments</option>
-                      {segments.map((s) => (
-                        <option key={s.segment_id} value={s.segment_id}>
-                          {s.segment_name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                    <div className="mb-2">
+                      <div className="ijv-label">Segment</div>
+                      <select
+                        className="form-select"
+                        value={segmentId}
+                        onChange={(e) => setSegmentId(e.target.value)}
+                        disabled={!platformId}
+                      >
+                        <option value="">All Segments</option>
+                        {segments.map((s) => (
+                          <option key={s.segment_id} value={s.segment_id}>
+                            {s.segment_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                  <div className="mb-0">
-                    <div className="ijv-label">Month</div>
-                    <input
-                      className="form-control"
-                      type="month"
-                      value={month.slice(0, 7)}
-                      onChange={(e) => setMonth(`${e.target.value}-01`)}
-                    />
+                    <div className="mb-0">
+                      <div className="ijv-label">Month</div>
+                      <input
+                        className="form-control"
+                        type="month"
+                        value={month.slice(0, 7)}
+                        onChange={(e) => setMonth(`${e.target.value}-01`)}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Table / Mobile */}
-            <div className="col-12 col-lg-8">
-              <div className="ijv-card">
-                <div className="ijv-head px-3 py-2 d-flex align-items-center justify-content-between">
-                  <div style={{ fontWeight: 1000 }}>Monthly Trades</div>
-                  <div className="ijv-meta">{dailySummary.length} rows</div>
-                </div>
-
-                {!isMobile ? (
-                  // ✅ Desktop table (with Trade Logic + Mistakes)
-                  <div className="table-responsive ijv-table" style={{ maxHeight: "72vh" }}>
-                    <table className="table table-hover mb-0 align-middle">
-                      <thead>
-                        <tr>
-                          <th className="py-3 px-3">Date</th>
-                          <th className="py-3 px-3">Trade Name</th>
-                          <th className="py-3 px-3">Platform</th>
-                          <th className="py-3 px-3">Segment</th>
-                          <th className="py-3 px-3">Profit</th>
-                          <th className="py-3 px-3">Loss</th>
-                          <th className="py-3 px-3">Brokerage</th>
-                          <th className="py-3 px-3">Net</th>
-                          <th className="py-3 px-3">Trade Logic</th>
-                          <th className="py-3 px-3">Mistakes</th>
-                          <th className="py-3 px-3">Actions</th>
-                        </tr>
-                      </thead>
-
-                      <tbody>
-                        {dailySummary.map((r) => (
-                          <tr key={r.journal_id}>
-                            <td className="px-3 py-3">
-                              <div style={{ fontWeight: 1000 }}>{formatDate(r.trade_date)}</div>
-                              <div className="ijv-meta">#{r.journal_id}</div>
-                            </td>
-
-                            <td className="px-3 py-3">{r.trade_name || "-"}</td>
-                            <td className="px-3 py-3">{r.platform_name}</td>
-                            <td className="px-3 py-3">{r.segment_name}</td>
-
-                            <td className="px-3 py-3">
-                              <span className="ijv-pill ijv-pos">{formatNumber(r.profit)}</span>
-                            </td>
-                            <td className="px-3 py-3">
-                              <span className="ijv-pill ijv-neg">{formatNumber(r.loss)}</span>
-                            </td>
-                            <td className="px-3 py-3">
-                              <span className="ijv-pill ijv-neu">{formatNumber(r.brokerage)}</span>
-                            </td>
-                            <td className="px-3 py-3">
-                              <NetPill value={r.net_total} />
-                            </td>
-
-                            <td className="px-3 py-3">
-                              <div className="ijv-logic">{renderLogic(r.trade_logic)}</div>
-                            </td>
-                            <td className="px-3 py-3">
-                              <div className="ijv-mistake">{renderMistake(r.mistakes)}</div>
-                            </td>
-
-                            <td className="px-3 py-3">
-                              <div className="d-flex gap-2 flex-wrap">
-                                <SmallBtn
-                                  variant="dark"
-                                  outline
-                                  disabled={busy === `upd-${r.journal_id}` || busy === `del-${r.journal_id}`}
-                                  onClick={() => onOpenUpdate(r)}
-                                >
-                                  Update
-                                </SmallBtn>
-
-                                <SmallBtn
-                                  variant="danger"
-                                  outline
-                                  disabled={busy === `del-${r.journal_id}` || busy === `upd-${r.journal_id}`}
-                                  onClick={() => onDelete(r.journal_id)}
-                                >
-                                  {busy === `del-${r.journal_id}` ? "..." : "Delete"}
-                                </SmallBtn>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-
-                        {dailySummary.length === 0 ? (
-                          <tr>
-                            <td colSpan={11} className="px-3 py-4 ijv-meta">
-                              No data
-                            </td>
-                          </tr>
-                        ) : null}
-                      </tbody>
-                    </table>
+              {/* Table / Mobile */}
+              <div className="col-12 col-lg-8">
+                <div className="ijv-card">
+                  <div className="ijv-head px-3 py-2 d-flex align-items-center justify-content-between">
+                    <div style={{ fontWeight: 1000 }}>Monthly Trades</div>
+                    <div className="ijv-meta">{dailySummary.length} rows</div>
                   </div>
-                ) : (
-                  // ✅ Mobile cards (responsive)
-                  <div className="p-3">
-                    {dailySummary.map((r) => (
-                      <div key={r.journal_id} className="ijv-mcard">
-                        <div className="ijv-mcardHead">
-                          <div>
-                            <div style={{ fontWeight: 1000, fontSize: 15 }}>{formatDate(r.trade_date)}</div>
-                            <div className="ijv-meta">#{r.journal_id}</div>
-                            <div style={{ fontWeight: 950 }}>{r.trade_name || "-"}</div>
-                            <div className="ijv-meta">
-                              {r.platform_name} • {r.segment_name}
+
+                  {!isMobile ? (
+                    <div className="table-responsive ijv-table ijv-tableWrap">
+                      <table className="table table-hover mb-0 align-middle">
+                        <thead>
+                          <tr>
+                            <th className="py-3 px-3">Date</th>
+                            <th className="py-3 px-3">Trade Name</th>
+                            <th className="py-3 px-3">Platform</th>
+                            <th className="py-3 px-3">Segment</th>
+                            <th className="py-3 px-3">Profit</th>
+                            <th className="py-3 px-3">Loss</th>
+                            <th className="py-3 px-3">Brokerage</th>
+                            <th className="py-3 px-3">Net</th>
+                            <th className="py-3 px-3">Trade Logic</th>
+                            <th className="py-3 px-3">Mistakes</th>
+                            <th className="py-3 px-3">Actions</th>
+                          </tr>
+                        </thead>
+
+                        <tbody>
+                          {dailySummary.map((r) => (
+                            <tr key={r.journal_id}>
+                              <td className="px-3 py-3">
+                                <div style={{ fontWeight: 1000 }}>{formatDate(r.trade_date)}</div>
+                                <div className="ijv-meta">#{r.journal_id}</div>
+                              </td>
+                              <td className="px-3 py-3">{r.trade_name || "-"}</td>
+                              <td className="px-3 py-3">{r.platform_name}</td>
+                              <td className="px-3 py-3">{r.segment_name}</td>
+                              <td className="px-3 py-3">
+                                <span className="ijv-pill ijv-pos">{formatNumber(r.profit)}</span>
+                              </td>
+                              <td className="px-3 py-3">
+                                <span className="ijv-pill ijv-neg">{formatNumber(r.loss)}</span>
+                              </td>
+                              <td className="px-3 py-3">
+                                <span className="ijv-pill ijv-neu">{formatNumber(r.brokerage)}</span>
+                              </td>
+                              <td className="px-3 py-3">
+                                <NetPill value={r.net_total} />
+                              </td>
+                              <td className="px-3 py-3">
+                                <div className="ijv-logic">{renderLogic(r.trade_logic)}</div>
+                              </td>
+                              <td className="px-3 py-3">
+                                <div className="ijv-mistake">{renderMistake(r.mistakes)}</div>
+                              </td>
+                              <td className="px-3 py-3">
+                                <div className="d-flex gap-2 flex-wrap">
+                                  <SmallBtn
+                                    variant="dark"
+                                    outline
+                                    disabled={busy === `upd-${r.journal_id}` || busy === `del-${r.journal_id}`}
+                                    onClick={() => onOpenUpdate(r)}
+                                  >
+                                    Update
+                                  </SmallBtn>
+                                  <SmallBtn
+                                    variant="danger"
+                                    outline
+                                    disabled={busy === `del-${r.journal_id}` || busy === `upd-${r.journal_id}`}
+                                    onClick={() => onDelete(r.journal_id)}
+                                  >
+                                    {busy === `del-${r.journal_id}` ? "Deleting..." : "Delete"}
+                                  </SmallBtn>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+
+                          {dailySummary.length === 0 ? (
+                            <tr>
+                              <td colSpan={11} className="px-3 py-4 ijv-meta">
+                                No data
+                              </td>
+                            </tr>
+                          ) : null}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="p-3">
+                      {dailySummary.map((r) => (
+                        <div key={r.journal_id} className="ijv-mcard">
+                          <div className="ijv-mcardHead">
+                            <div>
+                              <div style={{ fontWeight: 1000, fontSize: 15 }}>{formatDate(r.trade_date)}</div>
+                              <div className="ijv-meta">#{r.journal_id}</div>
+                              <div style={{ fontWeight: 950 }}>{r.trade_name || "-"}</div>
+                              <div className="ijv-meta">
+                                {r.platform_name} • {r.segment_name}
+                              </div>
+                            </div>
+
+                            <div className="d-flex gap-2">
+                              <SmallBtn
+                                variant="dark"
+                                outline
+                                disabled={busy === `upd-${r.journal_id}` || busy === `del-${r.journal_id}`}
+                                onClick={() => onOpenUpdate(r)}
+                              >
+                                Update
+                              </SmallBtn>
+                              <SmallBtn
+                                variant="danger"
+                                outline
+                                disabled={busy === `del-${r.journal_id}` || busy === `upd-${r.journal_id}`}
+                                onClick={() => onDelete(r.journal_id)}
+                              >
+                                {busy === `del-${r.journal_id}` ? "Deleting..." : "Delete"}
+                              </SmallBtn>
                             </div>
                           </div>
 
-                          <div className="d-flex gap-2">
-                            <SmallBtn
-                              variant="dark"
-                              outline
-                              disabled={busy === `upd-${r.journal_id}` || busy === `del-${r.journal_id}`}
-                              onClick={() => onOpenUpdate(r)}
-                            >
-                              Update
-                            </SmallBtn>
-                            <SmallBtn
-                              variant="danger"
-                              outline
-                              disabled={busy === `del-${r.journal_id}` || busy === `upd-${r.journal_id}`}
-                              onClick={() => onDelete(r.journal_id)}
-                            >
-                              {busy === `del-${r.journal_id}` ? "..." : "Del"}
-                            </SmallBtn>
+                          <div className="ijv-mcardBody">
+                            <div className="ijv-row2">
+                              <span className="ijv-pill ijv-pos">P {formatNumber(r.profit)}</span>
+                              <span className="ijv-pill ijv-neg">L {formatNumber(r.loss)}</span>
+                              <span className="ijv-pill ijv-neu">B {formatNumber(r.brokerage)}</span>
+                              <NetPill value={r.net_total} />
+                            </div>
+
+                            <div className="ijv-block">
+                              <div className="ijv-kv">Trade Logic</div>
+                              <div className="ijv-logic">{renderLogic(r.trade_logic)}</div>
+                            </div>
+
+                            <div className="ijv-block">
+                              <div className="ijv-kv">Mistakes</div>
+                              <div className="ijv-mistake">{renderMistake(r.mistakes)}</div>
+                            </div>
                           </div>
                         </div>
+                      ))}
 
-                        <div className="ijv-mcardBody">
-                          <div className="ijv-row2">
-                            <span className="ijv-pill ijv-pos">P {formatNumber(r.profit)}</span>
-                            <span className="ijv-pill ijv-neg">L {formatNumber(r.loss)}</span>
-                            <span className="ijv-pill ijv-neu">B {formatNumber(r.brokerage)}</span>
-                            <NetPill value={r.net_total} />
-                          </div>
-
-                          <div className="ijv-block">
-                            <div className="ijv-kv">Trade Logic</div>
-                            <div className="ijv-logic">{renderLogic(r.trade_logic)}</div>
-                          </div>
-
-                          <div className="ijv-block">
-                            <div className="ijv-kv">Mistakes</div>
-                            <div className="ijv-mistake">{renderMistake(r.mistakes)}</div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-
-                    {dailySummary.length === 0 ? <div className="ijv-meta">No data</div> : null}
-                  </div>
-                )}
+                      {dailySummary.length === 0 ? <div className="ijv-meta">No data</div> : null}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* Update Modal */}
+      {/* ✅ Update Modal (center + scroll) */}
       {edit.open ? (
-        <div className="ijv-modalOverlay" role="dialog" aria-modal="true">
-          <div className="ijv-modal">
+        <div className="ijv-modalOverlay" role="dialog" aria-modal="true" onMouseDown={(e) => {
+          // click outside to close (optional): uncomment next line if you want
+          // if (e.target === e.currentTarget) closeEdit();
+        }}>
+          <div className="ijv-modal" onMouseDown={(e) => e.stopPropagation()}>
             <div className="ijv-head px-3 py-2 d-flex align-items-center justify-content-between">
               <div style={{ fontWeight: 1000 }}>Update Trade</div>
               <button type="button" className="btn btn-light btn-sm ijv-btn" onClick={closeEdit}>
@@ -709,7 +817,7 @@ export default function Investment_getview_trandingjouranal() {
               </button>
             </div>
 
-            <div className="p-3">
+            <div className="ijv-modalBody">
               <div className="row g-2">
                 <div className="col-12 col-md-6">
                   <div className="ijv-label">Trade Date</div>
@@ -761,6 +869,42 @@ export default function Investment_getview_trandingjouranal() {
                   />
                 </div>
 
+                {/* Optional: allow changing platform/segment inside update modal */}
+                <div className="col-12 col-md-6">
+                  <div className="ijv-label">Platform</div>
+                  <select
+                    className="form-select"
+                    value={edit.platform_id}
+                    onChange={(e) => setEdit((x) => ({ ...x, platform_id: e.target.value }))}
+                  >
+                    <option value="">Select Platform</option>
+                    {platforms.map((p) => (
+                      <option key={p.platform_id} value={p.platform_id}>
+                        {p.platform_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="col-12 col-md-6">
+                  <div className="ijv-label">Segment</div>
+                  <select
+                    className="form-select"
+                    value={edit.segment_id}
+                    onChange={(e) => setEdit((x) => ({ ...x, segment_id: e.target.value }))}
+                    disabled={!edit.platform_id}
+                  >
+                    <option value="">Select Segment</option>
+                    {segments
+                      .filter((s) => String(s.platform_id) === String(edit.platform_id) || !edit.platform_id)
+                      .map((s) => (
+                        <option key={s.segment_id} value={s.segment_id}>
+                          {s.segment_name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
                 <div className="col-12">
                   <div className="ijv-label">Trade Logic</div>
                   <textarea
@@ -783,19 +927,24 @@ export default function Investment_getview_trandingjouranal() {
               </div>
             </div>
 
-            <div className="p-3 pt-0 d-flex justify-content-end gap-2">
-              <SmallBtn variant="secondary" outline disabled={busy === `upd-${edit.journal_id}`} onClick={closeEdit}>
+            <div className="ijv-modalFooter">
+              <SmallBtn
+                variant="secondary"
+                outline
+                disabled={busy === `upd-${edit.journal_id}`}
+                onClick={closeEdit}
+              >
                 Cancel
               </SmallBtn>
               <SmallBtn variant="dark" disabled={busy === `upd-${edit.journal_id}`} onClick={onUpdate}>
-                {busy === `upd-${edit.journal_id}` ? "..." : "Save"}
+                {busy === `upd-${edit.journal_id}` ? "Saving..." : "Update"}
               </SmallBtn>
             </div>
           </div>
         </div>
       ) : null}
 
-      {/* Info/Error Modal */}
+      {/* ✅ Info/Error Modal (center + scroll) */}
       {modal.open ? (
         <div className="ijv-modalOverlay" role="dialog" aria-modal="true">
           <div className="ijv-modal">
@@ -805,10 +954,12 @@ export default function Investment_getview_trandingjouranal() {
                 ✕
               </button>
             </div>
-            <div className="p-3" style={{ fontWeight: 850 }}>
+
+            <div className="ijv-modalBody" style={{ fontWeight: 850 }}>
               {modal.message}
             </div>
-            <div className="p-3 pt-0 d-flex justify-content-end">
+
+            <div className="ijv-modalFooter">
               <SmallBtn variant="dark" onClick={closeModal}>
                 OK
               </SmallBtn>
