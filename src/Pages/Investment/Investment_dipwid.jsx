@@ -71,8 +71,7 @@ export default function Investment_dipwid() {
       onConfirm: p.onConfirm || null,
     }));
 
-  const closeModal = () =>
-    setModal((m) => ({ ...m, open: false, title: "", message: "", onConfirm: null }));
+  const closeModal = () => setModal((m) => ({ ...m, open: false, title: "", message: "", onConfirm: null }));
 
   const toast = (msg) => openModal({ type: "success", title: "Success", message: msg });
   const fail = (msg) => openModal({ type: "error", title: "Error", message: msg });
@@ -89,7 +88,7 @@ export default function Investment_dipwid() {
     return () => window.removeEventListener("resize", onR);
   }, []);
 
-  const Btn = ({ variant, small, disabled, onClick, children, type = "button" }) => (
+  const Btn = ({ variant, small, disabled, onClick, children, type = "button", style }) => (
     <button
       type={type}
       onClick={onClick}
@@ -102,6 +101,7 @@ export default function Investment_dipwid() {
       style={{
         ...styles.btn(variant, small),
         ...(disabled ? styles.btnDisabled : null),
+        ...(style || null),
       }}
     >
       {children}
@@ -112,7 +112,6 @@ export default function Investment_dipwid() {
   const request = async (url, options = {}) => {
     const token = getToken();
     if (!token) {
-      // ✅ If no token, go login (same device refresh works, but token removed -> login)
       navigate("/login");
       throw new Error("Please login again.");
     }
@@ -132,7 +131,6 @@ export default function Investment_dipwid() {
       data = {};
     }
 
-    // ✅ if token invalid/expired -> logout behavior (remove token + go login)
     if (res.status === 401 || res.status === 403) {
       localStorage.removeItem("token");
       localStorage.removeItem("auth");
@@ -141,10 +139,7 @@ export default function Investment_dipwid() {
       throw new Error(data?.message || "Session expired. Please login again.");
     }
 
-    if (!res.ok) {
-      throw new Error(data?.message || "Request failed");
-    }
-
+    if (!res.ok) throw new Error(data?.message || "Request failed");
     return data;
   };
 
@@ -156,10 +151,9 @@ export default function Investment_dipwid() {
 
     async getSegments(pid) {
       if (!pid) return [];
-      const data = await request(
-        `${BASE_URL}/api/investment/platform-segment/segment?platform_id=${pid}`,
-        { method: "GET" }
-      );
+      const data = await request(`${BASE_URL}/api/investment/platform-segment/segment?platform_id=${pid}`, {
+        method: "GET",
+      });
       return Array.isArray(data?.data) ? data.data : [];
     },
 
@@ -356,9 +350,7 @@ export default function Investment_dipwid() {
     try {
       const d = new Date(val);
       if (Number.isNaN(d.getTime())) return "-";
-      return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" })
-        .format(d)
-        .replace(/^\d+/, "1");
+      return new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric" }).format(d);
     } catch {
       return "-";
     }
@@ -368,19 +360,49 @@ export default function Investment_dipwid() {
     if (!val) return "-";
     const d = new Date(val);
     if (Number.isNaN(d.getTime())) return String(val);
-    const datePart = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(d);
+    const datePart = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(d);
     const timePart = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" }).format(d);
     return `${datePart}, ${timePart}`;
   };
 
+  // quick totals (nice look)
+  const totals = ledgerRows.reduce(
+    (acc, r) => {
+      const isDep = String(r.txn_type).toUpperCase() === "DEPOSIT";
+      const amt = Number(String(r.amount ?? 0).replace(/[^\d.-]/g, "")) || 0;
+      if (isDep) acc.deposit += amt;
+      else acc.withdraw += amt;
+      return acc;
+    },
+    { deposit: 0, withdraw: 0 }
+  );
+  const net = totals.deposit - totals.withdraw;
+
   return (
     <div style={styles.page}>
+      <style>{styles.css}</style>
+
       {/* Header */}
       <div style={styles.topbar}>
-        <div style={styles.title}>Deposit / Withdrawal</div>
-        <Btn small variant="primary" onClick={refreshViews} disabled={busy === "refresh" || loading}>
-          {busy === "refresh" || loading ? "..." : "Refresh"}
-        </Btn>
+        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <div style={styles.title}>Deposit / Withdrawal</div>
+          <div style={styles.subtitle}>Track cash flow • Filter by platform/segment/plan • Monthly insights</div>
+        </div>
+
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <Btn
+            small
+            variant="ghost"
+            onClick={() => navigate(-1)}
+            disabled={loading || busy === "refresh"}
+            style={{ minWidth: 88 }}
+          >
+            ← Back
+          </Btn>
+          <Btn small variant="primary" onClick={refreshViews} disabled={busy === "refresh" || loading}>
+            {busy === "refresh" || loading ? "..." : "Refresh"}
+          </Btn>
+        </div>
       </div>
 
       <div style={styles.grid(wide)}>
@@ -388,74 +410,93 @@ export default function Investment_dipwid() {
         <section style={styles.card}>
           <div style={styles.cardHeader}>
             <div style={styles.cardTitle}>Add Entry</div>
-            <div style={styles.cardMeta} />
+            <div style={styles.cardMeta}>Required: Platform + Segment</div>
           </div>
 
           <form style={styles.form} onSubmit={onSubmit} noValidate>
-            <select style={styles.select} value={platformId} onChange={(e) => setPlatformId(e.target.value)}>
-              <option value="">Select Platform</option>
-              {platforms.map((p) => (
-                <option key={p.platform_id} value={p.platform_id}>
-                  {p.platform_name}
-                </option>
-              ))}
-            </select>
-
-            <select
-              style={styles.select}
-              value={segmentId}
-              onChange={(e) => setSegmentId(e.target.value)}
-              disabled={!platformId}
-            >
-              <option value="">Select Segment</option>
-              {segments.map((s) => (
-                <option key={s.segment_id} value={s.segment_id}>
-                  {s.segment_name}
-                </option>
-              ))}
-            </select>
-
-            <select
-              style={styles.select}
-              value={planId}
-              onChange={(e) => setPlanId(e.target.value)}
-              disabled={!platformId || !segmentId}
-            >
-              <option value="">Plan (Optional)</option>
-              {plans.map((p) => (
-                <option key={p.plan_id} value={p.plan_id}>
-                  {p.plan_name ? p.plan_name : `Plan #${p.plan_id}`}
-                </option>
-              ))}
-            </select>
-
-            <div style={styles.row2(wide)}>
-              <select style={styles.select} value={txnType} onChange={(e) => setTxnType(e.target.value)}>
-                <option value="DEPOSIT">Deposit</option>
-                <option value="WITHDRAW">Withdraw</option>
+            <div style={styles.field}>
+              <div style={styles.label}>Platform</div>
+              <select style={styles.select} value={platformId} onChange={(e) => setPlatformId(e.target.value)}>
+                <option value="">Select Platform</option>
+                {platforms.map((p) => (
+                  <option key={p.platform_id} value={p.platform_id}>
+                    {p.platform_name}
+                  </option>
+                ))}
               </select>
-
-              <input
-                style={styles.input}
-                value={amount}
-                onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ""))}
-                inputMode="numeric"
-                placeholder="Amount"
-              />
             </div>
 
-            <textarea
-              style={styles.textarea}
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Note (optional)"
-            />
+            <div style={styles.field}>
+              <div style={styles.label}>Segment</div>
+              <select
+                style={styles.select}
+                value={segmentId}
+                onChange={(e) => setSegmentId(e.target.value)}
+                disabled={!platformId}
+              >
+                <option value="">Select Segment</option>
+                {segments.map((s) => (
+                  <option key={s.segment_id} value={s.segment_id}>
+                    {s.segment_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div style={styles.field}>
+              <div style={styles.label}>Plan (Optional)</div>
+              <select
+                style={styles.select}
+                value={planId}
+                onChange={(e) => setPlanId(e.target.value)}
+                disabled={!platformId || !segmentId}
+              >
+                <option value="">Select Plan (Optional)</option>
+                {plans.map((p) => (
+                  <option key={p.plan_id} value={p.plan_id}>
+                    {p.plan_name ? p.plan_name : `Plan #${p.plan_id}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div style={styles.row2(wide)}>
+              <div style={styles.field}>
+                <div style={styles.label}>Type</div>
+                <select style={styles.select} value={txnType} onChange={(e) => setTxnType(e.target.value)}>
+                  <option value="DEPOSIT">Deposit</option>
+                  <option value="WITHDRAW">Withdraw</option>
+                </select>
+              </div>
+
+              <div style={styles.field}>
+                <div style={styles.label}>Amount</div>
+                <input
+                  style={styles.input}
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ""))}
+                  inputMode="numeric"
+                  placeholder="Enter amount"
+                />
+              </div>
+            </div>
+
+            <div style={styles.field}>
+              <div style={styles.label}>Note (Optional)</div>
+              <textarea
+                style={styles.textarea}
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Add a note (example: Bank transfer / Cash / Profit booking)"
+              />
+            </div>
 
             <div style={styles.btnRow}>
               <Btn variant="primary" type="submit" disabled={busy === "save"}>
                 {busy === "save" ? "Saving..." : "Save"}
               </Btn>
               <Btn
+                variant="ghost"
                 onClick={() => {
                   setTxnType("DEPOSIT");
                   setAmount("");
@@ -466,20 +507,50 @@ export default function Investment_dipwid() {
                 Clear
               </Btn>
             </div>
+
+            <div style={styles.hintBox}>
+              <div style={{ fontWeight: 950 }}>Tip</div>
+              <div style={{ fontSize: 12, color: "rgba(15,23,42,.72)", lineHeight: 1.35 }}>
+                Use <b>Deposit</b> for adding funds, <b>Withdraw</b> for removing funds. You can filter by month using the
+                selector on the Ledger card.
+              </div>
+            </div>
           </form>
         </section>
 
         {/* RIGHT: LEDGER + MONTH SUMMARY */}
         <section style={styles.card}>
           <div style={styles.cardHeader}>
-            <div style={styles.cardTitle}>Ledger</div>
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <div style={styles.cardTitle}>Ledger</div>
+              <div style={{ fontSize: 12, color: "rgba(15,23,42,.62)", fontWeight: 800, margin: "0 12px 10px" }}>
+                {ledgerRows.length} entries • Balance flow overview
+              </div>
+            </div>
+
             <div style={styles.cardMeta}>
               <input
-                style={{ ...styles.input, height: 36, width: 170 }}
+                style={{ ...styles.input, height: 38, width: 170, background: "rgba(255,255,255,.92)" }}
                 type="month"
                 value={month.slice(0, 7)}
                 onChange={(e) => setMonth(`${e.target.value}-01`)}
               />
+            </div>
+          </div>
+
+          {/* mini stats */}
+          <div style={styles.statsRow}>
+            <div style={styles.statCard}>
+              <div style={styles.statLabel}>Total Deposit</div>
+              <div style={{ ...styles.statValue, color: "#16a34a" }}>{totals.deposit ? totals.deposit : 0}</div>
+            </div>
+            <div style={styles.statCard}>
+              <div style={styles.statLabel}>Total Withdraw</div>
+              <div style={{ ...styles.statValue, color: "#ef4444" }}>{totals.withdraw ? totals.withdraw : 0}</div>
+            </div>
+            <div style={styles.statCard}>
+              <div style={styles.statLabel}>Net</div>
+              <div style={{ ...styles.statValue, color: net >= 0 ? "#16a34a" : "#ef4444" }}>{net}</div>
             </div>
           </div>
 
@@ -499,16 +570,16 @@ export default function Investment_dipwid() {
                 {ledgerRows.map((r) => {
                   const isDep = String(r.txn_type).toUpperCase() === "DEPOSIT";
                   return (
-                    <tr key={r.dipwid_id}>
+                    <tr key={r.dipwid_id} style={styles.tr}>
                       <td style={styles.td}>
-                        <div style={{ fontWeight: 900 }}>{fmtDateTime(r.txn_at)}</div>
-                        <div style={{ fontSize: 12, color: "#64748b" }}>#{r.dipwid_id}</div>
+                        <div style={{ fontWeight: 950 }}>{fmtDateTime(r.txn_at)}</div>
+                        <div style={{ fontSize: 12, color: "rgba(100,116,139,.95)", fontWeight: 800 }}>
+                          #{r.dipwid_id}
+                        </div>
                       </td>
 
                       <td style={styles.td}>
-                        <span style={isDep ? styles.pillGreen : styles.pillRed}>
-                          {isDep ? "Deposit" : "Withdraw"}
-                        </span>
+                        <span style={isDep ? styles.pillGreen : styles.pillRed}>{isDep ? "Deposit" : "Withdraw"}</span>
                       </td>
 
                       <td style={styles.td}>
@@ -519,7 +590,9 @@ export default function Investment_dipwid() {
                         <span style={styles.pillNeutral}>{money(r.running_balance)}</span>
                       </td>
 
-                      <td style={styles.td}>{r.note ? r.note : "-"}</td>
+                      <td style={{ ...styles.td, maxWidth: 360 }}>
+                        <div style={styles.wrapText}>{r.note ? r.note : "-"}</div>
+                      </td>
 
                       <td style={styles.td}>
                         <Btn
@@ -546,7 +619,7 @@ export default function Investment_dipwid() {
             </table>
           </div>
 
-          <div style={{ height: 12 }} />
+          <div style={{ height: 14 }} />
 
           <div style={styles.cardHeader}>
             <div style={styles.cardTitle}>Monthly Summary</div>
@@ -566,7 +639,7 @@ export default function Investment_dipwid() {
               </thead>
               <tbody>
                 {monthSummaryRows.map((m, idx) => (
-                  <tr key={idx}>
+                  <tr key={idx} style={styles.tr}>
                     <td style={styles.td}>
                       <b>{fmtMonth(m.month_start)}</b>
                     </td>
@@ -600,7 +673,7 @@ export default function Investment_dipwid() {
 
       <div style={{ height: 90 }} />
 
-      {/* Center Modal */}
+      {/* Center Modal (improved: center + maxHeight + scroll + footer visible) */}
       {modal.open ? (
         <div style={styles.overlay} role="dialog" aria-modal="true">
           <div style={styles.modal}>
@@ -610,11 +683,15 @@ export default function Investment_dipwid() {
                 ×
               </button>
             </div>
+
             <div style={styles.modalBody}>{modal.message}</div>
+
             <div style={styles.modalFoot}>
               {modal.type === "confirm" ? (
                 <>
-                  <Btn onClick={closeModal}>{modal.cancelText}</Btn>
+                  <Btn variant="ghost" onClick={closeModal}>
+                    {modal.cancelText}
+                  </Btn>
                   <Btn
                     variant="danger"
                     onClick={() => {
@@ -638,23 +715,32 @@ export default function Investment_dipwid() {
   );
 }
 
-// -------------------- styles (same as your original) --------------------
+// -------------------- Enhanced styles (new font + attractive look) --------------------
 const styles = {
+  css: `
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800;900&display=swap');
+
+    * { -webkit-tap-highlight-color: transparent; }
+  `,
+
   page: {
     width: "100vw",
     minHeight: "100vh",
     margin: 0,
     padding: 0,
-    background: "#ffffff",
     color: "#0f172a",
-    fontFamily: '"Times New Roman", Times, serif',
+    fontFamily: '"Plus Jakarta Sans", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
     paddingBottom: 70,
     boxSizing: "border-box",
+    background:
+      "radial-gradient(900px 520px at 10% 10%, rgba(124,58,237,.14), transparent 60%), radial-gradient(900px 520px at 92% 12%, rgba(6,182,212,.12), transparent 60%), radial-gradient(900px 520px at 40% 96%, rgba(245,158,11,.12), transparent 60%), linear-gradient(135deg, #f6f8ff, #fff7f1)",
   },
+
   topbar: {
     width: "100%",
-    borderBottom: "1px solid #e5e7eb",
-    background: "#ffffff",
+    borderBottom: "1px solid rgba(15,23,42,.10)",
+    background: "rgba(255,255,255,.72)",
+    backdropFilter: "blur(14px)",
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
@@ -664,7 +750,8 @@ const styles = {
     top: 0,
     zIndex: 5,
   },
-  title: { margin: 0, fontSize: 16, fontWeight: 900 },
+  title: { margin: 0, fontSize: 16, fontWeight: 950, letterSpacing: 0.2 },
+  subtitle: { fontSize: 12, fontWeight: 800, color: "rgba(15,23,42,.62)" },
 
   grid: (wide) => ({
     width: "100%",
@@ -676,173 +763,242 @@ const styles = {
   }),
 
   card: {
-    border: "1px solid #e5e7eb",
-    background: "#fff",
-    borderRadius: 14,
+    border: "1px solid rgba(15,23,42,.10)",
+    background: "rgba(255,255,255,.86)",
+    borderRadius: 18,
     overflow: "hidden",
-    boxShadow: "0 6px 18px rgba(15,23,42,0.06)",
+    boxShadow: "0 16px 38px rgba(15,23,42,0.10)",
   },
   cardHeader: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    borderBottom: "1px solid #e5e7eb",
-    background: "#fbfbfd",
+    borderBottom: "1px solid rgba(15,23,42,.10)",
+    background: "rgba(255,255,255,.74)",
   },
-  cardTitle: { margin: "10px 12px", fontSize: 14, fontWeight: 900 },
-  cardMeta: { margin: "10px 12px", fontSize: 12, color: "#475569" },
+  cardTitle: { margin: "12px 12px", fontSize: 14, fontWeight: 950 },
+  cardMeta: { margin: "10px 12px", fontSize: 12, color: "rgba(15,23,42,.62)", fontWeight: 800 },
 
   form: { margin: "12px 12px 14px", display: "grid", gap: 10 },
   row2: (wide) => ({ display: "grid", gridTemplateColumns: wide ? "1fr 1fr" : "1fr", gap: 10 }),
+  field: { display: "grid", gap: 6 },
+  label: { fontSize: 12, fontWeight: 950, color: "rgba(15,23,42,.62)" },
 
   input: {
-    height: 44,
-    borderRadius: 12,
-    border: "1px solid #cbd5e1",
+    height: 46,
+    borderRadius: 14,
+    border: "1px solid rgba(15,23,42,.14)",
     padding: "0 12px",
     outline: "none",
-    background: "#fff",
+    background: "rgba(255,255,255,.94)",
     color: "#0f172a",
     fontSize: 14,
     boxSizing: "border-box",
+    fontWeight: 800,
+    boxShadow: "0 10px 22px rgba(15,23,42,0.06)",
   },
   select: {
-    height: 44,
-    borderRadius: 12,
-    border: "1px solid #cbd5e1",
+    height: 46,
+    borderRadius: 14,
+    border: "1px solid rgba(15,23,42,.14)",
     padding: "0 12px",
     outline: "none",
-    background: "#fff",
+    background: "rgba(255,255,255,.94)",
     color: "#0f172a",
     fontSize: 14,
     boxSizing: "border-box",
+    fontWeight: 800,
+    boxShadow: "0 10px 22px rgba(15,23,42,0.06)",
   },
   textarea: {
-    minHeight: 80,
-    borderRadius: 12,
-    border: "1px solid #cbd5e1",
+    minHeight: 84,
+    borderRadius: 14,
+    border: "1px solid rgba(15,23,42,.14)",
     padding: "10px 12px",
     outline: "none",
-    background: "#fff",
+    background: "rgba(255,255,255,.94)",
     color: "#0f172a",
     fontSize: 14,
     resize: "vertical",
     boxSizing: "border-box",
+    fontWeight: 800,
+    boxShadow: "0 10px 22px rgba(15,23,42,0.06)",
+  },
+
+  hintBox: {
+    marginTop: 4,
+    borderRadius: 16,
+    border: "1px dashed rgba(124,58,237,.35)",
+    background: "linear-gradient(135deg, rgba(124,58,237,.10), rgba(6,182,212,.08))",
+    padding: 12,
   },
 
   btnRow: { display: "flex", gap: 10, flexWrap: "wrap" },
   btn: (variant, small) => ({
-    height: small ? 34 : 42,
-    padding: small ? "0 10px" : "0 14px",
-    borderRadius: 12,
-    border: "1px solid #cbd5e1",
-    background: variant === "primary" ? "#0f172a" : variant === "danger" ? "#b91c1c" : "#ffffff",
+    height: small ? 36 : 44,
+    padding: small ? "0 12px" : "0 16px",
+    borderRadius: 14,
+    border:
+      variant === "primary"
+        ? "1px solid rgba(15,23,42,.14)"
+        : variant === "danger"
+        ? "1px solid rgba(185,28,28,.35)"
+        : "1px solid rgba(15,23,42,.14)",
+    background:
+      variant === "primary"
+        ? "linear-gradient(135deg, #0f172a, #1f2937)"
+        : variant === "danger"
+        ? "linear-gradient(135deg, #991b1b, #ef4444)"
+        : "rgba(255,255,255,.92)",
     color: variant === "primary" || variant === "danger" ? "#ffffff" : "#0f172a",
     cursor: "pointer",
-    fontWeight: 900,
-    boxShadow: "0 2px 8px rgba(15,23,42,0.10)",
+    fontWeight: 950,
+    boxShadow: "0 14px 28px rgba(15,23,42,0.12)",
     transition: "transform 0.06s ease, box-shadow 0.12s ease",
     userSelect: "none",
     whiteSpace: "nowrap",
   }),
   btnDisabled: { opacity: 0.6, cursor: "not-allowed", transform: "none", boxShadow: "none" },
 
+  statsRow: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: 10,
+    padding: "12px 12px 0",
+  },
+  statCard: {
+    borderRadius: 16,
+    border: "1px solid rgba(15,23,42,.10)",
+    background: "rgba(255,255,255,.82)",
+    padding: 12,
+    boxShadow: "0 12px 28px rgba(15,23,42,0.08)",
+  },
+  statLabel: { fontSize: 12, fontWeight: 950, color: "rgba(15,23,42,.60)" },
+  statValue: { fontSize: 16, fontWeight: 1000, marginTop: 4 },
+
   tableWrap: { width: "100%", overflowX: "auto" },
   table: { width: "100%", borderCollapse: "collapse", minWidth: 980 },
   th: {
     textAlign: "left",
     fontSize: 12,
-    color: "#475569",
-    borderBottom: "1px solid #e5e7eb",
+    color: "rgba(15,23,42,.62)",
+    borderBottom: "1px solid rgba(15,23,42,.10)",
     padding: "10px 12px",
-    background: "#f8fafc",
+    background: "rgba(248,250,252,.90)",
     position: "sticky",
     top: 0,
     zIndex: 1,
     whiteSpace: "nowrap",
+    fontWeight: 950,
   },
-  td: { borderBottom: "1px solid #f1f5f9", padding: "10px 12px", fontSize: 13, verticalAlign: "top" },
+  td: {
+    borderBottom: "1px solid rgba(241,245,249,0.9)",
+    padding: "10px 12px",
+    fontSize: 13,
+    verticalAlign: "top",
+    fontWeight: 800,
+  },
+  tr: {
+    transition: "background 120ms ease",
+  },
 
-  amountDeposit: { fontWeight: 900, color: "#166534" },
-  amountWithdraw: { fontWeight: 900, color: "#b91c1c" },
+  wrapText: {
+    whiteSpace: "normal",
+    wordBreak: "break-word",
+    lineHeight: 1.25,
+    color: "rgba(15,23,42,.86)",
+  },
+
+  amountDeposit: { fontWeight: 1000, color: "#16a34a" },
+  amountWithdraw: { fontWeight: 1000, color: "#ef4444" },
 
   pillGreen: {
     display: "inline-block",
-    padding: "4px 10px",
+    padding: "5px 10px",
     borderRadius: 999,
-    border: "1px solid #bbf7d0",
-    background: "#ecfdf5",
-    color: "#065f46",
+    border: "1px solid rgba(34,197,94,.22)",
+    background: "rgba(34,197,94,.10)",
+    color: "#166534",
     fontSize: 12,
-    fontWeight: 900,
+    fontWeight: 950,
   },
   pillRed: {
     display: "inline-block",
-    padding: "4px 10px",
+    padding: "5px 10px",
     borderRadius: 999,
-    border: "1px solid #fecaca",
-    background: "#fff1f2",
+    border: "1px solid rgba(244,63,94,.25)",
+    background: "rgba(244,63,94,.10)",
     color: "#9f1239",
     fontSize: 12,
-    fontWeight: 900,
+    fontWeight: 950,
   },
   pillNeutral: {
     display: "inline-block",
-    padding: "4px 10px",
+    padding: "5px 10px",
     borderRadius: 999,
-    border: "1px solid #e5e7eb",
-    background: "#f8fafc",
+    border: "1px solid rgba(15,23,42,.12)",
+    background: "rgba(248,250,252,.92)",
     color: "#0f172a",
     fontSize: 12,
-    fontWeight: 900,
+    fontWeight: 950,
   },
 
   overlay: {
     position: "fixed",
     inset: 0,
-    background: "rgba(0,0,0,0.35)",
+    background: "rgba(15,23,42,0.42)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     padding: 12,
     zIndex: 50,
+    overflow: "auto",
+    WebkitOverflowScrolling: "touch",
   },
   modal: {
-    width: "min(92vw, 420px)",
+    width: "min(92vw, 460px)",
+    maxHeight: "92vh",
     background: "#ffffff",
-    borderRadius: 16,
-    border: "1px solid #e5e7eb",
-    boxShadow: "0 18px 45px rgba(0,0,0,0.25)",
+    borderRadius: 18,
+    border: "1px solid rgba(15,23,42,.12)",
+    boxShadow: "0 22px 60px rgba(0,0,0,0.30)",
     overflow: "hidden",
-    fontFamily: '"Times New Roman", Times, serif',
+    display: "flex",
+    flexDirection: "column",
   },
   modalHead: {
     padding: "12px 14px",
-    borderBottom: "1px solid #e5e7eb",
+    borderBottom: "1px solid rgba(15,23,42,.10)",
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
+    background: "rgba(255,255,255,.92)",
   },
-  modalTitle: { margin: 0, fontSize: 14, fontWeight: 900, color: "#0f172a" },
-  modalBody: { padding: "12px 14px", fontSize: 13, color: "#0f172a" },
+  modalTitle: { margin: 0, fontSize: 14, fontWeight: 1000, color: "#0f172a" },
+  modalBody: { padding: "12px 14px", fontSize: 13, color: "#0f172a", overflow: "auto", fontWeight: 850 },
   modalFoot: {
     padding: "12px 14px",
-    borderTop: "1px solid #e5e7eb",
+    borderTop: "1px solid rgba(15,23,42,.10)",
     display: "flex",
     gap: 10,
     justifyContent: "flex-end",
     flexWrap: "wrap",
+    background: "rgba(255,255,255,.94)",
+    position: "sticky",
+    bottom: 0,
+    paddingBottom: "calc(12px + env(safe-area-inset-bottom, 0px))",
   },
   xBtn: {
-    border: "1px solid #e5e7eb",
-    background: "#ffffff",
-    borderRadius: 10,
-    height: 34,
-    width: 34,
+    border: "1px solid rgba(15,23,42,.12)",
+    background: "rgba(255,255,255,.92)",
+    borderRadius: 12,
+    height: 36,
+    width: 36,
     cursor: "pointer",
-    fontWeight: 900,
-    lineHeight: "32px",
+    fontWeight: 1000,
+    lineHeight: "34px",
     userSelect: "none",
+    boxShadow: "0 10px 22px rgba(15,23,42,0.08)",
   },
 };

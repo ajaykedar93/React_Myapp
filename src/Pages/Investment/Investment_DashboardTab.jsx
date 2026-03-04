@@ -13,15 +13,16 @@ export default function Investment_DashboardTab() {
 
   const tabs = useMemo(
     () => [
-      { key: "catsub", label: "Platform & Segment", render: Investmentcatsub },
-      { key: "plan", label: "Trading Plan", render: InvestmentPlan },
+    
+      
       { key: "journal", label: "Trading Journal", render: TradingJournal },
       { key: "getjournal", label: "Get Trading Journal", render: GetTradingJournal },
-     
-      // ✅ NEW TAB
       { key: "overall", label: "Overall Report", render: InvestmentOverall },
-
-      { key: "dipwid", label: "Deposit / Withdraw", render: DipWid },
+     
+       // ✅ NOTE MORE USE
+        { key: "plan", label: "Trading Plan", render: InvestmentPlan },
+       { key: "catsub", label: "Platform & Segment", render: Investmentcatsub },
+       { key: "dipwid", label: "Deposit / Withdraw", render: DipWid },
     ],
     []
   );

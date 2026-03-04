@@ -71,6 +71,9 @@ export default function Investment_getview_trandingjouranal() {
       mistakes: "",
     });
 
+  // ✅ segments for edit modal (so segment dropdown always correct)
+  const [editSegments, setEditSegments] = useState([]);
+
   // responsive
   const [isMobile, setIsMobile] = useState(typeof window !== "undefined" ? window.innerWidth < 992 : true);
   useEffect(() => {
@@ -150,7 +153,6 @@ export default function Investment_getview_trandingjouranal() {
       return Array.isArray(data?.data) ? data.data : [];
     },
 
-    // ✅ View API
     async getDailySummary({ platform_id, segment_id, month }) {
       const qs = new URLSearchParams();
       if (platform_id) qs.set("platform_id", String(platform_id));
@@ -165,7 +167,6 @@ export default function Investment_getview_trandingjouranal() {
       return Array.isArray(data?.data) ? data.data : [];
     },
 
-    // ✅ UPDATE
     async updateJournal(journal_id, payload) {
       const res = await fetch(`${BASE_URL}/api/investment/tradingjournal-view/${journal_id}`, {
         method: "PUT",
@@ -177,7 +178,6 @@ export default function Investment_getview_trandingjouranal() {
       return data?.data;
     },
 
-    // ✅ DELETE
     async deleteJournal(journal_id) {
       const res = await fetch(`${BASE_URL}/api/investment/tradingjournal-view/${journal_id}`, {
         method: "DELETE",
@@ -211,7 +211,7 @@ export default function Investment_getview_trandingjouranal() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // segments when platform changes
+  // segments when filter platform changes
   useEffect(() => {
     (async () => {
       try {
@@ -226,6 +226,22 @@ export default function Investment_getview_trandingjouranal() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [platformId]);
+
+  // ✅ segments when EDIT modal platform changes (fix for modal dropdown)
+  useEffect(() => {
+    (async () => {
+      try {
+        setEditSegments([]);
+        if (!edit.open) return;
+        if (!edit.platform_id) return;
+        const s = await api.getSegments(edit.platform_id);
+        setEditSegments(s);
+      } catch (e) {
+        openError(e.message);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [edit.open, edit.platform_id]);
 
   // ---------- Refresh ----------
   const refresh = async () => {
@@ -250,12 +266,13 @@ export default function Investment_getview_trandingjouranal() {
   }, [month, platformId, segmentId]);
 
   // ---------- Actions ----------
-  const onOpenUpdate = (r) => {
+  const onOpenUpdate = async (r) => {
+    // set edit first
     setEdit({
       open: true,
       journal_id: r.journal_id,
-      platform_id: r.platform_id,
-      segment_id: r.segment_id,
+      platform_id: String(r.platform_id ?? ""),
+      segment_id: String(r.segment_id ?? ""),
       plan_id: r.plan_id ?? null,
       trade_date: (r.trade_date || "").slice(0, 10),
       trade_name: r.trade_name || "",
@@ -428,11 +445,11 @@ export default function Investment_getview_trandingjouranal() {
           letter-spacing:.15px;
           padding:.33rem .55rem !important;
           box-shadow:0 8px 18px rgba(15,23,42,0.08);
-          white-space: nowrap;              /* ✅ no half text */
-          min-width: 86px;                  /* ✅ Update / Cancel / Delete fully visible */
+          white-space: nowrap;
+          min-width: 92px;          /* ✅ better for mobile buttons */
         }
         @media (max-width: 420px){
-          .ijv-btn{ min-width: 78px; }
+          .ijv-btn{ min-width: 86px; }
         }
 
         .ijv-table thead th{
@@ -521,7 +538,7 @@ export default function Investment_getview_trandingjouranal() {
         .ijv-kv{ font-size:12px; font-weight:950; color:rgba(15,23,42,.60); }
         .ijv-block{ margin-top: 10px; }
 
-        /* ✅ MODAL: always center, fully visible top-to-bottom, scroll if content more */
+        /* ✅ MODAL: center + internal scroll + footer always visible */
         .ijv-modalOverlay{
           position:fixed;
           inset:0;
@@ -529,14 +546,15 @@ export default function Investment_getview_trandingjouranal() {
           display:flex;
           align-items:center;
           justify-content:center;
-          padding:12px;
+          padding: 12px;
           z-index:9999;
-          overflow:auto;                   /* ✅ if small device, overlay can scroll */
+          overflow:auto;
           -webkit-overflow-scrolling: touch;
         }
+
         .ijv-modal{
-          width:min(92vw, 760px);
-          max-height: calc(100vh - 24px);  /* ✅ never hide under screen */
+          width: min(96vw, 760px);
+          max-height: 92vh;                 /* ✅ never go out of screen */
           display:flex;
           flex-direction:column;
           border-radius:18px;
@@ -545,26 +563,27 @@ export default function Investment_getview_trandingjouranal() {
           overflow:hidden;
           box-shadow:0 22px 60px rgba(0,0,0,0.30);
         }
-        @media (max-width: 520px){
-          .ijv-modal{ width: min(96vw, 760px); border-radius:16px; }
-        }
 
         .ijv-modalBody{
           padding: 12px;
-          overflow:auto;                   /* ✅ scroll inside modal */
+          overflow:auto;                    /* ✅ scroll inside */
           -webkit-overflow-scrolling: touch;
+          padding-bottom: 22px;
         }
+
         .ijv-modalFooter{
+          position: sticky;                 /* ✅ footer always visible */
+          bottom: 0;
           padding: 12px;
-          padding-top: 8px;
+          padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); /* ✅ avoid mobile nav */
           display:flex;
           justify-content:flex-end;
           gap:10px;
           border-top:1px solid rgba(15,23,42,.10);
-          background: rgba(255,255,255,.92);
+          background: rgba(255,255,255,.96);
+          backdrop-filter: blur(10px);
         }
 
-        /* ✅ Make table area full width */
         .ijv-tableWrap{
           width: 100%;
           max-height: 72vh;
@@ -588,7 +607,6 @@ export default function Investment_getview_trandingjouranal() {
 
       {/* Body wrapper (desktop only padding) */}
       <div className="ijv-wrap">
-        {/* Initial Loading */}
         {initialLoading ? (
           <div className="ijv-card p-3 d-flex align-items-center justify-content-between gap-3 flex-wrap">
             <div>
@@ -803,12 +821,9 @@ export default function Investment_getview_trandingjouranal() {
         )}
       </div>
 
-      {/* ✅ Update Modal (center + scroll) */}
+      {/* ✅ Update Modal (center + scroll + footer always visible) */}
       {edit.open ? (
-        <div className="ijv-modalOverlay" role="dialog" aria-modal="true" onMouseDown={(e) => {
-          // click outside to close (optional): uncomment next line if you want
-          // if (e.target === e.currentTarget) closeEdit();
-        }}>
+        <div className="ijv-modalOverlay" role="dialog" aria-modal="true">
           <div className="ijv-modal" onMouseDown={(e) => e.stopPropagation()}>
             <div className="ijv-head px-3 py-2 d-flex align-items-center justify-content-between">
               <div style={{ fontWeight: 1000 }}>Update Trade</div>
@@ -869,13 +884,15 @@ export default function Investment_getview_trandingjouranal() {
                   />
                 </div>
 
-                {/* Optional: allow changing platform/segment inside update modal */}
                 <div className="col-12 col-md-6">
                   <div className="ijv-label">Platform</div>
                   <select
                     className="form-select"
                     value={edit.platform_id}
-                    onChange={(e) => setEdit((x) => ({ ...x, platform_id: e.target.value }))}
+                    onChange={(e) => {
+                      const pid = e.target.value;
+                      setEdit((x) => ({ ...x, platform_id: pid, segment_id: "" })); // reset segment
+                    }}
                   >
                     <option value="">Select Platform</option>
                     {platforms.map((p) => (
@@ -895,13 +912,11 @@ export default function Investment_getview_trandingjouranal() {
                     disabled={!edit.platform_id}
                   >
                     <option value="">Select Segment</option>
-                    {segments
-                      .filter((s) => String(s.platform_id) === String(edit.platform_id) || !edit.platform_id)
-                      .map((s) => (
-                        <option key={s.segment_id} value={s.segment_id}>
-                          {s.segment_name}
-                        </option>
-                      ))}
+                    {editSegments.map((s) => (
+                      <option key={s.segment_id} value={s.segment_id}>
+                        {s.segment_name}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -928,12 +943,7 @@ export default function Investment_getview_trandingjouranal() {
             </div>
 
             <div className="ijv-modalFooter">
-              <SmallBtn
-                variant="secondary"
-                outline
-                disabled={busy === `upd-${edit.journal_id}`}
-                onClick={closeEdit}
-              >
+              <SmallBtn variant="secondary" outline disabled={busy === `upd-${edit.journal_id}`} onClick={closeEdit}>
                 Cancel
               </SmallBtn>
               <SmallBtn variant="dark" disabled={busy === `upd-${edit.journal_id}`} onClick={onUpdate}>
@@ -944,7 +954,7 @@ export default function Investment_getview_trandingjouranal() {
         </div>
       ) : null}
 
-      {/* ✅ Info/Error Modal (center + scroll) */}
+      {/* ✅ Info/Error Modal (center + scroll + footer visible) */}
       {modal.open ? (
         <div className="ijv-modalOverlay" role="dialog" aria-modal="true">
           <div className="ijv-modal">
