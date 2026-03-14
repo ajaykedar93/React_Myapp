@@ -19,8 +19,35 @@ export default function Investment_getview_trandingjouranal() {
 
   const openError = (message) =>
     setModal({ open: true, title: "Error", message: message || "Something went wrong", kind: "error" });
-  const openInfo = (message) => setModal({ open: true, title: "Success", message: message || "Done", kind: "info" });
+  const openInfo = (message) =>
+    setModal({ open: true, title: "Success", message: message || "Done", kind: "info" });
   const closeModal = () => setModal({ open: false, title: "", message: "", kind: "error" });
+
+  // ✅ custom delete confirm modal
+  const [deleteConfirm, setDeleteConfirm] = useState({
+    open: false,
+    journal_id: null,
+    title: "Delete Entry",
+    message: "Are you sure you want to delete this entry?",
+  });
+
+  const openDeleteConfirm = (journal_id) => {
+    setDeleteConfirm({
+      open: true,
+      journal_id,
+      title: "Delete Entry",
+      message: "Are you sure you want to delete this trading journal entry?",
+    });
+  };
+
+  const closeDeleteConfirm = () => {
+    setDeleteConfirm({
+      open: false,
+      journal_id: null,
+      title: "Delete Entry",
+      message: "Are you sure you want to delete this entry?",
+    });
+  };
 
   // ---------- Master data ----------
   const [platforms, setPlatforms] = useState([]);
@@ -71,7 +98,7 @@ export default function Investment_getview_trandingjouranal() {
       mistakes: "",
     });
 
-  // ✅ segments for edit modal (so segment dropdown always correct)
+  // ✅ segments for edit modal
   const [editSegments, setEditSegments] = useState([]);
 
   // responsive
@@ -82,9 +109,9 @@ export default function Investment_getview_trandingjouranal() {
     return () => window.removeEventListener("resize", onR);
   }, []);
 
-  // ✅ lock page scroll when modal open (edit or info modal)
+  // ✅ lock page scroll when modal open
   useEffect(() => {
-    const shouldLock = !!edit.open || !!modal.open;
+    const shouldLock = !!edit.open || !!modal.open || !!deleteConfirm.open;
     if (shouldLock) {
       const prev = document.body.style.overflow;
       document.body.style.overflow = "hidden";
@@ -92,7 +119,7 @@ export default function Investment_getview_trandingjouranal() {
         document.body.style.overflow = prev || "";
       };
     }
-  }, [edit.open, modal.open]);
+  }, [edit.open, modal.open, deleteConfirm.open]);
 
   // ---------- Helpers ----------
   const formatDate = (value) => {
@@ -227,7 +254,7 @@ export default function Investment_getview_trandingjouranal() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [platformId]);
 
-  // ✅ segments when EDIT modal platform changes (fix for modal dropdown)
+  // ✅ segments when EDIT modal platform changes
   useEffect(() => {
     (async () => {
       try {
@@ -267,7 +294,6 @@ export default function Investment_getview_trandingjouranal() {
 
   // ---------- Actions ----------
   const onOpenUpdate = async (r) => {
-    // set edit first
     setEdit({
       open: true,
       journal_id: r.journal_id,
@@ -315,11 +341,11 @@ export default function Investment_getview_trandingjouranal() {
   };
 
   const onDelete = async (journal_id) => {
-    if (!window.confirm("Delete this entry?")) return;
     try {
       setBusy(`del-${journal_id}`);
       await api.deleteJournal(journal_id);
-      openInfo("Deleted");
+      closeDeleteConfirm();
+      openInfo("Deleted successfully");
       await refresh();
     } catch (e) {
       openError(e.message);
@@ -353,7 +379,6 @@ export default function Investment_getview_trandingjouranal() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800;900&display=swap');
 
-        /* ✅ FULL EDGE-TO-EDGE RESET */
         html, body { width:100%; margin:0; padding:0; }
         .container-fluid { padding-left: 0 !important; padding-right: 0 !important; }
         .row { margin-left: 0 !important; margin-right: 0 !important; }
@@ -379,6 +404,7 @@ export default function Investment_getview_trandingjouranal() {
           background:rgba(255,255,255,.74);
           border-bottom:1px solid rgba(15,23,42,.10);
           backdrop-filter: blur(14px);
+          -webkit-backdrop-filter: blur(14px);
         }
         .ijv-topbarInner{
           width: 100%;
@@ -402,7 +428,6 @@ export default function Investment_getview_trandingjouranal() {
           font-size:12px;
         }
 
-        /* ✅ FULL WIDTH CARD */
         .ijv-card{
           width: 100%;
           border-top:1px solid rgba(15,23,42,.10);
@@ -440,16 +465,21 @@ export default function Investment_getview_trandingjouranal() {
         }
 
         .ijv-btn{
-          border-radius:14px !important;
-          font-weight:950 !important;
-          letter-spacing:.15px;
-          padding:.33rem .55rem !important;
-          box-shadow:0 8px 18px rgba(15,23,42,0.08);
+          border-radius:12px !important;
+          font-weight:900 !important;
+          letter-spacing:.10px;
+          padding:.28rem .58rem !important;
+          box-shadow:0 6px 14px rgba(15,23,42,0.07);
           white-space: nowrap;
-          min-width: 92px;          /* ✅ better for mobile buttons */
+          min-width: 76px;
+          font-size: 12px !important;
         }
         @media (max-width: 420px){
-          .ijv-btn{ min-width: 86px; }
+          .ijv-btn{
+            min-width: 68px;
+            font-size: 11px !important;
+            padding: .24rem .5rem !important;
+          }
         }
 
         .ijv-table thead th{
@@ -508,7 +538,6 @@ export default function Investment_getview_trandingjouranal() {
           line-height: 1.25;
         }
 
-        /* Mobile cards */
         .ijv-mcard{
           width: 100%;
           border-top:1px solid rgba(15,23,42,.10);
@@ -538,15 +567,14 @@ export default function Investment_getview_trandingjouranal() {
         .ijv-kv{ font-size:12px; font-weight:950; color:rgba(15,23,42,.60); }
         .ijv-block{ margin-top: 10px; }
 
-        /* ✅ MODAL: center + internal scroll + footer always visible */
         .ijv-modalOverlay{
           position:fixed;
           inset:0;
-          background:rgba(15,23,42,0.38);
+          background:rgba(15,23,42,0.40);
           display:flex;
           align-items:center;
           justify-content:center;
-          padding: 12px;
+          padding: 14px;
           z-index:9999;
           overflow:auto;
           -webkit-overflow-scrolling: touch;
@@ -554,7 +582,7 @@ export default function Investment_getview_trandingjouranal() {
 
         .ijv-modal{
           width: min(96vw, 760px);
-          max-height: 92vh;                 /* ✅ never go out of screen */
+          max-height: 92vh;
           display:flex;
           flex-direction:column;
           border-radius:18px;
@@ -562,26 +590,94 @@ export default function Investment_getview_trandingjouranal() {
           background:#fff;
           overflow:hidden;
           box-shadow:0 22px 60px rgba(0,0,0,0.30);
+          animation: ijvPop .18s ease;
+        }
+
+        .ijv-confirmModal{
+          width: min(92vw, 340px);
+          max-width: 340px;
+          border-radius: 18px;
+          border:1px solid rgba(15,23,42,.12);
+          background:#fff;
+          overflow:hidden;
+          box-shadow:0 22px 60px rgba(0,0,0,0.30);
+          animation: ijvPop .18s ease;
+        }
+
+        @keyframes ijvPop{
+          from{
+            opacity:0;
+            transform: translateY(8px) scale(.98);
+          }
+          to{
+            opacity:1;
+            transform: translateY(0) scale(1);
+          }
         }
 
         .ijv-modalBody{
           padding: 12px;
-          overflow:auto;                    /* ✅ scroll inside */
+          overflow:auto;
           -webkit-overflow-scrolling: touch;
           padding-bottom: 22px;
         }
 
         .ijv-modalFooter{
-          position: sticky;                 /* ✅ footer always visible */
+          position: sticky;
           bottom: 0;
           padding: 12px;
-          padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); /* ✅ avoid mobile nav */
+          padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
           display:flex;
           justify-content:flex-end;
-          gap:10px;
+          gap:8px;
           border-top:1px solid rgba(15,23,42,.10);
           background: rgba(255,255,255,.96);
           backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(10px);
+        }
+
+        .ijv-confirmBody{
+          padding: 18px 16px 8px;
+          text-align: center;
+        }
+
+        .ijv-confirmIcon{
+          width: 52px;
+          height: 52px;
+          border-radius: 999px;
+          margin: 0 auto 12px;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          font-size: 22px;
+          font-weight: 1000;
+          color: #dc2626;
+          background: linear-gradient(135deg, #fee2e2, #fecaca);
+          border: 1px solid rgba(220,38,38,.14);
+        }
+
+        .ijv-confirmTitle{
+          margin:0 0 6px 0;
+          font-size:16px;
+          font-weight:1000;
+          color:#0f172a;
+        }
+
+        .ijv-confirmText{
+          margin:0;
+          font-size:13px;
+          font-weight:700;
+          color:rgba(15,23,42,.68);
+          line-height:1.5;
+        }
+
+        .ijv-confirmFooter{
+          padding: 12px 14px 14px;
+          display:flex;
+          justify-content:center;
+          gap:8px;
+          border-top:1px solid rgba(15,23,42,.08);
+          background:#fff;
         }
 
         .ijv-tableWrap{
@@ -605,7 +701,7 @@ export default function Investment_getview_trandingjouranal() {
         </div>
       </div>
 
-      {/* Body wrapper (desktop only padding) */}
+      {/* Body wrapper */}
       <div className="ijv-wrap">
         {initialLoading ? (
           <div className="ijv-card p-3 d-flex align-items-center justify-content-between gap-3 flex-wrap">
@@ -737,7 +833,7 @@ export default function Investment_getview_trandingjouranal() {
                                     variant="danger"
                                     outline
                                     disabled={busy === `del-${r.journal_id}` || busy === `upd-${r.journal_id}`}
-                                    onClick={() => onDelete(r.journal_id)}
+                                    onClick={() => openDeleteConfirm(r.journal_id)}
                                   >
                                     {busy === `del-${r.journal_id}` ? "Deleting..." : "Delete"}
                                   </SmallBtn>
@@ -783,7 +879,7 @@ export default function Investment_getview_trandingjouranal() {
                                 variant="danger"
                                 outline
                                 disabled={busy === `del-${r.journal_id}` || busy === `upd-${r.journal_id}`}
-                                onClick={() => onDelete(r.journal_id)}
+                                onClick={() => openDeleteConfirm(r.journal_id)}
                               >
                                 {busy === `del-${r.journal_id}` ? "Deleting..." : "Delete"}
                               </SmallBtn>
@@ -821,7 +917,7 @@ export default function Investment_getview_trandingjouranal() {
         )}
       </div>
 
-      {/* ✅ Update Modal (center + scroll + footer always visible) */}
+      {/* Update Modal */}
       {edit.open ? (
         <div className="ijv-modalOverlay" role="dialog" aria-modal="true">
           <div className="ijv-modal" onMouseDown={(e) => e.stopPropagation()}>
@@ -891,7 +987,7 @@ export default function Investment_getview_trandingjouranal() {
                     value={edit.platform_id}
                     onChange={(e) => {
                       const pid = e.target.value;
-                      setEdit((x) => ({ ...x, platform_id: pid, segment_id: "" })); // reset segment
+                      setEdit((x) => ({ ...x, platform_id: pid, segment_id: "" }));
                     }}
                   >
                     <option value="">Select Platform</option>
@@ -954,7 +1050,7 @@ export default function Investment_getview_trandingjouranal() {
         </div>
       ) : null}
 
-      {/* ✅ Info/Error Modal (center + scroll + footer visible) */}
+      {/* Info/Error Modal */}
       {modal.open ? (
         <div className="ijv-modalOverlay" role="dialog" aria-modal="true">
           <div className="ijv-modal">
@@ -972,6 +1068,38 @@ export default function Investment_getview_trandingjouranal() {
             <div className="ijv-modalFooter">
               <SmallBtn variant="dark" onClick={closeModal}>
                 OK
+              </SmallBtn>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* ✅ Delete Confirm Modal */}
+      {deleteConfirm.open ? (
+        <div className="ijv-modalOverlay" role="dialog" aria-modal="true" onClick={closeDeleteConfirm}>
+          <div className="ijv-confirmModal" onClick={(e) => e.stopPropagation()}>
+            <div className="ijv-confirmBody">
+              <div className="ijv-confirmIcon">!</div>
+              <h3 className="ijv-confirmTitle">{deleteConfirm.title}</h3>
+              <p className="ijv-confirmText">{deleteConfirm.message}</p>
+            </div>
+
+            <div className="ijv-confirmFooter">
+              <SmallBtn
+                variant="secondary"
+                outline
+                disabled={busy === `del-${deleteConfirm.journal_id}`}
+                onClick={closeDeleteConfirm}
+              >
+                Cancel
+              </SmallBtn>
+
+              <SmallBtn
+                variant="danger"
+                disabled={busy === `del-${deleteConfirm.journal_id}`}
+                onClick={() => onDelete(deleteConfirm.journal_id)}
+              >
+                {busy === `del-${deleteConfirm.journal_id}` ? "Deleting..." : "Delete"}
               </SmallBtn>
             </div>
           </div>

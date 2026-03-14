@@ -10,7 +10,7 @@ const PageStyles = memo(function PageStyles() {
       @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800;900&display=swap');
 
       * { box-sizing: border-box; }
-      html, body { height: 100%; margin: 0; padding: 0; }
+      html, body, #root { height: 100%; margin: 0; padding: 0; }
       body {
         font-family: "Plus Jakarta Sans", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
         -webkit-tap-highlight-color: transparent;
@@ -32,6 +32,7 @@ const PageStyles = memo(function PageStyles() {
         top: 0;
         z-index: 10;
         backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
         background: rgba(255,255,255,0.75);
         border-bottom: 1px solid rgba(148,163,184,0.35);
       }
@@ -56,7 +57,6 @@ const PageStyles = memo(function PageStyles() {
         font-weight: 700;
       }
 
-      /* edge-to-edge */
       .grid{
         width: 100%;
         padding: 0;
@@ -212,6 +212,10 @@ const PageStyles = memo(function PageStyles() {
         background: linear-gradient(135deg, #111827 0%, #334155 100%);
         color: #fff;
       }
+      .btn.success{
+        background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+        color: #fff;
+      }
       .btn.disabled{
         opacity: 0.55;
         cursor: not-allowed;
@@ -219,54 +223,103 @@ const PageStyles = memo(function PageStyles() {
         box-shadow: none !important;
       }
 
-      .overlay{
+      .fixedOverlay{
         position: fixed;
         inset: 0;
-        background: rgba(2,6,23,0.45);
+        width: 100vw;
+        height: 100vh;
+        background: rgba(2,6,23,0.52);
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: 12px;
-        z-index: 50;
+        padding: 16px;
+        z-index: 999999;
       }
-      .modal{
-        width: min(92vw, 420px);
-        background: #fff;
+
+      .fixedModal{
+        width: min(92vw, 380px);
+        background: #ffffff;
         border-radius: 18px;
         border: 1px solid rgba(148,163,184,0.35);
-        box-shadow: 0 22px 60px rgba(0,0,0,0.30);
+        box-shadow: 0 24px 70px rgba(0,0,0,0.35);
         overflow: hidden;
+        animation: popupShow .22s ease;
       }
-      .modalHead{
-        padding: 12px 14px;
-        border-bottom: 1px solid rgba(148,163,184,0.25);
+
+      @keyframes popupShow{
+        from{
+          opacity: 0;
+          transform: translateY(10px) scale(.96);
+        }
+        to{
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+
+      .fixedModalHead{
+        padding: 14px 16px 10px;
+        text-align: center;
+        background: #fff;
+      }
+
+      .successIcon{
+        width: 58px;
+        height: 58px;
+        border-radius: 999px;
+        margin: 0 auto 10px;
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-        background: rgba(248,250,252,0.9);
-      }
-      .modalTitle{ margin: 0; font-size: 14px; font-weight: 900; }
-      .modalBody{ padding: 12px 14px; font-size: 13px; }
-      .modalFoot{
-        padding: 12px 14px;
-        border-top: 1px solid rgba(148,163,184,0.25);
-        display: flex;
-        gap: 10px;
-        justify-content: flex-end;
-        flex-wrap: wrap;
-        background: rgba(255,255,255,0.9);
-      }
-      .xBtn{
-        border: 1px solid rgba(148,163,184,0.45);
-        background: #fff;
-        border-radius: 10px;
-        height: 32px;
-        width: 32px;
-        cursor: pointer;
+        justify-content: center;
+        background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+        color: #15803d;
+        font-size: 28px;
         font-weight: 900;
-        line-height: 30px;
-        touch-action: manipulation;
+        box-shadow: inset 0 0 0 1px rgba(34,197,94,0.18);
+      }
+
+      .errorIcon{
+        width: 58px;
+        height: 58px;
+        border-radius: 999px;
+        margin: 0 auto 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+        color: #dc2626;
+        font-size: 28px;
+        font-weight: 900;
+        box-shadow: inset 0 0 0 1px rgba(239,68,68,0.18);
+      }
+
+      .fixedModalTitle{
+        margin: 0;
+        font-size: 18px;
+        font-weight: 900;
+        color: #0f172a;
+      }
+
+      .fixedModalBody{
+        padding: 0 16px 16px;
+        text-align: center;
+        font-size: 14px;
+        color: #475569;
+        line-height: 1.6;
+      }
+
+      .fixedModalFoot{
+        padding: 12px 16px 16px;
+        display: flex;
+        justify-content: center;
+        background: #fff;
+      }
+
+      @media (max-width: 480px){
+        .fixedModal{
+          width: min(94vw, 360px);
+          border-radius: 16px;
+        }
       }
     `}</style>
   );
@@ -304,27 +357,49 @@ export default function Investment_tradingjournal() {
 
   const [modal, setModal] = useState({
     open: false,
-    type: "info",
+    type: "success",
     title: "",
     message: "",
     confirmText: "OK",
   });
 
-  const openModal = (p) =>
-    setModal((m) => ({
-      ...m,
+  const openModal = (p) => {
+    setModal({
       open: true,
-      type: p.type || "info",
+      type: p.type || "success",
       title: p.title || "",
       message: p.message || "",
       confirmText: p.confirmText || "OK",
-    }));
+    });
+  };
 
-  const closeModal = () => setModal((m) => ({ ...m, open: false, title: "", message: "" }));
-  const toast = (msg) => openModal({ type: "success", title: "Success", message: msg });
-  const fail = (msg) => openModal({ type: "error", title: "Error", message: msg });
+  const closeModal = () => {
+    setModal({
+      open: false,
+      type: "success",
+      title: "",
+      message: "",
+      confirmText: "OK",
+    });
+  };
 
-  // -------------------- refs (UNCONTROLLED inputs) --------------------
+  const toast = (msg) =>
+    openModal({
+      type: "success",
+      title: "Success",
+      message: msg,
+      confirmText: "OK",
+    });
+
+  const fail = (msg) =>
+    openModal({
+      type: "error",
+      title: "Error",
+      message: msg,
+      confirmText: "OK",
+    });
+
+  // -------------------- refs --------------------
   const tradeNameRef = useRef(null);
   const profitRef = useRef(null);
   const lossRef = useRef(null);
@@ -334,6 +409,7 @@ export default function Investment_tradingjournal() {
 
   // -------------------- helpers --------------------
   const toNum = (v) => (v === "" ? NaN : Number(v));
+
   const onlyDigits = (el) => {
     if (!el) return;
     el.value = String(el.value ?? "").replace(/[^\d]/g, "");
@@ -394,7 +470,7 @@ export default function Investment_tradingjournal() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // -------------------- load segments when platform changes --------------------
+  // -------------------- load segments --------------------
   useEffect(() => {
     (async () => {
       try {
@@ -412,7 +488,7 @@ export default function Investment_tradingjournal() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [platformId]);
 
-  // -------------------- load plans when segment changes --------------------
+  // -------------------- load plans --------------------
   useEffect(() => {
     (async () => {
       try {
@@ -436,7 +512,6 @@ export default function Investment_tradingjournal() {
 
     const tradeName = (tradeNameRef.current?.value || "").trim();
     const logic = (tradeLogicRef.current?.value || "").trim();
-    const mistakes = (mistakesRef.current?.value || "").trim();
 
     if (!tradeName) return "Trade name (Index/Company) required";
     if (!logic) return "Trade logic required";
@@ -454,7 +529,7 @@ export default function Investment_tradingjournal() {
     if (!Number.isFinite(b) || b < 0) return "Brokerage must be 0 or more";
 
     const ok = (p === 0 && l > 0) || (l === 0 && p > 0) || (p === 0 && l === 0);
-    if (!ok) return "Either Profit OR Loss should be > 0 (both cannot be > 0 together)";
+    if (!ok) return "Either Profit OR Loss should be > 0. Both cannot be > 0 together.";
     if (p === 0 && l === 0 && b > 0) return "Brokerage not allowed when profit=loss=0";
 
     return "";
@@ -472,12 +547,10 @@ export default function Investment_tradingjournal() {
       segment_id: Number(segmentId),
       plan_id: planId ? Number(planId) : null,
       trade_date: tradeDate,
-
       trade_name: (tradeNameRef.current?.value || "").trim(),
       profit: Number(profitRef.current?.value || 0),
       loss: Number(lossRef.current?.value || 0),
       brokerage: Number(brokerageRef.current?.value || 0),
-
       trade_logic: (tradeLogicRef.current?.value || "").trim(),
       mistakes: (mistakesRef.current?.value || "").trim() || null,
     };
@@ -485,9 +558,7 @@ export default function Investment_tradingjournal() {
     try {
       setBusy("save");
       await api.createJournal(payload);
-      toast("Trade saved");
 
-      // reset uncontrolled inputs
       if (tradeNameRef.current) tradeNameRef.current.value = "";
       if (tradeLogicRef.current) tradeLogicRef.current.value = "";
       if (mistakesRef.current) mistakesRef.current.value = "";
@@ -495,7 +566,7 @@ export default function Investment_tradingjournal() {
       if (lossRef.current) lossRef.current.value = "0";
       if (brokerageRef.current) brokerageRef.current.value = "0";
 
-      // keep focus at first field
+      toast("Trade saved successfully");
       tradeNameRef.current?.focus();
     } catch (e2) {
       fail(e2.message);
@@ -504,7 +575,6 @@ export default function Investment_tradingjournal() {
     }
   };
 
-  // -------- button micro animation ----------
   const press = (e) => (e.currentTarget.style.transform = "translateY(1px) scale(0.99)");
   const release = (e) => (e.currentTarget.style.transform = "translateY(0px) scale(1)");
 
@@ -535,7 +605,6 @@ export default function Investment_tradingjournal() {
     <div className="page">
       <PageStyles />
 
-      {/* Header */}
       <div className="topbar">
         <div className="topbarInner">
           <div style={{ display: "flex", flexDirection: "column" }}>
@@ -709,25 +778,29 @@ export default function Investment_tradingjournal() {
         </div>
       </div>
 
-      {/* Modal */}
-      {modal.open ? (
-        <div className="overlay" role="dialog" aria-modal="true">
-          <div className="modal">
-            <div className="modalHead">
-              <h3 className="modalTitle">{modal.title}</h3>
-              <button className="xBtn" onClick={closeModal} aria-label="Close">
-                ×
-              </button>
+      {modal.open && (
+        <div className="fixedOverlay" onClick={closeModal}>
+          <div className="fixedModal" onClick={(e) => e.stopPropagation()}>
+            <div className="fixedModalHead">
+              <div className={modal.type === "error" ? "errorIcon" : "successIcon"}>
+                {modal.type === "error" ? "!" : "✓"}
+              </div>
+              <h3 className="fixedModalTitle">{modal.title}</h3>
             </div>
-            <div className="modalBody">{modal.message}</div>
-            <div className="modalFoot">
-              <Btn variant="primary" onClick={closeModal}>
+
+            <div className="fixedModalBody">{modal.message}</div>
+
+            <div className="fixedModalFoot">
+              <Btn
+                variant={modal.type === "error" ? "primary" : "success"}
+                onClick={closeModal}
+              >
                 {modal.confirmText}
               </Btn>
             </div>
           </div>
         </div>
-      ) : null}
+      )}
     </div>
   );
 }
