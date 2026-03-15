@@ -52,6 +52,10 @@ import NewFeature from "./Pages/NewFeatures/NewFeatureTab.jsx";
 import TryNewPageTabs from "./Pages/NewFeatures/TryNewPageTabs.jsx";
 
 
+//PUBLIC PAGES 
+import Wakeup from "./Pages/Public/Wakeup.jsx";
+
+
 
 // ✅ Private Route Wrapper
 function PrivateRoute({ children }) {
@@ -75,8 +79,17 @@ function AppRoutes() {
     <Routes>
       {/* ✅ PUBLIC: Inward View Only (share link page) */}
     
+
+    {/* ✅ PUBLIC: API Wakeup Page */}
+
+<Route path="/wakeup-api" element={<Wakeup />} /> 
+
+
       <Route path="/inward-view" element={<InwardViewOnly />} />
     <Route path="/Check-inward-view" element={<CheckInwardView />} />    
+
+
+
 
       {/* ✅ PROTECTED: Inward Update (full page) */}
    <Route path="/work-details/inward/update/:id" element={<InwardUpdate />} /> 
