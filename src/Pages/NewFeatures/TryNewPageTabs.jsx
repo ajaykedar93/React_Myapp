@@ -1,9 +1,9 @@
-// src/Notes/TryNewPageTabs.jsx
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
 
 import Demo from "./Demo";
+import Chat from "./Chat";
 
 export default function TryNewPageTabs() {
   const navigate = useNavigate();
@@ -25,6 +25,8 @@ export default function TryNewPageTabs() {
         --tnpC:#8b5cf6;
         --tnpD:#f59e0b;
         --tnpInk:#0f172a;
+        --tnpChatA:#2563eb;
+        --tnpChatB:#06b6d4;
       }
 
       .tnp-page{
@@ -40,7 +42,7 @@ export default function TryNewPageTabs() {
         color: var(--tnpInk);
       }
 
-      /* ✅ Navbar */
+      /* Navbar */
       .tnp-navbar{
         background: rgba(17,24,39,.96);
         border-bottom:1px solid rgba(255,255,255,.10);
@@ -49,16 +51,15 @@ export default function TryNewPageTabs() {
         z-index: 1200;
       }
 
-      /* ✅ HARD FIX: always ROW + title left + back right */
       .tnp-nav-inner{
         width: 100%;
         display:flex !important;
-        flex-direction: row !important;     /* ✅ prevent column by other css */
+        flex-direction: row !important;
         align-items:center !important;
         justify-content: space-between !important;
         gap: 10px;
         padding: 18px 14px;
-        min-height: 76px;                  /* ✅ increase navbar height */
+        min-height: 76px;
       }
 
       .tnp-title-wrap{
@@ -78,12 +79,11 @@ export default function TryNewPageTabs() {
         flex: 0 0 auto;
       }
 
-      /* ✅ Title always visible (1 line) */
       .tnp-title{
         color:#fff;
         font-weight:1000;
         letter-spacing:.25px;
-        font-size: 15px;                   /* ✅ small on mobile */
+        font-size: 15px;
         line-height: 1.1;
         white-space: nowrap;
         overflow: hidden;
@@ -91,22 +91,19 @@ export default function TryNewPageTabs() {
         min-width: 0;
       }
 
-      /* ✅ Back button MUST stay small (NOT full width) */
       .tnp-back{
         flex: 0 0 auto !important;
         flex-shrink: 0 !important;
         width: auto !important;
         min-width: unset !important;
-        display: inline-flex !important;   /* ✅ prevents block full width */
+        display: inline-flex !important;
         align-items: center !important;
         justify-content: center !important;
-
         padding: 7px 11px !important;
         font-size: 12.5px !important;
         line-height: 1 !important;
         border-radius: 12px !important;
         font-weight: 950 !important;
-
         background: rgba(255,255,255,.12)!important;
         border: 1px solid rgba(255,255,255,.18)!important;
         color:#fff!important;
@@ -114,14 +111,12 @@ export default function TryNewPageTabs() {
       }
       .tnp-back:hover{ background:rgba(255,255,255,.18)!important; }
 
-      /* Main */
       .tnp-main{
         flex:1;
         width:100%;
         padding-bottom: calc(env(safe-area-inset-bottom,0px) + 110px);
       }
 
-      /* Tabs */
       .tnp-tabsbar{ width:100%; padding: 12px 0 10px; }
       .tnp-tabs{
         display:flex;
@@ -157,10 +152,21 @@ export default function TryNewPageTabs() {
         transform: translateY(-1px);
       }
 
-      /* Content full width */
-      .tnp-content{ width:100%; padding: 0; }
+      .tnp-tabbtn.chat-active{
+        color:#fff;
+        border-color: rgba(37,99,235,.45);
+        background:linear-gradient(135deg,var(--tnpChatA),var(--tnpChatB),var(--tnpC));
+        box-shadow:
+          0 18px 36px rgba(0,0,0,.16),
+          0 0 0 4px rgba(37,99,235,.10);
+        transform: translateY(-1px);
+      }
 
-      /* ✅ Big screens: auto bigger fonts + navbar */
+      .tnp-content{
+        width:100%;
+        padding: 0;
+      }
+
       @media (min-width: 992px){
         .tnp-nav-inner{ min-height: 86px; padding: 22px 22px; }
         .tnp-title{ font-size: 18px; }
@@ -184,7 +190,6 @@ export default function TryNewPageTabs() {
 
   return (
     <div className="tnp-page">
-      {/* Navbar */}
       <header className="tnp-navbar sticky-top">
         <div className="tnp-nav-inner">
           <div className="tnp-title-wrap">
@@ -194,13 +199,16 @@ export default function TryNewPageTabs() {
             </div>
           </div>
 
-          <button className="btn tnp-back" onClick={() => navigate("/new-features")} type="button">
+          <button
+            className="btn tnp-back"
+            onClick={() => navigate("/new-features")}
+            type="button"
+          >
             Back
           </button>
         </div>
       </header>
 
-      {/* Main */}
       <main className="tnp-main">
         <div className="tnp-tabsbar">
           <div className="tnp-tabs" role="tablist" aria-label="Try New Look Tabs">
@@ -213,10 +221,23 @@ export default function TryNewPageTabs() {
             >
               Demo
             </button>
+
+            <button
+              className={`tnp-tabbtn ${activeTab === "chat" ? "chat-active" : ""}`}
+              onClick={() => setActiveTab("chat")}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "chat"}
+            >
+              Chat
+            </button>
           </div>
         </div>
 
-        <div className="tnp-content">{activeTab === "demo" && <Demo />}</div>
+        <div className="tnp-content">
+          {activeTab === "demo" && <Demo />}
+          {activeTab === "chat" && <Chat />}
+        </div>
       </main>
     </div>
   );
