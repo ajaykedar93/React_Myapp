@@ -1,9 +1,15 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 const Wakeup = () => {
+  const navigate = useNavigate();
+
   const [status, setStatus] = useState("loading");
   const [message, setMessage] = useState("Waking up server...");
   const [showButton, setShowButton] = useState(false);
+  const [showPasswordBox, setShowPasswordBox] = useState(false);
+  const [password, setPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
 
   useEffect(() => {
     const wakeApi = async () => {
@@ -31,12 +37,20 @@ const Wakeup = () => {
   }, []);
 
   const handleContinue = () => {
-    // change this route if needed
-    window.location.href = "/";
+    setShowPasswordBox(true);
+    setPasswordError("");
   };
 
   const handleRetry = () => {
     window.location.reload();
+  };
+
+  const handlePasswordSubmit = () => {
+    if (password === "9370") {
+      navigate("/dashboard");
+    } else {
+      setPasswordError("Incorrect password. Please enter valid password.");
+    }
   };
 
   return (
@@ -50,12 +64,8 @@ const Wakeup = () => {
           }
 
           @keyframes wakeup-spin {
-            0% {
-              transform: rotate(0deg);
-            }
-            100% {
-              transform: rotate(360deg);
-            }
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
           }
 
           @keyframes wakeup-fadeIn {
@@ -69,19 +79,14 @@ const Wakeup = () => {
             }
           }
 
-          @keyframes wakeup-pulse {
-            0% {
-              transform: scale(1);
-              box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.25);
-            }
-            70% {
-              transform: scale(1.03);
-              box-shadow: 0 0 0 18px rgba(37, 99, 235, 0);
-            }
-            100% {
-              transform: scale(1);
-              box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
-            }
+          .wakeup-input:focus {
+            outline: none;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+          }
+
+          .wakeup-button:hover {
+            transform: translateY(-1px);
           }
         `}
       </style>
@@ -104,7 +109,6 @@ const Wakeup = () => {
                     : status === "success"
                     ? "#16a34a"
                     : "#dc2626",
-                animation: status === "success" ? "wakeup-pulse 1.8s infinite" : "none",
               }}
             >
               {status === "loading" ? "⏳" : status === "success" ? "✔" : "✖"}
@@ -126,16 +130,47 @@ const Wakeup = () => {
               </div>
             )}
 
-            {showButton && status === "success" && (
-              <button style={styles.button} onClick={handleContinue}>
+            {showButton && status === "success" && !showPasswordBox && (
+              <button style={styles.button} className="wakeup-button" onClick={handleContinue}>
                 Continue
               </button>
             )}
 
             {showButton && status === "error" && (
-              <button style={styles.button} onClick={handleRetry}>
+              <button style={styles.button} className="wakeup-button" onClick={handleRetry}>
                 Retry
               </button>
+            )}
+
+            {showPasswordBox && status === "success" && (
+              <div style={styles.passwordSection}>
+                <label style={styles.passwordLabel}>Enter Password</label>
+
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={4}
+                  placeholder="Enter 4 digit password"
+                  value={password}
+                  onChange={(e) => {
+                    const onlyNumbers = e.target.value.replace(/\D/g, "");
+                    setPassword(onlyNumbers);
+                    setPasswordError("");
+                  }}
+                  style={styles.input}
+                  className="wakeup-input"
+                />
+
+                {passwordError && <p style={styles.errorText}>{passwordError}</p>}
+
+                <button
+                  style={styles.button}
+                  className="wakeup-button"
+                  onClick={handlePasswordSubmit}
+                >
+                  Submit
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -227,6 +262,35 @@ const styles = {
     cursor: "pointer",
     boxShadow: "0 8px 18px rgba(37,99,235,0.25)",
     transition: "all 0.3s ease",
+    width: "100%",
+  },
+  passwordSection: {
+    marginTop: "20px",
+    textAlign: "left",
+  },
+  passwordLabel: {
+    display: "block",
+    marginBottom: "10px",
+    fontSize: "14px",
+    fontWeight: "600",
+    color: "#111827",
+  },
+  input: {
+    width: "100%",
+    height: "48px",
+    borderRadius: "12px",
+    border: "1px solid #d1d5db",
+    padding: "0 14px",
+    fontSize: "15px",
+    color: "#111827",
+    background: "#ffffff",
+    transition: "all 0.3s ease",
+  },
+  errorText: {
+    marginTop: "8px",
+    fontSize: "13px",
+    color: "#dc2626",
+    fontWeight: "500",
   },
 };
 
