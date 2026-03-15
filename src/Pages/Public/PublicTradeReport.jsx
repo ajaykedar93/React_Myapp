@@ -1,27 +1,20 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 
 /**
  * PUBLIC VIEW VERSION
  *
- * IMPORTANT:
- * If backend route still has auth middleware,
- * this page will show Unauthorized.
+ * Public API:
+ * https://express-backend-myapp.onrender.com/api/investment/trading/public/month-stats
  *
- * Best backend public route example:
- * https://express-backend-myapp.onrender.com/api/public/investment/trading/month-stats
+ * Required query:
+ * - user_id
  *
- * If you already removed auth from old route, then this current API will work.
+ * Example public URL:
+ * https://react-myapp-omega.vercel.app/#/public-trade-report?user_id=1
  */
 
 const BASE_URL = "https://express-backend-myapp.onrender.com";
-
-// OPTION 1:
-// Use same API if backend auth removed from that route
-const API_URL = `${BASE_URL}/api/investment/trading/month-stats`;
-
-// OPTION 2:
-// If you create separate public API, then replace above with:
-// const API_URL = `${BASE_URL}/api/public/investment/trading/month-stats`;
+const API_URL = `${BASE_URL}/api/investment/trading/public/month-stats`;
 
 function toMonthStartISO(d = new Date()) {
   const y = d.getFullYear();
@@ -33,17 +26,6 @@ function monthLabel(isoMonthStart) {
   const [y, m] = isoMonthStart.split("-").map((x) => Number(x));
   const date = new Date(y, (m || 1) - 1, 1);
   return date.toLocaleString(undefined, { month: "long", year: "numeric" });
-}
-
-function buildRecentMonths(count = 24) {
-  const arr = [];
-  const now = new Date();
-  const base = new Date(now.getFullYear(), now.getMonth(), 1);
-  for (let i = 0; i < count; i++) {
-    const d = new Date(base.getFullYear(), base.getMonth() - i, 1);
-    arr.push(toMonthStartISO(d));
-  }
-  return arr;
 }
 
 function formatMoney(n) {
@@ -67,20 +49,52 @@ function statusFromPnl(pnl) {
   return { label: "Ok", tone: "ok" };
 }
 
+function getPublicUserId() {
+  if (typeof window === "undefined") return "";
+
+  try {
+    const fullUrl = window.location.href;
+
+    if (fullUrl.includes("?")) {
+      const queryString = fullUrl.split("?")[1] || "";
+      const cleanQuery = queryString.split("#")[0];
+      const params = new URLSearchParams(cleanQuery);
+      return params.get("user_id") || "";
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    return params.get("user_id") || "";
+  } catch {
+    return "";
+  }
+}
+
 export default function PublicTradeReport() {
-  const [selectedMonth, setSelectedMonth] = useState(toMonthStartISO(new Date()));
+  const currentMonth = toMonthStartISO(new Date());
+
+  const [selectedMonth] = useState(currentMonth);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [data, setData] = useState(null);
-
-  const monthOptions = useMemo(() => buildRecentMonths(24), []);
+  const [publicUserId] = useState(getPublicUserId());
 
   async function fetchMonthStats(monthIso) {
     setLoading(true);
     setError("");
 
     try {
-      const url = monthIso ? `${API_URL}?month=${encodeURIComponent(monthIso)}` : API_URL;
+      if (!publicUserId) {
+        throw new Error("Public user_id missing in URL. Use ?user_id=1");
+      }
+
+      const params = new URLSearchParams();
+      params.append("user_id", publicUserId);
+
+      if (monthIso) {
+        params.append("month", monthIso);
+      }
+
+      const url = `${API_URL}?${params.toString()}`;
 
       const resp = await fetch(url, {
         method: "GET",
@@ -92,11 +106,7 @@ export default function PublicTradeReport() {
       const json = await resp.json().catch(() => ({}));
 
       if (!resp.ok) {
-        const msg =
-          json?.message ||
-          (resp.status === 401
-            ? "This report API is still protected. Make backend route public first."
-            : "Request failed");
+        const msg = json?.message || "Request failed";
         throw new Error(msg);
       }
 
@@ -111,7 +121,7 @@ export default function PublicTradeReport() {
 
   useEffect(() => {
     fetchMonthStats(selectedMonth);
-  }, [selectedMonth]);
+  }, [selectedMonth, publicUserId]);
 
   const totalTrades = Number(data?.total_trades ?? 0);
   const totalProfit = Number(data?.total_profit ?? 0);
@@ -120,11 +130,10 @@ export default function PublicTradeReport() {
   const totalDeposit = Number(data?.total_deposit ?? 0);
 
   const pnl = Number(data?.overall_month_pnl ?? totalProfit - (totalLoss + totalBrokerage));
-
   const status = statusFromPnl(pnl);
 
   const [isDesktop, setIsDesktop] = useState(() =>
-    typeof window !== "undefined" ? window.innerWidth >= 980 : true
+    typeof window !== "undefined" ? window.innerWidth >= 980 : false
   );
 
   useEffect(() => {
@@ -136,19 +145,19 @@ export default function PublicTradeReport() {
   }, []);
 
   const theme = {
-    bg1: "#F6F8FF",
-    bg2: "#FFF7F1",
-    card: "rgba(255,255,255,0.82)",
-    card2: "rgba(255,255,255,0.70)",
-    border: "rgba(15, 23, 42, 0.10)",
-    text: "rgba(15, 23, 42, 0.92)",
-    muted: "rgba(15, 23, 42, 0.62)",
+    bg1: "#f8fbff",
+    bg2: "#fffaf5",
+    card: "rgba(255,255,255,0.84)",
+    card2: "rgba(255,255,255,0.72)",
+    border: "rgba(15, 23, 42, 0.08)",
+    text: "#0f172a",
+    muted: "#64748b",
     good: "#16A34A",
     bad: "#E11D48",
     ok: "#2563EB",
-    accent1: "#7C3AED",
-    accent2: "#06B6D4",
-    accent3: "#F59E0B",
+    purple: "#7c3aed",
+    cyan: "#06b6d4",
+    amber: "#f59e0b",
   };
 
   const page = {
@@ -158,9 +167,9 @@ export default function PublicTradeReport() {
     padding: 0,
     color: theme.text,
     background: `
-      radial-gradient(900px 520px at 8% 10%, rgba(124,58,237,.14), transparent 60%),
-      radial-gradient(900px 520px at 92% 18%, rgba(6,182,212,.14), transparent 60%),
-      radial-gradient(900px 520px at 40% 92%, rgba(245,158,11,.12), transparent 60%),
+      radial-gradient(700px 400px at 5% 8%, rgba(124,58,237,.12), transparent 60%),
+      radial-gradient(700px 400px at 95% 12%, rgba(6,182,212,.12), transparent 60%),
+      radial-gradient(700px 400px at 45% 100%, rgba(245,158,11,.10), transparent 60%),
       linear-gradient(135deg, ${theme.bg1}, ${theme.bg2})
     `,
   };
@@ -170,50 +179,109 @@ export default function PublicTradeReport() {
     position: "sticky",
     top: 0,
     zIndex: 20,
-    background: "rgba(255,255,255,0.72)",
-    backdropFilter: "blur(14px)",
+    background: "rgba(255,255,255,0.82)",
+    backdropFilter: "blur(16px)",
     borderBottom: `1px solid ${theme.border}`,
+    boxShadow: "0 8px 24px rgba(15, 23, 42, 0.04)",
+    paddingTop: isDesktop ? "0px" : "max(16px, env(safe-area-inset-top))",
   };
 
   const topInner = {
-    display: "flex",
-    alignItems: isDesktop ? "center" : "flex-start",
-    justifyContent: "space-between",
-    gap: 12,
-    padding: isDesktop ? "16px 16px" : "14px 12px",
     width: "100%",
-    flexDirection: isDesktop ? "row" : "column",
-  };
-
-  const titleWrap = {
     display: "flex",
     flexDirection: "column",
-    gap: 3,
-    width: "100%",
+    gap: 12,
+    padding: isDesktop
+      ? "18px 18px 16px"
+      : "10px calc(14px + env(safe-area-inset-right)) 16px calc(14px + env(safe-area-inset-left))",
+    minHeight: isDesktop ? "auto" : "104px",
   };
 
-  const h1 = {
+  const heroTitle = {
+    margin: 0,
+    fontSize: isDesktop ? 22 : 19,
+    fontWeight: 1000,
+    lineHeight: 1.2,
+    letterSpacing: "-0.3px",
+    background: `linear-gradient(90deg, ${theme.purple}, ${theme.ok}, ${theme.cyan})`,
+    WebkitBackgroundClip: "text",
+    WebkitTextFillColor: "transparent",
+  };
+
+  const heroSub = {
+    margin: "4px 0 0 0",
+    fontSize: isDesktop ? 13 : 12,
+    color: theme.muted,
+    fontWeight: 700,
+  };
+
+  const devRow = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    flexWrap: "wrap",
+  };
+
+  const devPill = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "8px 12px",
+    borderRadius: 999,
+    background: "linear-gradient(135deg, rgba(124,58,237,0.10), rgba(37,99,235,0.10))",
+    border: `1px solid ${theme.border}`,
+    fontSize: 12.5,
+    fontWeight: 900,
+    color: theme.text,
+    boxShadow: "0 8px 18px rgba(15, 23, 42, 0.04)",
+  };
+
+  const monthPill = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "8px 12px",
+    borderRadius: 999,
+    background: "linear-gradient(135deg, rgba(6,182,212,0.10), rgba(245,158,11,0.10))",
+    border: `1px solid ${theme.border}`,
+    fontSize: 12.5,
+    fontWeight: 900,
+    color: theme.text,
+    boxShadow: "0 8px 18px rgba(15, 23, 42, 0.04)",
+  };
+
+  const wrap = {
+    width: "100%",
+    padding: isDesktop
+      ? "16px 18px 28px"
+      : "12px calc(12px + env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left))",
+  };
+
+  const introCard = {
+    width: "100%",
+    borderRadius: 22,
+    border: `1px solid ${theme.border}`,
+    background: "linear-gradient(135deg, rgba(255,255,255,0.86), rgba(255,255,255,0.74))",
+    boxShadow: "0 18px 38px rgba(15, 23, 42, 0.06)",
+    padding: isDesktop ? "18px" : "16px",
+    marginBottom: 12,
+  };
+
+  const introTitle = {
     margin: 0,
     fontSize: isDesktop ? 18 : 16,
-    fontWeight: 950,
-    letterSpacing: 0.2,
-  };
-
-  const sub = { margin: 0, fontSize: 12.5, color: theme.muted, fontWeight: 700 };
-
-  const select = {
-    width: isDesktop ? 260 : "100%",
-    maxWidth: "100%",
-    borderRadius: 14,
-    padding: "12px 12px",
-    border: `1px solid ${theme.border}`,
-    background: theme.card,
+    fontWeight: 1000,
     color: theme.text,
-    outline: "none",
-    fontWeight: 900,
   };
 
-  const wrap = { width: "100%", padding: isDesktop ? "14px 16px 18px" : "12px 12px 16px" };
+  const introText = {
+    margin: "6px 0 0 0",
+    fontSize: 12.5,
+    color: theme.muted,
+    fontWeight: 700,
+    lineHeight: 1.55,
+  };
 
   const grid = {
     display: "grid",
@@ -224,10 +292,10 @@ export default function PublicTradeReport() {
 
   const card = (spanDesktop, spanMobile = 12) => ({
     gridColumn: `span ${isDesktop ? spanDesktop : spanMobile}`,
-    borderRadius: 20,
+    borderRadius: 22,
     border: `1px solid ${theme.border}`,
     background: theme.card,
-    boxShadow: "0 14px 34px rgba(15, 23, 42, 0.08)",
+    boxShadow: "0 16px 36px rgba(15, 23, 42, 0.06)",
     overflow: "hidden",
   });
 
@@ -282,7 +350,7 @@ export default function PublicTradeReport() {
 
   const big = (color) => ({
     margin: 0,
-    fontSize: isDesktop ? 34 : 30,
+    fontSize: isDesktop ? 36 : 30,
     fontWeight: 1000,
     color,
     letterSpacing: 0.2,
@@ -319,8 +387,19 @@ export default function PublicTradeReport() {
     justifyContent: "center",
   };
 
-  const tileLabel = { margin: 0, fontSize: 12.5, fontWeight: 950, color: theme.muted };
-  const tileVal = { margin: "6px 0 0 0", fontSize: 20, fontWeight: 1000, letterSpacing: 0.2 };
+  const tileLabel = {
+    margin: 0,
+    fontSize: 12.5,
+    fontWeight: 950,
+    color: theme.muted,
+  };
+
+  const tileVal = {
+    margin: "6px 0 0 0",
+    fontSize: 20,
+    fontWeight: 1000,
+    letterSpacing: 0.2,
+  };
 
   const statementBox = {
     borderRadius: 18,
@@ -330,50 +409,57 @@ export default function PublicTradeReport() {
     marginTop: 12,
     color: theme.text,
     fontWeight: 900,
-    lineHeight: 1.45,
+    lineHeight: 1.55,
     fontSize: 13,
   };
 
-  const statusColor = status.tone === "good" ? theme.good : status.tone === "bad" ? theme.bad : theme.ok;
+  const statusColor =
+    status.tone === "good" ? theme.good : status.tone === "bad" ? theme.bad : theme.ok;
 
   return (
     <div style={page}>
       <div style={topBar}>
         <div style={topInner}>
-          <div style={titleWrap}>
-            <h1 style={h1}>Public Trade Report</h1>
-            <p style={sub}>Select month to see trades, totals and monthly P&amp;L</p>
+          <div>
+            <h1 style={heroTitle}>Public Trade Report</h1>
+            <p style={heroSub}>Live current month performance overview</p>
           </div>
 
-          <select
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value)}
-            style={select}
-            aria-label="Select month"
-          >
-            {monthOptions.map((m) => (
-              <option key={m} value={m}>
-                {monthLabel(m)}
-              </option>
-            ))}
-          </select>
+          <div style={devRow}>
+            <div style={devPill}>
+              <span style={dot(theme.purple)} />
+              Developer: Ajay
+            </div>
+
+            <div style={monthPill}>
+              <span style={dot(theme.cyan)} />
+              {monthLabel(selectedMonth)}
+            </div>
+          </div>
         </div>
       </div>
 
       <div style={wrap}>
+        <div style={introCard}>
+          <h2 style={introTitle}>Current Month Summary</h2>
+          <p style={introText}>
+            This public page shows the latest monthly trading overview automatically. Only the current month report is displayed.
+          </p>
+        </div>
+
         {loading ? (
           <div
             style={{
               borderRadius: 16,
               border: `1px solid ${theme.border}`,
-              background: "rgba(255,255,255,0.70)",
+              background: "rgba(255,255,255,0.72)",
               padding: 12,
               fontWeight: 950,
               color: theme.muted,
               marginBottom: 12,
             }}
           >
-            Loading report…
+            Loading report...
           </div>
         ) : error ? (
           <div
@@ -433,20 +519,20 @@ export default function PublicTradeReport() {
               <div style={statementBox}>
                 {pnl > 0 ? (
                   <>
-                    Your month is in <span style={{ color: theme.good }}>profit</span> of{" "}
+                    Your current month is in <span style={{ color: theme.good }}>profit</span> of{" "}
                     <span style={{ color: theme.good }}>{formatMoney(pnl)}</span>. Keep following your
-                    rules and continue the same discipline.
+                    rules and maintain the same discipline.
                   </>
                 ) : pnl < 0 ? (
                   <>
-                    Your month is in <span style={{ color: theme.bad }}>loss</span> of{" "}
+                    Your current month is in <span style={{ color: theme.bad }}>loss</span> of{" "}
                     <span style={{ color: theme.bad }}>{formatMoney(Math.abs(pnl))}</span>. Reduce risk,
                     avoid overtrading, and improve entry &amp; exit logic.
                   </>
                 ) : (
                   <>
-                    Your month is <span style={{ color: theme.ok }}>breakeven</span>. Focus on consistent
-                    setups and keep brokerage under control.
+                    Your current month is <span style={{ color: theme.ok }}>breakeven</span>. Focus on
+                    consistent setups and keep brokerage under control.
                   </>
                 )}
               </div>
@@ -494,7 +580,14 @@ export default function PublicTradeReport() {
                     lineHeight: 1.55,
                   }}
                 >
-                  <div style={{ color: theme.muted, fontWeight: 950, fontSize: 12.5, marginBottom: 8 }}>
+                  <div
+                    style={{
+                      color: theme.muted,
+                      fontWeight: 950,
+                      fontSize: 12.5,
+                      marginBottom: 8,
+                    }}
+                  >
                     Formula used
                   </div>
 
@@ -532,7 +625,8 @@ export default function PublicTradeReport() {
                   style={{
                     borderRadius: 18,
                     border: `1px solid ${theme.border}`,
-                    background: "linear-gradient(135deg, rgba(22,163,74,0.07), rgba(245,158,11,0.06))",
+                    background:
+                      "linear-gradient(135deg, rgba(22,163,74,0.07), rgba(245,158,11,0.06))",
                     padding: 12,
                     fontWeight: 900,
                     color: theme.text,
@@ -585,13 +679,13 @@ export default function PublicTradeReport() {
               </div>
 
               <div style={{ marginTop: 12, color: theme.muted, fontSize: 12.5, fontWeight: 800 }}>
-                Showing {monthLabel(selectedMonth)} report.
+                Showing current month report: {monthLabel(selectedMonth)}
               </div>
             </div>
           </div>
         </div>
 
-        <div style={{ height: 8 }} />
+        <div style={{ height: isDesktop ? 8 : "max(18px, env(safe-area-inset-bottom))" }} />
       </div>
     </div>
   );

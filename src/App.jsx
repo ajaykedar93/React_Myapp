@@ -28,30 +28,27 @@ import TransactionDashboard from "./Pages/Transaction/TransactionDashboard";
 import DocumentTab from "./Pages/Document/DocumentTab.jsx";
 
 // Work Details pages
-import WorkDetails from "./Pages/WorkDetails/Worknewtab.jsx";// ✅ PUBLIC PAGE
+import WorkDetails from "./Pages/WorkDetails/Worknewtab.jsx"; // ✅ PUBLIC PAGE
 import InwardViewOnly from "./Pages/WorkDetails/InwardViewOnly";
-import CheckInwardView from "./Pages/WorkDetails/CheckInwardView.jsx";    //OPTIONAL PAGE NOT ADD ONLY PUBLIC LINK ADD CHECK 
-
-
+import CheckInwardView from "./Pages/WorkDetails/CheckInwardView.jsx"; // OPTIONAL PAGE NOT ADD ONLY PUBLIC LINK ADD CHECK
 
 import InwardUpdate from "./Pages/WorkDetails/InwardUpdate";
 
 // Investment pages
-//import InvestmentTabs from "./Pages/Investment/InvestmentTabs.jsx";
+// import InvestmentTabs from "./Pages/Investment/InvestmentTabs.jsx";
 import Investment_DashboardTab from "./Pages/Investment/Investment_DashboardTab.jsx";
-
 
 import UserTabs from "./Pages/User_Personal/User_Tabs.jsx";
 
-
-// Notes pages 
+// Notes pages
 import NotesTab from "./Pages/Notes/NotesN.jsx";
-
 
 import NewFeature from "./Pages/NewFeatures/NewFeatureTab.jsx";
 import TryNewPageTabs from "./Pages/NewFeatures/TryNewPageTabs.jsx";
 
-
+// ✅ PUBLIC PAGES
+import Wakeup from "./Pages/Public/Wakeup.jsx";
+import PublicTradeReport from "./Pages/Public/PublicTradeReport.jsx";
 
 // ✅ Private Route Wrapper
 function PrivateRoute({ children }) {
@@ -74,13 +71,24 @@ function AppRoutes() {
   return (
     <Routes>
       {/* ✅ PUBLIC: Inward View Only (share link page) */}
-    
       <Route path="/inward-view" element={<InwardViewOnly />} />
-    <Route path="/Check-inward-view" element={<CheckInwardView />} />    
+      <Route path="/Check-inward-view" element={<CheckInwardView />} />
+
+      {/* ✅ PUBLIC: Wakeup Page */}
+      <Route path="/wakeup-api" element={<Wakeup />} />
+
+      {/* ✅ PUBLIC: Trade Report Page */}
+      <Route path="/public-trade-report" element={<PublicTradeReport />} />
 
       {/* ✅ PROTECTED: Inward Update (full page) */}
-   <Route path="/work-details/inward/update/:id" element={<InwardUpdate />} /> 
-
+      <Route
+        path="/work-details/inward/update/:id"
+        element={
+          <PrivateRoute>
+            <InwardUpdate />
+          </PrivateRoute>
+        }
+      />
 
       {/* Default route → always go to login if not logged in */}
       <Route path="/" element={<Navigate to={user ? "/dashboard" : "/login"} replace />} />
@@ -110,15 +118,15 @@ function AppRoutes() {
           </PrivateRoute>
         }
       />
-      
-     <Route
-          path="/user-tabs"
-          element={
-            <PrivateRoute>
-              <UserTabs />
-            </PrivateRoute>
-          }
-        />
+
+      <Route
+        path="/user-tabs"
+        element={
+          <PrivateRoute>
+            <UserTabs />
+          </PrivateRoute>
+        }
+      />
 
       {/* Entertainment Routes (protected) */}
       <Route
@@ -185,7 +193,7 @@ function AppRoutes() {
           </PrivateRoute>
         }
       />
-      
+
       <Route
         path="/all-list"
         element={
@@ -245,26 +253,24 @@ function AppRoutes() {
         }
       />
 
-
       {/* New Features (protected) */}
-<Route
-  path="/new-features"
-  element={
-    <PrivateRoute>
-      <NewFeature />   {/* ✅ make sure this is the SAME component you export */}
-    </PrivateRoute>
-  }
-/>
+      <Route
+        path="/new-features"
+        element={
+          <PrivateRoute>
+            <NewFeature />   {/* ✅ make sure this is the SAME component you export */}
+          </PrivateRoute>
+        }
+      />
 
-<Route
-  path="/try-new-look"
-  element={
-    <PrivateRoute>
-      <TryNewPageTabs />  {/* ✅ opens when you do navigate("/try-new-look") */}
-    </PrivateRoute>
-  }
-/>
-
+      <Route
+        path="/try-new-look"
+        element={
+          <PrivateRoute>
+            <TryNewPageTabs />  {/* ✅ opens when you do navigate("/try-new-look") */}
+          </PrivateRoute>
+        }
+      />
 
       {/* Logout */}
       <Route path="/logout" element={<Logout />} />
