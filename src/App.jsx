@@ -46,9 +46,18 @@ import NotesTab from "./Pages/Notes/NotesN.jsx";
 import NewFeature from "./Pages/NewFeatures/NewFeatureTab.jsx";
 import TryNewPageTabs from "./Pages/NewFeatures/TryNewPageTabs.jsx";
 
+import ChatAuth from "./Pages/NewFeatures/ChatAuth.jsx";
+import Chat from "./Pages/NewFeatures/Chat.jsx";
+
+
+
 // ✅ PUBLIC PAGES
 import Wakeup from "./Pages/Public/Wakeup.jsx";
 import PublicTradeReport from "./Pages/Public/PublicTradeReport.jsx";
+
+
+
+
 
 // ✅ Private Route Wrapper
 function PrivateRoute({ children }) {
@@ -263,15 +272,28 @@ function AppRoutes() {
         }
       />
 
-      <Route
-        path="/try-new-look"
-        element={
-          <PrivateRoute>
-            <TryNewPageTabs />  {/* ✅ opens when you do navigate("/try-new-look") */}
-          </PrivateRoute>
-        }
-      />
+     <Route
+  path="/try-new-look"
+  element={
+    <PrivateRoute>
+      <TryNewPageTabs />
+    </PrivateRoute>
+  }
+/>
 
+<Route
+  path="/chat-auth"
+  element={<ChatAuth />}
+/>
+
+<Route
+  path="/chat"
+  element={
+    <PrivateRoute>
+      <Chat />
+    </PrivateRoute>
+  }
+/>
       {/* Logout */}
       <Route path="/logout" element={<Logout />} />
 

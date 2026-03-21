@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 
-// Pages
+// Existing Pages
 import AddSitekharch from "./SiteKharch_add";
 import SitekharchGet from "../WorkDetails/SitekharchnewGet";
 import TotalSiteKharch from "./TotalSiteKharch";
@@ -10,7 +10,11 @@ import Measure from "./Measure";
 import AddInward from "./AddInward";
 import InwardGet from "./InwardGet";
 import InwardViewOnly from "./InwardViewOnly";
-import CheckInwardView from "./CheckInwardView";    //OPTIONAL PAGE FOR CHECK NOT ADD TAB 
+import CheckInwardView from "./CheckInwardView";
+
+// New DPR Pages
+import AddMonthdpr from "./AddMonthdpr";
+import GetMonthdpr from "./GetMonthdpr";
 
 const GAP_1 = 6;
 const TABS_H = 53;
@@ -28,10 +32,13 @@ export default function Worknewtab() {
       { key: "total", label: "TOTAL KHARCH", component: <TotalSiteKharch /> },
       { key: "addinward", label: "ADD INWARD", component: <AddInward /> },
 
-      // IMPORTANT: GET INWARD component dynamically render होईल
       { key: "getinward", label: "GET INWARD", component: null },
 
       { key: "inwardview", label: "INWARD VIEW ONLY", component: <InwardViewOnly /> },
+
+      // New DPR Tabs
+      { key: "adddpr", label: "ADD DPR", component: <AddMonthdpr /> },
+      { key: "getdpr", label: "GET DPR", component: <GetMonthdpr /> },
     ],
     []
   );
@@ -39,10 +46,8 @@ export default function Worknewtab() {
   const [activeKey, setActiveKey] = useState(tabs[0].key);
   const [loading, setLoading] = useState(true);
 
-  // ✅ This token will force refresh InwardGet when coming back from Update
   const [inwardRefreshToken, setInwardRefreshToken] = useState(0);
 
-  // ✅ If navigation comes with state: { tabKey:"getinward", refreshInward:true }
   useEffect(() => {
     const tabKey = location?.state?.tabKey;
     const refreshInward = location?.state?.refreshInward;
@@ -57,10 +62,8 @@ export default function Worknewtab() {
     if (tabKey || refreshInward) {
       navigate(location.pathname, { replace: true, state: {} });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location?.state]);
+  }, [location?.state, navigate, location.pathname]);
 
-  // loader animation on tab change
   useEffect(() => {
     setLoading(true);
     const t = setTimeout(() => setLoading(false), 250);
@@ -69,7 +72,6 @@ export default function Worknewtab() {
 
   const activeTab = tabs.find((t) => t.key === activeKey);
 
-  // ✅ Render InwardGet with refreshToken
   const renderTabComponent = () => {
     if (activeKey === "getinward") {
       return <InwardGet refreshToken={inwardRefreshToken} />;
@@ -91,7 +93,6 @@ export default function Worknewtab() {
           --navHDesktop: 85px;
           --navHMobile: 85px;
 
-          /* total header height = navbar + gaps + tabs */
           --headerTotalDesktop: calc(
             var(--safeTop) + var(--navTopGap) + var(--navHDesktop) + ${GAP_1}px + ${TABS_H}px + ${GAP_2}px
           );
@@ -99,7 +100,6 @@ export default function Worknewtab() {
             var(--safeTop) + var(--navTopGap) + var(--navHMobile) + ${GAP_1}px + ${TABS_H}px + ${GAP_2}px
           );
 
-          /* for overlays - default desktop */
           --overlayTopPad: var(--headerTotalDesktop);
         }
 
@@ -111,8 +111,11 @@ export default function Worknewtab() {
           }
         }
 
-        /* IMPORTANT: stop transform stacking issues (fixed overlays bug) */
-        .worknewtab-page, .worknewtab-scroll, .worknewtab-contentWrap, .worknewtab-navbar, .worknewtab-tabs-row{
+        .worknewtab-page, 
+        .worknewtab-scroll, 
+        .worknewtab-contentWrap, 
+        .worknewtab-navbar, 
+        .worknewtab-tabs-row{
           transform: none !important;
           filter: none !important;
           perspective: none !important;
@@ -122,8 +125,6 @@ export default function Worknewtab() {
 
         .worknewtab-page{ position: relative; z-index: 0; }
 
-        /* ✅ MAIN FIX: Any popup/modal overlay inside child pages should START below tabs
-           and center inside remaining visible area */
         .worknewtab-page .popup-overlay-center,
         .worknewtab-page .globalModalOverlay{
           position: fixed !important;
@@ -131,25 +132,20 @@ export default function Worknewtab() {
           right: 0 !important;
           top: var(--overlayTopPad) !important;
           bottom: 0 !important;
-
           width: 100% !important;
           height: auto !important;
-
           display: grid !important;
           place-items: center !important;
-
           padding:
             calc(14px + var(--safeTop)) 14px
             calc(14px + var(--safeBottom)) 14px !important;
-
           overflow: auto !important;
           -webkit-overflow-scrolling: touch !important;
-          z-index: 9000 !important; /* above content, below header is already safe due to top offset */
+          z-index: 9000 !important;
           background: rgba(0,0,0,.55) !important;
           backdrop-filter: blur(4px) !important;
         }
 
-        /* dynamic viewport height fix (mobile address bar) */
         @supports (height: 100dvh){
           .worknewtab-page .popup-overlay-center,
           .worknewtab-page .globalModalOverlay{
@@ -177,26 +173,29 @@ export default function Worknewtab() {
           border-radius: 999px;
         }
 
-        @keyframes spin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }
+        @keyframes spin { 
+          from { transform: rotate(0deg);} 
+          to { transform: rotate(360deg);} 
+        }
 
-        /* navbar height setup */
         .worknewtab-navbar{
           padding-top: calc(var(--safeTop) + var(--navTopGap));
           padding-left: 12px;
           padding-right: 12px;
           height: calc(var(--navHDesktop) + var(--safeTop) + var(--navTopGap));
         }
+
         @media (max-width: 768px){
           .worknewtab-navbar{
             height: calc(var(--navHMobile) + var(--safeTop) + var(--navTopGap));
           }
         }
 
-        /* ✅ scroll area should start below header total */
         .worknewtab-scroll{
           top: var(--headerTotalDesktop);
           padding-bottom: var(--safeBottom);
         }
+
         @media (max-width: 768px){
           .worknewtab-scroll{
             top: var(--headerTotalMobile);
@@ -208,7 +207,7 @@ export default function Worknewtab() {
         <div className="worknewtab-navbar" style={styles.navbar}>
           <div style={styles.navLeft}>
             <div style={styles.title}>Work Details</div>
-            <div style={styles.subtitle}>Expenses & Reports</div>
+            <div style={styles.subtitle}>Expenses, Inward & DPR Reports</div>
           </div>
 
           <button
@@ -305,9 +304,19 @@ const styles = {
     justifyContent: "space-between",
     color: "#fff",
   },
-  navLeft: { display: "flex", flexDirection: "column" },
-  title: { fontSize: 16, fontWeight: 900 },
-  subtitle: { fontSize: 11, fontWeight: 700, opacity: 0.95 },
+  navLeft: {
+    display: "flex",
+    flexDirection: "column",
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: 900,
+  },
+  subtitle: {
+    fontSize: 11,
+    fontWeight: 700,
+    opacity: 0.95,
+  },
   dashboardBtn: {
     background: "#fff",
     color: "#2563EB",
@@ -318,7 +327,9 @@ const styles = {
     fontSize: 12,
     cursor: "pointer",
   },
-  gapBetweenNavbarAndTabs: { height: GAP_1 },
+  gapBetweenNavbarAndTabs: {
+    height: GAP_1,
+  },
   tabsBar: {
     height: TABS_H,
     background: "#fff",
@@ -345,7 +356,10 @@ const styles = {
     cursor: "pointer",
     position: "relative",
   },
-  tabActive: { background: "#2563EB", color: "#fff" },
+  tabActive: {
+    background: "#2563EB",
+    color: "#fff",
+  },
   underline: {
     position: "absolute",
     bottom: -6,
@@ -355,7 +369,9 @@ const styles = {
     background: "#22C55E",
     borderRadius: 999,
   },
-  gapBelowTabs: { height: GAP_2 },
+  gapBelowTabs: {
+    height: GAP_2,
+  },
   scrollArea: {
     position: "fixed",
     left: 0,
@@ -365,7 +381,9 @@ const styles = {
     background: "#F8FAFF",
     zIndex: 1,
   },
-  content: { width: "100%" },
+  content: {
+    width: "100%",
+  },
   loaderOverlay: {
     position: "absolute",
     inset: 0,
@@ -391,5 +409,9 @@ const styles = {
     animation: "spin 0.8s linear infinite",
     margin: "0 auto",
   },
-  loadingText: { marginTop: 10, fontWeight: 900, fontSize: 14 },
+  loadingText: {
+    marginTop: 10,
+    fontWeight: 900,
+    fontSize: 14,
+  },
 };
