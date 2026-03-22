@@ -46,9 +46,6 @@ import NotesTab from "./Pages/Notes/NotesN.jsx";
 import NewFeature from "./Pages/NewFeatures/NewFeatureTab.jsx";
 import TryNewPageTabs from "./Pages/NewFeatures/TryNewPageTabs.jsx";
 
-import ChatAuth from "./Pages/NewFeatures/ChatAuth.jsx";
-import Chat from "./Pages/NewFeatures/Chat.jsx";
-
 
 
 // ✅ PUBLIC PAGES
@@ -281,19 +278,6 @@ function AppRoutes() {
   }
 />
 
-<Route
-  path="/chat-auth"
-  element={<ChatAuth />}
-/>
-
-<Route
-  path="/chat"
-  element={
-    <PrivateRoute>
-      <Chat />
-    </PrivateRoute>
-  }
-/>
       {/* Logout */}
       <Route path="/logout" element={<Logout />} />
 

@@ -3,8 +3,6 @@ import { useNavigate } from "react-router-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
 
 import Demo from "./Demo";
-import Chat from "./Chat";
-import ChatAuth from "./ChatAuth";
 
 export default function TryNewPageTabs() {
   const navigate = useNavigate();
@@ -175,19 +173,7 @@ export default function TryNewPageTabs() {
               Demo
             </button>
 
-            <button
-              className={`tnp-tabbtn ${activeTab === "chat" ? "chat-active" : ""}`}
-              onClick={() => setActiveTab("chat")}
-            >
-              Chat
-            </button>
-
-            <button
-              className={`tnp-tabbtn ${activeTab === "auth" ? "auth-active" : ""}`}
-              onClick={() => setActiveTab("auth")}
-            >
-              Register / Login
-            </button>
+            
 
           </div>
 
@@ -197,9 +183,7 @@ export default function TryNewPageTabs() {
 
           {activeTab === "demo" && <Demo />}
 
-          {activeTab === "chat" && <Chat />}
-
-          {activeTab === "auth" && <ChatAuth />}
+         
 
         </div>
 
