@@ -891,7 +891,7 @@ const styles = {
     padding: "14px 12px",
     background: "linear-gradient(135deg, #0f2557, #173b77)",
     color: "#ffffff",
-    fontSize: "13px",
+    fontSize: "23px",
     fontWeight: "800",
     textAlign: "left",
     borderBottom: "1px solid #264c8b",
