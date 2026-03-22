@@ -108,28 +108,37 @@ const GetMonthdpr = () => {
 
       const allRows = result.data || [];
 
-      const filteredRows = allRows.filter((item) => {
-        const [year, month] = selectedMonth.split("-");
-        const rowDate = new Date(item.dpr_date);
-        if (isNaN(rowDate.getTime())) return false;
+      const filteredRows = allRows
+        .filter((item) => {
+          const [year, month] = selectedMonth.split("-");
+          const rowDate = new Date(item.dpr_date);
+          if (isNaN(rowDate.getTime())) return false;
 
-        const rowYear = rowDate.getFullYear();
-        const rowMonth = rowDate.getMonth() + 1;
+          const rowYear = rowDate.getFullYear();
+          const rowMonth = rowDate.getMonth() + 1;
 
-        return rowYear === Number(year) && rowMonth === Number(month);
-      });
+          return rowYear === Number(year) && rowMonth === Number(month);
+        })
+        .sort((a, b) => {
+          const dateA = new Date(a.dpr_date);
+          const dateB = new Date(b.dpr_date);
+          if (dateA.getTime() !== dateB.getTime()) return dateA - dateB;
+          return (a.sr_no || 0) - (b.sr_no || 0);
+        });
 
       const grouped = [];
       let lastDate = "";
 
       filteredRows.forEach((item, index) => {
         const currentDate = formatToDisplayDate(item.dpr_date);
+
         grouped.push({
           ...item,
           display_sequence: index + 1,
           display_date: currentDate,
           show_date: lastDate !== currentDate,
         });
+
         lastDate = currentDate;
       });
 
@@ -229,9 +238,7 @@ const GetMonthdpr = () => {
       }
 
       const [year, month] = selectedMonth.split("-");
-      const pdfUrl = `${API_BASE_URL}/monthdpr/export-pdf?month=${Number(
-        month
-      )}&year=${year}`;
+      const pdfUrl = `${API_BASE_URL}/monthdpr/export-pdf?month=${Number(month)}&year=${year}`;
 
       const response = await fetch(pdfUrl);
 
@@ -240,9 +247,7 @@ const GetMonthdpr = () => {
         try {
           const result = await response.json();
           errorMessage = result.message || errorMessage;
-        } catch {
-          // ignore json parse error
-        }
+        } catch {}
         throw new Error(errorMessage);
       }
 
@@ -267,89 +272,180 @@ const GetMonthdpr = () => {
   return (
     <div style={styles.page}>
       <style>{`
-        * { box-sizing: border-box; }
+        * {
+          box-sizing: border-box;
+        }
+
+        html, body, #root {
+          margin: 0;
+          padding: 0;
+          width: 100%;
+          min-height: 100%;
+          overflow-x: hidden;
+          font-family: Arial, sans-serif;
+          background: #edf3fb;
+        }
+
+        .fade-up {
+          animation: fadeUp 0.4s ease;
+        }
+
+        @keyframes fadeUp {
+          from {
+            opacity: 0;
+            transform: translateY(10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
 
         .dpr-btn {
-          transition: all 0.18s ease;
+          transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
         }
 
         .dpr-btn:hover {
-          transform: translateY(-1px);
+          transform: translateY(-2px);
+          filter: brightness(1.03);
         }
 
         .dpr-btn:active {
           transform: scale(0.97);
         }
 
+        .dpr-input {
+          transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+        }
+
+        .dpr-input:focus {
+          border-color: #2563eb !important;
+          box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+          background: #ffffff !important;
+        }
+
         .dpr-table-wrap::-webkit-scrollbar {
-          height: 7px;
+          height: 8px;
         }
 
         .dpr-table-wrap::-webkit-scrollbar-thumb {
-          background: #cbd5e1;
+          background: #bfd3f7;
           border-radius: 999px;
         }
 
-        @media (max-width: 640px) {
-          .dpr-main-title {
+        .dpr-table-wrap::-webkit-scrollbar-track {
+          background: #edf4ff;
+        }
+
+        .dpr-table tbody tr td {
+          transition: background 0.2s ease;
+        }
+
+        .dpr-table tbody tr:nth-child(even) td {
+          background: #f8fbff;
+        }
+
+        .dpr-table tbody tr:hover td {
+          background: #eef5ff;
+        }
+
+        @media (max-width: 991px) {
+          .page-space {
+            padding: 12px !important;
+          }
+
+          .main-title {
+            font-size: 24px !important;
+          }
+
+          .card-pad {
+            padding: 14px !important;
+          }
+        }
+
+        @media (max-width: 767px) {
+          .page-space {
+            padding: 10px !important;
+          }
+
+          .main-title {
             font-size: 20px !important;
           }
 
-          .dpr-subtitle {
-            font-size: 12px !important;
+          .filter-grid {
+            grid-template-columns: 1fr !important;
+            gap: 10px !important;
           }
 
-          .dpr-small-btn {
-            padding: 8px 10px !important;
-            font-size: 12px !important;
-            min-height: 34px !important;
+          .download-row {
+            justify-content: stretch !important;
           }
 
-          .dpr-download-btn {
-            padding: 10px 12px !important;
-            font-size: 13px !important;
-            min-height: 40px !important;
+          .download-mobile {
+            width: 100% !important;
           }
 
-          .dpr-popup-card {
-            width: calc(100% - 28px) !important;
-            max-width: 360px !important;
-            padding: 18px 16px !important;
-            border-radius: 16px !important;
+          .card-pad {
+            padding: 12px !important;
+            border-radius: 18px !important;
+          }
+
+          .dpr-table {
+            min-width: 760px !important;
           }
 
           .dpr-table th,
           .dpr-table td {
-            font-size: 12px !important;
             padding: 10px 8px !important;
+            font-size: 12px !important;
+          }
+
+          .small-btn {
+            min-width: 58px !important;
+            padding: 8px 10px !important;
+            font-size: 11px !important;
+          }
+
+          .popup-mobile {
+            width: calc(100% - 20px) !important;
+            max-width: 360px !important;
+            padding: 18px 14px !important;
+          }
+        }
+
+        @media (max-width: 575px) {
+          .page-space {
+            padding: 8px !important;
+          }
+
+          .main-title {
+            font-size: 18px !important;
+          }
+
+          .dpr-table {
+            min-width: 680px !important;
           }
         }
       `}</style>
 
-      <div style={styles.container}>
-        <div style={styles.headerCard}>
-          <div style={styles.headerTop}>
-            <div>
-              <h2 className="dpr-main-title" style={styles.title}>
-                Month DPR Details
-              </h2>
-              <p className="dpr-subtitle" style={styles.subtitle}>
-                View, update, delete and download selected month DPR in a clean professional format
-              </p>
-            </div>
-            <div style={styles.headerBadge}>DPR</div>
-          </div>
+      <div style={styles.container} className="page-space">
+        <div style={styles.pageHeader} className="fade-up">
+          <h2 style={styles.pageHeaderTitle} className="main-title">
+            Month DPR Details
+          </h2>
         </div>
 
-        <div style={styles.filterCard}>
-          <div style={styles.filterGrid}>
-            <div>
-              <label style={styles.label}>Select Month</label>
+        <div style={styles.filterCard} className="fade-up card-pad">
+          <div style={styles.filterHeader}>Select Month</div>
+
+          <div style={styles.filterGrid} className="filter-grid">
+            <div style={styles.monthInputBlock}>
               <input
                 type="month"
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
-                style={styles.input}
+                style={styles.monthInput}
+                className="dpr-input"
               />
             </div>
 
@@ -364,24 +460,24 @@ const GetMonthdpr = () => {
             </div>
           </div>
 
-          <div style={styles.downloadRow}>
+          <div style={styles.downloadRow} className="download-row">
             <button
               type="button"
               onClick={handleDownloadPdf}
               style={styles.downloadBtn}
-              className="dpr-btn dpr-download-btn"
+              className="dpr-btn download-mobile"
             >
               Download PDF
             </button>
           </div>
         </div>
 
-        <div style={styles.tableCard}>
+        <div style={styles.tableCard} className="fade-up card-pad">
           <div style={styles.tableHeader}>
             <div>
-              <h3 style={styles.tableTitle}>DPR Entry Table</h3>
+              <h3 style={styles.tableTitle}>DPR Details List</h3>
               <p style={styles.tableSubtitle}>
-                Sequence-wise monthly details with date, work information, time and actions
+                Professional monthly DPR list. 
               </p>
             </div>
           </div>
@@ -395,15 +491,11 @@ const GetMonthdpr = () => {
               <table style={styles.table} className="dpr-table">
                 <thead>
                   <tr>
-                    <th style={{ ...styles.th, ...styles.thCenter, width: "80px" }}>
-                      Sr.No
-                    </th>
-                    <th style={{ ...styles.th, width: "140px" }}>Date</th>
-                    <th style={{ ...styles.th }}>Work Details</th>
-                    <th style={{ ...styles.th, width: "140px" }}>Time</th>
-                    <th style={{ ...styles.th, ...styles.thCenter, width: "150px" }}>
-                      Action
-                    </th>
+                    <th style={{ ...styles.th, ...styles.thCenter, width: "80px" }}>Sr.No</th>
+                    <th style={{ ...styles.th, width: "150px" }}>Date</th>
+                    <th style={styles.th}>Work Details</th>
+                    <th style={{ ...styles.th, width: "150px" }}>Time</th>
+                    <th style={{ ...styles.th, ...styles.thCenter, width: "170px" }}>Action</th>
                   </tr>
                 </thead>
 
@@ -411,7 +503,7 @@ const GetMonthdpr = () => {
                   {dprList.map((item) =>
                     editingId === item.sr_no ? (
                       <tr key={item.sr_no}>
-                        <td style={{ ...styles.td, ...styles.tdCenter }}>
+                        <td style={{ ...styles.td, ...styles.tdCenter, ...styles.seqText }}>
                           {item.display_sequence}
                         </td>
 
@@ -426,6 +518,7 @@ const GetMonthdpr = () => {
                               }))
                             }
                             style={styles.tableInput}
+                            className="dpr-input"
                           />
                         </td>
 
@@ -440,6 +533,7 @@ const GetMonthdpr = () => {
                               }))
                             }
                             style={styles.tableTextarea}
+                            className="dpr-input"
                             placeholder="Enter work details"
                           />
                         </td>
@@ -455,6 +549,7 @@ const GetMonthdpr = () => {
                               }))
                             }
                             style={styles.tableInput}
+                            className="dpr-input"
                             placeholder="Ex. 10 AM to 5 PM"
                           />
                         </td>
@@ -465,7 +560,7 @@ const GetMonthdpr = () => {
                               type="button"
                               onClick={() => handleUpdate(item.sr_no)}
                               style={styles.saveBtn}
-                              className="dpr-btn dpr-small-btn"
+                              className="dpr-btn small-btn"
                             >
                               Save
                             </button>
@@ -473,7 +568,7 @@ const GetMonthdpr = () => {
                               type="button"
                               onClick={cancelEdit}
                               style={styles.cancelBtn}
-                              className="dpr-btn dpr-small-btn"
+                              className="dpr-btn small-btn"
                             >
                               Cancel
                             </button>
@@ -487,7 +582,11 @@ const GetMonthdpr = () => {
                         </td>
 
                         <td style={styles.td}>
-                          <span style={styles.dateText}>{item.display_date}</span>
+                          {item.show_date ? (
+                            <span style={styles.dateText}>{item.display_date}</span>
+                          ) : (
+                            <span style={styles.emptyDate}></span>
+                          )}
                         </td>
 
                         <td style={styles.td}>
@@ -510,17 +609,15 @@ const GetMonthdpr = () => {
                               type="button"
                               onClick={() => startEdit(item)}
                               style={styles.updateBtn}
-                              className="dpr-btn dpr-small-btn"
+                              className="dpr-btn small-btn"
                             >
                               Update
                             </button>
                             <button
                               type="button"
-                              onClick={() =>
-                                openDeletePopup(item.sr_no, item.display_sequence)
-                              }
+                              onClick={() => openDeletePopup(item.sr_no, item.display_sequence)}
                               style={styles.deleteBtn}
-                              className="dpr-btn dpr-small-btn"
+                              className="dpr-btn small-btn"
                             >
                               Delete
                             </button>
@@ -534,13 +631,15 @@ const GetMonthdpr = () => {
             </div>
           )}
         </div>
+
+        <div style={styles.mobileBottomSpace}></div>
       </div>
 
       {popup.open && (
         <div style={styles.popupOverlay} onClick={closePopup}>
           <div
             style={styles.popupCard}
-            className="dpr-popup-card"
+            className="popup-mobile fade-up"
             onClick={(e) => e.stopPropagation()}
           >
             <div
@@ -565,10 +664,10 @@ const GetMonthdpr = () => {
                 ...styles.popupButton,
                 background:
                   popup.type === "success"
-                    ? "linear-gradient(135deg, #111827, #1f2937)"
-                    : "linear-gradient(135deg, #b91c1c, #dc2626)",
+                    ? "linear-gradient(135deg, #2563eb, #1d4ed8)"
+                    : "linear-gradient(135deg, #dc2626, #b91c1c)",
               }}
-              className="dpr-btn dpr-download-btn"
+              className="dpr-btn"
             >
               OK
             </button>
@@ -580,7 +679,7 @@ const GetMonthdpr = () => {
         <div style={styles.popupOverlay} onClick={closeDeletePopup}>
           <div
             style={styles.popupCard}
-            className="dpr-popup-card"
+            className="popup-mobile fade-up"
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ ...styles.popupIcon, background: "linear-gradient(135deg, #dc2626, #ef4444)" }}>
@@ -599,7 +698,7 @@ const GetMonthdpr = () => {
                 type="button"
                 onClick={closeDeletePopup}
                 style={styles.cancelConfirmBtn}
-                className="dpr-btn dpr-small-btn"
+                className="dpr-btn"
               >
                 Cancel
               </button>
@@ -608,7 +707,7 @@ const GetMonthdpr = () => {
                 type="button"
                 onClick={confirmDelete}
                 style={styles.deleteConfirmBtn}
-                className="dpr-btn dpr-small-btn"
+                className="dpr-btn"
               >
                 Delete
               </button>
@@ -623,197 +722,231 @@ const GetMonthdpr = () => {
 const styles = {
   page: {
     minHeight: "100vh",
-    background: "linear-gradient(180deg, #f8fbff 0%, #f3f6fb 100%)",
-    padding: "14px",
-    fontFamily: "Arial, sans-serif",
+    width: "100%",
+    background: "linear-gradient(180deg, #edf3fb 0%, #f8fbff 35%, #f1f5fb 100%)",
+    margin: 0,
+    paddingBottom: "env(safe-area-inset-bottom)",
   },
+
   container: {
-    maxWidth: "1180px",
-    margin: "0 auto",
+    width: "100%",
+    maxWidth: "100%",
+    margin: 0,
+    padding: "12px",
   },
-  headerCard: {
-    background: "linear-gradient(135deg, #ffffff, #f8fbff)",
-    borderRadius: "18px",
-    padding: "18px",
-    boxShadow: "0 10px 28px rgba(15, 23, 42, 0.08)",
-    marginBottom: "14px",
-    border: "1px solid #e6edf6",
+
+  pageHeader: {
+    width: "100%",
+    marginBottom: "12px",
+    padding: "2px 2px 4px 2px",
   },
-  headerTop: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: "12px",
-    flexWrap: "wrap",
-  },
-  title: {
+
+  pageHeaderTitle: {
     margin: 0,
     fontSize: "26px",
-    color: "#0f172a",
-    fontWeight: "800",
+    fontWeight: "900",
+    color: "#0b1f4d",
+    lineHeight: "1.2",
+    letterSpacing: "0.2px",
   },
-  subtitle: {
-    margin: "6px 0 0 0",
-    color: "#64748b",
-    fontSize: "14px",
-    lineHeight: "1.5",
-  },
-  headerBadge: {
-    background: "linear-gradient(135deg, #2563eb, #1d4ed8)",
-    color: "#fff",
-    padding: "8px 14px",
-    borderRadius: "999px",
-    fontSize: "12px",
-    fontWeight: "800",
-    letterSpacing: "0.6px",
-  },
+
   filterCard: {
-    background: "#ffffff",
-    borderRadius: "18px",
-    padding: "16px",
-    boxShadow: "0 10px 28px rgba(15, 23, 42, 0.08)",
+    width: "100%",
+    background: "linear-gradient(135deg, #ffffff, #fbfdff)",
+    borderRadius: "20px",
+    padding: "14px",
     marginBottom: "14px",
-    border: "1px solid #e6edf6",
+    border: "1px solid #dfe8f5",
+    boxShadow: "0 10px 24px rgba(15, 23, 42, 0.06)",
   },
+
+  filterHeader: {
+    fontSize: "18px",
+    fontWeight: "800",
+    color: "#17335d",
+    marginBottom: "12px",
+  },
+
   filterGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
     gap: "12px",
+    width: "100%",
     marginBottom: "14px",
   },
-  label: {
-    display: "block",
-    marginBottom: "8px",
-    fontSize: "14px",
-    fontWeight: "700",
-    color: "#334155",
-  },
-  input: {
-    width: "100%",
-    padding: "12px 14px",
-    borderRadius: "12px",
-    border: "1px solid #dbe3ef",
-    outline: "none",
-    fontSize: "14px",
-    boxSizing: "border-box",
-    background: "#fff",
-    color: "#0f172a",
-  },
-  infoBox: {
-    background: "linear-gradient(135deg, #f8fbff, #f1f5f9)",
-    border: "1px solid #e2e8f0",
+
+  monthInputBlock: {
+    background: "#ffffff",
+    border: "1px solid #d7e2f0",
     borderRadius: "14px",
-    padding: "12px 14px",
+    padding: "10px",
+    minHeight: "72px",
+    display: "flex",
+    alignItems: "center",
+  },
+
+  monthInput: {
+    width: "100%",
+    height: "40px",
+    borderRadius: "12px",
+    border: "1px solid #cad7ea",
+    padding: "0 12px",
+    fontSize: "13px",
+    color: "#0f172a",
+    background: "#ffffff",
+    outline: "none",
+  },
+
+  infoBox: {
+    background: "linear-gradient(135deg, #f7faff 0%, #eef4ff 100%)",
+    border: "1px solid #d7e2f0",
+    borderRadius: "14px",
+    padding: "10px 12px",
+    minHeight: "72px",
     display: "flex",
     flexDirection: "column",
     justifyContent: "center",
   },
+
   infoBoxLabel: {
-    fontSize: "12px",
-    color: "#64748b",
-    marginBottom: "4px",
+    fontSize: "11px",
     fontWeight: "700",
+    color: "#607798",
+    marginBottom: "4px",
+    lineHeight: "1.2",
   },
+
   infoBoxValue: {
-    fontSize: "16px",
-    color: "#0f172a",
-    fontWeight: "800",
+    fontSize: "14px",
+    fontWeight: "700",
+    color: "#081f4a",
+    lineHeight: "1.2",
+    wordBreak: "break-word",
   },
+
   downloadRow: {
     display: "flex",
     justifyContent: "flex-end",
+    width: "100%",
   },
+
   downloadBtn: {
     border: "none",
-    background: "linear-gradient(135deg, #111827, #1f2937)",
+    background: "linear-gradient(135deg, #0f172a, #1e3a8a)",
     color: "#fff",
-    borderRadius: "12px",
-    padding: "11px 14px",
+    borderRadius: "14px",
+    padding: "12px 20px",
     fontWeight: "800",
     fontSize: "14px",
     cursor: "pointer",
     minHeight: "42px",
-    boxShadow: "0 8px 18px rgba(17, 24, 39, 0.18)",
+    boxShadow: "0 12px 22px rgba(30, 58, 138, 0.22)",
   },
+
   tableCard: {
+    width: "100%",
     background: "#ffffff",
-    borderRadius: "18px",
-    padding: "16px",
-    boxShadow: "0 10px 28px rgba(15, 23, 42, 0.08)",
-    border: "1px solid #e6edf6",
+    borderRadius: "20px",
+    padding: "14px",
+    border: "1px solid #dfe8f5",
+    boxShadow: "0 14px 34px rgba(15, 23, 42, 0.08)",
+    overflow: "hidden",
   },
+
   tableHeader: {
     marginBottom: "14px",
   },
+
   tableTitle: {
     margin: 0,
-    fontSize: "20px",
-    fontWeight: "800",
-    color: "#0f172a",
+    fontSize: "22px",
+    fontWeight: "900",
+    color: "#0a2354",
   },
+
   tableSubtitle: {
     margin: "6px 0 0 0",
     fontSize: "13px",
-    color: "#64748b",
-    lineHeight: "1.5",
+    color: "#6781a7",
+    lineHeight: "1.6",
   },
+
   tableWrap: {
     width: "100%",
     overflowX: "auto",
-    borderRadius: "14px",
-    border: "1px solid #e5e7eb",
-  },
-  table: {
-    width: "100%",
-    minWidth: "900px",
-    borderCollapse: "collapse",
+    borderRadius: "18px",
+    border: "1px solid #dbe5f2",
     background: "#ffffff",
   },
+
+  table: {
+    width: "100%",
+    minWidth: "920px",
+    borderCollapse: "collapse",
+    tableLayout: "fixed",
+    background: "#ffffff",
+  },
+
   th: {
-    padding: "12px 10px",
-    background: "#0f172a",
+    padding: "14px 12px",
+    background: "linear-gradient(135deg, #0f2557, #173b77)",
     color: "#ffffff",
     fontSize: "13px",
     fontWeight: "800",
     textAlign: "left",
-    borderBottom: "1px solid #dbe3ef",
+    borderBottom: "1px solid #264c8b",
     whiteSpace: "nowrap",
   },
+
   thCenter: {
     textAlign: "center",
   },
+
   td: {
-    padding: "12px 10px",
+    padding: "14px 12px",
     fontSize: "13px",
-    color: "#1e293b",
-    borderBottom: "1px solid #eef2f6",
+    color: "#20324d",
+    borderBottom: "1px solid #e9eef6",
     verticalAlign: "top",
-    background: "#fff",
+    wordBreak: "break-word",
   },
+
   tdCenter: {
     textAlign: "center",
     verticalAlign: "middle",
   },
+
   seqText: {
-    fontWeight: "800",
-    color: "#0f172a",
+    fontWeight: "900",
+    color: "#08224f",
   },
+
   dateText: {
-    fontWeight: "700",
-    color: "#0f172a",
+    fontWeight: "800",
+    color: "#173b77",
     whiteSpace: "nowrap",
+    display: "inline-block",
   },
+
+  emptyDate: {
+    display: "inline-block",
+    minHeight: "18px",
+  },
+
   workDetailsCell: {
-    lineHeight: "1.6",
-    whiteSpace: "pre-wrap",
-    color: "#334155",
+    color: "#334a68",
+    lineHeight: "1.7",
     fontWeight: "500",
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word",
   },
+
   timeText: {
-    color: "#334155",
+    color: "#2f4a71",
+    fontWeight: "700",
     whiteSpace: "nowrap",
-    fontWeight: "600",
   },
+
   actionBtns: {
     display: "flex",
     alignItems: "center",
@@ -821,110 +954,123 @@ const styles = {
     gap: "8px",
     flexWrap: "wrap",
   },
+
   updateBtn: {
     border: "none",
-    background: "#175cd3",
+    background: "linear-gradient(135deg, #2563eb, #3b82f6)",
     color: "#fff",
-    borderRadius: "10px",
-    padding: "8px 10px",
-    fontWeight: "700",
+    borderRadius: "12px",
+    padding: "9px 12px",
+    fontWeight: "800",
     fontSize: "12px",
     cursor: "pointer",
-    minHeight: "34px",
-    minWidth: "64px",
+    boxShadow: "0 10px 18px rgba(37, 99, 235, 0.18)",
+    minWidth: "72px",
   },
+
   deleteBtn: {
     border: "none",
-    background: "#d92d20",
+    background: "linear-gradient(135deg, #ef4444, #dc2626)",
     color: "#fff",
-    borderRadius: "10px",
-    padding: "8px 10px",
-    fontWeight: "700",
+    borderRadius: "12px",
+    padding: "9px 12px",
+    fontWeight: "800",
     fontSize: "12px",
     cursor: "pointer",
-    minHeight: "34px",
-    minWidth: "64px",
+    boxShadow: "0 10px 18px rgba(220, 38, 38, 0.18)",
+    minWidth: "72px",
   },
+
   saveBtn: {
     border: "none",
-    background: "#027a48",
+    background: "linear-gradient(135deg, #16a34a, #22c55e)",
     color: "#fff",
-    borderRadius: "10px",
-    padding: "8px 10px",
-    fontWeight: "700",
+    borderRadius: "12px",
+    padding: "9px 12px",
+    fontWeight: "800",
     fontSize: "12px",
     cursor: "pointer",
-    minHeight: "34px",
-    minWidth: "64px",
+    boxShadow: "0 10px 18px rgba(34, 197, 94, 0.18)",
+    minWidth: "72px",
   },
+
   cancelBtn: {
-    border: "1px solid #d0d5dd",
-    background: "#fff",
-    color: "#344054",
-    borderRadius: "10px",
-    padding: "8px 10px",
-    fontWeight: "700",
+    border: "1px solid #d1dbe8",
+    background: "linear-gradient(135deg, #ffffff, #f8fbff)",
+    color: "#425b7b",
+    borderRadius: "12px",
+    padding: "9px 12px",
+    fontWeight: "800",
     fontSize: "12px",
     cursor: "pointer",
-    minHeight: "34px",
-    minWidth: "64px",
+    minWidth: "72px",
   },
+
   tableInput: {
     width: "100%",
     padding: "10px 12px",
-    borderRadius: "10px",
-    border: "1px solid #dbe3ef",
-    outline: "none",
+    borderRadius: "12px",
+    border: "1px solid #d1dded",
+    background: "#ffffff",
     fontSize: "13px",
-    boxSizing: "border-box",
-    background: "#fff",
+    outline: "none",
   },
+
   tableTextarea: {
     width: "100%",
-    padding: "10px 12px",
-    borderRadius: "10px",
-    border: "1px solid #dbe3ef",
-    outline: "none",
-    fontSize: "13px",
-    boxSizing: "border-box",
-    resize: "vertical",
-    background: "#fff",
     minHeight: "92px",
+    resize: "vertical",
+    padding: "10px 12px",
+    borderRadius: "12px",
+    border: "1px solid #d1dded",
+    background: "#ffffff",
+    fontSize: "13px",
+    outline: "none",
   },
+
   emptyState: {
-    background: "linear-gradient(135deg, #f8fbff, #f1f5f9)",
-    border: "1px solid #e2e8f0",
-    borderRadius: "14px",
-    padding: "28px 16px",
+    background: "linear-gradient(135deg, #f7faff, #eef4ff)",
+    border: "1px solid #dbe6f4",
+    borderRadius: "18px",
+    padding: "30px 16px",
     textAlign: "center",
     fontSize: "14px",
-    color: "#64748b",
-    fontWeight: "600",
+    fontWeight: "700",
+    color: "#6480a5",
   },
+
+  mobileBottomSpace: {
+    width: "100%",
+    height: "84px",
+    flexShrink: 0,
+  },
+
   popupOverlay: {
     position: "fixed",
     inset: 0,
-    background: "rgba(15, 23, 42, 0.45)",
-    backdropFilter: "blur(4px)",
+    background: "rgba(8, 20, 48, 0.45)",
+    backdropFilter: "blur(5px)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     padding: "14px",
     zIndex: 9999,
   },
+
   popupCard: {
     width: "100%",
-    maxWidth: "370px",
+    maxWidth: "380px",
     background: "#ffffff",
-    borderRadius: "20px",
+    borderRadius: "22px",
     padding: "22px 18px",
     textAlign: "center",
-    boxShadow: "0 20px 40px rgba(0, 0, 0, 0.18)",
-    border: "1px solid #e5e7eb",
+    boxShadow: "0 20px 44px rgba(15, 23, 42, 0.22)",
+    border: "1px solid #e6edf6",
   },
+
   popupIcon: {
-    width: "56px",
-    height: "56px",
+    width: "58px",
+    height: "58px",
     borderRadius: "50%",
     margin: "0 auto 14px auto",
     color: "#fff",
@@ -934,60 +1080,65 @@ const styles = {
     fontSize: "26px",
     fontWeight: "900",
   },
+
   popupTitle: {
     margin: "0 0 8px 0",
-    color: "#111827",
+    color: "#08224f",
     fontSize: "20px",
-    fontWeight: "800",
+    fontWeight: "900",
   },
+
   popupMessage: {
     margin: "0 0 16px 0",
-    color: "#475569",
+    color: "#5f7699",
     fontSize: "14px",
     lineHeight: "1.6",
   },
+
   popupButton: {
     width: "100%",
     border: "none",
     color: "#fff",
-    borderRadius: "12px",
-    padding: "11px 14px",
+    borderRadius: "14px",
+    padding: "12px 14px",
     fontWeight: "800",
     fontSize: "14px",
     cursor: "pointer",
-    minHeight: "42px",
+    boxShadow: "0 12px 22px rgba(37, 99, 235, 0.2)",
   },
+
   confirmBtnRow: {
     display: "flex",
     gap: "10px",
     justifyContent: "center",
     flexWrap: "wrap",
   },
+
   cancelConfirmBtn: {
     flex: 1,
-    border: "1px solid #d0d5dd",
-    background: "#fff",
-    color: "#344054",
-    borderRadius: "10px",
+    border: "1px solid #d1dbe8",
+    background: "linear-gradient(135deg, #ffffff, #f8fbff)",
+    color: "#425b7b",
+    borderRadius: "12px",
     padding: "10px 12px",
-    fontWeight: "700",
+    fontWeight: "800",
     fontSize: "13px",
     cursor: "pointer",
-    minHeight: "40px",
     minWidth: "110px",
   },
+
   deleteConfirmBtn: {
     flex: 1,
     border: "none",
-    background: "#d92d20",
+    background: "linear-gradient(135deg, #ef4444, #dc2626)",
     color: "#fff",
-    borderRadius: "10px",
+    borderRadius: "12px",
     padding: "10px 12px",
-    fontWeight: "700",
+    fontWeight: "800",
     fontSize: "13px",
     cursor: "pointer",
-    minHeight: "40px",
     minWidth: "110px",
+    boxShadow: "0 10px 18px rgba(220, 38, 38, 0.16)",
   },
 };
 
