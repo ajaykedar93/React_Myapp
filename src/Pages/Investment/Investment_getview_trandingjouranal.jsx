@@ -12,23 +12,39 @@ export default function Investment_getview_trandingjouranal() {
     return h;
   }, [token]);
 
-  // ---------- UI ----------
   const [initialLoading, setInitialLoading] = useState(true);
-  const [busy, setBusy] = useState(""); // "refresh" | `upd-${id}` | `del-${id}`
-  const [modal, setModal] = useState({ open: false, title: "", message: "", kind: "error" });
+  const [busy, setBusy] = useState("");
+  const [modal, setModal] = useState({
+    open: false,
+    title: "",
+    message: "",
+    kind: "error",
+  });
 
   const openError = (message) =>
-    setModal({ open: true, title: "Error", message: message || "Something went wrong", kind: "error" });
-  const openInfo = (message) =>
-    setModal({ open: true, title: "Success", message: message || "Done", kind: "info" });
-  const closeModal = () => setModal({ open: false, title: "", message: "", kind: "error" });
+    setModal({
+      open: true,
+      title: "Error",
+      message: message || "Something went wrong",
+      kind: "error",
+    });
 
-  // ✅ custom delete confirm modal
+  const openInfo = (message) =>
+    setModal({
+      open: true,
+      title: "Success",
+      message: message || "Done",
+      kind: "info",
+    });
+
+  const closeModal = () =>
+    setModal({ open: false, title: "", message: "", kind: "error" });
+
   const [deleteConfirm, setDeleteConfirm] = useState({
     open: false,
     journal_id: null,
     title: "Delete Entry",
-    message: "Are you sure you want to delete this entry?",
+    message: "Are you sure you want to delete this trading journal entry?",
   });
 
   const openDeleteConfirm = (journal_id) => {
@@ -45,17 +61,15 @@ export default function Investment_getview_trandingjouranal() {
       open: false,
       journal_id: null,
       title: "Delete Entry",
-      message: "Are you sure you want to delete this entry?",
+      message: "Are you sure you want to delete this trading journal entry?",
     });
   };
 
-  // ---------- Master data ----------
   const [platforms, setPlatforms] = useState([]);
   const [segments, setSegments] = useState([]);
   const [platformId, setPlatformId] = useState("");
   const [segmentId, setSegmentId] = useState("");
 
-  // month filter
   const [month, setMonth] = useState(() => {
     const d = new Date();
     const yyyy = d.getFullYear();
@@ -63,10 +77,8 @@ export default function Investment_getview_trandingjouranal() {
     return `${yyyy}-${mm}-01`;
   });
 
-  // ---------- Data ----------
   const [dailySummary, setDailySummary] = useState([]);
 
-  // ---------- Update Modal ----------
   const [edit, setEdit] = useState({
     open: false,
     journal_id: null,
@@ -98,18 +110,8 @@ export default function Investment_getview_trandingjouranal() {
       mistakes: "",
     });
 
-  // ✅ segments for edit modal
   const [editSegments, setEditSegments] = useState([]);
 
-  // responsive
-  const [isMobile, setIsMobile] = useState(typeof window !== "undefined" ? window.innerWidth < 992 : true);
-  useEffect(() => {
-    const onR = () => setIsMobile(window.innerWidth < 992);
-    window.addEventListener("resize", onR);
-    return () => window.removeEventListener("resize", onR);
-  }, []);
-
-  // ✅ lock page scroll when modal open
   useEffect(() => {
     const shouldLock = !!edit.open || !!modal.open || !!deleteConfirm.open;
     if (shouldLock) {
@@ -121,12 +123,25 @@ export default function Investment_getview_trandingjouranal() {
     }
   }, [edit.open, modal.open, deleteConfirm.open]);
 
-  // ---------- Helpers ----------
   const formatDate = (value) => {
     if (!value) return "-";
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return String(value);
-    return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(d);
+    return new Intl.DateTimeFormat("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }).format(d);
+  };
+
+  const formatDayMonth = (value) => {
+    if (!value) return { day: "--", month: "---" };
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return { day: "--", month: "---" };
+    return {
+      day: String(d.getDate()).padStart(2, "0"),
+      month: d.toLocaleString("en-US", { month: "short" }).toUpperCase(),
+    };
   };
 
   const toNumber = (v) => {
@@ -150,21 +165,27 @@ export default function Investment_getview_trandingjouranal() {
   const validateEdit = () => {
     if (!edit.trade_date) return "Trade date required";
     if (!String(edit.trade_name || "").trim()) return "Trade name required";
+    if (!String(edit.platform_id || "").trim()) return "Platform required";
+    if (!String(edit.segment_id || "").trim()) return "Segment required";
     if (!String(edit.trade_logic || "").trim()) return "Trade logic required";
 
     const p = toNumber(edit.profit);
     const l = toNumber(edit.loss);
     const b = toNumber(edit.brokerage);
 
-    if (p < 0 || l < 0 || b < 0) return "Profit/Loss/Brokerage must be 0 or more";
+    if (p < 0 || l < 0 || b < 0) return "Profit, Loss and Brokerage must be 0 or more";
 
-    const ok = (p === 0 && l > 0) || (l === 0 && p > 0) || (p === 0 && l === 0);
-    if (!ok) return "Either Profit OR Loss should be > 0 (both cannot be > 0)";
-    if (p === 0 && l === 0 && b > 0) return "Brokerage not allowed when profit=loss=0";
+    const ok =
+      (p > 0 && l === 0) ||
+      (l > 0 && p === 0) ||
+      (p === 0 && l === 0);
+
+    if (!ok) return "Either Profit or Loss should be greater than 0, not both";
+    if (p === 0 && l === 0 && b > 0) return "Brokerage not allowed when both profit and loss are 0";
+
     return "";
   };
 
-  // ---------- API ----------
   const api = {
     async getPlatforms() {
       const res = await fetch(`${BASE_URL}/api/investment/platform-segment/platform`, { headers });
@@ -172,6 +193,7 @@ export default function Investment_getview_trandingjouranal() {
       if (!res.ok) throw new Error(data?.message || "Platform fetch failed");
       return Array.isArray(data?.data) ? data.data : [];
     },
+
     async getSegments(pid) {
       if (!pid) return [];
       const res = await fetch(`${BASE_URL}/api/investment/platform-segment/segment?platform_id=${pid}`, { headers });
@@ -186,9 +208,10 @@ export default function Investment_getview_trandingjouranal() {
       if (segment_id) qs.set("segment_id", String(segment_id));
       if (month) qs.set("month", month);
 
-      const res = await fetch(`${BASE_URL}/api/investment/tradingjournal-view/daily-summary?${qs.toString()}`, {
-        headers,
-      });
+      const res = await fetch(
+        `${BASE_URL}/api/investment/tradingjournal-view/daily-summary?${qs.toString()}`,
+        { headers }
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message || "Daily summary fetch failed");
       return Array.isArray(data?.data) ? data.data : [];
@@ -216,10 +239,8 @@ export default function Investment_getview_trandingjouranal() {
     },
   };
 
-  // avoid double init
   const didInit = useRef(false);
 
-  // ---------- Initial load ----------
   useEffect(() => {
     if (didInit.current) return;
     didInit.current = true;
@@ -235,10 +256,8 @@ export default function Investment_getview_trandingjouranal() {
         setInitialLoading(false);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // segments when filter platform changes
   useEffect(() => {
     (async () => {
       try {
@@ -251,26 +270,21 @@ export default function Investment_getview_trandingjouranal() {
         openError(e.message);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [platformId]);
 
-  // ✅ segments when EDIT modal platform changes
   useEffect(() => {
     (async () => {
       try {
         setEditSegments([]);
-        if (!edit.open) return;
-        if (!edit.platform_id) return;
+        if (!edit.open || !edit.platform_id) return;
         const s = await api.getSegments(edit.platform_id);
         setEditSegments(s);
       } catch (e) {
         openError(e.message);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [edit.open, edit.platform_id]);
 
-  // ---------- Refresh ----------
   const refresh = async () => {
     try {
       setBusy("refresh");
@@ -289,11 +303,9 @@ export default function Investment_getview_trandingjouranal() {
 
   useEffect(() => {
     refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month, platformId, segmentId]);
 
-  // ---------- Actions ----------
-  const onOpenUpdate = async (r) => {
+  const onOpenUpdate = (r) => {
     setEdit({
       open: true,
       journal_id: r.journal_id,
@@ -324,13 +336,15 @@ export default function Investment_getview_trandingjouranal() {
       loss: toNumber(edit.loss),
       brokerage: toNumber(edit.brokerage),
       trade_logic: String(edit.trade_logic).trim(),
-      mistakes: String(edit.mistakes || "").trim() ? String(edit.mistakes).trim() : null,
+      mistakes: String(edit.mistakes || "").trim()
+        ? String(edit.mistakes).trim()
+        : null,
     };
 
     try {
       setBusy(`upd-${edit.journal_id}`);
       await api.updateJournal(edit.journal_id, payload);
-      openInfo("Updated");
+      openInfo("Trading journal updated successfully");
       closeEdit();
       await refresh();
     } catch (e) {
@@ -345,7 +359,7 @@ export default function Investment_getview_trandingjouranal() {
       setBusy(`del-${journal_id}`);
       await api.deleteJournal(journal_id);
       closeDeleteConfirm();
-      openInfo("Deleted successfully");
+      openInfo("Trading journal deleted successfully");
       await refresh();
     } catch (e) {
       openError(e.message);
@@ -354,636 +368,873 @@ export default function Investment_getview_trandingjouranal() {
     }
   };
 
-  // ---------- Small UI ----------
-  const SmallBtn = ({ variant = "dark", outline = false, disabled, onClick, children, className = "" }) => (
+  const totalProfit = dailySummary.reduce((sum, row) => sum + toNumber(row.profit), 0);
+  const totalLoss = dailySummary.reduce((sum, row) => sum + toNumber(row.loss), 0);
+  const totalBrokerage = dailySummary.reduce((sum, row) => sum + toNumber(row.brokerage), 0);
+  const totalNet = dailySummary.reduce((sum, row) => sum + toNumber(row.net_total), 0);
+
+  const SmallBtn = ({
+    variant = "dark",
+    outline = false,
+    disabled,
+    onClick,
+    children,
+    className = "",
+  }) => (
     <button
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className={`btn ${outline ? `btn-outline-${variant}` : `btn-${variant}`} btn-sm ijv-btn ${className}`}
+      className={`btn ${outline ? `btn-outline-${variant}` : `btn-${variant}`} btn-sm tj-btn ${className}`}
     >
       {children}
     </button>
   );
 
-  const NetPill = ({ value }) => {
-    const t = netTone(value);
-    return <span className={`ijv-pill ijv-${t}`}>{formatNumber(value)}</span>;
+  const NetBadge = ({ value }) => {
+    const tone = netTone(value);
+    return <span className={`tj-chip tj-${tone}`}>Net {formatNumber(value)}</span>;
   };
 
-  const renderLogic = (txt) => (String(txt || "").trim() ? String(txt) : "-");
-  const renderMistake = (txt) => (String(txt || "").trim() ? String(txt) : "-");
-
   return (
-    <div className="ijv-root">
+    <div className="tj-root">
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
 
-        html, body { width:100%; margin:0; padding:0; }
-        .container-fluid { padding-left: 0 !important; padding-right: 0 !important; }
-        .row { margin-left: 0 !important; margin-right: 0 !important; }
-        [class^="col-"], [class*=" col-"] { padding-left: 0 !important; padding-right: 0 !important; }
+        * { box-sizing: border-box; }
+        html, body, #root {
+          width: 100%;
+          min-height: 100%;
+          margin: 0;
+          padding: 0;
+        }
 
-        .ijv-root{
-          min-height:100vh;
-          width:100%;
-          color:#0f172a;
-          font-family:"Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+        body {
+          font-family: "Plus Jakarta Sans", sans-serif;
+          background: #f7f8fc;
+        }
+
+        .tj-root {
+          min-height: 100vh;
+          width: 100%;
+          color: #0f172a;
           background:
-            radial-gradient(900px 520px at 12% 8%, rgba(124,58,237,.12), transparent 60%),
-            radial-gradient(900px 520px at 90% 14%, rgba(6,182,212,.12), transparent 60%),
-            radial-gradient(900px 520px at 40% 96%, rgba(245,158,11,.10), transparent 60%),
-            linear-gradient(135deg, #f6f8ff, #fff7f1);
-          padding-bottom: 72px;
+            radial-gradient(900px 500px at top left, rgba(124,58,237,.08), transparent 55%),
+            radial-gradient(900px 500px at top right, rgba(59,130,246,.08), transparent 50%),
+            linear-gradient(180deg, #f8fbff 0%, #f7f8fc 100%);
         }
 
-        .ijv-topbar{
-          position:sticky;
-          top:0;
-          z-index:40;
-          background:rgba(255,255,255,.74);
-          border-bottom:1px solid rgba(15,23,42,.10);
-          backdrop-filter: blur(14px);
-          -webkit-backdrop-filter: blur(14px);
-        }
-        .ijv-topbarInner{
+        .tj-wrap {
           width: 100%;
-          padding: 10px 12px;
-          display:flex;
-          align-items:center;
-          justify-content:space-between;
-          gap:12px;
-        }
-        .ijv-title{
-          margin:0;
-          font-weight:1000;
-          letter-spacing:.2px;
-          font-size:16px;
-          line-height:1.2;
-        }
-        .ijv-sub{
-          margin:0;
-          color:rgba(15,23,42,.62);
-          font-weight:850;
-          font-size:12px;
+          max-width: 760px;
+          margin: 0 auto;
+          padding: 0 14px 28px;
         }
 
-        .ijv-card{
-          width: 100%;
-          border-top:1px solid rgba(15,23,42,.10);
-          border-bottom:1px solid rgba(15,23,42,.10);
-          border-left:0;
-          border-right:0;
-          border-radius: 0;
-          overflow:hidden;
-          background:rgba(255,255,255,.88);
-          box-shadow:0 14px 34px rgba(15,23,42,0.08);
-        }
-
-        @media (min-width: 992px){
-          .ijv-wrap{ padding: 12px; }
-          .ijv-card{ border:1px solid rgba(15,23,42,.10); border-radius:18px; }
-          .ijv-title{ font-size:18px; }
-        }
-
-        .ijv-head{
-          background:rgba(255,255,255,.66);
-          border-bottom:1px solid rgba(15,23,42,.10);
-        }
-        .ijv-label{
-          font-size:12px;
-          color:rgba(15,23,42,.62);
-          font-weight:900;
-          margin-bottom:6px;
-        }
-
-        .ijv-form .form-select,
-        .ijv-form .form-control{
-          border-radius:14px;
-          border:1px solid rgba(15,23,42,.14);
-          font-weight:850;
-        }
-
-        .ijv-btn{
-          border-radius:12px !important;
-          font-weight:900 !important;
-          letter-spacing:.10px;
-          padding:.28rem .58rem !important;
-          box-shadow:0 6px 14px rgba(15,23,42,0.07);
-          white-space: nowrap;
-          min-width: 76px;
-          font-size: 12px !important;
-        }
-        @media (max-width: 420px){
-          .ijv-btn{
-            min-width: 68px;
-            font-size: 11px !important;
-            padding: .24rem .5rem !important;
-          }
-        }
-
-        .ijv-table thead th{
+        .tj-header {
           position: sticky;
           top: 0;
-          z-index: 2;
-          background: rgba(248,250,252,.95) !important;
-          border-bottom: 1px solid rgba(15,23,42,.10) !important;
-          font-size: 12px;
-          color: rgba(15,23,42,.66);
-          font-weight: 950;
-          white-space: nowrap;
-        }
-        .ijv-table td{
-          vertical-align: top;
-          font-size: 13px;
-          font-weight: 850;
+          z-index: 40;
+          backdrop-filter: blur(14px);
+          -webkit-backdrop-filter: blur(14px);
+          background: rgba(255,255,255,.86);
+          border-bottom: 1px solid rgba(15,23,42,.06);
+          box-shadow: 0 8px 30px rgba(15,23,42,.04);
         }
 
-        .ijv-meta{
-          font-size:11px;
-          font-weight:900;
-          color:rgba(15,23,42,.50);
+        .tj-headerInner {
+          max-width: 760px;
+          margin: 0 auto;
+          padding: 14px 14px 12px;
         }
 
-        .ijv-pill{
-          display:inline-flex;
-          align-items:center;
-          justify-content:center;
-          padding:6px 10px;
-          border-radius:999px;
-          font-weight:1000;
-          font-size:12px;
-          border:1px solid rgba(15,23,42,.12);
-          min-width:88px;
-          white-space:nowrap;
-        }
-        .ijv-pos{ background:rgba(22,163,74,.10); color:#15803d; }
-        .ijv-neg{ background:rgba(225,29,72,.10); color:#be123c; }
-        .ijv-neu{ background:rgba(37,99,235,.10); color:#1d4ed8; }
-
-        .ijv-logic{
-          color:#1d4ed8;
-          font-weight:900;
-          max-width: 420px;
-          white-space: normal;
-          word-break: break-word;
-          line-height: 1.25;
-        }
-        .ijv-mistake{
-          color:#dc2626;
-          font-weight:950;
-          max-width: 420px;
-          white-space: normal;
-          word-break: break-word;
-          line-height: 1.25;
+        .tj-topRow {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 12px;
         }
 
-        .ijv-mcard{
-          width: 100%;
-          border-top:1px solid rgba(15,23,42,.10);
-          border-bottom:1px solid rgba(15,23,42,.10);
-          border-left:0;
-          border-right:0;
-          border-radius:0;
-          background:rgba(255,255,255,.88);
-          box-shadow:0 14px 34px rgba(15,23,42,0.08);
-          overflow:hidden;
-          margin-bottom: 10px;
-        }
-        @media (min-width: 992px){
-          .ijv-mcard{ border:1px solid rgba(15,23,42,.10); border-radius:18px; }
+        .tj-title {
+          margin: 0;
+          font-size: 20px;
+          font-weight: 900;
+          line-height: 1.15;
+          color: #0f172a;
         }
 
-        .ijv-mcardHead{
-          padding: 12px 14px;
-          border-bottom:1px solid rgba(15,23,42,.10);
-          display:flex;
-          align-items:flex-start;
-          justify-content:space-between;
-          gap:10px;
-        }
-        .ijv-mcardBody{ padding: 12px 14px; }
-        .ijv-row2{ display:flex; gap:10px; flex-wrap:wrap; }
-        .ijv-kv{ font-size:12px; font-weight:950; color:rgba(15,23,42,.60); }
-        .ijv-block{ margin-top: 10px; }
-
-        .ijv-modalOverlay{
-          position:fixed;
-          inset:0;
-          background:rgba(15,23,42,0.40);
-          display:flex;
-          align-items:center;
-          justify-content:center;
-          padding: 14px;
-          z-index:9999;
-          overflow:auto;
-          -webkit-overflow-scrolling: touch;
+        .tj-sub {
+          margin: 4px 0 0;
+          font-size: 11px;
+          font-weight: 700;
+          color: #64748b;
         }
 
-        .ijv-modal{
-          width: min(96vw, 760px);
-          max-height: 92vh;
-          display:flex;
-          flex-direction:column;
-          border-radius:18px;
-          border:1px solid rgba(15,23,42,.12);
-          background:#fff;
-          overflow:hidden;
-          box-shadow:0 22px 60px rgba(0,0,0,0.30);
-          animation: ijvPop .18s ease;
+        .tj-miniWrap {
+          display: flex;
+          gap: 7px;
+          flex-wrap: wrap;
+          justify-content: flex-end;
         }
 
-        .ijv-confirmModal{
-          width: min(92vw, 340px);
-          max-width: 340px;
-          border-radius: 18px;
-          border:1px solid rgba(15,23,42,.12);
-          background:#fff;
-          overflow:hidden;
-          box-shadow:0 22px 60px rgba(0,0,0,0.30);
-          animation: ijvPop .18s ease;
-        }
-
-        @keyframes ijvPop{
-          from{
-            opacity:0;
-            transform: translateY(8px) scale(.98);
-          }
-          to{
-            opacity:1;
-            transform: translateY(0) scale(1);
-          }
-        }
-
-        .ijv-modalBody{
-          padding: 12px;
-          overflow:auto;
-          -webkit-overflow-scrolling: touch;
-          padding-bottom: 22px;
-        }
-
-        .ijv-modalFooter{
-          position: sticky;
-          bottom: 0;
-          padding: 12px;
-          padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-          display:flex;
-          justify-content:flex-end;
-          gap:8px;
-          border-top:1px solid rgba(15,23,42,.10);
+        .tj-miniStat {
+          min-width: 76px;
+          padding: 7px 9px;
+          border-radius: 14px;
           background: rgba(255,255,255,.96);
-          backdrop-filter: blur(10px);
-          -webkit-backdrop-filter: blur(10px);
+          border: 1px solid rgba(15,23,42,.08);
+          box-shadow: 0 10px 24px rgba(15,23,42,.05);
         }
 
-        .ijv-confirmBody{
-          padding: 18px 16px 8px;
+        .tj-miniLabel {
+          font-size: 9px;
+          font-weight: 900;
+          color: #64748b;
+          text-transform: uppercase;
+          letter-spacing: .5px;
+          margin-bottom: 2px;
+        }
+
+        .tj-miniValue {
+          font-size: 12px;
+          font-weight: 900;
+          line-height: 1.1;
+        }
+
+        .tj-miniProfit .tj-miniValue { color: #15803d; }
+        .tj-miniLoss .tj-miniValue { color: #be123c; }
+        .tj-miniOverall.pos .tj-miniValue { color: #15803d; }
+        .tj-miniOverall.neg .tj-miniValue { color: #be123c; }
+        .tj-miniOverall.neu .tj-miniValue { color: #1d4ed8; }
+
+        .tj-filterCard {
+          margin-top: 14px;
+          background: rgba(255,255,255,.88);
+          border: 1px solid rgba(15,23,42,.08);
+          border-radius: 22px;
+          box-shadow: 0 16px 40px rgba(15,23,42,.05);
+          overflow: hidden;
+        }
+
+        .tj-filterHead {
+          padding: 14px 16px 10px;
+          border-bottom: 1px solid rgba(15,23,42,.06);
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+        }
+
+        .tj-filterTitle {
+          font-size: 14px;
+          font-weight: 900;
+          color: #0f172a;
+        }
+
+        .tj-filterMeta {
+          font-size: 11px;
+          font-weight: 700;
+          color: #64748b;
+        }
+
+        .tj-filterBody {
+          padding: 14px;
+        }
+
+        .tj-label {
+          font-size: 11px;
+          font-weight: 900;
+          color: #475569;
+          margin-bottom: 6px;
+        }
+
+        .tj-input,
+        .tj-select,
+        .tj-textarea {
+          width: 100%;
+          border: 1px solid rgba(15,23,42,.12);
+          border-radius: 14px;
+          padding: 11px 12px;
+          outline: none;
+          font-size: 13px;
+          font-weight: 700;
+          color: #0f172a;
+          background: #fff;
+          transition: .2s ease;
+        }
+
+        .tj-input:focus,
+        .tj-select:focus,
+        .tj-textarea:focus {
+          border-color: rgba(37,99,235,.35);
+          box-shadow: 0 0 0 4px rgba(37,99,235,.08);
+        }
+
+        .tj-btn {
+          border-radius: 12px !important;
+          font-weight: 800 !important;
+          font-size: 12px !important;
+          padding: .52rem .9rem !important;
+          box-shadow: 0 8px 18px rgba(15,23,42,.08);
+        }
+
+        .tj-filterActions {
+          display: flex;
+          gap: 10px;
+          margin-top: 12px;
+          flex-wrap: wrap;
+        }
+
+        .tj-list {
+          margin-top: 16px;
+          display: grid;
+          gap: 14px;
+        }
+
+        .tj-card {
+          position: relative;
+          overflow: hidden;
+          background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(250,251,255,.94));
+          border: 1px solid rgba(15,23,42,.08);
+          border-radius: 26px;
+          box-shadow: 0 18px 40px rgba(15,23,42,.06);
+        }
+
+        .tj-card::before {
+          content: "";
+          position: absolute;
+          inset: 0 auto 0 0;
+          width: 5px;
+          background: linear-gradient(180deg, #2563eb, #7c3aed);
+        }
+
+        .tj-cardTop {
+          display: flex;
+          gap: 12px;
+          padding: 16px;
+          align-items: flex-start;
+        }
+
+        .tj-dateBadge {
+          min-width: 62px;
+          max-width: 62px;
+          border-radius: 20px;
+          background: linear-gradient(180deg, #0f172a, #1e293b);
+          color: #fff;
+          padding: 10px 8px;
+          text-align: center;
+          box-shadow: 0 16px 28px rgba(15,23,42,.18);
+        }
+
+        .tj-dateDay {
+          font-size: 20px;
+          line-height: 1;
+          font-weight: 900;
+          margin-bottom: 4px;
+        }
+
+        .tj-dateMonth {
+          font-size: 10px;
+          font-weight: 800;
+          letter-spacing: 1px;
+          opacity: .92;
+        }
+
+        .tj-main {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .tj-mainTop {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 10px;
+        }
+
+        .tj-name {
+          font-size: 16px;
+          font-weight: 900;
+          line-height: 1.25;
+          color: #0f172a;
+          margin: 0 0 4px;
+          word-break: break-word;
+        }
+
+        .tj-subline {
+          font-size: 11px;
+          font-weight: 800;
+          color: #64748b;
+          line-height: 1.4;
+        }
+
+        .tj-id {
+          flex-shrink: 0;
+          font-size: 10px;
+          font-weight: 900;
+          color: #475569;
+          background: rgba(15,23,42,.05);
+          padding: 7px 10px;
+          border-radius: 999px;
+          border: 1px solid rgba(15,23,42,.06);
+        }
+
+        .tj-chipRow {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-top: 12px;
+        }
+
+        .tj-chip {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 34px;
+          padding: 8px 12px;
+          border-radius: 999px;
+          font-size: 11px;
+          font-weight: 900;
+          border: 1px solid transparent;
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.5);
+        }
+
+        .tj-profit {
+          background: rgba(22,163,74,.12);
+          color: #15803d;
+          border-color: rgba(22,163,74,.15);
+        }
+
+        .tj-loss {
+          background: rgba(225,29,72,.12);
+          color: #be123c;
+          border-color: rgba(225,29,72,.15);
+        }
+
+        .tj-brokerage {
+          background: rgba(37,99,235,.10);
+          color: #1d4ed8;
+          border-color: rgba(37,99,235,.14);
+        }
+
+        .tj-pos {
+          background: rgba(22,163,74,.12);
+          color: #15803d;
+          border-color: rgba(22,163,74,.15);
+        }
+
+        .tj-neg {
+          background: rgba(225,29,72,.12);
+          color: #be123c;
+          border-color: rgba(225,29,72,.15);
+        }
+
+        .tj-neu {
+          background: rgba(100,116,139,.10);
+          color: #334155;
+          border-color: rgba(100,116,139,.14);
+        }
+
+        .tj-divider {
+          height: 1px;
+          background: linear-gradient(90deg, transparent, rgba(15,23,42,.08), transparent);
+          margin: 0 16px;
+        }
+
+        .tj-section {
+          padding: 14px 16px 0;
+        }
+
+        .tj-section:last-child {
+          padding-bottom: 16px;
+        }
+
+        .tj-sectionLabel {
+          font-size: 10px;
+          font-weight: 900;
+          letter-spacing: .7px;
+          color: #64748b;
+          margin-bottom: 7px;
+          text-transform: uppercase;
+        }
+
+        .tj-logicText {
+          font-size: 13px;
+          font-weight: 700;
+          line-height: 1.65;
+          color: #0f172a;
+          word-break: break-word;
+        }
+
+        .tj-mistakeBox {
+          background: rgba(254,242,242,.8);
+          border: 1px solid rgba(248,113,113,.18);
+          color: #b91c1c;
+          border-radius: 16px;
+          padding: 12px;
+          font-size: 13px;
+          font-weight: 700;
+          line-height: 1.6;
+          word-break: break-word;
+        }
+
+        .tj-actionBar {
+          padding: 14px 16px 16px;
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .tj-empty,
+        .tj-loading {
+          margin-top: 18px;
+          background: rgba(255,255,255,.9);
+          border: 1px solid rgba(15,23,42,.08);
+          border-radius: 24px;
+          padding: 28px 18px;
+          text-align: center;
+          box-shadow: 0 18px 40px rgba(15,23,42,.05);
+        }
+
+        .tj-emptyTitle,
+        .tj-loadingTitle {
+          font-size: 18px;
+          font-weight: 900;
+          color: #0f172a;
+          margin-bottom: 6px;
+        }
+
+        .tj-emptySub,
+        .tj-loadingSub {
+          font-size: 13px;
+          font-weight: 700;
+          color: #64748b;
+        }
+
+        .tj-modalOverlay {
+          position: fixed;
+          inset: 0;
+          z-index: 9999;
+          background: rgba(15,23,42,.42);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 16px;
+        }
+
+        .tj-modal {
+          width: min(720px, 96vw);
+          max-height: 92vh;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          background: #fff;
+          border-radius: 24px;
+          border: 1px solid rgba(15,23,42,.08);
+          box-shadow: 0 24px 60px rgba(0,0,0,.24);
+        }
+
+        .tj-modalHead {
+          padding: 16px 18px;
+          border-bottom: 1px solid rgba(15,23,42,.08);
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .tj-modalTitle {
+          font-size: 16px;
+          font-weight: 900;
+          color: #0f172a;
+        }
+
+        .tj-modalBody {
+          padding: 18px;
+          overflow: auto;
+        }
+
+        .tj-modalFooter {
+          padding: 16px 18px;
+          border-top: 1px solid rgba(15,23,42,.08);
+          display: flex;
+          justify-content: flex-end;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .tj-grid2 {
+          display: grid;
+          gap: 14px;
+          grid-template-columns: 1fr;
+        }
+
+        .tj-confirm {
+          width: min(360px, 94vw);
+          background: #fff;
+          border-radius: 24px;
+          border: 1px solid rgba(15,23,42,.08);
+          box-shadow: 0 24px 60px rgba(0,0,0,.24);
+          overflow: hidden;
+        }
+
+        .tj-confirmBody {
+          padding: 24px 20px 10px;
           text-align: center;
         }
 
-        .ijv-confirmIcon{
-          width: 52px;
-          height: 52px;
+        .tj-confirmIcon {
+          width: 62px;
+          height: 62px;
+          margin: 0 auto 14px;
           border-radius: 999px;
-          margin: 0 auto 12px;
-          display:flex;
-          align-items:center;
-          justify-content:center;
-          font-size: 22px;
-          font-weight: 1000;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 24px;
+          font-weight: 900;
           color: #dc2626;
           background: linear-gradient(135deg, #fee2e2, #fecaca);
-          border: 1px solid rgba(220,38,38,.14);
         }
 
-        .ijv-confirmTitle{
-          margin:0 0 6px 0;
-          font-size:16px;
-          font-weight:1000;
-          color:#0f172a;
+        .tj-confirmTitle {
+          font-size: 18px;
+          font-weight: 900;
+          margin: 0 0 6px;
+          color: #0f172a;
         }
 
-        .ijv-confirmText{
-          margin:0;
-          font-size:13px;
-          font-weight:700;
-          color:rgba(15,23,42,.68);
-          line-height:1.5;
+        .tj-confirmText {
+          font-size: 13px;
+          font-weight: 700;
+          color: #64748b;
+          line-height: 1.55;
+          margin: 0;
         }
 
-        .ijv-confirmFooter{
-          padding: 12px 14px 14px;
-          display:flex;
-          justify-content:center;
-          gap:8px;
-          border-top:1px solid rgba(15,23,42,.08);
-          background:#fff;
+        .tj-confirmFooter {
+          display: flex;
+          justify-content: center;
+          gap: 10px;
+          flex-wrap: wrap;
+          padding: 16px;
+          border-top: 1px solid rgba(15,23,42,.06);
         }
 
-        .ijv-tableWrap{
-          width: 100%;
-          max-height: 72vh;
+        @media (min-width: 768px) {
+          .tj-wrap,
+          .tj-headerInner {
+            max-width: 1120px;
+          }
+
+          .tj-grid2 {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+
+          .tj-list {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+
+          .tj-title {
+            font-size: 24px;
+          }
+
+          .tj-sub {
+            font-size: 12px;
+          }
+
+          .tj-miniStat {
+            min-width: 92px;
+          }
+        }
+
+        @media (min-width: 1200px) {
+          .tj-list {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+          }
         }
       `}</style>
 
-      {/* Header */}
-      <div className="ijv-topbar">
-        <div className="ijv-topbarInner">
-          <div className="d-flex flex-column">
-            <p className="ijv-title">Trading Journal</p>
-            <p className="ijv-sub">View monthly trades • Update / Delete</p>
-          </div>
-          <div className="d-flex align-items-center gap-2">
-            <SmallBtn variant="dark" disabled={busy === "refresh"} onClick={refresh}>
-              {busy === "refresh" ? "..." : "Refresh"}
-            </SmallBtn>
+      <div className="tj-header">
+        <div className="tj-headerInner">
+          <div className="tj-topRow">
+            <div>
+              <h1 className="tj-title">Trading Journal View</h1>
+              <p className="tj-sub">Mobile first professional view page</p>
+            </div>
+
+            <div className="tj-miniWrap">
+              <div className="tj-miniStat tj-miniProfit">
+                <div className="tj-miniLabel">Profit</div>
+                <div className="tj-miniValue">{formatNumber(totalProfit)}</div>
+              </div>
+
+              <div className="tj-miniStat tj-miniLoss">
+                <div className="tj-miniLabel">Loss</div>
+                <div className="tj-miniValue">{formatNumber(totalLoss)}</div>
+              </div>
+
+              <div className={`tj-miniStat tj-miniOverall ${netTone(totalNet)}`}>
+                <div className="tj-miniLabel">Overall</div>
+                <div className="tj-miniValue">{formatNumber(totalNet)}</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Body wrapper */}
-      <div className="ijv-wrap">
-        {initialLoading ? (
-          <div className="ijv-card p-3 d-flex align-items-center justify-content-between gap-3 flex-wrap">
-            <div>
-              <div style={{ fontWeight: 1000 }}>Loading…</div>
-              <div className="ijv-meta">Please wait</div>
+      <div className="tj-wrap">
+        <div className="tj-filterCard">
+          <div className="tj-filterHead">
+            <div className="tj-filterTitle">Filter Trades</div>
+            <div className="tj-filterMeta">
+              Brokerage Total: {formatNumber(totalBrokerage)}
             </div>
-            <div className="spinner-border" role="status" aria-label="Loading" />
+          </div>
+
+          <div className="tj-filterBody">
+            <div className="tj-grid2">
+              <div>
+                <div className="tj-label">Platform</div>
+                <select
+                  className="tj-select"
+                  value={platformId}
+                  onChange={(e) => setPlatformId(e.target.value)}
+                >
+                  <option value="">All Platforms</option>
+                  {platforms.map((p) => (
+                    <option key={p.platform_id} value={p.platform_id}>
+                      {p.platform_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <div className="tj-label">Segment</div>
+                <select
+                  className="tj-select"
+                  value={segmentId}
+                  onChange={(e) => setSegmentId(e.target.value)}
+                  disabled={!platformId}
+                >
+                  <option value="">All Segments</option>
+                  {segments.map((s) => (
+                    <option key={s.segment_id} value={s.segment_id}>
+                      {s.segment_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <div className="tj-label">Month</div>
+                <input
+                  className="tj-input"
+                  type="month"
+                  value={month.slice(0, 7)}
+                  onChange={(e) => setMonth(`${e.target.value}-01`)}
+                />
+              </div>
+            </div>
+
+            <div className="tj-filterActions">
+              <SmallBtn variant="dark" disabled={busy === "refresh"} onClick={refresh}>
+                {busy === "refresh" ? "Refreshing..." : "Apply Filter"}
+              </SmallBtn>
+
+              <SmallBtn
+                variant="secondary"
+                outline
+                onClick={() => {
+                  setPlatformId("");
+                  setSegmentId("");
+                  const d = new Date();
+                  const yyyy = d.getFullYear();
+                  const mm = String(d.getMonth() + 1).padStart(2, "0");
+                  setMonth(`${yyyy}-${mm}-01`);
+                }}
+              >
+                Reset
+              </SmallBtn>
+            </div>
+          </div>
+        </div>
+
+        {initialLoading ? (
+          <div className="tj-loading">
+            <div className="spinner-border text-dark mb-3" role="status" />
+            <div className="tj-loadingTitle">Loading Trading Journal...</div>
+            <div className="tj-loadingSub">Please wait while data is being fetched</div>
+          </div>
+        ) : dailySummary.length === 0 ? (
+          <div className="tj-empty">
+            <div className="tj-emptyTitle">No Trades Found</div>
+            <div className="tj-emptySub">Try changing platform, segment or month filter.</div>
           </div>
         ) : (
-          <div className="container-fluid">
-            <div className="row g-0">
-              {/* Filters */}
-              <div className="col-12 col-lg-4">
-                <div className="ijv-card ijv-form">
-                  <div className="ijv-head px-3 py-2 d-flex align-items-center justify-content-between">
-                    <div style={{ fontWeight: 1000 }}>Filters</div>
-                    <div className="ijv-meta">Optional</div>
-                  </div>
-                  <div className="p-3">
-                    <div className="mb-2">
-                      <div className="ijv-label">Platform</div>
-                      <select className="form-select" value={platformId} onChange={(e) => setPlatformId(e.target.value)}>
-                        <option value="">All Platforms</option>
-                        {platforms.map((p) => (
-                          <option key={p.platform_id} value={p.platform_id}>
-                            {p.platform_name}
-                          </option>
-                        ))}
-                      </select>
+          <div className="tj-list">
+            {dailySummary.map((r) => {
+              const dateParts = formatDayMonth(r.trade_date);
+
+              return (
+                <div className="tj-card" key={r.journal_id}>
+                  <div className="tj-cardTop">
+                    <div className="tj-dateBadge">
+                      <div className="tj-dateDay">{dateParts.day}</div>
+                      <div className="tj-dateMonth">{dateParts.month}</div>
                     </div>
 
-                    <div className="mb-2">
-                      <div className="ijv-label">Segment</div>
-                      <select
-                        className="form-select"
-                        value={segmentId}
-                        onChange={(e) => setSegmentId(e.target.value)}
-                        disabled={!platformId}
-                      >
-                        <option value="">All Segments</option>
-                        {segments.map((s) => (
-                          <option key={s.segment_id} value={s.segment_id}>
-                            {s.segment_name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="mb-0">
-                      <div className="ijv-label">Month</div>
-                      <input
-                        className="form-control"
-                        type="month"
-                        value={month.slice(0, 7)}
-                        onChange={(e) => setMonth(`${e.target.value}-01`)}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Table / Mobile */}
-              <div className="col-12 col-lg-8">
-                <div className="ijv-card">
-                  <div className="ijv-head px-3 py-2 d-flex align-items-center justify-content-between">
-                    <div style={{ fontWeight: 1000 }}>Monthly Trades</div>
-                    <div className="ijv-meta">{dailySummary.length} rows</div>
-                  </div>
-
-                  {!isMobile ? (
-                    <div className="table-responsive ijv-table ijv-tableWrap">
-                      <table className="table table-hover mb-0 align-middle">
-                        <thead>
-                          <tr>
-                            <th className="py-3 px-3">Date</th>
-                            <th className="py-3 px-3">Trade Name</th>
-                            <th className="py-3 px-3">Platform</th>
-                            <th className="py-3 px-3">Segment</th>
-                            <th className="py-3 px-3">Profit</th>
-                            <th className="py-3 px-3">Loss</th>
-                            <th className="py-3 px-3">Brokerage</th>
-                            <th className="py-3 px-3">Net</th>
-                            <th className="py-3 px-3">Trade Logic</th>
-                            <th className="py-3 px-3">Mistakes</th>
-                            <th className="py-3 px-3">Actions</th>
-                          </tr>
-                        </thead>
-
-                        <tbody>
-                          {dailySummary.map((r) => (
-                            <tr key={r.journal_id}>
-                              <td className="px-3 py-3">
-                                <div style={{ fontWeight: 1000 }}>{formatDate(r.trade_date)}</div>
-                                <div className="ijv-meta">#{r.journal_id}</div>
-                              </td>
-                              <td className="px-3 py-3">{r.trade_name || "-"}</td>
-                              <td className="px-3 py-3">{r.platform_name}</td>
-                              <td className="px-3 py-3">{r.segment_name}</td>
-                              <td className="px-3 py-3">
-                                <span className="ijv-pill ijv-pos">{formatNumber(r.profit)}</span>
-                              </td>
-                              <td className="px-3 py-3">
-                                <span className="ijv-pill ijv-neg">{formatNumber(r.loss)}</span>
-                              </td>
-                              <td className="px-3 py-3">
-                                <span className="ijv-pill ijv-neu">{formatNumber(r.brokerage)}</span>
-                              </td>
-                              <td className="px-3 py-3">
-                                <NetPill value={r.net_total} />
-                              </td>
-                              <td className="px-3 py-3">
-                                <div className="ijv-logic">{renderLogic(r.trade_logic)}</div>
-                              </td>
-                              <td className="px-3 py-3">
-                                <div className="ijv-mistake">{renderMistake(r.mistakes)}</div>
-                              </td>
-                              <td className="px-3 py-3">
-                                <div className="d-flex gap-2 flex-wrap">
-                                  <SmallBtn
-                                    variant="dark"
-                                    outline
-                                    disabled={busy === `upd-${r.journal_id}` || busy === `del-${r.journal_id}`}
-                                    onClick={() => onOpenUpdate(r)}
-                                  >
-                                    Update
-                                  </SmallBtn>
-                                  <SmallBtn
-                                    variant="danger"
-                                    outline
-                                    disabled={busy === `del-${r.journal_id}` || busy === `upd-${r.journal_id}`}
-                                    onClick={() => openDeleteConfirm(r.journal_id)}
-                                  >
-                                    {busy === `del-${r.journal_id}` ? "Deleting..." : "Delete"}
-                                  </SmallBtn>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-
-                          {dailySummary.length === 0 ? (
-                            <tr>
-                              <td colSpan={11} className="px-3 py-4 ijv-meta">
-                                No data
-                              </td>
-                            </tr>
-                          ) : null}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="p-3">
-                      {dailySummary.map((r) => (
-                        <div key={r.journal_id} className="ijv-mcard">
-                          <div className="ijv-mcardHead">
-                            <div>
-                              <div style={{ fontWeight: 1000, fontSize: 15 }}>{formatDate(r.trade_date)}</div>
-                              <div className="ijv-meta">#{r.journal_id}</div>
-                              <div style={{ fontWeight: 950 }}>{r.trade_name || "-"}</div>
-                              <div className="ijv-meta">
-                                {r.platform_name} • {r.segment_name}
-                              </div>
-                            </div>
-
-                            <div className="d-flex gap-2">
-                              <SmallBtn
-                                variant="dark"
-                                outline
-                                disabled={busy === `upd-${r.journal_id}` || busy === `del-${r.journal_id}`}
-                                onClick={() => onOpenUpdate(r)}
-                              >
-                                Update
-                              </SmallBtn>
-                              <SmallBtn
-                                variant="danger"
-                                outline
-                                disabled={busy === `del-${r.journal_id}` || busy === `upd-${r.journal_id}`}
-                                onClick={() => openDeleteConfirm(r.journal_id)}
-                              >
-                                {busy === `del-${r.journal_id}` ? "Deleting..." : "Delete"}
-                              </SmallBtn>
-                            </div>
+                    <div className="tj-main">
+                      <div className="tj-mainTop">
+                        <div>
+                          <h3 className="tj-name">{r.trade_name || "Trade Entry"}</h3>
+                          <div className="tj-subline">
+                            {r.platform_name || "-"} • {r.segment_name || "-"}
                           </div>
-
-                          <div className="ijv-mcardBody">
-                            <div className="ijv-row2">
-                              <span className="ijv-pill ijv-pos">P {formatNumber(r.profit)}</span>
-                              <span className="ijv-pill ijv-neg">L {formatNumber(r.loss)}</span>
-                              <span className="ijv-pill ijv-neu">B {formatNumber(r.brokerage)}</span>
-                              <NetPill value={r.net_total} />
-                            </div>
-
-                            <div className="ijv-block">
-                              <div className="ijv-kv">Trade Logic</div>
-                              <div className="ijv-logic">{renderLogic(r.trade_logic)}</div>
-                            </div>
-
-                            <div className="ijv-block">
-                              <div className="ijv-kv">Mistakes</div>
-                              <div className="ijv-mistake">{renderMistake(r.mistakes)}</div>
-                            </div>
+                          <div className="tj-subline" style={{ marginTop: 3 }}>
+                            {formatDate(r.trade_date)}
                           </div>
                         </div>
-                      ))}
 
-                      {dailySummary.length === 0 ? <div className="ijv-meta">No data</div> : null}
+                        <div className="tj-id">#{r.journal_id}</div>
+                      </div>
+
+                      <div className="tj-chipRow">
+                        <span className="tj-chip tj-profit">
+                          Profit {formatNumber(r.profit)}
+                        </span>
+                        <span className="tj-chip tj-loss">
+                          Loss {formatNumber(r.loss)}
+                        </span>
+                        <span className="tj-chip tj-brokerage">
+                          Brokerage {formatNumber(r.brokerage)}
+                        </span>
+                        <NetBadge value={r.net_total} />
+                      </div>
                     </div>
-                  )}
+                  </div>
+
+                  <div className="tj-divider" />
+
+                  <div className="tj-section">
+                    <div className="tj-sectionLabel">Trade Logic</div>
+                    <div className="tj-logicText">
+                      {String(r.trade_logic || "").trim() ? r.trade_logic : "-"}
+                    </div>
+                  </div>
+
+                  <div className="tj-section">
+                    <div className="tj-sectionLabel">Mistakes</div>
+                    {String(r.mistakes || "").trim() ? (
+                      <div className="tj-mistakeBox">{r.mistakes}</div>
+                    ) : (
+                      <div className="tj-logicText" style={{ color: "#64748b" }}>-</div>
+                    )}
+                  </div>
+
+                  <div className="tj-actionBar">
+                    <SmallBtn
+                      variant="dark"
+                      outline
+                      disabled={busy === `upd-${r.journal_id}` || busy === `del-${r.journal_id}`}
+                      onClick={() => onOpenUpdate(r)}
+                    >
+                      Update
+                    </SmallBtn>
+
+                    <SmallBtn
+                      variant="danger"
+                      outline
+                      disabled={busy === `upd-${r.journal_id}` || busy === `del-${r.journal_id}`}
+                      onClick={() => openDeleteConfirm(r.journal_id)}
+                    >
+                      {busy === `del-${r.journal_id}` ? "Deleting..." : "Delete"}
+                    </SmallBtn>
+                  </div>
                 </div>
-              </div>
-            </div>
+              );
+            })}
           </div>
         )}
       </div>
 
-      {/* Update Modal */}
-      {edit.open ? (
-        <div className="ijv-modalOverlay" role="dialog" aria-modal="true">
-          <div className="ijv-modal" onMouseDown={(e) => e.stopPropagation()}>
-            <div className="ijv-head px-3 py-2 d-flex align-items-center justify-content-between">
-              <div style={{ fontWeight: 1000 }}>Update Trade</div>
-              <button type="button" className="btn btn-light btn-sm ijv-btn" onClick={closeEdit}>
+      {edit.open && (
+        <div className="tj-modalOverlay" role="dialog" aria-modal="true">
+          <div className="tj-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="tj-modalHead">
+              <div className="tj-modalTitle">Update Trade Entry</div>
+              <button type="button" className="btn btn-light btn-sm tj-btn" onClick={closeEdit}>
                 ✕
               </button>
             </div>
 
-            <div className="ijv-modalBody">
-              <div className="row g-2">
-                <div className="col-12 col-md-6">
-                  <div className="ijv-label">Trade Date</div>
+            <div className="tj-modalBody">
+              <div className="tj-grid2">
+                <div>
+                  <div className="tj-label">Trade Date</div>
                   <input
-                    className="form-control"
+                    className="tj-input"
                     type="date"
                     value={edit.trade_date}
-                    onChange={(e) => setEdit((x) => ({ ...x, trade_date: e.target.value }))}
+                    onChange={(e) =>
+                      setEdit((x) => ({ ...x, trade_date: e.target.value }))
+                    }
                   />
                 </div>
 
-                <div className="col-12 col-md-6">
-                  <div className="ijv-label">Trade Name</div>
+                <div>
+                  <div className="tj-label">Trade Name</div>
                   <input
-                    className="form-control"
+                    className="tj-input"
                     value={edit.trade_name}
-                    onChange={(e) => setEdit((x) => ({ ...x, trade_name: e.target.value }))}
-                    placeholder="e.g. NIFTY50"
+                    onChange={(e) =>
+                      setEdit((x) => ({ ...x, trade_name: e.target.value }))
+                    }
+                    placeholder="Enter trade name"
                   />
                 </div>
 
-                <div className="col-12 col-md-4">
-                  <div className="ijv-label">Profit</div>
+                <div>
+                  <div className="tj-label">Profit</div>
                   <input
-                    className="form-control"
+                    className="tj-input"
                     inputMode="numeric"
                     value={edit.profit}
-                    onChange={(e) => setEdit((x) => ({ ...x, profit: toIntStr(e.target.value) }))}
+                    onChange={(e) =>
+                      setEdit((x) => ({ ...x, profit: toIntStr(e.target.value) }))
+                    }
                   />
                 </div>
 
-                <div className="col-12 col-md-4">
-                  <div className="ijv-label">Loss</div>
+                <div>
+                  <div className="tj-label">Loss</div>
                   <input
-                    className="form-control"
+                    className="tj-input"
                     inputMode="numeric"
                     value={edit.loss}
-                    onChange={(e) => setEdit((x) => ({ ...x, loss: toIntStr(e.target.value) }))}
+                    onChange={(e) =>
+                      setEdit((x) => ({ ...x, loss: toIntStr(e.target.value) }))
+                    }
                   />
                 </div>
 
-                <div className="col-12 col-md-4">
-                  <div className="ijv-label">Brokerage</div>
+                <div>
+                  <div className="tj-label">Brokerage</div>
                   <input
-                    className="form-control"
+                    className="tj-input"
                     inputMode="numeric"
                     value={edit.brokerage}
-                    onChange={(e) => setEdit((x) => ({ ...x, brokerage: toIntStr(e.target.value) }))}
+                    onChange={(e) =>
+                      setEdit((x) => ({ ...x, brokerage: toIntStr(e.target.value) }))
+                    }
                   />
                 </div>
 
-                <div className="col-12 col-md-6">
-                  <div className="ijv-label">Platform</div>
+                <div>
+                  <div className="tj-label">Platform</div>
                   <select
-                    className="form-select"
+                    className="tj-select"
                     value={edit.platform_id}
                     onChange={(e) => {
                       const pid = e.target.value;
@@ -999,12 +1250,14 @@ export default function Investment_getview_trandingjouranal() {
                   </select>
                 </div>
 
-                <div className="col-12 col-md-6">
-                  <div className="ijv-label">Segment</div>
+                <div>
+                  <div className="tj-label">Segment</div>
                   <select
-                    className="form-select"
+                    className="tj-select"
                     value={edit.segment_id}
-                    onChange={(e) => setEdit((x) => ({ ...x, segment_id: e.target.value }))}
+                    onChange={(e) =>
+                      setEdit((x) => ({ ...x, segment_id: e.target.value }))
+                    }
                     disabled={!edit.platform_id}
                   >
                     <option value="">Select Segment</option>
@@ -1015,76 +1268,85 @@ export default function Investment_getview_trandingjouranal() {
                     ))}
                   </select>
                 </div>
+              </div>
 
-                <div className="col-12">
-                  <div className="ijv-label">Trade Logic</div>
-                  <textarea
-                    className="form-control"
-                    rows={3}
-                    value={edit.trade_logic}
-                    onChange={(e) => setEdit((x) => ({ ...x, trade_logic: e.target.value }))}
-                  />
-                </div>
+              <div style={{ marginTop: 14 }}>
+                <div className="tj-label">Trade Logic</div>
+                <textarea
+                  className="tj-textarea"
+                  rows={4}
+                  value={edit.trade_logic}
+                  onChange={(e) =>
+                    setEdit((x) => ({ ...x, trade_logic: e.target.value }))
+                  }
+                  placeholder="Write your trade logic"
+                />
+              </div>
 
-                <div className="col-12">
-                  <div className="ijv-label">Mistakes (optional)</div>
-                  <textarea
-                    className="form-control"
-                    rows={2}
-                    value={edit.mistakes}
-                    onChange={(e) => setEdit((x) => ({ ...x, mistakes: e.target.value }))}
-                  />
-                </div>
+              <div style={{ marginTop: 14 }}>
+                <div className="tj-label">Mistakes (Optional)</div>
+                <textarea
+                  className="tj-textarea"
+                  rows={3}
+                  value={edit.mistakes}
+                  onChange={(e) =>
+                    setEdit((x) => ({ ...x, mistakes: e.target.value }))
+                  }
+                  placeholder="Write mistakes if any"
+                />
               </div>
             </div>
 
-            <div className="ijv-modalFooter">
-              <SmallBtn variant="secondary" outline disabled={busy === `upd-${edit.journal_id}`} onClick={closeEdit}>
+            <div className="tj-modalFooter">
+              <SmallBtn
+                variant="secondary"
+                outline
+                disabled={busy === `upd-${edit.journal_id}`}
+                onClick={closeEdit}
+              >
                 Cancel
               </SmallBtn>
-              <SmallBtn variant="dark" disabled={busy === `upd-${edit.journal_id}`} onClick={onUpdate}>
-                {busy === `upd-${edit.journal_id}` ? "Saving..." : "Update"}
+
+              <SmallBtn
+                variant="dark"
+                disabled={busy === `upd-${edit.journal_id}`}
+                onClick={onUpdate}
+              >
+                {busy === `upd-${edit.journal_id}` ? "Saving..." : "Update Trade"}
               </SmallBtn>
             </div>
           </div>
         </div>
-      ) : null}
+      )}
 
-      {/* Info/Error Modal */}
-      {modal.open ? (
-        <div className="ijv-modalOverlay" role="dialog" aria-modal="true">
-          <div className="ijv-modal">
-            <div className="ijv-head px-3 py-2 d-flex align-items-center justify-content-between">
-              <div style={{ fontWeight: 1000 }}>{modal.title}</div>
-              <button type="button" className="btn btn-light btn-sm ijv-btn" onClick={closeModal}>
-                ✕
-              </button>
+      {modal.open && (
+        <div className="tj-modalOverlay" role="dialog" aria-modal="true">
+          <div className="tj-confirm">
+            <div className="tj-confirmBody">
+              <div className="tj-confirmIcon">!</div>
+              <h3 className="tj-confirmTitle">{modal.title}</h3>
+              <p className="tj-confirmText">{modal.message}</p>
             </div>
 
-            <div className="ijv-modalBody" style={{ fontWeight: 850 }}>
-              {modal.message}
-            </div>
-
-            <div className="ijv-modalFooter">
+            <div className="tj-confirmFooter">
               <SmallBtn variant="dark" onClick={closeModal}>
                 OK
               </SmallBtn>
             </div>
           </div>
         </div>
-      ) : null}
+      )}
 
-      {/* ✅ Delete Confirm Modal */}
-      {deleteConfirm.open ? (
-        <div className="ijv-modalOverlay" role="dialog" aria-modal="true" onClick={closeDeleteConfirm}>
-          <div className="ijv-confirmModal" onClick={(e) => e.stopPropagation()}>
-            <div className="ijv-confirmBody">
-              <div className="ijv-confirmIcon">!</div>
-              <h3 className="ijv-confirmTitle">{deleteConfirm.title}</h3>
-              <p className="ijv-confirmText">{deleteConfirm.message}</p>
+      {deleteConfirm.open && (
+        <div className="tj-modalOverlay" onClick={closeDeleteConfirm}>
+          <div className="tj-confirm" onClick={(e) => e.stopPropagation()}>
+            <div className="tj-confirmBody">
+              <div className="tj-confirmIcon">🗑</div>
+              <h3 className="tj-confirmTitle">{deleteConfirm.title}</h3>
+              <p className="tj-confirmText">{deleteConfirm.message}</p>
             </div>
 
-            <div className="ijv-confirmFooter">
+            <div className="tj-confirmFooter">
               <SmallBtn
                 variant="secondary"
                 outline
@@ -1104,7 +1366,7 @@ export default function Investment_getview_trandingjouranal() {
             </div>
           </div>
         </div>
-      ) : null}
+      )}
     </div>
   );
 }
