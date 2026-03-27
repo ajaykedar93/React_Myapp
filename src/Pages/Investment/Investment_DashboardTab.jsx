@@ -6,37 +6,34 @@ import InvestmentPlan from "./Investment_plan";
 import TradingJournal from "./Investment_tradingjournal";
 import DipWid from "./Investment_dipwid";
 import GetTradingJournal from "./Investment_getview_trandingjouranal";
-import InvestmentOverall from "./Investment_Overall"; // ✅ NEW (Overall Report)
+import InvestmentOverall from "./Investment_Overall";
+import DownloadTradingJouranl from "./DownloadTradingJouranl"; // ✅ NEW IMPORT
 
 export default function Investment_DashboardTab() {
   const navigate = useNavigate();
 
   const tabs = useMemo(
     () => [
-    
-      
       { key: "journal", label: "Trading Journal", render: TradingJournal },
       { key: "getjournal", label: "Get Trading Journal", render: GetTradingJournal },
+      { key: "downloadjournal", label: "Download", render: DownloadTradingJouranl }, // ✅ NEW TAB
       { key: "overall", label: "Overall Report", render: InvestmentOverall },
-     
-       // ✅ NOTE MORE USE
-        { key: "plan", label: "Trading Plan", render: InvestmentPlan },
-       { key: "catsub", label: "Platform & Segment", render: Investmentcatsub },
-       { key: "dipwid", label: "Deposit / Withdraw", render: DipWid },
+
+      { key: "plan", label: "Trading Plan", render: InvestmentPlan },
+      { key: "catsub", label: "Platform & Segment", render: Investmentcatsub },
+      { key: "dipwid", label: "Deposit / Withdraw", render: DipWid },
     ],
     []
   );
 
-  const [activeTab, setActiveTab] = useState(tabs[0]?.key || "catsub");
+  const [activeTab, setActiveTab] = useState(tabs[0]?.key || "journal");
   const ActiveComponent = tabs.find((t) => t.key === activeTab)?.render || null;
 
   return (
     <div className="id3-root">
       <style>{styles}</style>
 
-      {/* ✅ Sticky container: Navbar + Tabs always visible */}
       <div className="id3-stickyWrap">
-        {/* NAVBAR */}
         <header className="id3-nav">
           <div className="id3-left">
             <div className="id3-logo" aria-hidden>
@@ -54,7 +51,6 @@ export default function Investment_DashboardTab() {
           </button>
         </header>
 
-        {/* TABS */}
         <div className="id3-tabsBar">
           <div className="id3-tabsScroll" role="tablist" aria-label="Investment Tabs">
             {tabs.map((t) => {
@@ -77,7 +73,6 @@ export default function Investment_DashboardTab() {
         </div>
       </div>
 
-      {/* ✅ ONLY this area scrolls (below navbar+tabs) */}
       <main className="id3-scrollArea">
         <div key={activeTab} className="id3-view">
           {ActiveComponent ? <ActiveComponent /> : null}
@@ -105,18 +100,15 @@ const styles = `
 
   *{ box-sizing:border-box; }
 
-  /* ✅ (Important) remove default body margin if any page uses it */
   body { margin: 0; }
 
-  /* ✅ Full height (mobile fix) */
   .id3-root{
-    height: 100vh;    /* fallback */
-    height: 100dvh;   /* ✅ perfect full height on mobile */
+    height: 100vh;
+    height: 100dvh;
     width: 100%;
     margin: 0;
     padding: 0;
-
-    overflow: hidden; /* ✅ stop page scroll, only inner scroll */
+    overflow: hidden;
     display: flex;
     flex-direction: column;
 
@@ -127,21 +119,18 @@ const styles = `
       linear-gradient(135deg, rgba(124,58,237,.92), rgba(255,61,141,.88));
   }
 
-  /* ✅ sticky wrap always visible */
   .id3-stickyWrap{
     position: sticky;
     top: 0;
     z-index: 80;
   }
 
-  /* NAVBAR */
   .id3-nav{
     height: 150px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 10px;
-
     padding: 12px 12px;
     background: var(--glass);
     border-bottom: 1px solid rgba(255,255,255,.45);
@@ -165,7 +154,6 @@ const styles = `
     color: #fff;
     flex: 0 0 auto;
     font-size: 18px;
-
     background: linear-gradient(135deg, var(--g1), var(--g2));
     box-shadow: 0 14px 28px rgba(255,61,141,.22);
   }
@@ -209,16 +197,15 @@ const styles = `
     color: #fff;
     white-space: nowrap;
     font-size: 12px;
-
     background: linear-gradient(135deg, var(--g3), var(--g4));
     box-shadow: 0 14px 28px rgba(124,58,237,.20);
     transition: transform .08s ease, filter .15s ease;
     flex: 0 0 auto;
   }
+
   .id3-dashBtn:active{ transform: translateY(1px); }
   .id3-dashBtn:hover{ filter: brightness(1.02); }
 
-  /* TABS BAR */
   .id3-tabsBar{
     background: var(--glass2);
     border-bottom: 1px solid rgba(255,255,255,.45);
@@ -231,35 +218,32 @@ const styles = `
     gap: 8px;
     overflow-x: auto;
     overflow-y: hidden;
-
     padding: 2px 2px;
     scroll-behavior: smooth;
     scrollbar-width: none;
   }
+
   .id3-tabsScroll::-webkit-scrollbar{ display:none; }
 
   .id3-tab{
     position: relative;
     flex: 0 0 auto;
-
     border: 1px solid rgba(0,0,0,.10);
     background: rgba(255,255,255,.78);
     color: rgba(17,24,39,.92);
-
     padding: 8px 12px;
     border-radius: 999px;
     font-weight: 950;
     cursor: pointer;
     font-size: 12px;
     line-height: 1;
-
     display: inline-flex;
     align-items: center;
     justify-content: center;
-
     transition: transform .10s ease, background .18s ease, border-color .18s ease, color .18s ease;
     overflow: hidden;
   }
+
   .id3-tab:active{ transform: scale(.98); }
 
   .id3-tabText{
@@ -293,19 +277,14 @@ const styles = `
     100%{ transform: translateX(-10px) rotate(10deg); opacity:.75; }
   }
 
-  /* ✅ Full remaining height scroll area */
   .id3-scrollArea{
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
-
-    /* ✅ mobile full width: no left/right padding */
     padding: 0;
     margin: 0;
-
-    /* ✅ prevent bottom cut + avoid blank */
     padding-bottom: calc(12px + env(safe-area-inset-bottom));
   }
 
@@ -319,7 +298,6 @@ const styles = `
     to{ opacity: 1; transform: translateY(0); }
   }
 
-  /* DESKTOP */
   @media (min-width: 980px){
     .id3-stickyWrap{
       padding: 16px 16px 0;
@@ -346,7 +324,6 @@ const styles = `
 
     .id3-dashBtn{ font-size: 13px; padding: 10px 14px; }
 
-    /* ✅ Desktop padding looks nice, mobile is full width */
     .id3-scrollArea{
       padding: 12px 16px calc(16px + env(safe-area-inset-bottom));
     }
