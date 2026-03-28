@@ -147,6 +147,68 @@ export default function DownloadTradingJouranl() {
     return params.toString();
   };
 
+  const getFilenameFromDisposition = (contentDisposition, fallbackName) => {
+    if (!contentDisposition) return fallbackName;
+
+    const utfMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+    if (utfMatch?.[1]) {
+      try {
+        return decodeURIComponent(utfMatch[1]);
+      } catch {
+        return utfMatch[1];
+      }
+    }
+
+    const normalMatch = contentDisposition.match(/filename="?([^"]+)"?/i);
+    if (normalMatch?.[1]) {
+      return normalMatch[1];
+    }
+
+    return fallbackName;
+  };
+
+  const saveBlobToDevice = (blob, fileName) => {
+    const nav = window.navigator;
+
+    if (nav && typeof nav.msSaveOrOpenBlob === "function") {
+      nav.msSaveOrOpenBlob(blob, fileName);
+      return true;
+    }
+
+    const blobUrl = window.URL.createObjectURL(blob);
+
+    try {
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = fileName;
+      link.rel = "noopener";
+      link.style.display = "none";
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      setTimeout(() => {
+        window.URL.revokeObjectURL(blobUrl);
+      }, 4000);
+
+      return true;
+    } catch (e) {
+      try {
+        window.open(blobUrl, "_blank", "noopener,noreferrer");
+        setTimeout(() => {
+          window.URL.revokeObjectURL(blobUrl);
+        }, 10000);
+        return true;
+      } catch {
+        setTimeout(() => {
+          window.URL.revokeObjectURL(blobUrl);
+        }, 10000);
+        return false;
+      }
+    }
+  };
+
   const downloadFile = async (type) => {
     try {
       setDownloading(type);
@@ -156,6 +218,11 @@ export default function DownloadTradingJouranl() {
         type === "pdf"
           ? `${BASE_URL}/api/investment/tradingjournal-view/export/pdf?${query}`
           : `${BASE_URL}/api/investment/tradingjournal-view/export/txt?${query}`;
+
+      const fallbackName =
+        type === "pdf"
+          ? `trading_journal_${month}.pdf`
+          : `trading_journal_${month}.txt`;
 
       const res = await fetch(endpoint, {
         method: "GET",
@@ -168,33 +235,36 @@ export default function DownloadTradingJouranl() {
           const err = await res.json();
           msg = err?.message || msg;
         } catch {
-          // ignore json parse issue
+          // ignore parse error
         }
         throw new Error(msg);
       }
 
-      const blob = await res.blob();
-      const fileUrl = window.URL.createObjectURL(blob);
+      const contentType =
+        res.headers.get("content-type") ||
+        (type === "pdf" ? "application/pdf" : "text/plain;charset=utf-8");
 
-      const a = document.createElement("a");
-      a.href = fileUrl;
-      a.download =
-        type === "pdf"
-          ? `trading_journal_${month}.pdf`
-          : `trading_journal_${month}.txt`;
+      const contentDisposition = res.headers.get("content-disposition") || "";
+      const finalFileName = getFilenameFromDisposition(contentDisposition, fallbackName);
 
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      const blobData = await res.blob();
+      const finalBlob =
+        blobData.type && blobData.type !== "application/octet-stream"
+          ? blobData
+          : new Blob([blobData], { type: contentType });
 
-      window.URL.revokeObjectURL(fileUrl);
+      const saved = saveBlobToDevice(finalBlob, finalFileName);
+
+      if (!saved) {
+        throw new Error("Download could not start on this device.");
+      }
 
       openPopup(
         "success",
         "Download Complete",
         type === "pdf"
-          ? "Professional PDF file downloaded successfully."
-          : "Text file downloaded successfully."
+          ? "PDF file download started successfully."
+          : "Text file download started successfully."
       );
     } catch (error) {
       openPopup(
