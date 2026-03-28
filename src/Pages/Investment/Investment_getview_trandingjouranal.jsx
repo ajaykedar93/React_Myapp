@@ -173,7 +173,9 @@ export default function Investment_getview_trandingjouranal() {
     const l = toNumber(edit.loss);
     const b = toNumber(edit.brokerage);
 
-    if (p < 0 || l < 0 || b < 0) return "Profit, Loss and Brokerage must be 0 or more";
+    if (p < 0 || l < 0 || b < 0) {
+      return "Profit, Loss and Brokerage must be 0 or more";
+    }
 
     const ok =
       (p > 0 && l === 0) ||
@@ -181,14 +183,19 @@ export default function Investment_getview_trandingjouranal() {
       (p === 0 && l === 0);
 
     if (!ok) return "Either Profit or Loss should be greater than 0, not both";
-    if (p === 0 && l === 0 && b > 0) return "Brokerage not allowed when both profit and loss are 0";
+    if (p === 0 && l === 0 && b > 0) {
+      return "Brokerage not allowed when both profit and loss are 0";
+    }
 
     return "";
   };
 
   const api = {
     async getPlatforms() {
-      const res = await fetch(`${BASE_URL}/api/investment/platform-segment/platform`, { headers });
+      const res = await fetch(
+        `${BASE_URL}/api/investment/platform-segment/platform`,
+        { headers }
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message || "Platform fetch failed");
       return Array.isArray(data?.data) ? data.data : [];
@@ -196,7 +203,10 @@ export default function Investment_getview_trandingjouranal() {
 
     async getSegments(pid) {
       if (!pid) return [];
-      const res = await fetch(`${BASE_URL}/api/investment/platform-segment/segment?platform_id=${pid}`, { headers });
+      const res = await fetch(
+        `${BASE_URL}/api/investment/platform-segment/segment?platform_id=${pid}`,
+        { headers }
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message || "Segment fetch failed");
       return Array.isArray(data?.data) ? data.data : [];
@@ -218,21 +228,27 @@ export default function Investment_getview_trandingjouranal() {
     },
 
     async updateJournal(journal_id, payload) {
-      const res = await fetch(`${BASE_URL}/api/investment/tradingjournal-view/${journal_id}`, {
-        method: "PUT",
-        headers,
-        body: JSON.stringify(payload),
-      });
+      const res = await fetch(
+        `${BASE_URL}/api/investment/tradingjournal-view/${journal_id}`,
+        {
+          method: "PUT",
+          headers,
+          body: JSON.stringify(payload),
+        }
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message || data?.error || "Update failed");
       return data?.data;
     },
 
     async deleteJournal(journal_id) {
-      const res = await fetch(`${BASE_URL}/api/investment/tradingjournal-view/${journal_id}`, {
-        method: "DELETE",
-        headers,
-      });
+      const res = await fetch(
+        `${BASE_URL}/api/investment/tradingjournal-view/${journal_id}`,
+        {
+          method: "DELETE",
+          headers,
+        }
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message || "Delete failed");
       return true;
@@ -402,6 +418,7 @@ export default function Investment_getview_trandingjouranal() {
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
 
         * { box-sizing: border-box; }
+
         html, body, #root {
           width: 100%;
           min-height: 100%;
@@ -445,7 +462,7 @@ export default function Investment_getview_trandingjouranal() {
         .tj-headerInner {
           max-width: 760px;
           margin: 0 auto;
-          padding: 14px 14px 12px;
+          padding: 10px 12px 8px;
         }
 
         .tj-topRow {
@@ -778,6 +795,12 @@ export default function Investment_getview_trandingjouranal() {
           word-break: break-word;
         }
 
+        .tj-emptyMistake {
+          font-size: 13px;
+          font-weight: 700;
+          color: #64748b;
+        }
+
         .tj-actionBar {
           padding: 14px 16px 16px;
           display: flex;
@@ -919,6 +942,243 @@ export default function Investment_getview_trandingjouranal() {
           flex-wrap: wrap;
           padding: 16px;
           border-top: 1px solid rgba(15,23,42,.06);
+        }
+
+        @media (max-width: 767.98px) {
+          .tj-wrap {
+            padding: 0 10px 20px;
+          }
+
+          .tj-header {
+            position: sticky;
+            top: 0;
+            z-index: 40;
+          }
+
+          .tj-headerInner {
+            padding: 8px 10px 6px;
+          }
+
+          .tj-topRow {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+          }
+
+          .tj-topRow > div:first-child {
+            min-width: 0;
+            flex: 1;
+          }
+
+          .tj-title {
+            font-size: 15px;
+            line-height: 1.1;
+            margin: 0;
+          }
+
+          .tj-sub {
+            font-size: 9px;
+            margin: 2px 0 0;
+            line-height: 1.2;
+          }
+
+          .tj-miniWrap {
+            gap: 5px;
+            flex-wrap: nowrap;
+            justify-content: flex-end;
+            flex-shrink: 0;
+          }
+
+          .tj-miniStat {
+            min-width: 56px;
+            padding: 5px 6px;
+            border-radius: 10px;
+          }
+
+          .tj-miniLabel {
+            font-size: 8px;
+            margin-bottom: 1px;
+            letter-spacing: .3px;
+          }
+
+          .tj-miniValue {
+            font-size: 10px;
+            line-height: 1.05;
+          }
+
+          .tj-filterCard {
+            margin-top: 8px;
+            border-radius: 16px;
+          }
+
+          .tj-filterHead {
+            padding: 9px 10px 7px;
+            gap: 6px;
+          }
+
+          .tj-filterTitle {
+            font-size: 12px;
+          }
+
+          .tj-filterMeta {
+            font-size: 9px;
+          }
+
+          .tj-filterBody {
+            padding: 10px;
+          }
+
+          .tj-label {
+            font-size: 10px;
+            margin-bottom: 4px;
+          }
+
+          .tj-input,
+          .tj-select,
+          .tj-textarea {
+            padding: 9px 10px;
+            font-size: 12px;
+            border-radius: 10px;
+          }
+
+          .tj-filterActions {
+            gap: 8px;
+            margin-top: 10px;
+          }
+
+          .tj-btn {
+            font-size: 11px !important;
+            padding: .45rem .75rem !important;
+            border-radius: 10px !important;
+          }
+
+          .tj-list {
+            margin-top: 10px;
+            gap: 12px;
+          }
+
+          .tj-card {
+            border-radius: 18px;
+          }
+
+          .tj-cardTop {
+            padding: 12px;
+            gap: 10px;
+          }
+
+          .tj-dateBadge {
+            min-width: 52px;
+            max-width: 52px;
+            padding: 8px 6px;
+            border-radius: 14px;
+          }
+
+          .tj-dateDay {
+            font-size: 16px;
+            margin-bottom: 2px;
+          }
+
+          .tj-dateMonth {
+            font-size: 8px;
+          }
+
+          .tj-mainTop {
+            gap: 8px;
+          }
+
+          .tj-name {
+            font-size: 14px;
+            margin: 0 0 3px;
+          }
+
+          .tj-subline {
+            font-size: 10px;
+          }
+
+          .tj-id {
+            font-size: 9px;
+            padding: 5px 8px;
+          }
+
+          .tj-chipRow {
+            gap: 6px;
+            margin-top: 8px;
+          }
+
+          .tj-chip {
+            min-height: 28px;
+            padding: 6px 9px;
+            font-size: 10px;
+          }
+
+          .tj-divider {
+            margin: 0 12px;
+          }
+
+          .tj-section {
+            padding: 10px 12px 0;
+          }
+
+          .tj-section:last-child {
+            padding-bottom: 12px;
+          }
+
+          .tj-sectionLabel {
+            font-size: 9px;
+            margin-bottom: 5px;
+            letter-spacing: .5px;
+          }
+
+          .tj-logicText,
+          .tj-mistakeBox,
+          .tj-emptyMistake {
+            font-size: 12px;
+            line-height: 1.5;
+          }
+
+          .tj-mistakeBox {
+            padding: 10px;
+            border-radius: 12px;
+          }
+
+          .tj-actionBar {
+            padding: 10px 12px 12px;
+            gap: 8px;
+          }
+
+          .tj-empty,
+          .tj-loading {
+            margin-top: 12px;
+            padding: 22px 14px;
+            border-radius: 18px;
+          }
+
+          .tj-emptyTitle,
+          .tj-loadingTitle {
+            font-size: 16px;
+          }
+
+          .tj-emptySub,
+          .tj-loadingSub {
+            font-size: 12px;
+          }
+
+          .tj-modal {
+            width: min(96vw, 720px);
+            border-radius: 18px;
+          }
+
+          .tj-modalHead,
+          .tj-modalBody,
+          .tj-modalFooter {
+            padding-left: 12px;
+            padding-right: 12px;
+          }
+
+          .tj-confirm {
+            border-radius: 18px;
+          }
         }
 
         @media (min-width: 768px) {
@@ -1129,15 +1389,14 @@ export default function Investment_getview_trandingjouranal() {
                     {String(r.mistakes || "").trim() ? (
                       <div className="tj-mistakeBox">{r.mistakes}</div>
                     ) : (
-                      <div className="tj-logicText" style={{ color: "#64748b" }}>-</div>
+                      <div className="tj-emptyMistake">No mistakes added</div>
                     )}
                   </div>
 
                   <div className="tj-actionBar">
                     <SmallBtn
                       variant="dark"
-                      outline
-                      disabled={busy === `upd-${r.journal_id}` || busy === `del-${r.journal_id}`}
+                      disabled={busy === `upd-${r.journal_id}`}
                       onClick={() => onOpenUpdate(r)}
                     >
                       Update
@@ -1146,10 +1405,10 @@ export default function Investment_getview_trandingjouranal() {
                     <SmallBtn
                       variant="danger"
                       outline
-                      disabled={busy === `upd-${r.journal_id}` || busy === `del-${r.journal_id}`}
+                      disabled={busy === `del-${r.journal_id}`}
                       onClick={() => openDeleteConfirm(r.journal_id)}
                     >
-                      {busy === `del-${r.journal_id}` ? "Deleting..." : "Delete"}
+                      Delete
                     </SmallBtn>
                   </div>
                 </div>
@@ -1160,13 +1419,13 @@ export default function Investment_getview_trandingjouranal() {
       </div>
 
       {edit.open && (
-        <div className="tj-modalOverlay" role="dialog" aria-modal="true">
+        <div className="tj-modalOverlay" onClick={closeEdit}>
           <div className="tj-modal" onClick={(e) => e.stopPropagation()}>
             <div className="tj-modalHead">
-              <div className="tj-modalTitle">Update Trade Entry</div>
-              <button type="button" className="btn btn-light btn-sm tj-btn" onClick={closeEdit}>
-                ✕
-              </button>
+              <div className="tj-modalTitle">Update Trade</div>
+              <SmallBtn variant="secondary" outline onClick={closeEdit}>
+                Close
+              </SmallBtn>
             </div>
 
             <div className="tj-modalBody">
@@ -1174,11 +1433,11 @@ export default function Investment_getview_trandingjouranal() {
                 <div>
                   <div className="tj-label">Trade Date</div>
                   <input
-                    className="tj-input"
                     type="date"
+                    className="tj-input"
                     value={edit.trade_date}
                     onChange={(e) =>
-                      setEdit((x) => ({ ...x, trade_date: e.target.value }))
+                      setEdit((prev) => ({ ...prev, trade_date: e.target.value }))
                     }
                   />
                 </div>
@@ -1189,45 +1448,9 @@ export default function Investment_getview_trandingjouranal() {
                     className="tj-input"
                     value={edit.trade_name}
                     onChange={(e) =>
-                      setEdit((x) => ({ ...x, trade_name: e.target.value }))
+                      setEdit((prev) => ({ ...prev, trade_name: e.target.value }))
                     }
-                    placeholder="Enter trade name"
-                  />
-                </div>
-
-                <div>
-                  <div className="tj-label">Profit</div>
-                  <input
-                    className="tj-input"
-                    inputMode="numeric"
-                    value={edit.profit}
-                    onChange={(e) =>
-                      setEdit((x) => ({ ...x, profit: toIntStr(e.target.value) }))
-                    }
-                  />
-                </div>
-
-                <div>
-                  <div className="tj-label">Loss</div>
-                  <input
-                    className="tj-input"
-                    inputMode="numeric"
-                    value={edit.loss}
-                    onChange={(e) =>
-                      setEdit((x) => ({ ...x, loss: toIntStr(e.target.value) }))
-                    }
-                  />
-                </div>
-
-                <div>
-                  <div className="tj-label">Brokerage</div>
-                  <input
-                    className="tj-input"
-                    inputMode="numeric"
-                    value={edit.brokerage}
-                    onChange={(e) =>
-                      setEdit((x) => ({ ...x, brokerage: toIntStr(e.target.value) }))
-                    }
+                    placeholder="Trade name"
                   />
                 </div>
 
@@ -1236,10 +1459,13 @@ export default function Investment_getview_trandingjouranal() {
                   <select
                     className="tj-select"
                     value={edit.platform_id}
-                    onChange={(e) => {
-                      const pid = e.target.value;
-                      setEdit((x) => ({ ...x, platform_id: pid, segment_id: "" }));
-                    }}
+                    onChange={(e) =>
+                      setEdit((prev) => ({
+                        ...prev,
+                        platform_id: e.target.value,
+                        segment_id: "",
+                      }))
+                    }
                   >
                     <option value="">Select Platform</option>
                     {platforms.map((p) => (
@@ -1256,7 +1482,7 @@ export default function Investment_getview_trandingjouranal() {
                     className="tj-select"
                     value={edit.segment_id}
                     onChange={(e) =>
-                      setEdit((x) => ({ ...x, segment_id: e.target.value }))
+                      setEdit((prev) => ({ ...prev, segment_id: e.target.value }))
                     }
                     disabled={!edit.platform_id}
                   >
@@ -1268,32 +1494,83 @@ export default function Investment_getview_trandingjouranal() {
                     ))}
                   </select>
                 </div>
-              </div>
 
-              <div style={{ marginTop: 14 }}>
-                <div className="tj-label">Trade Logic</div>
-                <textarea
-                  className="tj-textarea"
-                  rows={4}
-                  value={edit.trade_logic}
-                  onChange={(e) =>
-                    setEdit((x) => ({ ...x, trade_logic: e.target.value }))
-                  }
-                  placeholder="Write your trade logic"
-                />
-              </div>
+                <div>
+                  <div className="tj-label">Profit</div>
+                  <input
+                    className="tj-input"
+                    value={edit.profit}
+                    onChange={(e) =>
+                      setEdit((prev) => ({ ...prev, profit: e.target.value }))
+                    }
+                    placeholder="0"
+                  />
+                </div>
 
-              <div style={{ marginTop: 14 }}>
-                <div className="tj-label">Mistakes (Optional)</div>
-                <textarea
-                  className="tj-textarea"
-                  rows={3}
-                  value={edit.mistakes}
-                  onChange={(e) =>
-                    setEdit((x) => ({ ...x, mistakes: e.target.value }))
-                  }
-                  placeholder="Write mistakes if any"
-                />
+                <div>
+                  <div className="tj-label">Loss</div>
+                  <input
+                    className="tj-input"
+                    value={edit.loss}
+                    onChange={(e) =>
+                      setEdit((prev) => ({ ...prev, loss: e.target.value }))
+                    }
+                    placeholder="0"
+                  />
+                </div>
+
+                <div>
+                  <div className="tj-label">Brokerage</div>
+                  <input
+                    className="tj-input"
+                    value={edit.brokerage}
+                    onChange={(e) =>
+                      setEdit((prev) => ({ ...prev, brokerage: e.target.value }))
+                    }
+                    placeholder="0"
+                  />
+                </div>
+
+                <div>
+                  <div className="tj-label">Plan ID</div>
+                  <input
+                    className="tj-input"
+                    value={edit.plan_id ?? ""}
+                    onChange={(e) =>
+                      setEdit((prev) => ({
+                        ...prev,
+                        plan_id: toIntStr(e.target.value),
+                      }))
+                    }
+                    placeholder="Optional"
+                  />
+                </div>
+
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <div className="tj-label">Trade Logic</div>
+                  <textarea
+                    className="tj-textarea"
+                    rows="4"
+                    value={edit.trade_logic}
+                    onChange={(e) =>
+                      setEdit((prev) => ({ ...prev, trade_logic: e.target.value }))
+                    }
+                    placeholder="Write trade logic"
+                  />
+                </div>
+
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <div className="tj-label">Mistakes</div>
+                  <textarea
+                    className="tj-textarea"
+                    rows="4"
+                    value={edit.mistakes}
+                    onChange={(e) =>
+                      setEdit((prev) => ({ ...prev, mistakes: e.target.value }))
+                    }
+                    placeholder="Write mistakes if any"
+                  />
+                </div>
               </div>
             </div>
 

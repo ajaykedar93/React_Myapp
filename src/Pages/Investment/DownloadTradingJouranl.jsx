@@ -44,6 +44,18 @@ export default function DownloadTradingJouranl() {
     return d.toLocaleString("en-US", { month: "long", year: "numeric" });
   }, [month]);
 
+  const isMobileDevice = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    const ua = navigator.userAgent || navigator.vendor || window.opera || "";
+    return /android|iphone|ipad|ipod|mobile/i.test(ua);
+  }, []);
+
+  const isIOSDevice = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    const ua = navigator.userAgent || navigator.vendor || window.opera || "";
+    return /iphone|ipad|ipod/i.test(ua);
+  }, []);
+
   const openPopup = (type, title, message) => {
     setPopup({
       open: true,
@@ -167,45 +179,124 @@ export default function DownloadTradingJouranl() {
     return fallbackName;
   };
 
-  const saveBlobToDevice = (blob, fileName) => {
-    const nav = window.navigator;
+  const getMimeType = (type, serverType) => {
+    if (serverType && serverType !== "application/octet-stream") return serverType;
+    if (type === "pdf") return "application/pdf";
+    return "text/plain;charset=utf-8";
+  };
 
-    if (nav && typeof nav.msSaveOrOpenBlob === "function") {
-      nav.msSaveOrOpenBlob(blob, fileName);
+  const tryShareFileOnMobile = async (blob, fileName, mimeType) => {
+    try {
+      if (!isMobileDevice) return false;
+      if (typeof File === "undefined") return false;
+      if (!navigator.share) return false;
+
+      const file = new File([blob], fileName, { type: mimeType });
+
+      if (navigator.canShare && !navigator.canShare({ files: [file] })) {
+        return false;
+      }
+
+      await navigator.share({
+        files: [file],
+        title: fileName,
+        text: "Trading journal export",
+      });
+
       return true;
+    } catch {
+      return false;
     }
+  };
 
-    const blobUrl = window.URL.createObjectURL(blob);
-
+  const tryAnchorDownload = (blobUrl, fileName) => {
     try {
       const link = document.createElement("a");
       link.href = blobUrl;
       link.download = fileName;
       link.rel = "noopener";
       link.style.display = "none";
-
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const openBlobForPreview = (blobUrl) => {
+    try {
+      const win = window.open(blobUrl, "_blank", "noopener,noreferrer");
+      return !!win;
+    } catch {
+      return false;
+    }
+  };
+
+  const saveBlobToDevice = async (blob, fileName, mimeType, type) => {
+    const nav = window.navigator;
+
+    if (nav && typeof nav.msSaveOrOpenBlob === "function") {
+      nav.msSaveOrOpenBlob(blob, fileName);
+      return {
+        success: true,
+        mode: "download",
+      };
+    }
+
+    const shared = await tryShareFileOnMobile(blob, fileName, mimeType);
+    if (shared) {
+      return {
+        success: true,
+        mode: "share",
+      };
+    }
+
+    const blobUrl = window.URL.createObjectURL(blob);
+
+    try {
+      const downloaded = tryAnchorDownload(blobUrl, fileName);
+      if (downloaded && !isIOSDevice) {
+        setTimeout(() => {
+          window.URL.revokeObjectURL(blobUrl);
+        }, 6000);
+
+        return {
+          success: true,
+          mode: "download",
+        };
+      }
+
+      const opened = openBlobForPreview(blobUrl);
+      if (opened) {
+        setTimeout(() => {
+          window.URL.revokeObjectURL(blobUrl);
+        }, 15000);
+
+        return {
+          success: true,
+          mode: type === "pdf" ? "preview" : "open",
+        };
+      }
 
       setTimeout(() => {
         window.URL.revokeObjectURL(blobUrl);
-      }, 4000);
+      }, 15000);
 
-      return true;
-    } catch (e) {
-      try {
-        window.open(blobUrl, "_blank", "noopener,noreferrer");
-        setTimeout(() => {
-          window.URL.revokeObjectURL(blobUrl);
-        }, 10000);
-        return true;
-      } catch {
-        setTimeout(() => {
-          window.URL.revokeObjectURL(blobUrl);
-        }, 10000);
-        return false;
-      }
+      return {
+        success: false,
+        mode: "",
+      };
+    } catch {
+      setTimeout(() => {
+        window.URL.revokeObjectURL(blobUrl);
+      }, 15000);
+
+      return {
+        success: false,
+        mode: "",
+      };
     }
   };
 
@@ -240,32 +331,51 @@ export default function DownloadTradingJouranl() {
         throw new Error(msg);
       }
 
-      const contentType =
-        res.headers.get("content-type") ||
-        (type === "pdf" ? "application/pdf" : "text/plain;charset=utf-8");
-
+      const serverContentType = res.headers.get("content-type") || "";
       const contentDisposition = res.headers.get("content-disposition") || "";
       const finalFileName = getFilenameFromDisposition(contentDisposition, fallbackName);
 
       const blobData = await res.blob();
+      const finalMimeType = getMimeType(type, serverContentType);
       const finalBlob =
         blobData.type && blobData.type !== "application/octet-stream"
           ? blobData
-          : new Blob([blobData], { type: contentType });
+          : new Blob([blobData], { type: finalMimeType });
 
-      const saved = saveBlobToDevice(finalBlob, finalFileName);
+      const result = await saveBlobToDevice(
+        finalBlob,
+        finalFileName,
+        finalMimeType,
+        type
+      );
 
-      if (!saved) {
+      if (!result.success) {
         throw new Error("Download could not start on this device.");
       }
 
-      openPopup(
-        "success",
-        "Download Complete",
-        type === "pdf"
-          ? "PDF file download started successfully."
-          : "Text file download started successfully."
-      );
+      if (result.mode === "share") {
+        openPopup(
+          "success",
+          "File Ready",
+          "Mobile share/save option opened successfully. Please choose Save to Files or your download location."
+        );
+      } else if (result.mode === "preview" || result.mode === "open") {
+        openPopup(
+          "success",
+          "File Opened",
+          type === "pdf"
+            ? "PDF opened in browser. Use browser menu to save/download on mobile."
+            : "File opened in browser tab. Use browser menu to save/download on mobile."
+        );
+      } else {
+        openPopup(
+          "success",
+          "Download Complete",
+          type === "pdf"
+            ? "PDF file download started successfully."
+            : "Text file download started successfully."
+        );
+      }
     } catch (error) {
       openPopup(
         "error",
@@ -563,6 +673,29 @@ export default function DownloadTradingJouranl() {
           margin-left: 4px;
         }
 
+        .dtj-noteBox {
+          margin-top: 14px;
+          border: 1px solid rgba(37,99,235,.10);
+          background: #f8fbff;
+          border-radius: 16px;
+          padding: 12px 14px;
+        }
+
+        .dtj-noteTitle {
+          margin: 0 0 5px;
+          font-size: 12px;
+          font-weight: 900;
+          color: #0f172a;
+        }
+
+        .dtj-noteText {
+          margin: 0;
+          font-size: 12px;
+          font-weight: 700;
+          color: #64748b;
+          line-height: 1.6;
+        }
+
         .dtj-footerLine {
           width: 100%;
           display: flex;
@@ -856,6 +989,14 @@ export default function DownloadTradingJouranl() {
                     : ""}
                 </span>
               )}
+            </div>
+
+            <div className="dtj-noteBox">
+              <h3 className="dtj-noteTitle">Mobile download note</h3>
+              <p className="dtj-noteText">
+                On some mobile browsers, files may open or show share/save options instead of going directly
+                to the Downloads folder. This is browser behavior and cannot be forced by website code.
+              </p>
             </div>
           </div>
         </div>
