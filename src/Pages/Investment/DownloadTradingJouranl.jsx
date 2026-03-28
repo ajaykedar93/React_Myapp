@@ -1,29 +1,23 @@
 // src/pages/DownloadTradingJouranl.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 
 const BASE_URL = "https://express-backend-myapp.onrender.com";
 
 export default function DownloadTradingJouranl() {
-  const token = useMemo(() => localStorage.getItem("token") || "", []);
-
-  const headers = useMemo(() => {
-    const h = {};
-    if (token) h.Authorization = `Bearer ${token}`;
-    return h;
-  }, [token]);
+  const popupTimerRef = useRef(null);
+  const hiddenFrameRef = useRef(null);
 
   const [loading, setLoading] = useState(false);
   const [platformLoading, setPlatformLoading] = useState(false);
   const [segmentLoading, setSegmentLoading] = useState(false);
+  const [downloading, setDownloading] = useState("");
 
   const [platforms, setPlatforms] = useState([]);
   const [segments, setSegments] = useState([]);
 
   const [platformId, setPlatformId] = useState("");
   const [segmentId, setSegmentId] = useState("");
-  const [downloading, setDownloading] = useState("");
-
   const [month, setMonth] = useState(() => {
     const d = new Date();
     const yyyy = d.getFullYear();
@@ -38,34 +32,78 @@ export default function DownloadTradingJouranl() {
     message: "",
   });
 
+  const token = useMemo(() => {
+    try {
+      return localStorage.getItem("token") || "";
+    } catch {
+      return "";
+    }
+  }, []);
+
+  const headers = useMemo(() => {
+    const h = {};
+    if (token) h.Authorization = `Bearer ${token}`;
+    return h;
+  }, [token]);
+
   const currentMonthName = useMemo(() => {
+    if (!month) return "";
     const [year, mon] = month.split("-");
     const d = new Date(Number(year), Number(mon) - 1, 1);
+    if (Number.isNaN(d.getTime())) return month;
     return d.toLocaleString("en-US", { month: "long", year: "numeric" });
   }, [month]);
 
-  const isMobileDevice = useMemo(() => {
-    if (typeof window === "undefined") return false;
-    const ua = navigator.userAgent || navigator.vendor || window.opera || "";
-    return /android|iphone|ipad|ipod|mobile/i.test(ua);
+  const isIOS = useMemo(() => {
+    if (typeof navigator === "undefined") return false;
+    return /iPad|iPhone|iPod/.test(navigator.userAgent);
   }, []);
 
-  const isIOSDevice = useMemo(() => {
-    if (typeof window === "undefined") return false;
-    const ua = navigator.userAgent || navigator.vendor || window.opera || "";
-    return /iphone|ipad|ipod/i.test(ua);
+  const isSafari = useMemo(() => {
+    if (typeof navigator === "undefined") return false;
+    const ua = navigator.userAgent;
+    return /Safari/i.test(ua) && !/Chrome|CriOS|Android/i.test(ua);
   }, []);
 
-  const openPopup = (type, title, message) => {
+  const isMobile = useMemo(() => {
+    if (typeof navigator === "undefined") return false;
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+      navigator.userAgent
+    );
+  }, []);
+
+  const openPopup = (type, title, message, autoCloseMs = 1400) => {
+    if (popupTimerRef.current) {
+      clearTimeout(popupTimerRef.current);
+      popupTimerRef.current = null;
+    }
+
     setPopup({
       open: true,
       type,
       title,
       message,
     });
+
+    if (autoCloseMs > 0) {
+      popupTimerRef.current = setTimeout(() => {
+        setPopup({
+          open: false,
+          type: "",
+          title: "",
+          message: "",
+        });
+        popupTimerRef.current = null;
+      }, autoCloseMs);
+    }
   };
 
   const closePopup = () => {
+    if (popupTimerRef.current) {
+      clearTimeout(popupTimerRef.current);
+      popupTimerRef.current = null;
+    }
+
     setPopup({
       open: false,
       type: "",
@@ -81,6 +119,7 @@ export default function DownloadTradingJouranl() {
       const res = await fetch(
         `${BASE_URL}/api/investment/platform-segment/platform`,
         {
+          method: "GET",
           headers,
         }
       );
@@ -93,7 +132,12 @@ export default function DownloadTradingJouranl() {
 
       setPlatforms(Array.isArray(data?.data) ? data.data : []);
     } catch (error) {
-      openPopup("error", "Platform Error", error.message || "Platform fetch failed");
+      openPopup(
+        "error",
+        "Platform Error",
+        error?.message || "Platform fetch failed",
+        1600
+      );
     } finally {
       setPlatformLoading(false);
     }
@@ -110,8 +154,11 @@ export default function DownloadTradingJouranl() {
       setSegmentLoading(true);
 
       const res = await fetch(
-        `${BASE_URL}/api/investment/platform-segment/segment?platform_id=${pid}`,
+        `${BASE_URL}/api/investment/platform-segment/segment?platform_id=${encodeURIComponent(
+          pid
+        )}`,
         {
+          method: "GET",
           headers,
         }
       );
@@ -124,7 +171,12 @@ export default function DownloadTradingJouranl() {
 
       setSegments(Array.isArray(data?.data) ? data.data : []);
     } catch (error) {
-      openPopup("error", "Segment Error", error.message || "Segment fetch failed");
+      openPopup(
+        "error",
+        "Segment Error",
+        error?.message || "Segment fetch failed",
+        1600
+      );
     } finally {
       setSegmentLoading(false);
     }
@@ -141,13 +193,19 @@ export default function DownloadTradingJouranl() {
 
   useEffect(() => {
     if (popup.open) {
-      const prev = document.body.style.overflow;
+      const oldOverflow = document.body.style.overflow;
       document.body.style.overflow = "hidden";
       return () => {
-        document.body.style.overflow = prev || "";
+        document.body.style.overflow = oldOverflow || "";
       };
     }
   }, [popup.open]);
+
+  useEffect(() => {
+    return () => {
+      if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
+    };
+  }, []);
 
   const buildQueryString = () => {
     const params = new URLSearchParams();
@@ -157,6 +215,22 @@ export default function DownloadTradingJouranl() {
     if (segmentId) params.append("segment_id", segmentId);
 
     return params.toString();
+  };
+
+  const buildEndpoint = (type) => {
+    const query = buildQueryString();
+    const path =
+      type === "pdf"
+        ? "/api/investment/tradingjournal-view/export/pdf"
+        : "/api/investment/tradingjournal-view/export/txt";
+
+    return query ? `${BASE_URL}${path}?${query}` : `${BASE_URL}${path}`;
+  };
+
+  const getFallbackFileName = (type) => {
+    return type === "pdf"
+      ? `trading_journal_${month || "report"}.pdf`
+      : `trading_journal_${month || "report"}.txt`;
   };
 
   const getFilenameFromDisposition = (contentDisposition, fallbackName) => {
@@ -172,148 +246,109 @@ export default function DownloadTradingJouranl() {
     }
 
     const normalMatch = contentDisposition.match(/filename="?([^"]+)"?/i);
-    if (normalMatch?.[1]) {
-      return normalMatch[1];
-    }
+    if (normalMatch?.[1]) return normalMatch[1];
 
     return fallbackName;
   };
 
-  const getMimeType = (type, serverType) => {
-    if (serverType && serverType !== "application/octet-stream") return serverType;
-    if (type === "pdf") return "application/pdf";
-    return "text/plain;charset=utf-8";
+  const getAuthErrorMessage = (status) => {
+    if (status === 401) return "Login expired. Please login again.";
+    if (status === 403) return "You do not have permission to download this file.";
+    if (status === 404) return "No data found for selected filters.";
+    return "";
   };
 
-  const tryShareFileOnMobile = async (blob, fileName, mimeType) => {
-    try {
-      if (!isMobileDevice) return false;
-      if (typeof File === "undefined") return false;
-      if (!navigator.share) return false;
-
-      const file = new File([blob], fileName, { type: mimeType });
-
-      if (navigator.canShare && !navigator.canShare({ files: [file] })) {
-        return false;
-      }
-
-      await navigator.share({
-        files: [file],
-        title: fileName,
-        text: "Trading journal export",
-      });
-
-      return true;
-    } catch {
-      return false;
-    }
+  const openBlobInNewTab = (blob) => {
+    const blobUrl = window.URL.createObjectURL(blob);
+    const win = window.open(blobUrl, "_blank", "noopener,noreferrer");
+    setTimeout(() => {
+      window.URL.revokeObjectURL(blobUrl);
+    }, 20000);
+    return !!win;
   };
 
-  const tryAnchorDownload = (blobUrl, fileName) => {
-    try {
-      const link = document.createElement("a");
-      link.href = blobUrl;
-      link.download = fileName;
-      link.rel = "noopener";
-      link.style.display = "none";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
-  const openBlobForPreview = (blobUrl) => {
-    try {
-      const win = window.open(blobUrl, "_blank", "noopener,noreferrer");
-      return !!win;
-    } catch {
-      return false;
-    }
-  };
-
-  const saveBlobToDevice = async (blob, fileName, mimeType, type) => {
-    const nav = window.navigator;
-
-    if (nav && typeof nav.msSaveOrOpenBlob === "function") {
-      nav.msSaveOrOpenBlob(blob, fileName);
-      return {
-        success: true,
-        mode: "download",
-      };
-    }
-
-    const shared = await tryShareFileOnMobile(blob, fileName, mimeType);
-    if (shared) {
-      return {
-        success: true,
-        mode: "share",
-      };
-    }
-
+  const downloadWithAnchor = (blob, fileName) => {
     const blobUrl = window.URL.createObjectURL(blob);
 
     try {
-      const downloaded = tryAnchorDownload(blobUrl, fileName);
-      if (downloaded && !isIOSDevice) {
-        setTimeout(() => {
-          window.URL.revokeObjectURL(blobUrl);
-        }, 6000);
-
-        return {
-          success: true,
-          mode: "download",
-        };
-      }
-
-      const opened = openBlobForPreview(blobUrl);
-      if (opened) {
-        setTimeout(() => {
-          window.URL.revokeObjectURL(blobUrl);
-        }, 15000);
-
-        return {
-          success: true,
-          mode: type === "pdf" ? "preview" : "open",
-        };
-      }
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = fileName;
+      a.rel = "noopener noreferrer";
+      a.style.display = "none";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
 
       setTimeout(() => {
         window.URL.revokeObjectURL(blobUrl);
       }, 15000);
 
-      return {
-        success: false,
-        mode: "",
-      };
+      return true;
     } catch {
       setTimeout(() => {
         window.URL.revokeObjectURL(blobUrl);
       }, 15000);
-
-      return {
-        success: false,
-        mode: "",
-      };
+      return false;
     }
+  };
+
+  const downloadWithMsSaveBlob = (blob, fileName) => {
+    try {
+      if (window.navigator && typeof window.navigator.msSaveOrOpenBlob === "function") {
+        window.navigator.msSaveOrOpenBlob(blob, fileName);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  };
+
+  const openByHiddenIframe = (url) => {
+    try {
+      if (!hiddenFrameRef.current) {
+        const iframe = document.createElement("iframe");
+        iframe.style.display = "none";
+        iframe.setAttribute("aria-hidden", "true");
+        document.body.appendChild(iframe);
+        hiddenFrameRef.current = iframe;
+      }
+
+      hiddenFrameRef.current.src = url;
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const saveBlobBestWay = async (blob, fileName, type) => {
+    if (downloadWithMsSaveBlob(blob, fileName)) {
+      return { ok: true, mode: "download" };
+    }
+
+    if (downloadWithAnchor(blob, fileName)) {
+      return { ok: true, mode: "download" };
+    }
+
+    if (type === "pdf" && openBlobInNewTab(blob)) {
+      return { ok: true, mode: "open" };
+    }
+
+    return { ok: false, mode: "" };
   };
 
   const downloadFile = async (type) => {
     try {
+      if (!token) {
+        openPopup("error", "Login Required", "Token not found. Please login first.", 1700);
+        return;
+      }
+
       setDownloading(type);
 
-      const query = buildQueryString();
-      const endpoint =
-        type === "pdf"
-          ? `${BASE_URL}/api/investment/tradingjournal-view/export/pdf?${query}`
-          : `${BASE_URL}/api/investment/tradingjournal-view/export/txt?${query}`;
-
-      const fallbackName =
-        type === "pdf"
-          ? `trading_journal_${month}.pdf`
-          : `trading_journal_${month}.txt`;
+      const endpoint = buildEndpoint(type);
+      const fallbackName = getFallbackFileName(type);
 
       const res = await fetch(endpoint, {
         method: "GET",
@@ -321,66 +356,92 @@ export default function DownloadTradingJouranl() {
       });
 
       if (!res.ok) {
-        let msg = `Failed to download ${type.toUpperCase()}`;
+        let msg = getAuthErrorMessage(res.status) || `Failed to download ${type.toUpperCase()}`;
+
+        const contentType = (res.headers.get("content-type") || "").toLowerCase();
         try {
-          const err = await res.json();
-          msg = err?.message || msg;
+          if (contentType.includes("application/json")) {
+            const err = await res.json();
+            msg = err?.message || msg;
+          } else {
+            const txt = await res.text();
+            if (txt) msg = txt;
+          }
         } catch {
           // ignore parse error
         }
+
         throw new Error(msg);
       }
 
-      const serverContentType = res.headers.get("content-type") || "";
       const contentDisposition = res.headers.get("content-disposition") || "";
-      const finalFileName = getFilenameFromDisposition(contentDisposition, fallbackName);
+      const fileName = getFilenameFromDisposition(contentDisposition, fallbackName);
+      const blob = await res.blob();
 
-      const blobData = await res.blob();
-      const finalMimeType = getMimeType(type, serverContentType);
-      const finalBlob =
-        blobData.type && blobData.type !== "application/octet-stream"
-          ? blobData
-          : new Blob([blobData], { type: finalMimeType });
-
-      const result = await saveBlobToDevice(
-        finalBlob,
-        finalFileName,
-        finalMimeType,
-        type
-      );
-
-      if (!result.success) {
-        throw new Error("Download could not start on this device.");
+      if (!blob || blob.size === 0) {
+        throw new Error("Downloaded file is empty.");
       }
 
-      if (result.mode === "share") {
+      const result = await saveBlobBestWay(blob, fileName, type);
+
+      if (result.ok) {
         openPopup(
           "success",
-          "File Ready",
-          "Mobile share/save option opened successfully. Please choose Save to Files or your download location."
+          "Download Started",
+          result.mode === "open"
+            ? `${type.toUpperCase()} opened successfully.`
+            : `${type.toUpperCase()} download started successfully.`,
+          1300
         );
-      } else if (result.mode === "preview" || result.mode === "open") {
-        openPopup(
-          "success",
-          "File Opened",
-          type === "pdf"
-            ? "PDF opened in browser. Use browser menu to save/download on mobile."
-            : "File opened in browser tab. Use browser menu to save/download on mobile."
-        );
-      } else {
-        openPopup(
-          "success",
-          "Download Complete",
-          type === "pdf"
-            ? "PDF file download started successfully."
-            : "Text file download started successfully."
-        );
+        return;
       }
+
+      // Final direct open fallback for mobile / Safari
+      if ((isIOS || isSafari || isMobile) && type === "pdf") {
+        const opened = openBlobInNewTab(blob);
+        if (opened) {
+          openPopup(
+            "success",
+            "Opened Successfully",
+            "PDF opened in browser. You can save or share it from there.",
+            1800
+          );
+          return;
+        }
+      }
+
+      // Final fallback: direct endpoint open in new tab
+      const finalUrl = endpoint;
+      const openedWindow = window.open(finalUrl, "_blank", "noopener,noreferrer");
+      if (openedWindow) {
+        openPopup(
+          "success",
+          "Opened Successfully",
+          "File opened in browser download window.",
+          1500
+        );
+        return;
+      }
+
+      // Final hidden iframe fallback
+      const iframeOk = openByHiddenIframe(finalUrl);
+      if (iframeOk) {
+        openPopup(
+          "success",
+          "Download Requested",
+          "Download request sent to browser.",
+          1500
+        );
+        return;
+      }
+
+      throw new Error("Browser blocked the download. Please allow popups/downloads and try again.");
     } catch (error) {
       openPopup(
         "error",
         "Download Failed",
-        error.message || "Unable to download file."
+        error?.message || "Unable to download file.",
+        1800
       );
     } finally {
       setDownloading("");
@@ -403,9 +464,7 @@ export default function DownloadTradingJouranl() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
 
-        * {
-          box-sizing: border-box;
-        }
+        * { box-sizing: border-box; }
 
         html, body, #root {
           margin: 0;
@@ -421,24 +480,25 @@ export default function DownloadTradingJouranl() {
 
         .dtj-root {
           min-height: 100vh;
+          width: 100%;
           background:
             radial-gradient(circle at top left, rgba(59,130,246,.12), transparent 34%),
             radial-gradient(circle at top right, rgba(139,92,246,.12), transparent 30%),
             linear-gradient(180deg, #f8fbff 0%, #f8fafc 100%);
           color: #0f172a;
-          padding: 18px 12px 28px;
+          padding: 14px 10px 30px;
         }
 
         .dtj-container {
           width: 100%;
-          max-width: 1150px;
+          max-width: 1180px;
           margin: 0 auto;
         }
 
         .dtj-hero {
           position: relative;
           overflow: hidden;
-          border-radius: 28px;
+          border-radius: 26px;
           background: linear-gradient(135deg, #0f172a 0%, #111827 45%, #1e293b 100%);
           padding: 20px 16px 18px;
           box-shadow: 0 20px 45px rgba(15,23,42,.16);
@@ -448,8 +508,8 @@ export default function DownloadTradingJouranl() {
         .dtj-hero::before {
           content: "";
           position: absolute;
-          width: 220px;
-          height: 220px;
+          width: 230px;
+          height: 230px;
           border-radius: 999px;
           background: rgba(59,130,246,.18);
           top: -80px;
@@ -460,8 +520,8 @@ export default function DownloadTradingJouranl() {
         .dtj-hero::after {
           content: "";
           position: absolute;
-          width: 180px;
-          height: 180px;
+          width: 190px;
+          height: 190px;
           border-radius: 999px;
           background: rgba(168,85,247,.18);
           bottom: -70px;
@@ -493,7 +553,7 @@ export default function DownloadTradingJouranl() {
         .dtj-title {
           margin: 0;
           color: #ffffff;
-          font-size: 23px;
+          font-size: 22px;
           font-weight: 900;
           line-height: 1.18;
         }
@@ -504,7 +564,7 @@ export default function DownloadTradingJouranl() {
           font-size: 12px;
           font-weight: 600;
           line-height: 1.7;
-          max-width: 760px;
+          max-width: 800px;
         }
 
         .dtj-monthBadge {
@@ -519,11 +579,12 @@ export default function DownloadTradingJouranl() {
           border: 1px solid rgba(255,255,255,.12);
           font-size: 11px;
           font-weight: 800;
+          flex-wrap: wrap;
         }
 
         .dtj-panel {
           margin-top: 16px;
-          background: rgba(255,255,255,.92);
+          background: rgba(255,255,255,.94);
           border: 1px solid rgba(15,23,42,.08);
           border-radius: 24px;
           box-shadow: 0 16px 40px rgba(15,23,42,.07);
@@ -583,15 +644,17 @@ export default function DownloadTradingJouranl() {
           width: 100%;
           border: 1px solid rgba(15,23,42,.12);
           background: #ffffff;
-          min-height: 42px;
+          min-height: 46px;
           border-radius: 14px;
           padding: 10px 12px;
-          font-size: 13px;
+          font-size: 14px;
           font-weight: 700;
           color: #0f172a;
           outline: none;
           transition: .2s ease;
           box-shadow: inset 0 1px 2px rgba(15,23,42,.03);
+          -webkit-appearance: none;
+          appearance: none;
         }
 
         .dtj-input:focus,
@@ -600,7 +663,8 @@ export default function DownloadTradingJouranl() {
           box-shadow: 0 0 0 4px rgba(37,99,235,.08);
         }
 
-        .dtj-select:disabled {
+        .dtj-select:disabled,
+        .dtj-input:disabled {
           background: #f1f5f9;
           color: #94a3b8;
           cursor: not-allowed;
@@ -616,10 +680,10 @@ export default function DownloadTradingJouranl() {
         .dtj-btn {
           border: 0;
           outline: none;
-          min-height: 40px;
-          padding: 0 15px;
-          border-radius: 12px;
-          font-size: 12px;
+          min-height: 46px;
+          padding: 0 16px;
+          border-radius: 14px;
+          font-size: 13px;
           font-weight: 800;
           display: inline-flex;
           align-items: center;
@@ -629,10 +693,11 @@ export default function DownloadTradingJouranl() {
           transition: .2s ease;
           box-shadow: 0 10px 24px rgba(15,23,42,.08);
           white-space: nowrap;
+          flex: 1 1 180px;
         }
 
         .dtj-btn:disabled {
-          opacity: .7;
+          opacity: .72;
           cursor: not-allowed;
         }
 
@@ -641,19 +706,10 @@ export default function DownloadTradingJouranl() {
           color: #ffffff;
         }
 
-        .dtj-btnPdf:hover {
-          transform: translateY(-1px);
-        }
-
         .dtj-btnTxt {
           background: #ffffff;
           color: #111827;
           border: 1px solid rgba(15,23,42,.12);
-        }
-
-        .dtj-btnTxt:hover {
-          transform: translateY(-1px);
-          background: #f8fafc;
         }
 
         .dtj-btnReset {
@@ -662,7 +718,7 @@ export default function DownloadTradingJouranl() {
           border: 1px solid rgba(37,99,235,.12);
         }
 
-        .dtj-btnReset:hover {
+        .dtj-btn:hover {
           transform: translateY(-1px);
         }
 
@@ -702,7 +758,7 @@ export default function DownloadTradingJouranl() {
           justify-content: center;
           align-items: center;
           text-align: center;
-          margin-top: 40px;
+          margin-top: 36px;
           padding: 18px 12px;
         }
 
@@ -714,6 +770,8 @@ export default function DownloadTradingJouranl() {
           font-size: 14px;
           font-weight: 800;
           letter-spacing: .2px;
+          flex-wrap: wrap;
+          justify-content: center;
         }
 
         .dtj-codeIcon {
@@ -734,29 +792,31 @@ export default function DownloadTradingJouranl() {
           position: fixed;
           inset: 0;
           z-index: 99999;
-          background: rgba(15, 23, 42, 0.42);
+          background: rgba(15, 23, 42, 0.32);
           display: flex;
           align-items: center;
           justify-content: center;
           padding: 16px;
-          backdrop-filter: blur(5px);
-          -webkit-backdrop-filter: blur(5px);
+          backdrop-filter: blur(3px);
+          -webkit-backdrop-filter: blur(3px);
         }
 
         .dtj-popupCard {
-          width: min(420px, 94vw);
+          width: min(360px, 92vw);
           background: #ffffff;
-          border-radius: 24px;
+          border-radius: 22px;
           border: 1px solid rgba(15,23,42,.08);
-          box-shadow: 0 28px 70px rgba(15,23,42,.28);
+          box-shadow: 0 24px 60px rgba(15,23,42,.22);
           overflow: hidden;
-          animation: dtjPopIn .18s ease-out;
+          animation: dtjPopupIn .18s ease-out;
+          padding: 20px 18px;
+          text-align: center;
         }
 
-        @keyframes dtjPopIn {
+        @keyframes dtjPopupIn {
           from {
             opacity: 0;
-            transform: translateY(10px) scale(.97);
+            transform: translateY(8px) scale(.97);
           }
           to {
             opacity: 1;
@@ -764,22 +824,17 @@ export default function DownloadTradingJouranl() {
           }
         }
 
-        .dtj-popupTop {
-          padding: 22px 20px 12px;
-          text-align: center;
-        }
-
         .dtj-popupIcon {
-          width: 64px;
-          height: 64px;
-          margin: 0 auto 14px;
+          width: 56px;
+          height: 56px;
           border-radius: 999px;
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 26px;
+          font-size: 24px;
           font-weight: 900;
-          box-shadow: 0 12px 30px rgba(15,23,42,.10);
+          margin: 0 auto 12px;
+          box-shadow: 0 10px 24px rgba(15,23,42,.12);
         }
 
         .dtj-popupIcon.success {
@@ -794,46 +849,23 @@ export default function DownloadTradingJouranl() {
 
         .dtj-popupTitle {
           margin: 0;
-          font-size: 20px;
+          font-size: 18px;
           font-weight: 900;
           color: #0f172a;
+          line-height: 1.2;
         }
 
         .dtj-popupMessage {
-          margin: 10px 0 0;
+          margin: 8px 0 0;
           font-size: 13px;
           font-weight: 700;
           color: #64748b;
-          line-height: 1.7;
-        }
-
-        .dtj-popupFooter {
-          padding: 16px 20px 20px;
-          display: flex;
-          justify-content: center;
-        }
-
-        .dtj-popupBtn {
-          min-width: 110px;
-          min-height: 42px;
-          border: 0;
-          border-radius: 12px;
-          padding: 0 18px;
-          font-size: 13px;
-          font-weight: 800;
-          cursor: pointer;
-          color: #ffffff;
-          background: linear-gradient(135deg, #111827, #1f2937);
-          box-shadow: 0 12px 24px rgba(15,23,42,.14);
-        }
-
-        .dtj-popupBtn:hover {
-          transform: translateY(-1px);
+          line-height: 1.5;
         }
 
         @media (min-width: 640px) {
           .dtj-root {
-            padding: 24px 18px 32px;
+            padding: 22px 18px 32px;
           }
 
           .dtj-hero {
@@ -850,6 +882,10 @@ export default function DownloadTradingJouranl() {
 
           .dtj-filters {
             grid-template-columns: repeat(3, minmax(0, 1fr));
+          }
+
+          .dtj-btn {
+            flex: 0 0 auto;
           }
         }
 
@@ -869,15 +905,11 @@ export default function DownloadTradingJouranl() {
           }
 
           .dtj-footerLine {
-            margin-top: 60px;
+            margin-top: 55px;
           }
 
           .dtj-footerText {
             font-size: 16px;
-          }
-
-          .dtj-popupCard {
-            width: min(460px, 92vw);
           }
         }
       `}</style>
@@ -888,10 +920,12 @@ export default function DownloadTradingJouranl() {
             <div className="dtj-topTag">Trading Journal Export</div>
             <h1 className="dtj-title">Download Trading Journal</h1>
             <p className="dtj-subtitle">
-              Export your journal in a clean professional format. Select month, platform,
-              and segment if needed, then download PDF or text instantly.
+              Export your journal in PDF or text format with direct browser-compatible
+              download support for desktop and mobile devices.
             </p>
-            <div className="dtj-monthBadge">Selected Month: {currentMonthName}</div>
+            <div className="dtj-monthBadge">
+              Selected Month: {currentMonthName || "-"}
+            </div>
           </div>
         </div>
 
@@ -900,7 +934,7 @@ export default function DownloadTradingJouranl() {
             <div>
               <h2 className="dtj-panelTitle">Export Filters</h2>
               <p className="dtj-panelSub">
-                Month is required by default. Platform and segment are optional.
+                Month is required. Platform and segment are optional.
               </p>
             </div>
           </div>
@@ -914,6 +948,7 @@ export default function DownloadTradingJouranl() {
                   className="dtj-input"
                   value={month}
                   onChange={(e) => setMonth(e.target.value)}
+                  disabled={downloading === "pdf" || downloading === "txt"}
                 />
               </div>
 
@@ -923,7 +958,7 @@ export default function DownloadTradingJouranl() {
                   className="dtj-select"
                   value={platformId}
                   onChange={(e) => setPlatformId(e.target.value)}
-                  disabled={platformLoading}
+                  disabled={platformLoading || downloading === "pdf" || downloading === "txt"}
                 >
                   <option value="">All Platforms</option>
                   {platforms.map((item) => (
@@ -940,7 +975,12 @@ export default function DownloadTradingJouranl() {
                   className="dtj-select"
                   value={segmentId}
                   onChange={(e) => setSegmentId(e.target.value)}
-                  disabled={!platformId || segmentLoading}
+                  disabled={
+                    !platformId ||
+                    segmentLoading ||
+                    downloading === "pdf" ||
+                    downloading === "txt"
+                  }
                 >
                   <option value="">All Segments</option>
                   {segments.map((item) => (
@@ -957,18 +997,18 @@ export default function DownloadTradingJouranl() {
                 type="button"
                 className="dtj-btn dtj-btnPdf"
                 onClick={() => downloadFile("pdf")}
-                disabled={downloading === "pdf" || loading}
+                disabled={downloading === "pdf" || !!loading}
               >
-                {downloading === "pdf" ? "Downloading..." : "Download PDF"}
+                {downloading === "pdf" ? "Downloading PDF..." : "Download PDF"}
               </button>
 
               <button
                 type="button"
                 className="dtj-btn dtj-btnTxt"
                 onClick={() => downloadFile("txt")}
-                disabled={downloading === "txt" || loading}
+                disabled={downloading === "txt" || !!loading}
               >
-                {downloading === "txt" ? "Downloading..." : "Download Text"}
+                {downloading === "txt" ? "Downloading Text..." : "Download Text"}
               </button>
 
               <button
@@ -992,10 +1032,11 @@ export default function DownloadTradingJouranl() {
             </div>
 
             <div className="dtj-noteBox">
-              <h3 className="dtj-noteTitle">Mobile download note</h3>
+              <h3 className="dtj-noteTitle">Browser download support</h3>
               <p className="dtj-noteText">
-                On some mobile browsers, files may open or show share/save options instead of going directly
-                to the Downloads folder. This is browser behavior and cannot be forced by website code.
+                This page first tries direct file download. If a mobile browser blocks it,
+                the file is opened in browser or requested through fallback mode so user can
+                save it without error.
               </p>
             </div>
           </div>
@@ -1012,19 +1053,11 @@ export default function DownloadTradingJouranl() {
       {popup.open && (
         <div className="dtj-popupOverlay" onClick={closePopup}>
           <div className="dtj-popupCard" onClick={(e) => e.stopPropagation()}>
-            <div className="dtj-popupTop">
-              <div className={`dtj-popupIcon ${popup.type === "success" ? "success" : "error"}`}>
-                {popup.type === "success" ? "✓" : "!"}
-              </div>
-              <h3 className="dtj-popupTitle">{popup.title}</h3>
-              <p className="dtj-popupMessage">{popup.message}</p>
+            <div className={`dtj-popupIcon ${popup.type === "success" ? "success" : "error"}`}>
+              {popup.type === "success" ? "✓" : "!"}
             </div>
-
-            <div className="dtj-popupFooter">
-              <button type="button" className="dtj-popupBtn" onClick={closePopup}>
-                OK
-              </button>
-            </div>
+            <h3 className="dtj-popupTitle">{popup.title}</h3>
+            <p className="dtj-popupMessage">{popup.message}</p>
           </div>
         </div>
       )}
