@@ -11,6 +11,7 @@ const GetMonthdpr = () => {
   const [selectedMonth, setSelectedMonth] = useState(defaultMonth);
   const [dprList, setDprList] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({
@@ -42,6 +43,12 @@ const GetMonthdpr = () => {
     });
   }, [selectedMonth]);
 
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   const openPopup = (type, title, message) => {
     setPopup({
       open: true,
@@ -59,6 +66,15 @@ const GetMonthdpr = () => {
       message: "",
     });
   };
+
+  useEffect(() => {
+    if (popup.open) {
+      const timer = setTimeout(() => {
+        closePopup();
+      }, 2200);
+      return () => clearTimeout(timer);
+    }
+  }, [popup.open]);
 
   const openDeletePopup = (sr_no, sequence_no) => {
     setDeletePopup({
@@ -199,7 +215,7 @@ const GetMonthdpr = () => {
       }
 
       cancelEdit();
-      openPopup("success", "Updated Successfully", "DPR entry updated successfully.");
+      openPopup("success", "Updated", "DPR entry updated successfully.");
       fetchDprData();
     } catch (error) {
       openPopup("error", "Update Failed", error.message || "Something went wrong.");
@@ -222,7 +238,7 @@ const GetMonthdpr = () => {
       }
 
       closeDeletePopup();
-      openPopup("success", "Deleted Successfully", "DPR entry deleted successfully.");
+      openPopup("success", "Deleted", "DPR entry deleted successfully.");
       fetchDprData();
     } catch (error) {
       closeDeletePopup();
@@ -238,7 +254,9 @@ const GetMonthdpr = () => {
       }
 
       const [year, month] = selectedMonth.split("-");
-      const pdfUrl = `${API_BASE_URL}/monthdpr/export-pdf?month=${Number(month)}&year=${year}`;
+      const pdfUrl = `${API_BASE_URL}/monthdpr/export-pdf?month=${Number(
+        month
+      )}&year=${year}`;
 
       const response = await fetch(pdfUrl);
 
@@ -282,18 +300,18 @@ const GetMonthdpr = () => {
           width: 100%;
           min-height: 100%;
           overflow-x: hidden;
-          font-family: Arial, sans-serif;
-          background: #edf3fb;
+          font-family: Inter, Arial, sans-serif;
+          background: #eff4fb;
         }
 
         .fade-up {
-          animation: fadeUp 0.4s ease;
+          animation: fadeUp 0.35s ease;
         }
 
         @keyframes fadeUp {
           from {
             opacity: 0;
-            transform: translateY(10px);
+            transform: translateY(12px);
           }
           to {
             opacity: 1;
@@ -301,88 +319,59 @@ const GetMonthdpr = () => {
           }
         }
 
-        .dpr-btn {
-          transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+        .btn-anim {
+          transition: all 0.2s ease;
         }
 
-        .dpr-btn:hover {
-          transform: translateY(-2px);
+        .btn-anim:hover {
+          transform: translateY(-1px);
           filter: brightness(1.03);
         }
 
-        .dpr-btn:active {
-          transform: scale(0.97);
+        .btn-anim:active {
+          transform: scale(0.98);
         }
 
-        .dpr-input {
-          transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+        .input-focus {
+          transition: all 0.18s ease;
         }
 
-        .dpr-input:focus {
+        .input-focus:focus {
           border-color: #2563eb !important;
-          box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
-          background: #ffffff !important;
+          box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.10);
+          background: #fff !important;
         }
 
-        .dpr-table-wrap::-webkit-scrollbar {
+        .table-scroll::-webkit-scrollbar {
           height: 8px;
+          width: 8px;
         }
 
-        .dpr-table-wrap::-webkit-scrollbar-thumb {
-          background: #bfd3f7;
+        .table-scroll::-webkit-scrollbar-thumb {
+          background: #c8d7f0;
           border-radius: 999px;
         }
 
-        .dpr-table-wrap::-webkit-scrollbar-track {
-          background: #edf4ff;
-        }
-
-        .dpr-table tbody tr td {
-          transition: background 0.2s ease;
-        }
-
-        .dpr-table tbody tr:nth-child(even) td {
-          background: #f8fbff;
-        }
-
-        .dpr-table tbody tr:hover td {
-          background: #eef5ff;
-        }
-
-        @media (max-width: 991px) {
-          .page-space {
-            padding: 12px !important;
-          }
-
-          .main-title {
-            font-size: 24px !important;
-          }
-
-          .card-pad {
-            padding: 14px !important;
-          }
+        .table-scroll::-webkit-scrollbar-track {
+          background: #edf3fb;
         }
 
         @media (max-width: 767px) {
-          .page-space {
+          .desktop-table {
+            display: none !important;
+          }
+
+          .page-pad {
             padding: 10px !important;
           }
 
-          .main-title {
+          .title-main {
             font-size: 20px !important;
           }
 
-          .filter-grid {
+          .top-grid {
             grid-template-columns: 1fr !important;
             gap: 10px !important;
-          }
-
-          .download-row {
-            justify-content: stretch !important;
-          }
-
-          .download-mobile {
-            width: 100% !important;
           }
 
           .card-pad {
@@ -390,62 +379,85 @@ const GetMonthdpr = () => {
             border-radius: 18px !important;
           }
 
-          .dpr-table {
-            min-width: 760px !important;
+          .download-mobile {
+            width: 100% !important;
           }
 
-          .dpr-table th,
-          .dpr-table td {
-            padding: 10px 8px !important;
-            font-size: 12px !important;
+          .mobile-card-actions {
+            justify-content: flex-end !important;
           }
 
-          .small-btn {
-            min-width: 58px !important;
-            padding: 8px 10px !important;
+          .mini-btn {
+            min-width: 62px !important;
             font-size: 11px !important;
+            padding: 7px 10px !important;
           }
 
-          .popup-mobile {
-            width: calc(100% - 20px) !important;
+          .popup-card-mobile {
+            width: calc(100% - 24px) !important;
             max-width: 360px !important;
             padding: 18px 14px !important;
           }
         }
 
-        @media (max-width: 575px) {
-          .page-space {
-            padding: 8px !important;
+        @media (min-width: 768px) {
+          .mobile-list {
+            display: none !important;
+          }
+        }
+
+        @media (min-width: 768px) and (max-width: 1024px) {
+          .title-main {
+            font-size: 24px !important;
           }
 
-          .main-title {
-            font-size: 18px !important;
+          .card-pad {
+            padding: 16px !important;
           }
 
-          .dpr-table {
-            min-width: 680px !important;
+          .desktop-table table th,
+          .desktop-table table td {
+            font-size: 13px !important;
+          }
+        }
+
+        @media (min-width: 1025px) {
+          .page-pad {
+            padding: 18px !important;
+          }
+
+          .title-main {
+            font-size: 28px !important;
+          }
+
+          .card-pad {
+            padding: 20px !important;
           }
         }
       `}</style>
 
-      <div style={styles.container} className="page-space">
+      <div style={styles.container} className="page-pad">
         <div style={styles.pageHeader} className="fade-up">
-          <h2 style={styles.pageHeaderTitle} className="main-title">
+          <h2 style={styles.pageHeaderTitle} className="title-main">
             Month DPR Details
           </h2>
+          <p style={styles.headerSubText}>
+            Responsive and professional monthly DPR details page
+          </p>
         </div>
 
         <div style={styles.filterCard} className="fade-up card-pad">
           <div style={styles.filterHeader}>Select Month</div>
 
-          <div style={styles.filterGrid} className="filter-grid">
+          <div style={styles.filterGrid} className="top-grid">
             <div style={styles.monthInputBlock}>
+              <label style={styles.blockLabel}>Month</label>
               <input
                 type="month"
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
                 style={styles.monthInput}
-                className="dpr-input"
+                className="input-focus"
               />
             </div>
 
@@ -460,12 +472,12 @@ const GetMonthdpr = () => {
             </div>
           </div>
 
-          <div style={styles.downloadRow} className="download-row">
+          <div style={styles.downloadRow}>
             <button
               type="button"
               onClick={handleDownloadPdf}
               style={styles.downloadBtn}
-              className="dpr-btn download-mobile"
+              className="btn-anim download-mobile"
             >
               Download PDF
             </button>
@@ -477,7 +489,7 @@ const GetMonthdpr = () => {
             <div>
               <h3 style={styles.tableTitle}>DPR Details List</h3>
               <p style={styles.tableSubtitle}>
-                Professional monthly DPR list. 
+                Clean monthly records with professional responsive layout
               </p>
             </div>
           </div>
@@ -487,80 +499,77 @@ const GetMonthdpr = () => {
           ) : dprList.length === 0 ? (
             <div style={styles.emptyState}>No DPR records found for this month.</div>
           ) : (
-            <div style={styles.tableWrap} className="dpr-table-wrap">
-              <table style={styles.table} className="dpr-table">
-                <thead>
-                  <tr>
-                    <th style={{ ...styles.th, ...styles.thCenter, width: "80px" }}>Sr.No</th>
-                    <th style={{ ...styles.th, width: "150px" }}>Date</th>
-                    <th style={styles.th}>Work Details</th>
-                    <th style={{ ...styles.th, width: "150px" }}>Time</th>
-                    <th style={{ ...styles.th, ...styles.thCenter, width: "170px" }}>Action</th>
-                  </tr>
-                </thead>
+            <>
+              {/* MOBILE LIST */}
+              <div className="mobile-list">
+                <div style={styles.mobileListWrap}>
+                  {dprList.map((item) => (
+                    <div key={item.sr_no} style={styles.mobileCard}>
+                      {editingId === item.sr_no ? (
+                        <>
+                          <div style={styles.mobileCardTop}>
+                            <span style={styles.mobileSrBadge}>#{item.display_sequence}</span>
+                            <span style={styles.mobileDateBadge}>{item.display_date}</span>
+                          </div>
 
-                <tbody>
-                  {dprList.map((item) =>
-                    editingId === item.sr_no ? (
-                      <tr key={item.sr_no}>
-                        <td style={{ ...styles.td, ...styles.tdCenter, ...styles.seqText }}>
-                          {item.display_sequence}
-                        </td>
+                          <div style={styles.mobileEditGrid}>
+                            <div style={styles.mobileField}>
+                              <label style={styles.mobileLabel}>Date</label>
+                              <input
+                                type="date"
+                                value={editForm.dpr_date}
+                                onChange={(e) =>
+                                  setEditForm((prev) => ({
+                                    ...prev,
+                                    dpr_date: e.target.value,
+                                  }))
+                                }
+                                style={styles.mobileInput}
+                                className="input-focus"
+                              />
+                            </div>
 
-                        <td style={styles.td}>
-                          <input
-                            type="date"
-                            value={editForm.dpr_date}
-                            onChange={(e) =>
-                              setEditForm((prev) => ({
-                                ...prev,
-                                dpr_date: e.target.value,
-                              }))
-                            }
-                            style={styles.tableInput}
-                            className="dpr-input"
-                          />
-                        </td>
+                            <div style={styles.mobileField}>
+                              <label style={styles.mobileLabel}>Work Details</label>
+                              <textarea
+                                rows="4"
+                                value={editForm.work_details}
+                                onChange={(e) =>
+                                  setEditForm((prev) => ({
+                                    ...prev,
+                                    work_details: e.target.value,
+                                  }))
+                                }
+                                style={styles.mobileTextarea}
+                                className="input-focus"
+                                placeholder="Enter work details"
+                              />
+                            </div>
 
-                        <td style={styles.td}>
-                          <textarea
-                            rows="3"
-                            value={editForm.work_details}
-                            onChange={(e) =>
-                              setEditForm((prev) => ({
-                                ...prev,
-                                work_details: e.target.value,
-                              }))
-                            }
-                            style={styles.tableTextarea}
-                            className="dpr-input"
-                            placeholder="Enter work details"
-                          />
-                        </td>
+                            <div style={styles.mobileField}>
+                              <label style={styles.mobileLabel}>Time</label>
+                              <input
+                                type="text"
+                                value={editForm.work_time}
+                                onChange={(e) =>
+                                  setEditForm((prev) => ({
+                                    ...prev,
+                                    work_time: e.target.value,
+                                  }))
+                                }
+                                style={styles.mobileInput}
+                                className="input-focus"
+                                placeholder="Ex. 10 AM to 5 PM"
+                              />
+                            </div>
+                          </div>
 
-                        <td style={styles.td}>
-                          <input
-                            type="text"
-                            value={editForm.work_time}
-                            onChange={(e) =>
-                              setEditForm((prev) => ({
-                                ...prev,
-                                work_time: e.target.value,
-                              }))
-                            }
-                            style={styles.tableInput}
-                            className="dpr-input"
-                            placeholder="Ex. 10 AM to 5 PM"
-                          />
-                        </td>
-
-                        <td style={{ ...styles.td, ...styles.tdCenter }}>
-                          <div style={styles.actionBtns}>
+                          <div style={styles.mobileActionRow} className="mobile-card-actions">
                             <button
                               type="button"
                               onClick={() => handleUpdate(item.sr_no)}
                               style={styles.saveBtn}
-                              className="dpr-btn small-btn"
+                              className="btn-anim mini-btn"
                             >
                               Save
                             </button>
@@ -568,70 +577,218 @@ const GetMonthdpr = () => {
                               type="button"
                               onClick={cancelEdit}
                               style={styles.cancelBtn}
-                              className="dpr-btn small-btn"
+                              className="btn-anim mini-btn"
                             >
                               Cancel
                             </button>
                           </div>
-                        </td>
-                      </tr>
-                    ) : (
-                      <tr key={item.sr_no}>
-                        <td style={{ ...styles.td, ...styles.tdCenter, ...styles.seqText }}>
-                          {item.display_sequence}
-                        </td>
-
-                        <td style={styles.td}>
-                          {item.show_date ? (
-                            <span style={styles.dateText}>{item.display_date}</span>
-                          ) : (
-                            <span style={styles.emptyDate}></span>
-                          )}
-                        </td>
-
-                        <td style={styles.td}>
-                          <div style={styles.workDetailsCell}>
-                            {item.work_details || "-"}
+                        </>
+                      ) : (
+                        <>
+                          <div style={styles.mobileCardTop}>
+                            <span style={styles.mobileSrBadge}>#{item.display_sequence}</span>
+                            <span style={styles.mobileDateBadge}>
+                              {item.display_date || "-"}
+                            </span>
                           </div>
-                        </td>
 
-                        <td style={styles.td}>
-                          <span style={styles.timeText}>
-                            {item.work_time && item.work_time.trim() !== ""
-                              ? item.work_time
-                              : "-"}
-                          </span>
-                        </td>
+                          <div style={styles.mobileFieldRow}>
+                            <span style={styles.mobileFieldTitle}>Work Details</span>
+                            <div style={styles.mobileFieldValue}>
+                              {item.work_details || "-"}
+                            </div>
+                          </div>
 
-                        <td style={{ ...styles.td, ...styles.tdCenter }}>
-                          <div style={styles.actionBtns}>
+                          <div style={styles.mobileFieldRow}>
+                            <span style={styles.mobileFieldTitle}>Time</span>
+                            <div style={styles.mobileFieldValue}>
+                              {item.work_time && item.work_time.trim() !== ""
+                                ? item.work_time
+                                : "-"}
+                            </div>
+                          </div>
+
+                          <div style={styles.mobileActionRow} className="mobile-card-actions">
                             <button
                               type="button"
                               onClick={() => startEdit(item)}
                               style={styles.updateBtn}
-                              className="dpr-btn small-btn"
+                              className="btn-anim mini-btn"
                             >
                               Update
                             </button>
                             <button
                               type="button"
-                              onClick={() => openDeletePopup(item.sr_no, item.display_sequence)}
+                              onClick={() =>
+                                openDeletePopup(item.sr_no, item.display_sequence)
+                              }
                               style={styles.deleteBtn}
-                              className="dpr-btn small-btn"
+                              className="btn-anim mini-btn"
                             >
                               Delete
                             </button>
                           </div>
-                        </td>
-                      </tr>
-                    )
-                  )}
-                </tbody>
-              </table>
-            </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* DESKTOP TABLE */}
+              <div style={styles.tableWrap} className="table-scroll desktop-table">
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={{ ...styles.th, ...styles.thCenter, width: "90px" }}>
+                        Sr.No
+                      </th>
+                      <th style={{ ...styles.th, width: "160px" }}>Date</th>
+                      <th style={styles.th}>Work Details</th>
+                      <th style={{ ...styles.th, width: "160px" }}>Time</th>
+                      <th style={{ ...styles.th, ...styles.thCenter, width: "170px" }}>
+                        Action
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {dprList.map((item) =>
+                      editingId === item.sr_no ? (
+                        <tr key={item.sr_no}>
+                          <td style={{ ...styles.td, ...styles.tdCenter, ...styles.seqText }}>
+                            {item.display_sequence}
+                          </td>
+
+                          <td style={styles.td}>
+                            <input
+                              type="date"
+                              value={editForm.dpr_date}
+                              onChange={(e) =>
+                                setEditForm((prev) => ({
+                                  ...prev,
+                                  dpr_date: e.target.value,
+                                }))
+                              }
+                              style={styles.tableInput}
+                              className="input-focus"
+                            />
+                          </td>
+
+                          <td style={styles.td}>
+                            <textarea
+                              rows="3"
+                              value={editForm.work_details}
+                              onChange={(e) =>
+                                setEditForm((prev) => ({
+                                  ...prev,
+                                  work_details: e.target.value,
+                                }))
+                              }
+                              style={styles.tableTextarea}
+                              className="input-focus"
+                              placeholder="Enter work details"
+                            />
+                          </td>
+
+                          <td style={styles.td}>
+                            <input
+                              type="text"
+                              value={editForm.work_time}
+                              onChange={(e) =>
+                                setEditForm((prev) => ({
+                                  ...prev,
+                                  work_time: e.target.value,
+                                }))
+                              }
+                              style={styles.tableInput}
+                              className="input-focus"
+                              placeholder="Ex. 10 AM to 5 PM"
+                            />
+                          </td>
+
+                          <td style={{ ...styles.td, ...styles.tdCenter }}>
+                            <div style={styles.actionBtns}>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdate(item.sr_no)}
+                                style={styles.saveBtn}
+                                className="btn-anim mini-btn"
+                              >
+                                Save
+                              </button>
+                              <button
+                                type="button"
+                                onClick={cancelEdit}
+                                style={styles.cancelBtn}
+                                className="btn-anim mini-btn"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        <tr key={item.sr_no}>
+                          <td style={{ ...styles.td, ...styles.tdCenter, ...styles.seqText }}>
+                            {item.display_sequence}
+                          </td>
+
+                          <td style={styles.td}>
+                            {item.show_date ? (
+                              <span style={styles.dateText}>{item.display_date}</span>
+                            ) : (
+                              <span style={styles.emptyDate}></span>
+                            )}
+                          </td>
+
+                          <td style={styles.td}>
+                            <div style={styles.workDetailsCell}>
+                              {item.work_details || "-"}
+                            </div>
+                          </td>
+
+                          <td style={styles.td}>
+                            <span style={styles.timeText}>
+                              {item.work_time && item.work_time.trim() !== ""
+                                ? item.work_time
+                                : "-"}
+                            </span>
+                          </td>
+
+                          <td style={{ ...styles.td, ...styles.tdCenter }}>
+                            <div style={styles.actionBtns}>
+                              <button
+                                type="button"
+                                onClick={() => startEdit(item)}
+                                style={styles.updateBtn}
+                                className="btn-anim mini-btn"
+                              >
+                                Update
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  openDeletePopup(item.sr_no, item.display_sequence)
+                                }
+                                style={styles.deleteBtn}
+                                className="btn-anim mini-btn"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
 
+        {/* extra bottom space for mobile bottom nav */}
         <div style={styles.mobileBottomSpace}></div>
       </div>
 
@@ -639,7 +796,7 @@ const GetMonthdpr = () => {
         <div style={styles.popupOverlay} onClick={closePopup}>
           <div
             style={styles.popupCard}
-            className="popup-mobile fade-up"
+            className="popup-card-mobile fade-up"
             onClick={(e) => e.stopPropagation()}
           >
             <div
@@ -656,21 +813,6 @@ const GetMonthdpr = () => {
 
             <h3 style={styles.popupTitle}>{popup.title}</h3>
             <p style={styles.popupMessage}>{popup.message}</p>
-
-            <button
-              type="button"
-              onClick={closePopup}
-              style={{
-                ...styles.popupButton,
-                background:
-                  popup.type === "success"
-                    ? "linear-gradient(135deg, #2563eb, #1d4ed8)"
-                    : "linear-gradient(135deg, #dc2626, #b91c1c)",
-              }}
-              className="dpr-btn"
-            >
-              OK
-            </button>
           </div>
         </div>
       )}
@@ -679,10 +821,15 @@ const GetMonthdpr = () => {
         <div style={styles.popupOverlay} onClick={closeDeletePopup}>
           <div
             style={styles.popupCard}
-            className="popup-mobile fade-up"
+            className="popup-card-mobile fade-up"
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ ...styles.popupIcon, background: "linear-gradient(135deg, #dc2626, #ef4444)" }}>
+            <div
+              style={{
+                ...styles.popupIcon,
+                background: "linear-gradient(135deg, #dc2626, #ef4444)",
+              }}
+            >
               !
             </div>
 
@@ -698,16 +845,15 @@ const GetMonthdpr = () => {
                 type="button"
                 onClick={closeDeletePopup}
                 style={styles.cancelConfirmBtn}
-                className="dpr-btn"
+                className="btn-anim"
               >
                 Cancel
               </button>
-
               <button
                 type="button"
                 onClick={confirmDelete}
                 style={styles.deleteConfirmBtn}
-                className="dpr-btn"
+                className="btn-anim"
               >
                 Delete
               </button>
@@ -723,31 +869,35 @@ const styles = {
   page: {
     minHeight: "100vh",
     width: "100%",
-    background: "linear-gradient(180deg, #edf3fb 0%, #f8fbff 35%, #f1f5fb 100%)",
-    margin: 0,
+    background: "linear-gradient(180deg, #eff4fb 0%, #f8fbff 50%, #f2f6fb 100%)",
     paddingBottom: "env(safe-area-inset-bottom)",
   },
 
   container: {
     width: "100%",
-    maxWidth: "100%",
-    margin: 0,
-    padding: "12px",
+    maxWidth: "1400px",
+    margin: "0 auto",
+    padding: "10px",
   },
 
   pageHeader: {
-    width: "100%",
     marginBottom: "12px",
-    padding: "2px 2px 4px 2px",
   },
 
   pageHeaderTitle: {
     margin: 0,
-    fontSize: "26px",
+    fontSize: "22px",
     fontWeight: "900",
     color: "#0b1f4d",
-    lineHeight: "1.2",
+    lineHeight: 1.2,
     letterSpacing: "0.2px",
+  },
+
+  headerSubText: {
+    margin: "6px 0 0 0",
+    color: "#5f7699",
+    fontSize: "13px",
+    lineHeight: 1.5,
   },
 
   filterCard: {
@@ -775,19 +925,25 @@ const styles = {
     marginBottom: "14px",
   },
 
+  blockLabel: {
+    display: "block",
+    marginBottom: "8px",
+    fontSize: "12px",
+    fontWeight: "700",
+    color: "#607798",
+  },
+
   monthInputBlock: {
     background: "#ffffff",
     border: "1px solid #d7e2f0",
     borderRadius: "14px",
     padding: "10px",
-    minHeight: "72px",
-    display: "flex",
-    alignItems: "center",
+    minHeight: "78px",
   },
 
   monthInput: {
     width: "100%",
-    height: "40px",
+    height: "42px",
     borderRadius: "12px",
     border: "1px solid #cad7ea",
     padding: "0 12px",
@@ -802,7 +958,7 @@ const styles = {
     border: "1px solid #d7e2f0",
     borderRadius: "14px",
     padding: "10px 12px",
-    minHeight: "72px",
+    minHeight: "78px",
     display: "flex",
     flexDirection: "column",
     justifyContent: "center",
@@ -818,9 +974,9 @@ const styles = {
 
   infoBoxValue: {
     fontSize: "14px",
-    fontWeight: "700",
+    fontWeight: "800",
     color: "#081f4a",
-    lineHeight: "1.2",
+    lineHeight: "1.3",
     wordBreak: "break-word",
   },
 
@@ -834,13 +990,13 @@ const styles = {
     border: "none",
     background: "linear-gradient(135deg, #0f172a, #1e3a8a)",
     color: "#fff",
-    borderRadius: "14px",
-    padding: "12px 20px",
+    borderRadius: "12px",
+    padding: "11px 18px",
     fontWeight: "800",
-    fontSize: "14px",
+    fontSize: "13px",
     cursor: "pointer",
     minHeight: "42px",
-    boxShadow: "0 12px 22px rgba(30, 58, 138, 0.22)",
+    boxShadow: "0 12px 22px rgba(30, 58, 138, 0.20)",
   },
 
   tableCard: {
@@ -859,7 +1015,7 @@ const styles = {
 
   tableTitle: {
     margin: 0,
-    fontSize: "22px",
+    fontSize: "20px",
     fontWeight: "900",
     color: "#0a2354",
   },
@@ -891,7 +1047,7 @@ const styles = {
     padding: "14px 12px",
     background: "linear-gradient(135deg, #0f2557, #173b77)",
     color: "#ffffff",
-    fontSize: "23px",
+    fontSize: "14px",
     fontWeight: "800",
     textAlign: "left",
     borderBottom: "1px solid #264c8b",
@@ -935,7 +1091,7 @@ const styles = {
 
   workDetailsCell: {
     color: "#334a68",
-    lineHeight: "1.7",
+    lineHeight: "1.65",
     fontWeight: "500",
     whiteSpace: "pre-wrap",
     wordBreak: "break-word",
@@ -959,57 +1115,57 @@ const styles = {
     border: "none",
     background: "linear-gradient(135deg, #2563eb, #3b82f6)",
     color: "#fff",
-    borderRadius: "12px",
-    padding: "9px 12px",
+    borderRadius: "10px",
+    padding: "7px 10px",
     fontWeight: "800",
-    fontSize: "12px",
+    fontSize: "11px",
     cursor: "pointer",
-    boxShadow: "0 10px 18px rgba(37, 99, 235, 0.18)",
-    minWidth: "72px",
+    boxShadow: "0 8px 16px rgba(37, 99, 235, 0.16)",
+    minWidth: "64px",
   },
 
   deleteBtn: {
     border: "none",
     background: "linear-gradient(135deg, #ef4444, #dc2626)",
     color: "#fff",
-    borderRadius: "12px",
-    padding: "9px 12px",
+    borderRadius: "10px",
+    padding: "7px 10px",
     fontWeight: "800",
-    fontSize: "12px",
+    fontSize: "11px",
     cursor: "pointer",
-    boxShadow: "0 10px 18px rgba(220, 38, 38, 0.18)",
-    minWidth: "72px",
+    boxShadow: "0 8px 16px rgba(220, 38, 38, 0.16)",
+    minWidth: "64px",
   },
 
   saveBtn: {
     border: "none",
     background: "linear-gradient(135deg, #16a34a, #22c55e)",
     color: "#fff",
-    borderRadius: "12px",
-    padding: "9px 12px",
+    borderRadius: "10px",
+    padding: "7px 10px",
     fontWeight: "800",
-    fontSize: "12px",
+    fontSize: "11px",
     cursor: "pointer",
-    boxShadow: "0 10px 18px rgba(34, 197, 94, 0.18)",
-    minWidth: "72px",
+    boxShadow: "0 8px 16px rgba(34, 197, 94, 0.16)",
+    minWidth: "64px",
   },
 
   cancelBtn: {
     border: "1px solid #d1dbe8",
     background: "linear-gradient(135deg, #ffffff, #f8fbff)",
     color: "#425b7b",
-    borderRadius: "12px",
-    padding: "9px 12px",
+    borderRadius: "10px",
+    padding: "7px 10px",
     fontWeight: "800",
-    fontSize: "12px",
+    fontSize: "11px",
     cursor: "pointer",
-    minWidth: "72px",
+    minWidth: "64px",
   },
 
   tableInput: {
     width: "100%",
-    padding: "10px 12px",
-    borderRadius: "12px",
+    padding: "9px 11px",
+    borderRadius: "10px",
     border: "1px solid #d1dded",
     background: "#ffffff",
     fontSize: "13px",
@@ -1018,10 +1174,10 @@ const styles = {
 
   tableTextarea: {
     width: "100%",
-    minHeight: "92px",
+    minHeight: "86px",
     resize: "vertical",
-    padding: "10px 12px",
-    borderRadius: "12px",
+    padding: "10px 11px",
+    borderRadius: "10px",
     border: "1px solid #d1dded",
     background: "#ffffff",
     fontSize: "13px",
@@ -1039,17 +1195,137 @@ const styles = {
     color: "#6480a5",
   },
 
+  mobileListWrap: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "12px",
+  },
+
+  mobileCard: {
+    background: "linear-gradient(180deg, #ffffff 0%, #fbfdff 100%)",
+    border: "1px solid #dfe8f5",
+    borderRadius: "16px",
+    padding: "12px",
+    boxShadow: "0 8px 18px rgba(15, 23, 42, 0.05)",
+  },
+
+  mobileCardTop: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "8px",
+    marginBottom: "12px",
+    flexWrap: "wrap",
+  },
+
+  mobileSrBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "5px 10px",
+    borderRadius: "999px",
+    background: "#e8f0ff",
+    color: "#173b77",
+    fontSize: "11px",
+    fontWeight: "800",
+  },
+
+  mobileDateBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "5px 10px",
+    borderRadius: "999px",
+    background: "#eef6ff",
+    color: "#1d4c8f",
+    fontSize: "11px",
+    fontWeight: "800",
+  },
+
+  mobileFieldRow: {
+    marginBottom: "10px",
+  },
+
+  mobileFieldTitle: {
+    display: "block",
+    fontSize: "11px",
+    fontWeight: "800",
+    color: "#607798",
+    marginBottom: "5px",
+    letterSpacing: "0.2px",
+  },
+
+  mobileFieldValue: {
+    fontSize: "13px",
+    color: "#233a5a",
+    lineHeight: "1.65",
+    background: "#f8fbff",
+    border: "1px solid #e8eef7",
+    borderRadius: "12px",
+    padding: "10px",
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word",
+  },
+
+  mobileActionRow: {
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: "8px",
+    flexWrap: "wrap",
+    marginTop: "8px",
+  },
+
+  mobileEditGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr",
+    gap: "10px",
+  },
+
+  mobileField: {
+    width: "100%",
+  },
+
+  mobileLabel: {
+    display: "block",
+    marginBottom: "6px",
+    fontSize: "11px",
+    fontWeight: "800",
+    color: "#607798",
+  },
+
+  mobileInput: {
+    width: "100%",
+    padding: "10px 11px",
+    borderRadius: "10px",
+    border: "1px solid #d1dded",
+    background: "#ffffff",
+    fontSize: "13px",
+    outline: "none",
+  },
+
+  mobileTextarea: {
+    width: "100%",
+    minHeight: "90px",
+    resize: "vertical",
+    padding: "10px 11px",
+    borderRadius: "10px",
+    border: "1px solid #d1dded",
+    background: "#ffffff",
+    fontSize: "13px",
+    outline: "none",
+  },
+
   mobileBottomSpace: {
     width: "100%",
-    height: "84px",
+    height: "96px",
     flexShrink: 0,
   },
 
   popupOverlay: {
     position: "fixed",
     inset: 0,
-    background: "rgba(8, 20, 48, 0.45)",
-    backdropFilter: "blur(5px)",
+    background: "rgba(8, 20, 48, 0.42)",
+    backdropFilter: "blur(4px)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -1061,50 +1337,38 @@ const styles = {
     width: "100%",
     maxWidth: "380px",
     background: "#ffffff",
-    borderRadius: "22px",
-    padding: "22px 18px",
+    borderRadius: "20px",
+    padding: "20px 16px",
     textAlign: "center",
-    boxShadow: "0 20px 44px rgba(15, 23, 42, 0.22)",
+    boxShadow: "0 22px 46px rgba(15, 23, 42, 0.22)",
     border: "1px solid #e6edf6",
   },
 
   popupIcon: {
-    width: "58px",
-    height: "58px",
+    width: "56px",
+    height: "56px",
     borderRadius: "50%",
     margin: "0 auto 14px auto",
     color: "#fff",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    fontSize: "26px",
+    fontSize: "24px",
     fontWeight: "900",
   },
 
   popupTitle: {
     margin: "0 0 8px 0",
     color: "#08224f",
-    fontSize: "20px",
+    fontSize: "18px",
     fontWeight: "900",
   },
 
   popupMessage: {
-    margin: "0 0 16px 0",
+    margin: "0 0 10px 0",
     color: "#5f7699",
-    fontSize: "14px",
+    fontSize: "13px",
     lineHeight: "1.6",
-  },
-
-  popupButton: {
-    width: "100%",
-    border: "none",
-    color: "#fff",
-    borderRadius: "14px",
-    padding: "12px 14px",
-    fontWeight: "800",
-    fontSize: "14px",
-    cursor: "pointer",
-    boxShadow: "0 12px 22px rgba(37, 99, 235, 0.2)",
   },
 
   confirmBtnRow: {
@@ -1112,6 +1376,7 @@ const styles = {
     gap: "10px",
     justifyContent: "center",
     flexWrap: "wrap",
+    marginTop: "14px",
   },
 
   cancelConfirmBtn: {

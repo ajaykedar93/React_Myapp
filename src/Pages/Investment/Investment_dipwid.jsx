@@ -1,5 +1,5 @@
 // src/pages/Investment_dipwid.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 const BASE_URL = "https://express-backend-myapp.onrender.com";
@@ -7,10 +7,8 @@ const BASE_URL = "https://express-backend-myapp.onrender.com";
 export default function Investment_dipwid() {
   const navigate = useNavigate();
 
-  // ✅ Always get fresh token (do NOT memoize with [])
   const getToken = () => localStorage.getItem("token") || "";
 
-  // ✅ Always build fresh headers for every request
   const getHeaders = () => {
     const token = getToken();
     const h = { "Content-Type": "application/json" };
@@ -18,25 +16,21 @@ export default function Investment_dipwid() {
     return h;
   };
 
-  // -------------------- master data --------------------
   const [platforms, setPlatforms] = useState([]);
   const [segments, setSegments] = useState([]);
   const [plans, setPlans] = useState([]);
 
   const [platformId, setPlatformId] = useState("");
   const [segmentId, setSegmentId] = useState("");
-  const [planId, setPlanId] = useState(""); // optional
+  const [planId, setPlanId] = useState("");
 
-  // -------------------- form --------------------
-  const [txnType, setTxnType] = useState("DEPOSIT"); // DEPOSIT | WITHDRAW
+  const [txnType, setTxnType] = useState("DEPOSIT");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
 
-  // -------------------- views data --------------------
   const [ledgerRows, setLedgerRows] = useState([]);
   const [monthSummaryRows, setMonthSummaryRows] = useState([]);
 
-  // month filter
   const [month, setMonth] = useState(() => {
     const d = new Date();
     const yyyy = d.getFullYear();
@@ -44,14 +38,12 @@ export default function Investment_dipwid() {
     return `${yyyy}-${mm}-01`;
   });
 
-  // -------------------- UI --------------------
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(null);
 
-  // modal
   const [modal, setModal] = useState({
     open: false,
-    type: "info", // success | error | confirm | info
+    type: "info",
     title: "",
     message: "",
     confirmText: "OK",
@@ -59,7 +51,20 @@ export default function Investment_dipwid() {
     onConfirm: null,
   });
 
-  const openModal = (p) =>
+  const [screenWidth, setScreenWidth] = useState(
+    typeof window !== "undefined" ? window.innerWidth : 1200
+  );
+
+  useEffect(() => {
+    const onResize = () => setScreenWidth(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  const isTabletUp = screenWidth >= 768;
+  const isDesktop = screenWidth >= 1100;
+
+  const openModal = (p) => {
     setModal((m) => ({
       ...m,
       open: true,
@@ -70,25 +75,50 @@ export default function Investment_dipwid() {
       cancelText: p.cancelText || "Cancel",
       onConfirm: p.onConfirm || null,
     }));
+  };
 
-  const closeModal = () => setModal((m) => ({ ...m, open: false, title: "", message: "", onConfirm: null }));
+  const closeModal = () => {
+    setModal((m) => ({
+      ...m,
+      open: false,
+      title: "",
+      message: "",
+      onConfirm: null,
+    }));
+  };
 
-  const toast = (msg) => openModal({ type: "success", title: "Success", message: msg });
-  const fail = (msg) => openModal({ type: "error", title: "Error", message: msg });
-
-  // click/tap effect
-  const press = (e) => (e.currentTarget.style.transform = "scale(0.98)");
-  const release = (e) => (e.currentTarget.style.transform = "scale(1)");
-
-  // -------------------- responsive --------------------
-  const [wide, setWide] = useState(typeof window !== "undefined" ? window.innerWidth >= 1100 : false);
   useEffect(() => {
-    const onR = () => setWide(window.innerWidth >= 1100);
-    window.addEventListener("resize", onR);
-    return () => window.removeEventListener("resize", onR);
-  }, []);
+    if (!modal.open) return;
+    if (modal.type === "success" || modal.type === "error") {
+      const timer = setTimeout(() => {
+        closeModal();
+      }, 2200);
+      return () => clearTimeout(timer);
+    }
+  }, [modal.open, modal.type]);
 
-  const Btn = ({ variant, small, disabled, onClick, children, type = "button", style }) => (
+  const toast = (msg) =>
+    openModal({ type: "success", title: "Success", message: msg });
+  const fail = (msg) =>
+    openModal({ type: "error", title: "Error", message: msg });
+
+  const press = (e) => {
+    e.currentTarget.style.transform = "scale(0.98)";
+  };
+
+  const release = (e) => {
+    e.currentTarget.style.transform = "scale(1)";
+  };
+
+  const Btn = ({
+    variant,
+    small,
+    disabled,
+    onClick,
+    children,
+    type = "button",
+    style,
+  }) => (
     <button
       type={type}
       onClick={onClick}
@@ -100,17 +130,18 @@ export default function Investment_dipwid() {
       onTouchEnd={disabled ? undefined : release}
       style={{
         ...styles.btn(variant, small),
-        ...(disabled ? styles.btnDisabled : null),
-        ...(style || null),
+        ...(disabled ? styles.btnDisabled : {}),
+        ...style,
       }}
+      className="page-btn"
     >
       {children}
     </button>
   );
 
-  // -------------------- API helper (with 401 handling) --------------------
   const request = async (url, options = {}) => {
     const token = getToken();
+
     if (!token) {
       navigate("/login");
       throw new Error("Please login again.");
@@ -145,15 +176,19 @@ export default function Investment_dipwid() {
 
   const api = {
     async getPlatforms() {
-      const data = await request(`${BASE_URL}/api/investment/platform-segment/platform`, { method: "GET" });
+      const data = await request(
+        `${BASE_URL}/api/investment/platform-segment/platform`,
+        { method: "GET" }
+      );
       return Array.isArray(data?.data) ? data.data : [];
     },
 
     async getSegments(pid) {
       if (!pid) return [];
-      const data = await request(`${BASE_URL}/api/investment/platform-segment/segment?platform_id=${pid}`, {
-        method: "GET",
-      });
+      const data = await request(
+        `${BASE_URL}/api/investment/platform-segment/segment?platform_id=${pid}`,
+        { method: "GET" }
+      );
       return Array.isArray(data?.data) ? data.data : [];
     },
 
@@ -161,7 +196,10 @@ export default function Investment_dipwid() {
       const qs = new URLSearchParams();
       if (pid) qs.set("platform_id", String(pid));
       if (sid) qs.set("segment_id", String(sid));
-      const data = await request(`${BASE_URL}/api/investment/plan?${qs.toString()}`, { method: "GET" });
+      const data = await request(
+        `${BASE_URL}/api/investment/plan?${qs.toString()}`,
+        { method: "GET" }
+      );
       return Array.isArray(data?.data) ? data.data : [];
     },
 
@@ -179,7 +217,10 @@ export default function Investment_dipwid() {
       if (segment_id) qs.set("segment_id", String(segment_id));
       if (plan_id) qs.set("plan_id", String(plan_id));
 
-      const data = await request(`${BASE_URL}/api/investment/dipwid/ledger?${qs.toString()}`, { method: "GET" });
+      const data = await request(
+        `${BASE_URL}/api/investment/dipwid/ledger?${qs.toString()}`,
+        { method: "GET" }
+      );
       return Array.isArray(data?.data) ? data.data : [];
     },
 
@@ -189,19 +230,21 @@ export default function Investment_dipwid() {
       if (segment_id) qs.set("segment_id", String(segment_id));
       if (month) qs.set("month", month);
 
-      const data = await request(`${BASE_URL}/api/investment/dipwid/month-summary?${qs.toString()}`, {
-        method: "GET",
-      });
+      const data = await request(
+        `${BASE_URL}/api/investment/dipwid/month-summary?${qs.toString()}`,
+        { method: "GET" }
+      );
       return Array.isArray(data?.data) ? data.data : [];
     },
 
     async deleteDipWid(id) {
-      await request(`${BASE_URL}/api/investment/dipwid/${id}`, { method: "DELETE" });
+      await request(`${BASE_URL}/api/investment/dipwid/${id}`, {
+        method: "DELETE",
+      });
       return true;
     },
   };
 
-  // -------------------- mount: platforms --------------------
   useEffect(() => {
     (async () => {
       try {
@@ -214,10 +257,8 @@ export default function Investment_dipwid() {
         setLoading(false);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // segments when platform changes
   useEffect(() => {
     (async () => {
       try {
@@ -225,33 +266,33 @@ export default function Investment_dipwid() {
         setPlans([]);
         setSegmentId("");
         setPlanId("");
+
         if (!platformId) return;
+
         const s = await api.getSegments(platformId);
         setSegments(s);
       } catch (e) {
         fail(e.message);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [platformId]);
 
-  // plans when segment changes
   useEffect(() => {
     (async () => {
       try {
         setPlans([]);
         setPlanId("");
+
         if (!platformId || !segmentId) return;
+
         const pl = await api.getPlans(platformId, segmentId);
         setPlans(pl);
       } catch (e) {
         fail(e.message);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [platformId, segmentId]);
 
-  // -------------------- refresh views --------------------
   const refreshViews = async () => {
     try {
       setLoading(true);
@@ -280,10 +321,8 @@ export default function Investment_dipwid() {
 
   useEffect(() => {
     refreshViews();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [platformId, segmentId, planId, month]);
 
-  // -------------------- submit --------------------
   const onSubmit = async (e) => {
     e.preventDefault();
 
@@ -291,7 +330,7 @@ export default function Investment_dipwid() {
     if (!segmentId) return fail("Select segment");
 
     const amt = Number(String(amount).replace(/[^\d]/g, ""));
-    if (!Number.isFinite(amt) || amt <= 0) return fail("Amount must be > 0");
+    if (!Number.isFinite(amt) || amt <= 0) return fail("Amount must be greater than 0");
 
     const payload = {
       platform_id: Number(platformId),
@@ -305,12 +344,12 @@ export default function Investment_dipwid() {
     try {
       setBusy("save");
       await api.createDipWid(payload);
-      toast("Saved");
+      toast("Saved successfully");
       setAmount("");
       setNote("");
       await refreshViews();
-    } catch (e2) {
-      fail(e2.message);
+    } catch (e) {
+      fail(e.message);
     } finally {
       setBusy(null);
     }
@@ -327,7 +366,7 @@ export default function Investment_dipwid() {
         try {
           setBusy(`del-${id}`);
           await api.deleteDipWid(id);
-          toast("Deleted");
+          toast("Deleted successfully");
           await refreshViews();
         } catch (e) {
           fail(e.message);
@@ -339,7 +378,6 @@ export default function Investment_dipwid() {
     });
   };
 
-  // -------------------- helpers --------------------
   const money = (v) => {
     if (v === null || v === undefined) return "-";
     const s = String(v).trim();
@@ -350,7 +388,10 @@ export default function Investment_dipwid() {
     try {
       const d = new Date(val);
       if (Number.isNaN(d.getTime())) return "-";
-      return new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric" }).format(d);
+      return new Intl.DateTimeFormat("en-GB", {
+        month: "short",
+        year: "numeric",
+      }).format(d);
     } catch {
       return "-";
     }
@@ -360,36 +401,183 @@ export default function Investment_dipwid() {
     if (!val) return "-";
     const d = new Date(val);
     if (Number.isNaN(d.getTime())) return String(val);
-    const datePart = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(d);
-    const timePart = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" }).format(d);
+    const datePart = new Intl.DateTimeFormat("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }).format(d);
+    const timePart = new Intl.DateTimeFormat("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(d);
     return `${datePart}, ${timePart}`;
   };
 
-  // quick totals (nice look)
-  const totals = ledgerRows.reduce(
-    (acc, r) => {
-      const isDep = String(r.txn_type).toUpperCase() === "DEPOSIT";
-      const amt = Number(String(r.amount ?? 0).replace(/[^\d.-]/g, "")) || 0;
-      if (isDep) acc.deposit += amt;
-      else acc.withdraw += amt;
-      return acc;
-    },
-    { deposit: 0, withdraw: 0 }
-  );
+  const totals = useMemo(() => {
+    return ledgerRows.reduce(
+      (acc, r) => {
+        const isDep = String(r.txn_type).toUpperCase() === "DEPOSIT";
+        const amt = Number(String(r.amount ?? 0).replace(/[^\d.-]/g, "")) || 0;
+        if (isDep) acc.deposit += amt;
+        else acc.withdraw += amt;
+        return acc;
+      },
+      { deposit: 0, withdraw: 0 }
+    );
+  }, [ledgerRows]);
+
   const net = totals.deposit - totals.withdraw;
 
   return (
     <div style={styles.page}>
-      <style>{styles.css}</style>
+      <style>{`
+        * {
+          box-sizing: border-box;
+        }
 
-      {/* Header */}
-      <div style={styles.topbar}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        html, body, #root {
+          margin: 0;
+          padding: 0;
+          width: 100%;
+          min-height: 100%;
+          overflow-x: hidden;
+          font-family: Inter, Arial, sans-serif;
+          background: #f7f8ff;
+        }
+
+        .fade-up {
+          animation: fadeUp .35s ease;
+        }
+
+        .fade-in {
+          animation: fadeIn .3s ease;
+        }
+
+        @keyframes fadeUp {
+          from {
+            opacity: 0;
+            transform: translateY(10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+
+        .page-btn {
+          transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
+        }
+
+        .page-btn:hover {
+          filter: brightness(1.03);
+          box-shadow: 0 14px 28px rgba(15,23,42,.14);
+        }
+
+        .soft-card {
+          transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+        }
+
+        .soft-card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 18px 36px rgba(15,23,42,.10);
+        }
+
+        .field-control {
+          transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
+        }
+
+        .field-control:focus {
+          border-color: #7c3aed !important;
+          box-shadow: 0 0 0 4px rgba(124,58,237,.12);
+          background: #ffffff !important;
+        }
+
+        .table-scroll::-webkit-scrollbar {
+          height: 8px;
+          width: 8px;
+        }
+
+        .table-scroll::-webkit-scrollbar-thumb {
+          background: #d7d8f7;
+          border-radius: 999px;
+        }
+
+        .table-scroll::-webkit-scrollbar-track {
+          background: #eff2ff;
+        }
+
+        @media (max-width: 1099px) {
+          .main-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+
+        @media (max-width: 767px) {
+          .desktop-only {
+            display: none !important;
+          }
+
+          .page-space {
+            padding: 10px !important;
+          }
+
+          .sticky-head {
+            padding: 10px !important;
+            align-items: flex-start !important;
+            flex-direction: column !important;
+          }
+
+          .sticky-actions {
+            width: 100% !important;
+            justify-content: stretch !important;
+          }
+
+          .sticky-actions button {
+            flex: 1 !important;
+          }
+
+          .mini-stats {
+            grid-template-columns: 1fr !important;
+          }
+
+          .mobile-card-list {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 12px !important;
+          }
+
+          .mobile-full-btn {
+            width: 100% !important;
+          }
+
+          .popup-mobile {
+            width: calc(100% - 24px) !important;
+            max-width: 380px !important;
+            padding: 18px 14px !important;
+          }
+        }
+
+        @media (min-width: 768px) {
+          .mobile-only {
+            display: none !important;
+          }
+        }
+      `}</style>
+
+      <div style={styles.topbar} className="sticky-head">
+        <div style={styles.topbarLeft}>
           <div style={styles.title}>Deposit / Withdrawal</div>
-          <div style={styles.subtitle}>Track cash flow • Filter by platform/segment/plan • Monthly insights</div>
+          <div style={styles.subtitle}>
+            Track cash flow • Filter by platform, segment, plan • Monthly insights
+          </div>
         </div>
 
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        <div style={styles.topbarActions} className="sticky-actions">
           <Btn
             small
             variant="ghost"
@@ -399,285 +587,495 @@ export default function Investment_dipwid() {
           >
             ← Back
           </Btn>
-          <Btn small variant="primary" onClick={refreshViews} disabled={busy === "refresh" || loading}>
-            {busy === "refresh" || loading ? "..." : "Refresh"}
+
+          <Btn
+            small
+            variant="primary"
+            onClick={refreshViews}
+            disabled={busy === "refresh" || loading}
+            style={{ minWidth: 100 }}
+          >
+            {busy === "refresh" || loading ? "Loading..." : "Refresh"}
           </Btn>
         </div>
       </div>
 
-      <div style={styles.grid(wide)}>
-        {/* LEFT: FORM */}
-        <section style={styles.card}>
-          <div style={styles.cardHeader}>
-            <div style={styles.cardTitle}>Add Entry</div>
-            <div style={styles.cardMeta}>Required: Platform + Segment</div>
-          </div>
-
-          <form style={styles.form} onSubmit={onSubmit} noValidate>
-            <div style={styles.field}>
-              <div style={styles.label}>Platform</div>
-              <select style={styles.select} value={platformId} onChange={(e) => setPlatformId(e.target.value)}>
-                <option value="">Select Platform</option>
-                {platforms.map((p) => (
-                  <option key={p.platform_id} value={p.platform_id}>
-                    {p.platform_name}
-                  </option>
-                ))}
-              </select>
+      <div style={styles.pageInner} className="page-space">
+        <div style={styles.grid(isDesktop)} className="main-grid">
+          <section style={styles.card} className="soft-card fade-up">
+            <div style={styles.cardHeader}>
+              <div>
+                <div style={styles.cardTitle}>Add Entry</div>
+                <div style={styles.cardMeta}>Required: Platform + Segment</div>
+              </div>
             </div>
 
-            <div style={styles.field}>
-              <div style={styles.label}>Segment</div>
-              <select
-                style={styles.select}
-                value={segmentId}
-                onChange={(e) => setSegmentId(e.target.value)}
-                disabled={!platformId}
-              >
-                <option value="">Select Segment</option>
-                {segments.map((s) => (
-                  <option key={s.segment_id} value={s.segment_id}>
-                    {s.segment_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div style={styles.field}>
-              <div style={styles.label}>Plan (Optional)</div>
-              <select
-                style={styles.select}
-                value={planId}
-                onChange={(e) => setPlanId(e.target.value)}
-                disabled={!platformId || !segmentId}
-              >
-                <option value="">Select Plan (Optional)</option>
-                {plans.map((p) => (
-                  <option key={p.plan_id} value={p.plan_id}>
-                    {p.plan_name ? p.plan_name : `Plan #${p.plan_id}`}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div style={styles.row2(wide)}>
+            <form style={styles.form} onSubmit={onSubmit} noValidate>
               <div style={styles.field}>
-                <div style={styles.label}>Type</div>
-                <select style={styles.select} value={txnType} onChange={(e) => setTxnType(e.target.value)}>
-                  <option value="DEPOSIT">Deposit</option>
-                  <option value="WITHDRAW">Withdraw</option>
+                <label style={styles.label}>Platform</label>
+                <select
+                  style={styles.select}
+                  className="field-control"
+                  value={platformId}
+                  onChange={(e) => setPlatformId(e.target.value)}
+                >
+                  <option value="">Select Platform</option>
+                  {platforms.map((p) => (
+                    <option key={p.platform_id} value={p.platform_id}>
+                      {p.platform_name}
+                    </option>
+                  ))}
                 </select>
               </div>
 
               <div style={styles.field}>
-                <div style={styles.label}>Amount</div>
+                <label style={styles.label}>Segment</label>
+                <select
+                  style={styles.select}
+                  className="field-control"
+                  value={segmentId}
+                  onChange={(e) => setSegmentId(e.target.value)}
+                  disabled={!platformId}
+                >
+                  <option value="">Select Segment</option>
+                  {segments.map((s) => (
+                    <option key={s.segment_id} value={s.segment_id}>
+                      {s.segment_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={styles.field}>
+                <label style={styles.label}>Plan (Optional)</label>
+                <select
+                  style={styles.select}
+                  className="field-control"
+                  value={planId}
+                  onChange={(e) => setPlanId(e.target.value)}
+                  disabled={!platformId || !segmentId}
+                >
+                  <option value="">Select Plan (Optional)</option>
+                  {plans.map((p) => (
+                    <option key={p.plan_id} value={p.plan_id}>
+                      {p.plan_name ? p.plan_name : `Plan #${p.plan_id}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={styles.row2(isTabletUp)}>
+                <div style={styles.field}>
+                  <label style={styles.label}>Type</label>
+                  <select
+                    style={styles.select}
+                    className="field-control"
+                    value={txnType}
+                    onChange={(e) => setTxnType(e.target.value)}
+                  >
+                    <option value="DEPOSIT">Deposit</option>
+                    <option value="WITHDRAW">Withdraw</option>
+                  </select>
+                </div>
+
+                <div style={styles.field}>
+                  <label style={styles.label}>Amount</label>
+                  <input
+                    style={styles.input}
+                    className="field-control"
+                    value={amount}
+                    onChange={(e) =>
+                      setAmount(e.target.value.replace(/[^\d]/g, ""))
+                    }
+                    inputMode="numeric"
+                    placeholder="Enter amount"
+                  />
+                </div>
+              </div>
+
+              <div style={styles.field}>
+                <label style={styles.label}>Note (Optional)</label>
+                <textarea
+                  style={styles.textarea}
+                  className="field-control"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="Add a note like bank transfer, cash, profit booking"
+                />
+              </div>
+
+              <div style={styles.btnRow}>
+                <Btn
+                  variant="primary"
+                  type="submit"
+                  disabled={busy === "save"}
+                  style={{ flex: 1 }}
+                >
+                  {busy === "save" ? "Saving..." : "Save"}
+                </Btn>
+
+                <Btn
+                  variant="ghost"
+                  onClick={() => {
+                    setTxnType("DEPOSIT");
+                    setAmount("");
+                    setNote("");
+                  }}
+                  disabled={busy === "save"}
+                  style={{ flex: 1 }}
+                >
+                  Clear
+                </Btn>
+              </div>
+
+              <div style={styles.hintBox}>
+                <div style={styles.hintTitle}>Tip</div>
+                <div style={styles.hintText}>
+                  Use <b>Deposit</b> for adding funds and <b>Withdraw</b> for
+                  removing funds. Filter month from the right side to check ledger
+                  and summary cleanly.
+                </div>
+              </div>
+            </form>
+          </section>
+
+          <section style={styles.card} className="soft-card fade-up">
+            <div style={styles.cardHeaderResponsive}>
+              <div>
+                <div style={styles.cardTitle}>Ledger</div>
+                <div style={styles.cardMeta}>
+                  {ledgerRows.length} entries • Balance flow overview
+                </div>
+              </div>
+
+              <div style={styles.monthInputWrap}>
                 <input
-                  style={styles.input}
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ""))}
-                  inputMode="numeric"
-                  placeholder="Enter amount"
+                  style={styles.monthInput}
+                  className="field-control"
+                  type="month"
+                  value={month.slice(0, 7)}
+                  onChange={(e) => setMonth(`${e.target.value}-01`)}
                 />
               </div>
             </div>
 
-            <div style={styles.field}>
-              <div style={styles.label}>Note (Optional)</div>
-              <textarea
-                style={styles.textarea}
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder="Add a note (example: Bank transfer / Cash / Profit booking)"
-              />
-            </div>
-
-            <div style={styles.btnRow}>
-              <Btn variant="primary" type="submit" disabled={busy === "save"}>
-                {busy === "save" ? "Saving..." : "Save"}
-              </Btn>
-              <Btn
-                variant="ghost"
-                onClick={() => {
-                  setTxnType("DEPOSIT");
-                  setAmount("");
-                  setNote("");
-                }}
-                disabled={busy === "save"}
-              >
-                Clear
-              </Btn>
-            </div>
-
-            <div style={styles.hintBox}>
-              <div style={{ fontWeight: 950 }}>Tip</div>
-              <div style={{ fontSize: 12, color: "rgba(15,23,42,.72)", lineHeight: 1.35 }}>
-                Use <b>Deposit</b> for adding funds, <b>Withdraw</b> for removing funds. You can filter by month using the
-                selector on the Ledger card.
+            <div style={styles.statsRow} className="mini-stats">
+              <div style={styles.statCard}>
+                <div style={styles.statLabel}>Total Deposit</div>
+                <div style={{ ...styles.statValue, color: "#16a34a" }}>
+                  {totals.deposit || 0}
+                </div>
               </div>
-            </div>
-          </form>
-        </section>
 
-        {/* RIGHT: LEDGER + MONTH SUMMARY */}
-        <section style={styles.card}>
-          <div style={styles.cardHeader}>
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              <div style={styles.cardTitle}>Ledger</div>
-              <div style={{ fontSize: 12, color: "rgba(15,23,42,.62)", fontWeight: 800, margin: "0 12px 10px" }}>
-                {ledgerRows.length} entries • Balance flow overview
+              <div style={styles.statCard}>
+                <div style={styles.statLabel}>Total Withdraw</div>
+                <div style={{ ...styles.statValue, color: "#ef4444" }}>
+                  {totals.withdraw || 0}
+                </div>
+              </div>
+
+              <div style={styles.statCard}>
+                <div style={styles.statLabel}>Net</div>
+                <div
+                  style={{
+                    ...styles.statValue,
+                    color: net >= 0 ? "#16a34a" : "#ef4444",
+                  }}
+                >
+                  {net}
+                </div>
               </div>
             </div>
 
-            <div style={styles.cardMeta}>
-              <input
-                style={{ ...styles.input, height: 38, width: 170, background: "rgba(255,255,255,.92)" }}
-                type="month"
-                value={month.slice(0, 7)}
-                onChange={(e) => setMonth(`${e.target.value}-01`)}
-              />
-            </div>
-          </div>
-
-          {/* mini stats */}
-          <div style={styles.statsRow}>
-            <div style={styles.statCard}>
-              <div style={styles.statLabel}>Total Deposit</div>
-              <div style={{ ...styles.statValue, color: "#16a34a" }}>{totals.deposit ? totals.deposit : 0}</div>
-            </div>
-            <div style={styles.statCard}>
-              <div style={styles.statLabel}>Total Withdraw</div>
-              <div style={{ ...styles.statValue, color: "#ef4444" }}>{totals.withdraw ? totals.withdraw : 0}</div>
-            </div>
-            <div style={styles.statCard}>
-              <div style={styles.statLabel}>Net</div>
-              <div style={{ ...styles.statValue, color: net >= 0 ? "#16a34a" : "#ef4444" }}>{net}</div>
-            </div>
-          </div>
-
-          <div style={styles.tableWrap}>
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>Time</th>
-                  <th style={styles.th}>Type</th>
-                  <th style={styles.th}>Amount</th>
-                  <th style={styles.th}>Balance</th>
-                  <th style={styles.th}>Note</th>
-                  <th style={styles.th}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ledgerRows.map((r) => {
-                  const isDep = String(r.txn_type).toUpperCase() === "DEPOSIT";
-                  return (
-                    <tr key={r.dipwid_id} style={styles.tr}>
-                      <td style={styles.td}>
-                        <div style={{ fontWeight: 950 }}>{fmtDateTime(r.txn_at)}</div>
-                        <div style={{ fontSize: 12, color: "rgba(100,116,139,.95)", fontWeight: 800 }}>
-                          #{r.dipwid_id}
-                        </div>
-                      </td>
-
-                      <td style={styles.td}>
-                        <span style={isDep ? styles.pillGreen : styles.pillRed}>{isDep ? "Deposit" : "Withdraw"}</span>
-                      </td>
-
-                      <td style={styles.td}>
-                        <span style={isDep ? styles.amountDeposit : styles.amountWithdraw}>{money(r.amount)}</span>
-                      </td>
-
-                      <td style={styles.td}>
-                        <span style={styles.pillNeutral}>{money(r.running_balance)}</span>
-                      </td>
-
-                      <td style={{ ...styles.td, maxWidth: 360 }}>
-                        <div style={styles.wrapText}>{r.note ? r.note : "-"}</div>
-                      </td>
-
-                      <td style={styles.td}>
-                        <Btn
-                          variant="danger"
-                          small
-                          onClick={() => onDelete(r.dipwid_id)}
-                          disabled={busy === `del-${r.dipwid_id}`}
-                        >
-                          {busy === `del-${r.dipwid_id}` ? "..." : "Delete"}
-                        </Btn>
-                      </td>
+            <div className="desktop-only">
+              <div style={styles.tableWrap} className="table-scroll">
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>Time</th>
+                      <th style={styles.th}>Type</th>
+                      <th style={styles.th}>Amount</th>
+                      <th style={styles.th}>Balance</th>
+                      <th style={styles.th}>Note</th>
+                      <th style={styles.th}>Action</th>
                     </tr>
+                  </thead>
+
+                  <tbody>
+                    {ledgerRows.map((r) => {
+                      const isDep =
+                        String(r.txn_type).toUpperCase() === "DEPOSIT";
+
+                      return (
+                        <tr key={r.dipwid_id} style={styles.tr}>
+                          <td style={styles.td}>
+                            <div style={styles.primaryCellText}>
+                              {fmtDateTime(r.txn_at)}
+                            </div>
+                            <div style={styles.secondaryCellText}>
+                              #{r.dipwid_id}
+                            </div>
+                          </td>
+
+                          <td style={styles.td}>
+                            <span style={isDep ? styles.pillGreen : styles.pillRed}>
+                              {isDep ? "Deposit" : "Withdraw"}
+                            </span>
+                          </td>
+
+                          <td style={styles.td}>
+                            <span
+                              style={
+                                isDep
+                                  ? styles.amountDeposit
+                                  : styles.amountWithdraw
+                              }
+                            >
+                              {money(r.amount)}
+                            </span>
+                          </td>
+
+                          <td style={styles.td}>
+                            <span style={styles.pillNeutral}>
+                              {money(r.running_balance)}
+                            </span>
+                          </td>
+
+                          <td style={{ ...styles.td, maxWidth: 340 }}>
+                            <div style={styles.wrapText}>
+                              {r.note ? r.note : "-"}
+                            </div>
+                          </td>
+
+                          <td style={styles.td}>
+                            <Btn
+                              variant="danger"
+                              small
+                              onClick={() => onDelete(r.dipwid_id)}
+                              disabled={busy === `del-${r.dipwid_id}`}
+                            >
+                              {busy === `del-${r.dipwid_id}` ? "..." : "Delete"}
+                            </Btn>
+                          </td>
+                        </tr>
+                      );
+                    })}
+
+                    {!loading && ledgerRows.length === 0 ? (
+                      <tr>
+                        <td style={styles.td} colSpan={6}>
+                          No entries found.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="mobile-only mobile-card-list" style={{ padding: 12 }}>
+              {ledgerRows.length === 0 && !loading ? (
+                <div style={styles.emptyCard}>No entries found.</div>
+              ) : (
+                ledgerRows.map((r) => {
+                  const isDep = String(r.txn_type).toUpperCase() === "DEPOSIT";
+
+                  return (
+                    <div key={r.dipwid_id} style={styles.mobileLedgerCard}>
+                      <div style={styles.mobileLedgerTop}>
+                        <div>
+                          <div style={styles.primaryCellText}>
+                            {fmtDateTime(r.txn_at)}
+                          </div>
+                          <div style={styles.secondaryCellText}>
+                            Entry #{r.dipwid_id}
+                          </div>
+                        </div>
+
+                        <span style={isDep ? styles.pillGreen : styles.pillRed}>
+                          {isDep ? "Deposit" : "Withdraw"}
+                        </span>
+                      </div>
+
+                      <div style={styles.mobileInfoGrid}>
+                        <div style={styles.infoItem}>
+                          <span style={styles.infoItemLabel}>Amount</span>
+                          <span
+                            style={
+                              isDep ? styles.amountDeposit : styles.amountWithdraw
+                            }
+                          >
+                            {money(r.amount)}
+                          </span>
+                        </div>
+
+                        <div style={styles.infoItem}>
+                          <span style={styles.infoItemLabel}>Balance</span>
+                          <span style={styles.pillNeutral}>
+                            {money(r.running_balance)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div style={styles.noteBox}>
+                        <div style={styles.infoItemLabel}>Note</div>
+                        <div style={styles.wrapText}>{r.note ? r.note : "-"}</div>
+                      </div>
+
+                      <Btn
+                        variant="danger"
+                        small
+                        onClick={() => onDelete(r.dipwid_id)}
+                        disabled={busy === `del-${r.dipwid_id}`}
+                        style={{ width: "100%" }}
+                        className="mobile-full-btn"
+                      >
+                        {busy === `del-${r.dipwid_id}` ? "Deleting..." : "Delete"}
+                      </Btn>
+                    </div>
                   );
-                })}
+                })
+              )}
+            </div>
 
-                {!loading && ledgerRows.length === 0 ? (
-                  <tr>
-                    <td style={styles.td} colSpan={6}>
-                      No entries found.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
+            <div style={{ height: 14 }} />
 
-          <div style={{ height: 14 }} />
+            <div style={styles.cardHeader}>
+              <div>
+                <div style={styles.cardTitle}>Monthly Summary</div>
+                <div style={styles.cardMeta}>Monthly deposit and withdrawal view</div>
+              </div>
+            </div>
 
-          <div style={styles.cardHeader}>
-            <div style={styles.cardTitle}>Monthly Summary</div>
-            <div style={styles.cardMeta} />
-          </div>
+            <div className="desktop-only">
+              <div style={styles.tableWrap} className="table-scroll">
+                <table style={{ ...styles.table, minWidth: 760 }}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>Month</th>
+                      <th style={styles.th}>Deposits</th>
+                      <th style={styles.th}>Withdrawals</th>
+                      <th style={styles.th}>Total Deposit</th>
+                      <th style={styles.th}>Total Withdraw</th>
+                    </tr>
+                  </thead>
 
-          <div style={styles.tableWrap}>
-            <table style={{ ...styles.table, minWidth: 760 }}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>Month</th>
-                  <th style={styles.th}>Deposits</th>
-                  <th style={styles.th}>Withdrawals</th>
-                  <th style={styles.th}>Total Deposit</th>
-                  <th style={styles.th}>Total Withdraw</th>
-                </tr>
-              </thead>
-              <tbody>
-                {monthSummaryRows.map((m, idx) => (
-                  <tr key={idx} style={styles.tr}>
-                    <td style={styles.td}>
-                      <b>{fmtMonth(m.month_start)}</b>
-                    </td>
-                    <td style={styles.td}>
-                      <span style={styles.pillNeutral}>{money(m.deposits_count)}</span>
-                    </td>
-                    <td style={styles.td}>
-                      <span style={styles.pillNeutral}>{money(m.withdrawals_count)}</span>
-                    </td>
-                    <td style={styles.td}>
-                      <span style={styles.amountDeposit}>{money(m.total_deposit)}</span>
-                    </td>
-                    <td style={styles.td}>
-                      <span style={styles.amountWithdraw}>{money(m.total_withdraw)}</span>
-                    </td>
-                  </tr>
-                ))}
+                  <tbody>
+                    {monthSummaryRows.map((m, idx) => (
+                      <tr key={idx} style={styles.tr}>
+                        <td style={styles.td}>
+                          <b>{fmtMonth(m.month_start)}</b>
+                        </td>
+                        <td style={styles.td}>
+                          <span style={styles.pillNeutral}>
+                            {money(m.deposits_count)}
+                          </span>
+                        </td>
+                        <td style={styles.td}>
+                          <span style={styles.pillNeutral}>
+                            {money(m.withdrawals_count)}
+                          </span>
+                        </td>
+                        <td style={styles.td}>
+                          <span style={styles.amountDeposit}>
+                            {money(m.total_deposit)}
+                          </span>
+                        </td>
+                        <td style={styles.td}>
+                          <span style={styles.amountWithdraw}>
+                            {money(m.total_withdraw)}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
 
-                {!loading && monthSummaryRows.length === 0 ? (
-                  <tr>
-                    <td style={styles.td} colSpan={5}>
-                      No summary found.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </section>
+                    {!loading && monthSummaryRows.length === 0 ? (
+                      <tr>
+                        <td style={styles.td} colSpan={5}>
+                          No summary found.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="mobile-only mobile-card-list" style={{ padding: 12 }}>
+              {monthSummaryRows.length === 0 && !loading ? (
+                <div style={styles.emptyCard}>No summary found.</div>
+              ) : (
+                monthSummaryRows.map((m, idx) => (
+                  <div key={idx} style={styles.mobileSummaryCard}>
+                    <div style={styles.mobileSummaryMonth}>
+                      {fmtMonth(m.month_start)}
+                    </div>
+
+                    <div style={styles.mobileInfoGrid}>
+                      <div style={styles.infoItem}>
+                        <span style={styles.infoItemLabel}>Deposits</span>
+                        <span style={styles.pillNeutral}>
+                          {money(m.deposits_count)}
+                        </span>
+                      </div>
+
+                      <div style={styles.infoItem}>
+                        <span style={styles.infoItemLabel}>Withdrawals</span>
+                        <span style={styles.pillNeutral}>
+                          {money(m.withdrawals_count)}
+                        </span>
+                      </div>
+
+                      <div style={styles.infoItem}>
+                        <span style={styles.infoItemLabel}>Total Deposit</span>
+                        <span style={styles.amountDeposit}>
+                          {money(m.total_deposit)}
+                        </span>
+                      </div>
+
+                      <div style={styles.infoItem}>
+                        <span style={styles.infoItemLabel}>Total Withdraw</span>
+                        <span style={styles.amountWithdraw}>
+                          {money(m.total_withdraw)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+        </div>
+
+        <div style={styles.bottomSafeSpace}></div>
       </div>
 
-      <div style={{ height: 90 }} />
-
-      {/* Center Modal (improved: center + maxHeight + scroll + footer visible) */}
       {modal.open ? (
-        <div style={styles.overlay} role="dialog" aria-modal="true">
-          <div style={styles.modal}>
+        <div style={styles.overlay} className="fade-in" role="dialog" aria-modal="true">
+          <div style={styles.modal} className="popup-mobile fade-up">
             <div style={styles.modalHead}>
+              <div
+                style={{
+                  ...styles.modalIcon,
+                  background:
+                    modal.type === "success"
+                      ? "linear-gradient(135deg, #16a34a, #22c55e)"
+                      : modal.type === "error"
+                      ? "linear-gradient(135deg, #ef4444, #dc2626)"
+                      : modal.type === "confirm"
+                      ? "linear-gradient(135deg, #f59e0b, #f97316)"
+                      : "linear-gradient(135deg, #6366f1, #7c3aed)",
+                }}
+              >
+                {modal.type === "success"
+                  ? "✓"
+                  : modal.type === "error"
+                  ? "!"
+                  : modal.type === "confirm"
+                  ? "?"
+                  : "i"}
+              </div>
+
               <h3 style={styles.modalTitle}>{modal.title}</h3>
               <button style={styles.xBtn} onClick={closeModal} aria-label="Close">
                 ×
@@ -689,7 +1087,7 @@ export default function Investment_dipwid() {
             <div style={styles.modalFoot}>
               {modal.type === "confirm" ? (
                 <>
-                  <Btn variant="ghost" onClick={closeModal}>
+                  <Btn variant="ghost" onClick={closeModal} style={{ flex: 1 }}>
                     {modal.cancelText}
                   </Btn>
                   <Btn
@@ -698,12 +1096,13 @@ export default function Investment_dipwid() {
                       if (typeof modal.onConfirm === "function") modal.onConfirm();
                       else closeModal();
                     }}
+                    style={{ flex: 1 }}
                   >
                     {modal.confirmText}
                   </Btn>
                 </>
               ) : (
-                <Btn variant="primary" onClick={closeModal}>
+                <Btn variant="primary" onClick={closeModal} style={{ width: "100%" }}>
                   {modal.confirmText}
                 </Btn>
               )}
@@ -715,290 +1114,539 @@ export default function Investment_dipwid() {
   );
 }
 
-// -------------------- Enhanced styles (new font + attractive look) --------------------
 const styles = {
-  css: `
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800;900&display=swap');
-
-    * { -webkit-tap-highlight-color: transparent; }
-  `,
-
   page: {
-    width: "100vw",
     minHeight: "100vh",
-    margin: 0,
-    padding: 0,
-    color: "#0f172a",
-    fontFamily: '"Plus Jakarta Sans", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
-    paddingBottom: 70,
-    boxSizing: "border-box",
+    width: "100%",
     background:
       "radial-gradient(900px 520px at 10% 10%, rgba(124,58,237,.14), transparent 60%), radial-gradient(900px 520px at 92% 12%, rgba(6,182,212,.12), transparent 60%), radial-gradient(900px 520px at 40% 96%, rgba(245,158,11,.12), transparent 60%), linear-gradient(135deg, #f6f8ff, #fff7f1)",
+    color: "#0f172a",
+    paddingBottom: "env(safe-area-inset-bottom)",
+  },
+
+  pageInner: {
+    width: "100%",
+    maxWidth: "1440px",
+    margin: "0 auto",
+    padding: "12px",
   },
 
   topbar: {
+    position: "sticky",
+    top: 0,
+    zIndex: 40,
     width: "100%",
-    borderBottom: "1px solid rgba(15,23,42,.10)",
+    borderBottom: "1px solid rgba(15,23,42,.08)",
     background: "rgba(255,255,255,.72)",
-    backdropFilter: "blur(14px)",
+    backdropFilter: "blur(16px)",
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
-    padding: "12px 12px",
-    position: "sticky",
-    top: 0,
-    zIndex: 5,
+    padding: "12px 14px",
   },
-  title: { margin: 0, fontSize: 16, fontWeight: 950, letterSpacing: 0.2 },
-  subtitle: { fontSize: 12, fontWeight: 800, color: "rgba(15,23,42,.62)" },
+
+  topbarLeft: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+    minWidth: 0,
+  },
+
+  topbarActions: {
+    display: "flex",
+    gap: 10,
+    alignItems: "center",
+    flexWrap: "wrap",
+  },
+
+  title: {
+    margin: 0,
+    fontSize: "18px",
+    fontWeight: 900,
+    letterSpacing: ".2px",
+    color: "#0f172a",
+  },
+
+  subtitle: {
+    fontSize: "12px",
+    fontWeight: 700,
+    color: "rgba(15,23,42,.62)",
+    lineHeight: 1.5,
+  },
 
   grid: (wide) => ({
     width: "100%",
     display: "grid",
-    gridTemplateColumns: wide ? "420px 1fr" : "1fr",
-    gap: 12,
-    padding: 12,
-    boxSizing: "border-box",
+    gridTemplateColumns: wide ? "400px 1fr" : "1fr",
+    gap: 14,
+    alignItems: "start",
   }),
 
   card: {
-    border: "1px solid rgba(15,23,42,.10)",
-    background: "rgba(255,255,255,.86)",
-    borderRadius: 18,
+    border: "1px solid rgba(15,23,42,.08)",
+    background: "rgba(255,255,255,.88)",
+    borderRadius: 22,
     overflow: "hidden",
-    boxShadow: "0 16px 38px rgba(15,23,42,0.10)",
+    boxShadow: "0 14px 36px rgba(15,23,42,0.08)",
   },
+
   cardHeader: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    borderBottom: "1px solid rgba(15,23,42,.10)",
-    background: "rgba(255,255,255,.74)",
+    gap: 10,
+    padding: "14px 16px",
+    borderBottom: "1px solid rgba(15,23,42,.08)",
+    background: "rgba(255,255,255,.64)",
   },
-  cardTitle: { margin: "12px 12px", fontSize: 14, fontWeight: 950 },
-  cardMeta: { margin: "10px 12px", fontSize: 12, color: "rgba(15,23,42,.62)", fontWeight: 800 },
 
-  form: { margin: "12px 12px 14px", display: "grid", gap: 10 },
-  row2: (wide) => ({ display: "grid", gridTemplateColumns: wide ? "1fr 1fr" : "1fr", gap: 10 }),
-  field: { display: "grid", gap: 6 },
-  label: { fontSize: 12, fontWeight: 950, color: "rgba(15,23,42,.62)" },
+  cardHeaderResponsive: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+    padding: "14px 16px",
+    borderBottom: "1px solid rgba(15,23,42,.08)",
+    background: "rgba(255,255,255,.64)",
+    flexWrap: "wrap",
+  },
+
+  cardTitle: {
+    fontSize: "15px",
+    fontWeight: 900,
+    color: "#0f172a",
+    marginBottom: 2,
+  },
+
+  cardMeta: {
+    fontSize: "12px",
+    color: "rgba(15,23,42,.62)",
+    fontWeight: 700,
+  },
+
+  monthInputWrap: {
+    minWidth: 160,
+  },
+
+  monthInput: {
+    width: "100%",
+    height: 40,
+    borderRadius: 12,
+    border: "1px solid rgba(15,23,42,.12)",
+    padding: "0 12px",
+    outline: "none",
+    background: "rgba(255,255,255,.94)",
+    fontSize: 13,
+    fontWeight: 700,
+    color: "#0f172a",
+  },
+
+  form: {
+    margin: "14px",
+    display: "grid",
+    gap: 12,
+  },
+
+  row2: (tabletUp) => ({
+    display: "grid",
+    gridTemplateColumns: tabletUp ? "1fr 1fr" : "1fr",
+    gap: 12,
+  }),
+
+  field: {
+    display: "grid",
+    gap: 6,
+  },
+
+  label: {
+    fontSize: 12,
+    fontWeight: 800,
+    color: "rgba(15,23,42,.70)",
+  },
 
   input: {
     height: 46,
     borderRadius: 14,
-    border: "1px solid rgba(15,23,42,.14)",
+    border: "1px solid rgba(15,23,42,.12)",
     padding: "0 12px",
     outline: "none",
-    background: "rgba(255,255,255,.94)",
+    background: "#fff",
     color: "#0f172a",
     fontSize: 14,
-    boxSizing: "border-box",
-    fontWeight: 800,
-    boxShadow: "0 10px 22px rgba(15,23,42,0.06)",
+    fontWeight: 700,
+    boxShadow: "0 8px 18px rgba(15,23,42,0.05)",
   },
+
   select: {
     height: 46,
     borderRadius: 14,
-    border: "1px solid rgba(15,23,42,.14)",
+    border: "1px solid rgba(15,23,42,.12)",
     padding: "0 12px",
     outline: "none",
-    background: "rgba(255,255,255,.94)",
+    background: "#fff",
     color: "#0f172a",
     fontSize: 14,
-    boxSizing: "border-box",
-    fontWeight: 800,
-    boxShadow: "0 10px 22px rgba(15,23,42,0.06)",
+    fontWeight: 700,
+    boxShadow: "0 8px 18px rgba(15,23,42,0.05)",
   },
+
   textarea: {
-    minHeight: 84,
+    minHeight: 94,
     borderRadius: 14,
-    border: "1px solid rgba(15,23,42,.14)",
+    border: "1px solid rgba(15,23,42,.12)",
     padding: "10px 12px",
     outline: "none",
-    background: "rgba(255,255,255,.94)",
+    background: "#fff",
     color: "#0f172a",
     fontSize: 14,
+    fontWeight: 700,
     resize: "vertical",
-    boxSizing: "border-box",
-    fontWeight: 800,
-    boxShadow: "0 10px 22px rgba(15,23,42,0.06)",
+    lineHeight: 1.5,
+    boxShadow: "0 8px 18px rgba(15,23,42,0.05)",
   },
 
-  hintBox: {
-    marginTop: 4,
-    borderRadius: 16,
-    border: "1px dashed rgba(124,58,237,.35)",
-    background: "linear-gradient(135deg, rgba(124,58,237,.10), rgba(6,182,212,.08))",
-    padding: 12,
+  btnRow: {
+    display: "flex",
+    gap: 10,
+    flexWrap: "wrap",
   },
 
-  btnRow: { display: "flex", gap: 10, flexWrap: "wrap" },
   btn: (variant, small) => ({
-    height: small ? 36 : 44,
+    height: small ? 36 : 46,
     padding: small ? "0 12px" : "0 16px",
     borderRadius: 14,
     border:
       variant === "primary"
         ? "1px solid rgba(15,23,42,.14)"
         : variant === "danger"
-        ? "1px solid rgba(185,28,28,.35)"
-        : "1px solid rgba(15,23,42,.14)",
+        ? "1px solid rgba(185,28,28,.30)"
+        : "1px solid rgba(15,23,42,.12)",
     background:
       variant === "primary"
-        ? "linear-gradient(135deg, #0f172a, #1f2937)"
+        ? "linear-gradient(135deg, #111827, #312e81)"
         : variant === "danger"
-        ? "linear-gradient(135deg, #991b1b, #ef4444)"
-        : "rgba(255,255,255,.92)",
-    color: variant === "primary" || variant === "danger" ? "#ffffff" : "#0f172a",
+        ? "linear-gradient(135deg, #b91c1c, #ef4444)"
+        : "linear-gradient(135deg, rgba(255,255,255,.94), rgba(248,250,252,.98))",
+    color: variant === "primary" || variant === "danger" ? "#fff" : "#0f172a",
     cursor: "pointer",
-    fontWeight: 950,
-    boxShadow: "0 14px 28px rgba(15,23,42,0.12)",
-    transition: "transform 0.06s ease, box-shadow 0.12s ease",
-    userSelect: "none",
+    fontWeight: 800,
+    fontSize: small ? 12 : 14,
+    boxShadow: "0 10px 22px rgba(15,23,42,0.10)",
     whiteSpace: "nowrap",
   }),
-  btnDisabled: { opacity: 0.6, cursor: "not-allowed", transform: "none", boxShadow: "none" },
+
+  btnDisabled: {
+    opacity: 0.65,
+    cursor: "not-allowed",
+    boxShadow: "none",
+  },
+
+  hintBox: {
+    marginTop: 2,
+    borderRadius: 16,
+    border: "1px dashed rgba(124,58,237,.28)",
+    background:
+      "linear-gradient(135deg, rgba(124,58,237,.08), rgba(6,182,212,.06), rgba(245,158,11,.06))",
+    padding: 12,
+  },
+
+  hintTitle: {
+    fontWeight: 900,
+    fontSize: 13,
+    marginBottom: 6,
+    color: "#312e81",
+  },
+
+  hintText: {
+    fontSize: 12,
+    lineHeight: 1.55,
+    color: "rgba(15,23,42,.76)",
+  },
 
   statsRow: {
     display: "grid",
     gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
     gap: 10,
-    padding: "12px 12px 0",
+    padding: "14px 14px 0",
   },
+
   statCard: {
     borderRadius: 16,
-    border: "1px solid rgba(15,23,42,.10)",
-    background: "rgba(255,255,255,.82)",
+    border: "1px solid rgba(15,23,42,.08)",
+    background: "rgba(255,255,255,.86)",
     padding: 12,
-    boxShadow: "0 12px 28px rgba(15,23,42,0.08)",
+    boxShadow: "0 8px 20px rgba(15,23,42,0.05)",
   },
-  statLabel: { fontSize: 12, fontWeight: 950, color: "rgba(15,23,42,.60)" },
-  statValue: { fontSize: 16, fontWeight: 1000, marginTop: 4 },
 
-  tableWrap: { width: "100%", overflowX: "auto" },
-  table: { width: "100%", borderCollapse: "collapse", minWidth: 980 },
+  statLabel: {
+    fontSize: 12,
+    fontWeight: 800,
+    color: "rgba(15,23,42,.60)",
+  },
+
+  statValue: {
+    fontSize: 18,
+    fontWeight: 900,
+    marginTop: 6,
+  },
+
+  tableWrap: {
+    width: "100%",
+    overflowX: "auto",
+  },
+
+  table: {
+    width: "100%",
+    minWidth: 980,
+    borderCollapse: "collapse",
+  },
+
   th: {
     textAlign: "left",
     fontSize: 12,
-    color: "rgba(15,23,42,.62)",
-    borderBottom: "1px solid rgba(15,23,42,.10)",
-    padding: "10px 12px",
-    background: "rgba(248,250,252,.90)",
-    position: "sticky",
-    top: 0,
-    zIndex: 1,
+    color: "rgba(15,23,42,.64)",
+    borderBottom: "1px solid rgba(15,23,42,.08)",
+    padding: "12px 14px",
+    background: "rgba(248,250,252,.94)",
     whiteSpace: "nowrap",
-    fontWeight: 950,
-  },
-  td: {
-    borderBottom: "1px solid rgba(241,245,249,0.9)",
-    padding: "10px 12px",
-    fontSize: 13,
-    verticalAlign: "top",
     fontWeight: 800,
   },
+
+  td: {
+    borderBottom: "1px solid rgba(226,232,240,.85)",
+    padding: "12px 14px",
+    fontSize: 13,
+    verticalAlign: "top",
+    fontWeight: 700,
+    color: "#0f172a",
+  },
+
   tr: {
     transition: "background 120ms ease",
+  },
+
+  primaryCellText: {
+    fontWeight: 800,
+    color: "#0f172a",
+    lineHeight: 1.4,
+  },
+
+  secondaryCellText: {
+    fontSize: 12,
+    color: "#64748b",
+    fontWeight: 700,
+    marginTop: 4,
   },
 
   wrapText: {
     whiteSpace: "normal",
     wordBreak: "break-word",
-    lineHeight: 1.25,
-    color: "rgba(15,23,42,.86)",
+    lineHeight: 1.45,
+    color: "rgba(15,23,42,.82)",
   },
 
-  amountDeposit: { fontWeight: 1000, color: "#16a34a" },
-  amountWithdraw: { fontWeight: 1000, color: "#ef4444" },
+  amountDeposit: {
+    fontWeight: 900,
+    color: "#16a34a",
+  },
+
+  amountWithdraw: {
+    fontWeight: 900,
+    color: "#ef4444",
+  },
 
   pillGreen: {
-    display: "inline-block",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
     padding: "5px 10px",
     borderRadius: 999,
     border: "1px solid rgba(34,197,94,.22)",
     background: "rgba(34,197,94,.10)",
     color: "#166534",
     fontSize: 12,
-    fontWeight: 950,
+    fontWeight: 800,
   },
+
   pillRed: {
-    display: "inline-block",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
     padding: "5px 10px",
     borderRadius: 999,
-    border: "1px solid rgba(244,63,94,.25)",
+    border: "1px solid rgba(244,63,94,.22)",
     background: "rgba(244,63,94,.10)",
     color: "#9f1239",
     fontSize: 12,
-    fontWeight: 950,
+    fontWeight: 800,
   },
+
   pillNeutral: {
-    display: "inline-block",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
     padding: "5px 10px",
     borderRadius: 999,
-    border: "1px solid rgba(15,23,42,.12)",
-    background: "rgba(248,250,252,.92)",
-    color: "#0f172a",
+    border: "1px solid rgba(15,23,42,.10)",
+    background: "rgba(241,245,249,.90)",
+    color: "#334155",
     fontSize: 12,
-    fontWeight: 950,
+    fontWeight: 800,
+  },
+
+  mobileLedgerCard: {
+    background: "rgba(255,255,255,.92)",
+    border: "1px solid rgba(15,23,42,.08)",
+    borderRadius: 18,
+    padding: 12,
+    boxShadow: "0 10px 24px rgba(15,23,42,0.06)",
+  },
+
+  mobileLedgerTop: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 10,
+    marginBottom: 12,
+  },
+
+  mobileInfoGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 10,
+    marginBottom: 12,
+  },
+
+  infoItem: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+    background: "#f8fafc",
+    border: "1px solid rgba(15,23,42,.06)",
+    borderRadius: 12,
+    padding: 10,
+  },
+
+  infoItemLabel: {
+    fontSize: 11,
+    fontWeight: 800,
+    color: "#64748b",
+  },
+
+  noteBox: {
+    marginBottom: 12,
+    background: "#f8fafc",
+    border: "1px solid rgba(15,23,42,.06)",
+    borderRadius: 12,
+    padding: 10,
+  },
+
+  mobileSummaryCard: {
+    background: "rgba(255,255,255,.92)",
+    border: "1px solid rgba(15,23,42,.08)",
+    borderRadius: 18,
+    padding: 12,
+    boxShadow: "0 10px 24px rgba(15,23,42,0.06)",
+  },
+
+  mobileSummaryMonth: {
+    fontSize: 15,
+    fontWeight: 900,
+    color: "#0f172a",
+    marginBottom: 10,
+  },
+
+  emptyCard: {
+    background: "rgba(255,255,255,.92)",
+    border: "1px solid rgba(15,23,42,.08)",
+    borderRadius: 16,
+    padding: 18,
+    textAlign: "center",
+    color: "#64748b",
+    fontWeight: 700,
+  },
+
+  bottomSafeSpace: {
+    width: "100%",
+    height: 110,
+    flexShrink: 0,
   },
 
   overlay: {
     position: "fixed",
     inset: 0,
-    background: "rgba(15,23,42,0.42)",
+    background: "rgba(15,23,42,.44)",
+    backdropFilter: "blur(5px)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    padding: 12,
-    zIndex: 50,
-    overflow: "auto",
-    WebkitOverflowScrolling: "touch",
+    padding: 14,
+    zIndex: 9999,
   },
+
   modal: {
-    width: "min(92vw, 460px)",
-    maxHeight: "92vh",
+    width: "100%",
+    maxWidth: 390,
     background: "#ffffff",
-    borderRadius: 18,
-    border: "1px solid rgba(15,23,42,.12)",
-    boxShadow: "0 22px 60px rgba(0,0,0,0.30)",
-    overflow: "hidden",
-    display: "flex",
-    flexDirection: "column",
+    borderRadius: 22,
+    padding: 18,
+    boxShadow: "0 20px 44px rgba(15,23,42,.20)",
+    border: "1px solid rgba(15,23,42,.08)",
   },
+
   modalHead: {
-    padding: "12px 14px",
-    borderBottom: "1px solid rgba(15,23,42,.10)",
+    position: "relative",
+    textAlign: "center",
+    paddingTop: 4,
+  },
+
+  modalIcon: {
+    width: 58,
+    height: 58,
+    borderRadius: "50%",
+    margin: "0 auto 12px auto",
     display: "flex",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-    background: "rgba(255,255,255,.92)",
+    justifyContent: "center",
+    color: "#fff",
+    fontWeight: 900,
+    fontSize: 24,
   },
-  modalTitle: { margin: 0, fontSize: 14, fontWeight: 1000, color: "#0f172a" },
-  modalBody: { padding: "12px 14px", fontSize: 13, color: "#0f172a", overflow: "auto", fontWeight: 850 },
+
+  modalTitle: {
+    margin: 0,
+    fontSize: 20,
+    fontWeight: 900,
+    color: "#0f172a",
+  },
+
+  xBtn: {
+    position: "absolute",
+    right: -2,
+    top: -4,
+    border: "none",
+    background: "transparent",
+    fontSize: 24,
+    color: "#64748b",
+    cursor: "pointer",
+    lineHeight: 1,
+  },
+
+  modalBody: {
+    marginTop: 12,
+    textAlign: "center",
+    color: "#64748b",
+    fontSize: 14,
+    lineHeight: 1.6,
+    fontWeight: 600,
+  },
+
   modalFoot: {
-    padding: "12px 14px",
-    borderTop: "1px solid rgba(15,23,42,.10)",
     display: "flex",
     gap: 10,
-    justifyContent: "flex-end",
+    justifyContent: "center",
     flexWrap: "wrap",
-    background: "rgba(255,255,255,.94)",
-    position: "sticky",
-    bottom: 0,
-    paddingBottom: "calc(12px + env(safe-area-inset-bottom, 0px))",
-  },
-  xBtn: {
-    border: "1px solid rgba(15,23,42,.12)",
-    background: "rgba(255,255,255,.92)",
-    borderRadius: 12,
-    height: 36,
-    width: 36,
-    cursor: "pointer",
-    fontWeight: 1000,
-    lineHeight: "34px",
-    userSelect: "none",
-    boxShadow: "0 10px 22px rgba(15,23,42,0.08)",
+    marginTop: 18,
   },
 };
