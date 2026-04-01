@@ -12,6 +12,11 @@ export default function InwardGet({ refreshToken = 0 }) {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const getCurrentYM = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  };
+
   const formatDDMMYYYY = (iso) => {
     const s = String(iso || "").slice(0, 10);
     if (!s || s.length !== 10) return s || "";
@@ -28,12 +33,9 @@ export default function InwardGet({ refreshToken = 0 }) {
     return `${names[monthIdx]} ${y}`;
   };
 
-  // ✅ Single date input (not applied until Apply click)
   const [selectedDate, setSelectedDate] = useState("");
-  const [appliedDate, setAppliedDate] = useState(""); // when applied, this controls filtering
-
-  // ✅ Month selection for PDF (default: latest month on screen)
-  const [selectedMonthYM, setSelectedMonthYM] = useState(""); // "YYYY-MM"
+  const [appliedDate, setAppliedDate] = useState("");
+  const [selectedMonthYM, setSelectedMonthYM] = useState(getCurrentYM());
 
   const getMonthRange = (ym) => {
     const [yStr, mStr] = String(ym || "").split("-");
@@ -49,7 +51,6 @@ export default function InwardGet({ refreshToken = 0 }) {
 
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState([]);
-
   const [overlay, setOverlay] = useState({ open: false, text: "Please wait..." });
 
   const [dlg, setDlg] = useState({
@@ -86,7 +87,6 @@ export default function InwardGet({ refreshToken = 0 }) {
     title: "",
   });
 
-  // ✅ make relative file_url absolute
   const computeFileUrl = (it) => {
     const f = it?.file_url || "";
     if (f) {
@@ -132,19 +132,10 @@ export default function InwardGet({ refreshToken = 0 }) {
     return out;
   };
 
-  // ✅ abortable fetch
   const abortRef = useRef(null);
 
-  const buildListUrl = (dateISO) => {
-    const qs = new URLSearchParams();
-    if (dateISO) {
-      qs.set("from", dateISO);
-      qs.set("to", dateISO);
-    }
-    return qs.toString() ? `${LIST_API}?${qs.toString()}` : LIST_API;
-  };
+  const buildListUrl = () => LIST_API;
 
-  // ✅ SAFE JSON (handles HTML / empty too)
   const safeReadJson = async (resp) => {
     const ct = resp.headers.get("content-type") || "";
     if (ct.includes("application/json")) {
@@ -154,17 +145,17 @@ export default function InwardGet({ refreshToken = 0 }) {
     return { success: false, message: txt ? String(txt).slice(0, 300) : "Server Error" };
   };
 
-  const fetchList = async ({ dateISO = "" } = {}) => {
+  const fetchList = async () => {
     try {
       if (abortRef.current) abortRef.current.abort();
     } catch {}
+
     const controller = new AbortController();
     abortRef.current = controller;
-
     setLoading(true);
 
     try {
-      const url = buildListUrl(dateISO);
+      const url = buildListUrl();
       const r = await fetch(url, { signal: controller.signal });
       const data = await safeReadJson(r);
 
@@ -208,40 +199,35 @@ export default function InwardGet({ refreshToken = 0 }) {
     }
   };
 
-  // ✅ FIRST LOAD
   useEffect(() => {
-    fetchList({ dateISO: "" });
+    fetchList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ✅ refreshToken change => refresh with currently applied filter
   const firstTokenSkip = useRef(true);
   useEffect(() => {
     if (firstTokenSkip.current) {
       firstTokenSkip.current = false;
       return;
     }
-    fetchList({ dateISO: appliedDate || "" });
+    fetchList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshToken]);
 
-  // ✅ when coming back from update page => refresh
   useEffect(() => {
     if (location?.state?.refresh === true) {
       if (typeof location?.state?.date === "string") {
         setSelectedDate(location.state.date);
         setAppliedDate(location.state.date);
-        fetchList({ dateISO: location.state.date });
-      } else {
-        fetchList({ dateISO: appliedDate || "" });
+        setSelectedMonthYM(String(location.state.date).slice(0, 7));
       }
+      fetchList();
       navigate(location.pathname, { replace: true, state: {} });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location?.state]);
 
   const downloadPdf = () => {
-    // ✅ ONLY selected month PDF
     const ym = selectedMonthYM;
     if (!ym) {
       openDlg({ type: "info", title: "Select Month", message: "Please select a month to download PDF." });
@@ -290,7 +276,6 @@ export default function InwardGet({ refreshToken = 0 }) {
     });
   };
 
-  // ✅ Delete popup OK/Cancel FIX
   const confirmDelete = (inwardId, displaySeq) => {
     openDlg({
       type: "error",
@@ -313,17 +298,16 @@ export default function InwardGet({ refreshToken = 0 }) {
           if (r.ok && data?.success) {
             setRows((prev) => prev.filter((x) => String(x.inward_id) !== String(inwardId)));
             openDlg({ type: "success", title: "Deleted", message: `Sr.No ${displaySeq} deleted successfully.` });
-            // ✅ optional refresh for safety
-            fetchList({ dateISO: appliedDate || "" });
+            fetchList();
             return;
           }
 
           openDlg({ type: "error", title: "Failed", message: data?.message || "Delete failed." });
-          fetchList({ dateISO: appliedDate || "" });
+          fetchList();
         } catch {
           setOverlay({ open: false, text: "Please wait..." });
           openDlg({ type: "error", title: "Network Error", message: "Server not reachable." });
-          fetchList({ dateISO: appliedDate || "" });
+          fetchList();
         }
       },
     });
@@ -331,14 +315,24 @@ export default function InwardGet({ refreshToken = 0 }) {
 
   const applyDate = () => {
     const d = String(selectedDate || "").slice(0, 10);
+    if (!d) {
+      openDlg({ type: "info", title: "Select Date", message: "Please select a date first." });
+      return;
+    }
     setAppliedDate(d);
-    fetchList({ dateISO: d });
+    setSelectedMonthYM(d.slice(0, 7));
   };
 
   const clearDate = () => {
     setSelectedDate("");
     setAppliedDate("");
-    fetchList({ dateISO: "" });
+    setSelectedMonthYM(getCurrentYM());
+  };
+
+  const onChangeMonth = (ym) => {
+    setSelectedMonthYM(ym);
+    setAppliedDate("");
+    setSelectedDate("");
   };
 
   const setRipplePoint = (e) => {
@@ -359,18 +353,43 @@ export default function InwardGet({ refreshToken = 0 }) {
     if (e.target === e.currentTarget) fn();
   };
 
-  // ✅ IMPORTANT: DO NOT use onClickCapture
   const stopAll = (e) => {
     e.stopPropagation();
   };
 
+  const monthOptions = useMemo(() => {
+    const set = new Set();
+    rows.forEach((r) => {
+      const ym = String(r.work_date || "").slice(0, 7);
+      if (ym) set.add(ym);
+    });
+    set.add(getCurrentYM());
+    return Array.from(set).sort((a, b) => b.localeCompare(a));
+  }, [rows]);
+
+  useEffect(() => {
+    if (!selectedMonthYM && monthOptions.length > 0) {
+      setSelectedMonthYM(getCurrentYM());
+      return;
+    }
+
+    if (selectedMonthYM && !monthOptions.includes(selectedMonthYM)) {
+      setSelectedMonthYM(monthOptions[0] || getCurrentYM());
+    }
+  }, [monthOptions, selectedMonthYM]);
+
   const filteredRows = useMemo(() => {
-    if (!appliedDate) return rows;
-    return rows.filter((r) => String(r.work_date || "").slice(0, 10) === appliedDate);
-  }, [rows, appliedDate]);
+    if (appliedDate) {
+      return rows.filter((r) => String(r.work_date || "").slice(0, 10) === appliedDate);
+    }
+
+    const activeYM = selectedMonthYM || getCurrentYM();
+    return rows.filter((r) => String(r.work_date || "").slice(0, 7) === activeYM);
+  }, [rows, appliedDate, selectedMonthYM]);
 
   const groupedByMonth = useMemo(() => {
     const headerMap = new Map();
+
     for (const r of filteredRows) {
       if (!headerMap.has(r.inward_id)) {
         headerMap.set(r.inward_id, {
@@ -390,11 +409,15 @@ export default function InwardGet({ refreshToken = 0 }) {
       const dateISO = String(h.work_date || "").slice(0, 10);
       const ym = dateISO.slice(0, 7);
 
-      if (!monthMap.has(ym)) monthMap.set(ym, { ym, datesMap: new Map(), entriesFlat: [] });
+      if (!monthMap.has(ym)) {
+        monthMap.set(ym, { ym, datesMap: new Map(), entriesFlat: [] });
+      }
 
       monthMap.get(ym).entriesFlat.push(h);
 
-      if (!monthMap.get(ym).datesMap.has(dateISO)) monthMap.get(ym).datesMap.set(dateISO, { dateISO, entries: [] });
+      if (!monthMap.get(ym).datesMap.has(dateISO)) {
+        monthMap.get(ym).datesMap.set(dateISO, { dateISO, entries: [] });
+      }
       monthMap.get(ym).datesMap.get(dateISO).entries.push(h);
     }
 
@@ -411,7 +434,9 @@ export default function InwardGet({ refreshToken = 0 }) {
       const seqMap = new Map();
       m.entriesFlat.forEach((e, idx) => seqMap.set(e.inward_id, idx + 1));
 
-      const dateCards = Array.from(m.datesMap.values()).sort((a, b) => String(b.dateISO).localeCompare(String(a.dateISO)));
+      const dateCards = Array.from(m.datesMap.values()).sort((a, b) =>
+        String(b.dateISO).localeCompare(String(a.dateISO))
+      );
 
       for (const d of dateCards) {
         d.entries = d.entries
@@ -430,32 +455,24 @@ export default function InwardGet({ refreshToken = 0 }) {
     return months;
   }, [filteredRows]);
 
-  // ✅ month options for dropdown
-  const monthOptions = useMemo(() => groupedByMonth.map((m) => m.ym), [groupedByMonth]);
-
-  // ✅ default month select: latest month
-  useEffect(() => {
-    if (!selectedMonthYM && monthOptions.length > 0) {
-      setSelectedMonthYM(monthOptions[0]);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [monthOptions]);
+  const activeHeading = appliedDate
+    ? `Showing: ${formatDDMMYYYY(appliedDate)}`
+    : `Showing: ${formatMonthTitle(selectedMonthYM || getCurrentYM())}`;
 
   return (
     <div className="igPage">
       <div className="igTopbar">
-        <div>
+        <div className="igTopbarInfo">
           <div className="igTopbar__title">Inward List</div>
-          {appliedDate ? <div className="igTopbar__sub">Showing: {formatDDMMYYYY(appliedDate)}</div> : null}
+          <div className="igTopbar__sub">{activeHeading}</div>
         </div>
 
         <div className="igTopbarActions">
-          {/* ✅ Month dropdown near Download (full page same, only added small control) */}
           <select
             className="igMonthSelect"
             value={selectedMonthYM}
-            onChange={(e) => setSelectedMonthYM(e.target.value)}
-            title="Select month for PDF"
+            onChange={(e) => onChangeMonth(e.target.value)}
+            title="Select month"
           >
             {monthOptions.length === 0 ? <option value="">No months</option> : null}
             {monthOptions.map((ym) => (
@@ -465,10 +482,22 @@ export default function InwardGet({ refreshToken = 0 }) {
             ))}
           </select>
 
-          <button type="button" className="igBtn igBtn--outline igRipple" onPointerDown={setRipplePoint} onClick={() => fetchList({ dateISO: appliedDate || "" })}>
+          <button
+            type="button"
+            className="igBtn igBtn--outline igRipple"
+            onPointerDown={setRipplePoint}
+            onClick={fetchList}
+          >
             Refresh
           </button>
-          <button type="button" className="igBtn igBtn--primary igRipple" onPointerDown={setRipplePoint} onClick={downloadPdf} disabled={!selectedMonthYM}>
+
+          <button
+            type="button"
+            className="igBtn igBtn--primary igRipple"
+            onPointerDown={setRipplePoint}
+            onClick={downloadPdf}
+            disabled={!selectedMonthYM}
+          >
             Download PDF
           </button>
         </div>
@@ -507,9 +536,9 @@ export default function InwardGet({ refreshToken = 0 }) {
         <div className="igEmpty">
           <div className="igEmptyCard">
             <div className="igEmptyTitle">No inward records</div>
-            <div className="igEmptySub">Try a different date or clear filter.</div>
+            <div className="igEmptySub">Try a different month or date filter.</div>
             <div className="igEmptyActions">
-              <button type="button" className="igBtn igBtn--dark igRipple" onPointerDown={setRipplePoint} onClick={() => fetchList({ dateISO: appliedDate || "" })}>
+              <button type="button" className="igBtn igBtn--dark igRipple" onPointerDown={setRipplePoint} onClick={fetchList}>
                 Refresh
               </button>
               <button type="button" className="igBtn igBtn--ghost igRipple" onPointerDown={setRipplePoint} onClick={clearDate}>
@@ -558,10 +587,20 @@ export default function InwardGet({ refreshToken = 0 }) {
                           </div>
 
                           <div className="igHeadRight">
-                            <button type="button" className="igBtn igBtn--outline igRipple" onPointerDown={setRipplePoint} onClick={() => goUpdatePage(g.inward_id, g.display_seq)}>
+                            <button
+                              type="button"
+                              className="igBtn igBtn--outline igRipple"
+                              onPointerDown={setRipplePoint}
+                              onClick={() => goUpdatePage(g.inward_id, g.display_seq)}
+                            >
                               Update
                             </button>
-                            <button type="button" className="igBtn igBtn--danger igRipple" onPointerDown={setRipplePoint} onClick={() => confirmDelete(g.inward_id, g.display_seq)}>
+                            <button
+                              type="button"
+                              className="igBtn igBtn--danger igRipple"
+                              onPointerDown={setRipplePoint}
+                              onClick={() => confirmDelete(g.inward_id, g.display_seq)}
+                            >
                               Delete
                             </button>
                           </div>
@@ -604,7 +643,12 @@ export default function InwardGet({ refreshToken = 0 }) {
                                   </td>
 
                                   <td className="igBillCell">
-                                    <button type="button" className="igBtn igBtn--small igBtn--sky igRipple" onPointerDown={setRipplePoint} onClick={() => openImage(r, g.display_seq)}>
+                                    <button
+                                      type="button"
+                                      className="igBtn igBtn--small igBtn--sky igRipple"
+                                      onPointerDown={setRipplePoint}
+                                      onClick={() => openImage(r, g.display_seq)}
+                                    >
                                       View
                                     </button>
                                   </td>
@@ -615,10 +659,20 @@ export default function InwardGet({ refreshToken = 0 }) {
                         </div>
 
                         <div className="igMobileActions">
-                          <button type="button" className="igBtn igBtn--outline igBtnTiny igRipple" onPointerDown={setRipplePoint} onClick={() => goUpdatePage(g.inward_id, g.display_seq)}>
+                          <button
+                            type="button"
+                            className="igBtn igBtn--outline igBtnTiny igRipple"
+                            onPointerDown={setRipplePoint}
+                            onClick={() => goUpdatePage(g.inward_id, g.display_seq)}
+                          >
                             Update
                           </button>
-                          <button type="button" className="igBtn igBtn--danger igBtnTiny igRipple" onPointerDown={setRipplePoint} onClick={() => confirmDelete(g.inward_id, g.display_seq)}>
+                          <button
+                            type="button"
+                            className="igBtn igBtn--danger igBtnTiny igRipple"
+                            onPointerDown={setRipplePoint}
+                            onClick={() => confirmDelete(g.inward_id, g.display_seq)}
+                          >
                             Delete
                           </button>
                         </div>
@@ -645,7 +699,6 @@ export default function InwardGet({ refreshToken = 0 }) {
 
         {dlg.open && (
           <div className="igDlgOverlay" role="dialog" aria-modal="true" onClick={(e) => closeIfBackdropClick(e, closeDlg)}>
-            {/* ✅ FIX: onClick (NOT onClickCapture) */}
             <div className="igDlg igDlgScrollable" onClick={stopAll}>
               <div className={`igDlgTop igDlgTop--${dlg.type}`}>
                 <div className="igDlgTitle">{dlg.title}</div>
@@ -688,7 +741,6 @@ export default function InwardGet({ refreshToken = 0 }) {
 
         {imageViewer.open && (
           <div className="igImgOverlay" role="dialog" aria-modal="true" onClick={(e) => closeIfBackdropClick(e, closeImage)}>
-            {/* ✅ FIX: onClick (NOT onClickCapture) */}
             <div className="igImgModal igImgModalSafe" onClick={stopAll}>
               <div className="igImgTop">
                 <div className="igImgTitle">{imageViewer.title}</div>
@@ -715,8 +767,6 @@ export default function InwardGet({ refreshToken = 0 }) {
 }
 
 const css = `
-// ✅ तुझं CSS जसं आहे तसंच ठेव (same)
-
 :root{
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -736,7 +786,6 @@ const css = `
   overflow-x:hidden;
 }
 
-/* ✅ BIG SCREEN: remove outside spaces (full page) */
 .igTopbar{
   width:100%;
   margin:0;
@@ -751,24 +800,35 @@ const css = `
   align-items:flex-start;
   box-shadow:0 14px 40px rgba(11,18,32,0.14);
 }
+.igTopbarInfo{
+  min-width:0;
+  flex:1 1 auto;
+}
 .igTopbar__title{font-size:18px;font-weight:900;letter-spacing:0.2px;}
-.igTopbar__sub{margin-top:4px;font-size:12px;font-weight:800;opacity:.85;}
-.igTopbarActions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;align-items:center;}
+.igTopbar__sub{margin-top:4px;font-size:12px;font-weight:800;opacity:.85;line-height:1.4;}
+.igTopbarActions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+  align-items:center;
+}
 
-/* ✅ month select (added) */
 .igMonthSelect{
   height:36px;
-  padding:8px 10px;
+  min-width:135px;
+  max-width:180px;
+  padding:7px 10px;
   border-radius:12px;
   border:1px solid rgba(255,255,255,0.25);
   background:rgba(255,255,255,0.10);
   color:#fff;
   font-weight:900;
+  font-size:13px;
   outline:none;
 }
 .igMonthSelect option{color:#0b1220;}
 
-/* filter */
 .igFilters{
   width:100%;
   margin:0;
@@ -796,17 +856,18 @@ const css = `
   outline:none;
   background:#fff;
 }
-.igFilterBtns{display:flex;gap:10px;flex-wrap:wrap;}
+.igFilterBtns{display:flex;gap:8px;flex-wrap:wrap;}
 
-/* buttons */
 .igBtn{
   border:0;border-radius:12px;
-  padding:9px 11px;
+  padding:8px 11px;
+  min-height:36px;
   font-weight:900;cursor:pointer;font-size:13px;line-height:1;
   transition:transform .08s ease, filter .15s ease, opacity .2s ease, box-shadow .15s ease;
   user-select:none;position:relative;overflow:hidden;
   touch-action:manipulation;
   -webkit-tap-highlight-color: transparent;
+  white-space:nowrap;
 }
 .igBtn:hover{filter:brightness(0.98);}
 .igBtn:active{transform:scale(0.98);filter:brightness(0.96);}
@@ -820,10 +881,9 @@ const css = `
 .igBtn--ghost{background:rgba(11,18,32,0.08);color:#0b1220;border:1px solid rgba(11,18,32,0.06);}
 .igBtn--emerald{background:rgba(16,185,129,0.16);color:#065f46;border:1px solid rgba(16,185,129,0.20);}
 .igBtn--sky{background:rgba(37,99,235,0.12);color:#1d4ed8;border:1px solid rgba(37,99,235,0.18);}
-.igBtn--small{padding:7px 10px;font-size:12px;border-radius:10px;}
-.igBtnTiny{padding:8px 10px;font-size:13px;border-radius:12px;}
+.igBtn--small{padding:6px 9px;font-size:11.5px;border-radius:10px;min-height:30px;}
+.igBtnTiny{padding:7px 9px;font-size:12px;border-radius:11px;min-height:32px;}
 
-/* ripple */
 .igRipple::after{
   content:"";
   position:absolute;inset:0;
@@ -832,13 +892,11 @@ const css = `
 }
 .igRipple:active::after{opacity:1;}
 
-/* center */
 .igCenterPad{padding:28px;text-align:center;}
 .igMuted{font-size:12px;color:#6b7280;}
 .igMiniLoader{width:34px;height:34px;border-radius:999px;border:4px solid rgba(11,18,32,0.15);border-top-color:#0b1220;animation:igSpin 0.9s linear infinite;margin:0 auto 10px;}
 @keyframes igSpin{to{transform:rotate(360deg);}}
 
-/* empty */
 .igEmpty{padding:14px 16px 18px;display:flex;justify-content:center;}
 .igEmptyCard{
   width:100%;
@@ -853,7 +911,6 @@ const css = `
 .igEmptySub{margin-top:6px;font-size:12px;color:#6b7280;line-height:1.4;}
 .igEmptyActions{margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;}
 
-/* list */
 .igList{
   padding:12px 16px 16px;
   display:flex;
@@ -904,7 +961,7 @@ const css = `
 .igDateLine{display:flex;align-items:center;gap:8px;}
 .igDateDot{width:10px;height:10px;border-radius:999px;background:rgba(16,185,129,0.25);border:2px solid rgba(16,185,129,0.45);}
 .igDateText{font-weight:900;color:#0b1220;font-size:13px;}
-.igHeadRight{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;}
+.igHeadRight{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;}
 
 .igTableWrap{
   width:100%;
@@ -941,32 +998,190 @@ const css = `
   word-break:break-word;
 }
 
-.igMobileActions{display:none;padding:12px;gap:10px;background:#fff;justify-content:flex-end;border-top:1px solid rgba(0,0,0,0.06);}
+.igMobileActions{display:none;padding:10px 12px;gap:8px;background:#fff;justify-content:flex-end;border-top:1px solid rgba(0,0,0,0.06);}
 
-@media (max-width: 720px){
-  .igList{
-    padding-left:  calc(20px + var(--safe-left));
-    padding-right: calc(20px + var(--safe-right));
+@media (max-width: 900px){
+  .igTopbar{
+    padding:12px 14px;
+    gap:10px;
+    flex-direction:column;
+    align-items:stretch;
   }
 
-  .igTopbar{padding-left: calc(12px + var(--safe-left)); padding-right: calc(12px + var(--safe-right));}
-  .igFilters{padding-left: calc(12px + var(--safe-left)); padding-right: calc(12px + var(--safe-right));}
-  .igList{padding-left: calc(12px + var(--safe-left)); padding-right: calc(12px + var(--safe-right));}
+  .igTopbarActions{
+    width:100%;
+    justify-content:flex-start;
+  }
 
-  .igHeadRight{display:none;}
-  .igMobileActions{display:flex;}
+  .igMonthSelect{
+    min-width:120px;
+    max-width:150px;
+    height:34px;
+    padding:6px 8px;
+    font-size:12px;
+    border-radius:10px;
+  }
 
-  .igField{flex:1 1 100%;}
-  .igField input{width:100%;}
+  .igBtn{
+    min-height:34px;
+    padding:7px 10px;
+    font-size:12px;
+    border-radius:10px;
+  }
 
-  .igBtn{padding:8px 10px;font-size:12px;border-radius:11px;}
-  .igBtn--small{padding:6px 9px;font-size:11.5px;border-radius:10px;}
-  .igBtnTiny{padding:7px 9px;font-size:12px;border-radius:11px;}
+  .igFilters{
+    padding:10px 14px;
+    gap:8px;
+  }
 
-  .igMonthSelect{width:100%; height:40px;}
+  .igField input{
+    width:190px;
+    padding:9px 10px;
+    font-size:13px;
+    border-radius:10px;
+  }
+
+  .igFilterBtns{
+    gap:8px;
+  }
+
+  .igHeadRight{
+    gap:8px;
+  }
 }
 
-/* overlays */
+@media (max-width: 720px){
+  .igTopbar{
+    padding-left: calc(12px + var(--safe-left));
+    padding-right: calc(12px + var(--safe-right));
+  }
+
+  .igFilters{
+    padding-left: calc(12px + var(--safe-left));
+    padding-right: calc(12px + var(--safe-right));
+  }
+
+  .igList{
+    padding-left: calc(12px + var(--safe-left));
+    padding-right: calc(12px + var(--safe-right));
+  }
+
+  .igTopbar__title{
+    font-size:16px;
+  }
+
+  .igTopbar__sub{
+    font-size:11px;
+  }
+
+  .igTopbarActions{
+    display:grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap:6px;
+    align-items:center;
+  }
+
+  .igMonthSelect{
+    width:100%;
+    max-width:none;
+    min-width:0;
+    height:32px;
+    padding:5px 8px;
+    font-size:11.5px;
+    border-radius:9px;
+  }
+
+  .igField{
+    flex:1 1 100%;
+  }
+
+  .igField input{
+    width:100%;
+    height:36px;
+    padding:8px 10px;
+    font-size:13px;
+    border-radius:10px;
+  }
+
+  .igFilterBtns{
+    width:100%;
+    gap:6px;
+  }
+
+  .igBtn{
+    min-height:32px;
+    padding:6px 8px;
+    font-size:11.5px;
+    border-radius:9px;
+  }
+
+  .igBtn--small{
+    padding:5px 8px;
+    font-size:10.5px;
+    border-radius:8px;
+    min-height:28px;
+  }
+
+  .igBtnTiny{
+    padding:6px 8px;
+    font-size:11px;
+    border-radius:9px;
+    min-height:30px;
+  }
+
+  .igHeadRight{
+    display:none;
+  }
+
+  .igMobileActions{
+    display:flex;
+  }
+
+  .igMonthHeader{
+    padding:10px 12px;
+    border-radius:14px;
+  }
+
+  .igMonthTitle{
+    font-size:14px;
+  }
+
+  .igMonthCount{
+    font-size:11px;
+  }
+
+  .igDateHeader{
+    padding:10px 12px;
+    border-radius:14px;
+  }
+
+  .igDateHeaderValue{
+    font-size:15px;
+  }
+
+  .igDateHeaderCount{
+    font-size:11px;
+  }
+
+  .igCard{
+    border-radius:16px;
+  }
+
+  .igCardHead{
+    padding:12px;
+  }
+
+  .igPill,
+  .igStorePill{
+    padding:5px 8px;
+    font-size:11px;
+  }
+
+  .igDateText{
+    font-size:12px;
+  }
+}
+
 .igOverlay{position:fixed; inset:0; z-index:999999; background:rgba(0,0,0,0.45); display:flex; justify-content:center; overflow:auto; -webkit-overflow-scrolling:touch;}
 .igDlgOverlay{position:fixed; inset:0; z-index:999999; background:rgba(0,0,0,0.55); display:flex; justify-content:center; overflow:auto; -webkit-overflow-scrolling:touch;}
 .igImgOverlay{position:fixed; inset:0; z-index:999999; background:rgba(0,0,0,0.72); display:flex; justify-content:center; overflow:auto; -webkit-overflow-scrolling:touch;}
@@ -991,7 +1206,6 @@ const css = `
 .igOverlayText{font-weight:900;color:#0b1220;font-size:16px;text-align:center;}
 .igOverlaySub{font-size:12px;color:#6b7280;text-align:center;}
 
-/* dialogs */
 .igDlg{width:100%;max-width:520px;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.25);}
 .igDlgScrollable{max-height: calc(100svh - 32px);display:flex;flex-direction:column;}
 @media (max-width: 768px){
@@ -1009,7 +1223,6 @@ const css = `
 .igDlgMsg{margin:0;white-space:pre-wrap;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;font-size:14px;color:#111827;line-height:1.4;}
 .igDlgActions{padding:12px 16px 16px;display:flex;justify-content:flex-end;gap:10px;background:#fff;border-top:1px solid rgba(0,0,0,0.06);}
 
-/* viewer */
 .igImgModalSafe{max-height:calc(100svh - 32px);display:flex;flex-direction:column;}
 @media (max-width: 768px){
   .igImgModalSafe{

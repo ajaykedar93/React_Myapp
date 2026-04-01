@@ -1,15 +1,6 @@
 // src/pages/investment/Investment_Overall.jsx
 import React, { useEffect, useMemo, useState } from "react";
 
-/**
- * ✅ API (base url localhost:5000)
- * - Current month (default):  http://localhost:5000/api/investment/trading/month-stats
- * - Specific month:           http://localhost:5000/api/investment/trading/month-stats?month=YYYY-MM-01
- *
- * NOTE: auth middleware => expects Authorization: Bearer <token>
- * (this component reads token from localStorage: "token")
- */
-
 const BASE_URL = "https://express-backend-myapp.onrender.com";
 const API_URL = `${BASE_URL}/api/investment/trading/month-stats`;
 
@@ -39,7 +30,9 @@ function buildRecentMonths(count = 24) {
 function formatMoney(n) {
   const num = Number(n || 0);
   try {
-    return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(num);
+    return new Intl.NumberFormat(undefined, {
+      maximumFractionDigits: 0,
+    }).format(num);
   } catch {
     return String(num);
   }
@@ -82,6 +75,7 @@ export default function Investment_Overall() {
       });
 
       const json = await resp.json().catch(() => ({}));
+
       if (!resp.ok) {
         const msg =
           json?.message ||
@@ -109,384 +103,543 @@ export default function Investment_Overall() {
   const totalBrokerage = Number(data?.total_brokerage ?? 0);
   const totalDeposit = Number(data?.total_deposit ?? 0);
 
-  // ✅ required calc: total_profit - (total_loss + total_brokerage)
-  const pnl = Number(data?.overall_month_pnl ?? totalProfit - (totalLoss + totalBrokerage));
+  const pnl = Number(
+    data?.overall_month_pnl ?? totalProfit - (totalLoss + totalBrokerage)
+  );
 
   const status = statusFromPnl(pnl);
 
-  // responsive
-  const [isDesktop, setIsDesktop] = useState(() =>
-    typeof window !== "undefined" ? window.innerWidth >= 980 : true
-  );
+  const [screen, setScreen] = useState(() => {
+    if (typeof window === "undefined") {
+      return { isMobile: false, isTablet: false, isDesktop: true };
+    }
+    const w = window.innerWidth;
+    return {
+      isMobile: w <= 640,
+      isTablet: w > 640 && w < 1024,
+      isDesktop: w >= 1024,
+    };
+  });
+
   useEffect(() => {
     function onResize() {
-      setIsDesktop(window.innerWidth >= 980);
+      const w = window.innerWidth;
+      setScreen({
+        isMobile: w <= 640,
+        isTablet: w > 640 && w < 1024,
+        isDesktop: w >= 1024,
+      });
     }
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // Bright professional theme (no dark/black)
+  const { isMobile, isTablet, isDesktop } = screen;
+
   const theme = {
-    bg1: "#F6F8FF",
-    bg2: "#FFF7F1",
-    card: "rgba(255,255,255,0.82)",
-    card2: "rgba(255,255,255,0.70)",
-    border: "rgba(15, 23, 42, 0.10)",
-    text: "rgba(15, 23, 42, 0.92)",
-    muted: "rgba(15, 23, 42, 0.62)",
+    bg1: "#F8FAFF",
+    bg2: "#FFF8F2",
+    bg3: "#F6FFFB",
+    card: "rgba(255,255,255,0.90)",
+    cardSoft: "rgba(255,255,255,0.76)",
+    border: "rgba(15,23,42,0.08)",
+    text: "#0F172A",
+    muted: "rgba(15,23,42,0.62)",
     good: "#16A34A",
     bad: "#E11D48",
     ok: "#2563EB",
     accent1: "#7C3AED",
     accent2: "#06B6D4",
     accent3: "#F59E0B",
+    shadow: "0 18px 40px rgba(15,23,42,0.08)",
   };
 
-  const page = {
-    minHeight: "100vh",
-    width: "100%",
-    margin: 0,
-    padding: 0,
-    color: theme.text,
-    background: `
-      radial-gradient(900px 520px at 8% 10%, rgba(124,58,237,.14), transparent 60%),
-      radial-gradient(900px 520px at 92% 18%, rgba(6,182,212,.14), transparent 60%),
-      radial-gradient(900px 520px at 40% 92%, rgba(245,158,11,.12), transparent 60%),
-      linear-gradient(135deg, ${theme.bg1}, ${theme.bg2})
-    `,
-  };
+  const statusColor =
+    status.tone === "good" ? theme.good : status.tone === "bad" ? theme.bad : theme.ok;
 
-  const topBar = {
-    width: "100%",
-    position: "sticky",
-    top: 0,
-    zIndex: 20,
-    background: "rgba(255,255,255,0.72)",
-    backdropFilter: "blur(14px)",
-    borderBottom: `1px solid ${theme.border}`,
-  };
+  const styles = {
+    page: {
+      minHeight: "100vh",
+      width: "100%",
+      background: `
+        radial-gradient(900px 450px at 5% 8%, rgba(124,58,237,.10), transparent 60%),
+        radial-gradient(900px 450px at 95% 10%, rgba(6,182,212,.10), transparent 60%),
+        radial-gradient(900px 450px at 50% 100%, rgba(245,158,11,.08), transparent 60%),
+        linear-gradient(135deg, ${theme.bg1}, ${theme.bg2}, ${theme.bg3})
+      `,
+      color: theme.text,
+      padding: 0,
+      margin: 0,
+    },
 
-  const topInner = {
-    display: "flex",
-    alignItems: isDesktop ? "center" : "flex-start",
-    justifyContent: "space-between",
-    gap: 12,
-    padding: isDesktop ? "16px 16px" : "14px 12px",
-    width: "100%",
-    flexDirection: isDesktop ? "row" : "column",
-  };
+    container: {
+      width: "100%",
+      maxWidth: "1600px",
+      margin: "0 auto",
+      padding: isDesktop ? "18px 18px 24px" : isTablet ? "16px 14px 22px" : "12px 10px 18px",
+      boxSizing: "border-box",
+    },
 
-  const titleWrap = {
-    display: "flex",
-    flexDirection: "column",
-    gap: 3,
-    width: "100%",
-  };
-
-  const h1 = {
-    margin: 0,
-    fontSize: isDesktop ? 18 : 16,
-    fontWeight: 950,
-    letterSpacing: 0.2,
-  };
-
-  const sub = { margin: 0, fontSize: 12.5, color: theme.muted, fontWeight: 700 };
-
-  const select = {
-    width: isDesktop ? 260 : "100%",
-    maxWidth: "100%",
-    borderRadius: 14,
-    padding: "12px 12px",
-    border: `1px solid ${theme.border}`,
-    background: theme.card,
-    color: theme.text,
-    outline: "none",
-    fontWeight: 900,
-  };
-
-  const wrap = { width: "100%", padding: isDesktop ? "14px 16px 18px" : "12px 12px 16px" };
-
-  const grid = {
-    display: "grid",
-    gridTemplateColumns: "repeat(12, 1fr)",
-    gap: 12,
-    width: "100%",
-  };
-
-  const card = (spanDesktop, spanMobile = 12) => ({
-    gridColumn: `span ${isDesktop ? spanDesktop : spanMobile}`,
-    borderRadius: 20,
-    border: `1px solid ${theme.border}`,
-    background: theme.card,
-    boxShadow: "0 14px 34px rgba(15, 23, 42, 0.08)",
-    overflow: "hidden",
-  });
-
-  const cardHead = {
-    padding: "14px 14px 10px",
-    borderBottom: `1px solid ${theme.border}`,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  };
-
-  const cardTitle = { margin: 0, fontSize: 12.5, fontWeight: 950, color: theme.muted, letterSpacing: 0.4 };
-
-  const pill = (tone) => {
-    const map = {
-      good: { bg: "rgba(22,163,74,0.10)", fg: theme.good },
-      bad: { bg: "rgba(225,29,72,0.10)", fg: theme.bad },
-      ok: { bg: "rgba(37,99,235,0.10)", fg: theme.ok },
-    };
-    const c = map[tone] || map.ok;
-    return {
-      display: "inline-flex",
-      alignItems: "center",
-      gap: 8,
-      padding: "8px 10px",
-      borderRadius: 999,
+    headingCard: {
+      width: "100%",
+      borderRadius: isMobile ? 18 : 22,
       border: `1px solid ${theme.border}`,
-      background: c.bg,
-      color: c.fg,
-      fontWeight: 950,
+      background: theme.card,
+      backdropFilter: "blur(12px)",
+      boxShadow: theme.shadow,
+      overflow: "hidden",
+      marginBottom: 14,
+    },
+
+    headingInner: {
+      padding: isDesktop ? 20 : isTablet ? 18 : 14,
+      display: "flex",
+      flexDirection: "column",
+      gap: 14,
+    },
+
+    title: {
+      margin: 0,
+      fontSize: isDesktop ? 24 : isTablet ? 21 : 18,
+      fontWeight: 900,
+      lineHeight: 1.2,
+      letterSpacing: 0.2,
+    },
+
+    subtitle: {
+      margin: 0,
+      fontSize: isDesktop ? 13.5 : 12.5,
+      color: theme.muted,
+      fontWeight: 700,
+      lineHeight: 1.45,
+    },
+
+    monthRow: {
+      display: "flex",
+      justifyContent: "flex-start",
+      alignItems: "center",
+      width: "100%",
+    },
+
+    monthControlWrap: {
+      width: isMobile ? "170px" : isTablet ? "220px" : "260px",
+      maxWidth: "100%",
+    },
+
+    monthLabelText: {
+      marginBottom: 6,
+      fontSize: 11.5,
+      color: theme.muted,
+      fontWeight: 800,
+    },
+
+    select: {
+      width: "100%",
+      height: isMobile ? 40 : 46,
+      borderRadius: 14,
+      border: `1px solid ${theme.border}`,
+      background: "#FFFFFF",
+      color: theme.text,
+      outline: "none",
+      padding: isMobile ? "0 10px" : "0 12px",
+      fontSize: isMobile ? 12.5 : 14,
+      fontWeight: 800,
+      boxSizing: "border-box",
+      cursor: "pointer",
+      boxShadow: "0 6px 16px rgba(15,23,42,0.04)",
+    },
+
+    stateBox: {
+      borderRadius: 16,
+      border: `1px solid ${theme.border}`,
+      padding: "12px 14px",
+      marginBottom: 12,
+      fontWeight: 800,
+      fontSize: 13,
+      background: "rgba(255,255,255,0.72)",
+    },
+
+    grid: {
+      display: "grid",
+      gridTemplateColumns: isDesktop ? "repeat(12, minmax(0, 1fr))" : "1fr",
+      gap: 14,
+      width: "100%",
+    },
+
+    card: (span = 12) => ({
+      gridColumn: isDesktop ? `span ${span}` : "span 12",
+      borderRadius: isMobile ? 18 : 22,
+      border: `1px solid ${theme.border}`,
+      background: theme.card,
+      boxShadow: theme.shadow,
+      overflow: "hidden",
+      minWidth: 0,
+    }),
+
+    cardHead: {
+      padding: isMobile ? "13px 14px 10px" : "15px 16px 12px",
+      borderBottom: `1px solid ${theme.border}`,
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: isMobile ? "flex-start" : "center",
+      gap: 10,
+      flexDirection: isMobile ? "column" : "row",
+    },
+
+    cardTitle: {
+      margin: 0,
       fontSize: 12.5,
-      whiteSpace: "nowrap",
-    };
+      color: theme.muted,
+      fontWeight: 900,
+      letterSpacing: 0.4,
+    },
+
+    cardBody: {
+      padding: isMobile ? 14 : 16,
+    },
+
+    pill: (tone) => {
+      const map = {
+        good: { bg: "rgba(22,163,74,0.10)", fg: theme.good },
+        bad: { bg: "rgba(225,29,72,0.10)", fg: theme.bad },
+        ok: { bg: "rgba(37,99,235,0.10)", fg: theme.ok },
+      };
+      const c = map[tone] || map.ok;
+
+      return {
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "8px 11px",
+        borderRadius: 999,
+        border: `1px solid ${theme.border}`,
+        background: c.bg,
+        color: c.fg,
+        fontWeight: 900,
+        fontSize: 12,
+        whiteSpace: "nowrap",
+      };
+    },
+
+    dot: (color) => ({
+      width: 8,
+      height: 8,
+      borderRadius: 999,
+      background: color,
+      display: "inline-block",
+      flexShrink: 0,
+    }),
+
+    bigPnl: {
+      margin: 0,
+      fontSize: isDesktop ? 42 : isTablet ? 36 : 30,
+      lineHeight: 1.1,
+      fontWeight: 1000,
+      color: statusColor,
+      wordBreak: "break-word",
+    },
+
+    metaRow: {
+      marginTop: 10,
+      display: "grid",
+      gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
+      gap: 8,
+      fontSize: 13,
+      color: theme.muted,
+      fontWeight: 700,
+    },
+
+    metaItem: {
+      padding: "10px 12px",
+      borderRadius: 14,
+      background: theme.cardSoft,
+      border: `1px solid ${theme.border}`,
+    },
+
+    // IMPORTANT: profit and loss side by side on mobile also
+    profitLossGrid: {
+      display: "grid",
+      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+      gap: 12,
+      marginTop: 14,
+    },
+
+    // brokerage stays below full width
+    brokerageGrid: {
+      display: "grid",
+      gridTemplateColumns: "1fr",
+      gap: 12,
+      marginTop: 12,
+    },
+
+    tile: {
+      borderRadius: 18,
+      border: `1px solid ${theme.border}`,
+      background: theme.cardSoft,
+      padding: isMobile ? 12 : 14,
+      minHeight: isMobile ? 84 : 92,
+      display: "flex",
+      flexDirection: "column",
+      justifyContent: "center",
+      boxSizing: "border-box",
+      minWidth: 0,
+    },
+
+    highlightTile: (type) => ({
+      borderRadius: 20,
+      border: `1px solid ${theme.border}`,
+      background:
+        type === "profit"
+          ? "linear-gradient(135deg, rgba(22,163,74,0.10), rgba(255,255,255,0.88))"
+          : "linear-gradient(135deg, rgba(225,29,72,0.10), rgba(255,255,255,0.88))",
+      padding: isMobile ? 12 : 16,
+      minHeight: isMobile ? 96 : 112,
+      display: "flex",
+      flexDirection: "column",
+      justifyContent: "center",
+      boxSizing: "border-box",
+      minWidth: 0,
+      boxShadow: "0 10px 24px rgba(15,23,42,0.05)",
+    }),
+
+    tileLabel: {
+      margin: 0,
+      fontSize: isMobile ? 11.5 : 12.5,
+      color: theme.muted,
+      fontWeight: 900,
+      lineHeight: 1.35,
+    },
+
+    tileVal: {
+      margin: "7px 0 0 0",
+      fontSize: isDesktop ? 24 : isTablet ? 22 : 18,
+      fontWeight: 1000,
+      lineHeight: 1.15,
+      wordBreak: "break-word",
+    },
+
+    bigTileVal: {
+      margin: "8px 0 0 0",
+      fontSize: isDesktop ? 28 : isTablet ? 24 : 18,
+      fontWeight: 1000,
+      lineHeight: 1.1,
+      wordBreak: "break-word",
+    },
+
+    statementBox: {
+      marginTop: 14,
+      borderRadius: 18,
+      border: `1px solid ${theme.border}`,
+      background:
+        "linear-gradient(135deg, rgba(124,58,237,0.08), rgba(6,182,212,0.05))",
+      padding: isMobile ? 12 : 14,
+      fontSize: 13,
+      lineHeight: 1.6,
+      fontWeight: 800,
+    },
+
+    formulaBox: {
+      borderRadius: 18,
+      border: `1px solid ${theme.border}`,
+      background: "rgba(255,255,255,0.68)",
+      padding: isMobile ? 12 : 14,
+      fontSize: 13,
+      lineHeight: 1.6,
+      fontWeight: 800,
+    },
+
+    formulaTitle: {
+      color: theme.muted,
+      fontWeight: 900,
+      fontSize: 12.5,
+      marginBottom: 8,
+    },
+
+    line: {
+      height: 1,
+      background: theme.border,
+      margin: "8px 0",
+    },
+
+    rowBetween: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      gap: 10,
+      marginBottom: 6,
+      flexWrap: "wrap",
+    },
+
+    summaryGrid: {
+      display: "grid",
+      gridTemplateColumns: isDesktop
+        ? "repeat(4, minmax(0, 1fr))"
+        : isTablet
+        ? "repeat(2, minmax(0, 1fr))"
+        : "repeat(2, minmax(0, 1fr))",
+      gap: 12,
+    },
+
+    bottomText: {
+      marginTop: 12,
+      color: theme.muted,
+      fontSize: 12.5,
+      fontWeight: 800,
+    },
+
+    tipBox: {
+      borderRadius: 18,
+      border: `1px solid ${theme.border}`,
+      background:
+        "linear-gradient(135deg, rgba(22,163,74,0.07), rgba(245,158,11,0.06))",
+      padding: isMobile ? 12 : 14,
+      fontWeight: 800,
+      color: theme.text,
+      lineHeight: 1.55,
+      fontSize: 13,
+    },
   };
-
-  const dot = (color) => ({
-    width: 8,
-    height: 8,
-    borderRadius: 999,
-    background: color,
-    display: "inline-block",
-  });
-
-  const body = { padding: "14px" };
-
-  const big = (color) => ({
-    margin: 0,
-    fontSize: isDesktop ? 34 : 30,
-    fontWeight: 1000,
-    color,
-    letterSpacing: 0.2,
-    lineHeight: 1.1,
-  });
-
-  const metaRow = {
-    marginTop: 8,
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 10,
-    flexWrap: "wrap",
-    color: theme.muted,
-    fontSize: 12.5,
-    fontWeight: 800,
-  };
-
-  const kpiGrid = {
-    display: "grid",
-    gridTemplateColumns: isDesktop ? "repeat(3, 1fr)" : "repeat(2, 1fr)",
-    gap: 10,
-    marginTop: 12,
-  };
-
-  const tile = {
-    borderRadius: 18,
-    border: `1px solid ${theme.border}`,
-    background: theme.card2,
-    padding: "12px",
-    minHeight: 88,
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-  };
-
-  const tileLabel = { margin: 0, fontSize: 12.5, fontWeight: 950, color: theme.muted };
-  const tileVal = { margin: "6px 0 0 0", fontSize: 20, fontWeight: 1000, letterSpacing: 0.2 };
-
-  const statementBox = {
-    borderRadius: 18,
-    border: `1px solid ${theme.border}`,
-    background: "linear-gradient(135deg, rgba(124,58,237,0.08), rgba(6,182,212,0.06))",
-    padding: 12,
-    marginTop: 12,
-    color: theme.text,
-    fontWeight: 900,
-    lineHeight: 1.45,
-    fontSize: 13,
-  };
-
-  const statusColor = status.tone === "good" ? theme.good : status.tone === "bad" ? theme.bad : theme.ok;
 
   return (
-    <div style={page}>
-      {/* Top */}
-      <div style={topBar}>
-        <div style={topInner}>
-          <div style={titleWrap}>
-            <h1 style={h1}>Overall Report</h1>
-            <p style={sub}>Select month to see trades, totals and monthly P&amp;L</p>
-          </div>
+    <div style={styles.page}>
+      <div style={styles.container}>
+        <div style={styles.headingCard}>
+          <div style={styles.headingInner}>
+            <div>
+              <h1 style={styles.title}>Investment Overall Report</h1>
+              <p style={styles.subtitle}>
+               Month Overall Report
+              </p>
+            </div>
 
-          <select
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value)}
-            style={select}
-            aria-label="Select month"
-          >
-            {monthOptions.map((m) => (
-              <option key={m} value={m}>
-                {monthLabel(m)}
-              </option>
-            ))}
-          </select>
+            <div style={styles.monthRow}>
+              <div style={styles.monthControlWrap}>
+                <div style={styles.monthLabelText}>Select Month</div>
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  style={styles.select}
+                  aria-label="Select month"
+                >
+                  {monthOptions.map((m) => (
+                    <option key={m} value={m}>
+                      {monthLabel(m)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <div style={wrap}>
-        {/* loading / error */}
         {loading ? (
-          <div
-            style={{
-              borderRadius: 16,
-              border: `1px solid ${theme.border}`,
-              background: "rgba(255,255,255,0.70)",
-              padding: 12,
-              fontWeight: 950,
-              color: theme.muted,
-              marginBottom: 12,
-            }}
-          >
-            Loading report…
-          </div>
+          <div style={{ ...styles.stateBox, color: theme.muted }}>Loading report...</div>
         ) : error ? (
           <div
             style={{
-              borderRadius: 16,
-              border: `1px solid ${theme.border}`,
-              background: "rgba(225,29,72,0.08)",
-              padding: 12,
-              fontWeight: 950,
+              ...styles.stateBox,
               color: theme.bad,
-              marginBottom: 12,
+              background: "rgba(225,29,72,0.08)",
             }}
           >
             {error}
           </div>
         ) : null}
 
-        <div style={grid}>
-          {/* MAIN PNL */}
-          <div style={card(7, 12)}>
-            <div style={cardHead}>
-              <p style={cardTitle}>MONTHLY OVERALL P&amp;L</p>
-              <div style={pill(status.tone)}>
-                <span style={dot(statusColor)} />
+        <div style={styles.grid}>
+          {/* LEFT MAIN CARD */}
+          <div style={styles.card(7)}>
+            <div style={styles.cardHead}>
+              <p style={styles.cardTitle}>MONTHLY OVERALL P&amp;L</p>
+              <div style={styles.pill(status.tone)}>
+                <span style={styles.dot(statusColor)} />
                 {status.label}
               </div>
             </div>
 
-            <div style={body}>
-              <p style={big(statusColor)}>{formatSigned(pnl)}</p>
+            <div style={styles.cardBody}>
+              <p style={styles.bigPnl}>{formatSigned(pnl)}</p>
 
-              <div style={metaRow}>
-                <span>
+              <div style={styles.metaRow}>
+                <div style={styles.metaItem}>
                   Month: <span style={{ color: theme.text }}>{monthLabel(selectedMonth)}</span>
-                </span>
-                <span>
+                </div>
+                <div style={styles.metaItem}>
                   Total Trades: <span style={{ color: theme.text }}>{totalTrades}</span>
-                </span>
-              </div>
-
-              <div style={kpiGrid}>
-                <div style={tile}>
-                  <p style={tileLabel}>Total Profit</p>
-                  <p style={{ ...tileVal, color: theme.good }}>{formatMoney(totalProfit)}</p>
-                </div>
-
-                <div style={tile}>
-                  <p style={tileLabel}>Total Loss</p>
-                  <p style={{ ...tileVal, color: theme.bad }}>{formatMoney(totalLoss)}</p>
-                </div>
-
-                <div style={tile}>
-                  <p style={tileLabel}>Total Brokerage</p>
-                  <p style={tileVal}>{formatMoney(totalBrokerage)}</p>
                 </div>
               </div>
 
-              <div style={statementBox}>
+              {/* PROFIT + LOSS SIDE BY SIDE */}
+              <div style={styles.profitLossGrid}>
+                <div style={styles.highlightTile("profit")}>
+                  <p style={styles.tileLabel}>Total Profit</p>
+                  <p style={{ ...styles.bigTileVal, color: theme.good }}>
+                    {formatMoney(totalProfit)}
+                  </p>
+                </div>
+
+                <div style={styles.highlightTile("loss")}>
+                  <p style={styles.tileLabel}>Total Loss</p>
+                  <p style={{ ...styles.bigTileVal, color: theme.bad }}>
+                    {formatMoney(totalLoss)}
+                  </p>
+                </div>
+              </div>
+
+              {/* BROKERAGE BELOW */}
+              <div style={styles.brokerageGrid}>
+                <div style={styles.tile}>
+                  <p style={styles.tileLabel}>Total Brokerage</p>
+                  <p style={{ ...styles.tileVal, color: theme.text }}>
+                    {formatMoney(totalBrokerage)}
+                  </p>
+                </div>
+              </div>
+
+              <div style={styles.statementBox}>
                 {pnl > 0 ? (
                   <>
                     Your month is in <span style={{ color: theme.good }}>profit</span> of{" "}
-                    <span style={{ color: theme.good }}>{formatMoney(pnl)}</span>. Keep following your
-                    rules and continue the same discipline.
+                    <span style={{ color: theme.good }}>{formatMoney(pnl)}</span>. Continue
+                    disciplined trading and maintain strong risk management.
                   </>
                 ) : pnl < 0 ? (
                   <>
                     Your month is in <span style={{ color: theme.bad }}>loss</span> of{" "}
-                    <span style={{ color: theme.bad }}>{formatMoney(Math.abs(pnl))}</span>. Reduce risk,
-                    avoid overtrading, and improve entry &amp; exit logic.
+                    <span style={{ color: theme.bad }}>{formatMoney(Math.abs(pnl))}</span>.
+                    Focus on reducing unnecessary trades and improving entries and exits.
                   </>
                 ) : (
                   <>
-                    Your month is <span style={{ color: theme.ok }}>breakeven</span>. Focus on consistent
-                    setups and keep brokerage under control.
+                    Your month is at <span style={{ color: theme.ok }}>breakeven</span>.
+                    Improve trade selection and keep execution consistent.
                   </>
                 )}
               </div>
             </div>
           </div>
 
-          {/* DEPOSIT + FORMULA */}
-          <div style={card(5, 12)}>
-            <div style={cardHead}>
-              <p style={cardTitle}>CAPITAL &amp; CALCULATION</p>
-              <div
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: "8px 10px",
-                  borderRadius: 999,
-                  border: `1px solid ${theme.border}`,
-                  background: "rgba(37,99,235,0.08)",
-                  color: theme.ok,
-                  fontWeight: 950,
-                  fontSize: 12.5,
-                }}
-              >
-                <span style={dot(theme.ok)} />
+          {/* RIGHT CARD */}
+          <div style={styles.card(5)}>
+            <div style={styles.cardHead}>
+              <p style={styles.cardTitle}>CAPITAL &amp; CALCULATION</p>
+              <div style={styles.pill("ok")}>
+                <span style={styles.dot(theme.ok)} />
                 Summary
               </div>
             </div>
 
-            <div style={body}>
-              <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "1fr" : "1fr", gap: 10 }}>
-                <div style={tile}>
-                  <p style={tileLabel}>Total Deposit (This Month)</p>
-                  <p style={{ ...tileVal, color: theme.ok }}>{formatMoney(totalDeposit)}</p>
+            <div style={styles.cardBody}>
+              <div style={{ display: "grid", gap: 12 }}>
+                <div style={styles.tile}>
+                  <p style={styles.tileLabel}>Total Deposit (This Month)</p>
+                  <p style={{ ...styles.tileVal, color: theme.ok }}>
+                    {formatMoney(totalDeposit)}
+                  </p>
                 </div>
 
-                <div
-                  style={{
-                    borderRadius: 18,
-                    border: `1px solid ${theme.border}`,
-                    background: "rgba(255,255,255,0.62)",
-                    padding: 12,
-                    color: theme.text,
-                    fontWeight: 900,
-                    fontSize: 13,
-                    lineHeight: 1.55,
-                  }}
-                >
-                  <div style={{ color: theme.muted, fontWeight: 950, fontSize: 12.5, marginBottom: 8 }}>
-                    Formula used
-                  </div>
+                <div style={styles.formulaBox}>
+                  <div style={styles.formulaTitle}>Formula used</div>
 
                   <div>
                     <span style={{ color: theme.muted }}>Overall P&amp;L</span> ={" "}
@@ -495,94 +648,85 @@ export default function Investment_Overall() {
                     </span>
                   </div>
 
-                  <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                  <div style={{ marginTop: 10 }}>
+                    <div style={styles.rowBetween}>
                       <span style={{ color: theme.muted }}>Total Profit</span>
                       <b style={{ color: theme.good }}>{formatMoney(totalProfit)}</b>
                     </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+
+                    <div style={styles.rowBetween}>
                       <span style={{ color: theme.muted }}>Total Loss</span>
                       <b style={{ color: theme.bad }}>{formatMoney(totalLoss)}</b>
                     </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+
+                    <div style={styles.rowBetween}>
                       <span style={{ color: theme.muted }}>Total Brokerage</span>
                       <b style={{ color: theme.text }}>{formatMoney(totalBrokerage)}</b>
                     </div>
 
-                    <div style={{ height: 1, background: theme.border, margin: "6px 0" }} />
+                    <div style={styles.line} />
 
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                      <span style={{ color: theme.muted, fontWeight: 1000 }}>Result</span>
+                    <div style={styles.rowBetween}>
+                      <span style={{ color: theme.muted, fontWeight: 900 }}>Result</span>
                       <b style={{ color: statusColor, fontSize: 16 }}>{formatSigned(pnl)}</b>
                     </div>
                   </div>
                 </div>
 
-                <div
-                  style={{
-                    borderRadius: 18,
-                    border: `1px solid ${theme.border}`,
-                    background: "linear-gradient(135deg, rgba(22,163,74,0.07), rgba(245,158,11,0.06))",
-                    padding: 12,
-                    fontWeight: 900,
-                    color: theme.text,
-                    lineHeight: 1.45,
-                    fontSize: 13,
-                  }}
-                >
-                  Tip: If brokerage is high, try fewer trades with better setups. It improves net results.
+                <div style={styles.tipBox}>
+                  Tip: If brokerage is high, try fewer but better quality trades. Better setup
+                  selection improves net monthly performance.
                 </div>
               </div>
             </div>
           </div>
 
-          {/* EDGE STRIP SUMMARY */}
-          <div style={{ ...card(12, 12) }}>
-            <div style={cardHead}>
-              <p style={cardTitle}>QUICK SUMMARY</p>
-              <div style={pill(status.tone)}>
-                <span style={dot(statusColor)} />
+          {/* FULL WIDTH SUMMARY */}
+          <div style={styles.card(12)}>
+            <div style={styles.cardHead}>
+              <p style={styles.cardTitle}>QUICK SUMMARY</p>
+              <div style={styles.pill(status.tone)}>
+                <span style={styles.dot(statusColor)} />
                 {status.label}
               </div>
             </div>
 
-            <div style={{ padding: 14 }}>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: isDesktop ? "repeat(4, 1fr)" : "repeat(2, 1fr)",
-                  gap: 10,
-                }}
-              >
-                <div style={tile}>
-                  <p style={tileLabel}>Trades</p>
-                  <p style={tileVal}>{totalTrades}</p>
+            <div style={styles.cardBody}>
+              <div style={styles.summaryGrid}>
+                <div style={styles.tile}>
+                  <p style={styles.tileLabel}>Trades</p>
+                  <p style={{ ...styles.tileVal, color: theme.text }}>{totalTrades}</p>
                 </div>
 
-                <div style={tile}>
-                  <p style={tileLabel}>Deposit</p>
-                  <p style={{ ...tileVal, color: theme.ok }}>{formatMoney(totalDeposit)}</p>
+                <div style={styles.tile}>
+                  <p style={styles.tileLabel}>Deposit</p>
+                  <p style={{ ...styles.tileVal, color: theme.ok }}>
+                    {formatMoney(totalDeposit)}
+                  </p>
                 </div>
 
-                <div style={tile}>
-                  <p style={tileLabel}>Brokerage</p>
-                  <p style={tileVal}>{formatMoney(totalBrokerage)}</p>
+                <div style={styles.tile}>
+                  <p style={styles.tileLabel}>Brokerage</p>
+                  <p style={{ ...styles.tileVal, color: theme.text }}>
+                    {formatMoney(totalBrokerage)}
+                  </p>
                 </div>
 
-                <div style={tile}>
-                  <p style={tileLabel}>Overall P&amp;L</p>
-                  <p style={{ ...tileVal, color: statusColor }}>{formatSigned(pnl)}</p>
+                <div style={styles.tile}>
+                  <p style={styles.tileLabel}>Overall P&amp;L</p>
+                  <p style={{ ...styles.tileVal, color: statusColor }}>
+                    {formatSigned(pnl)}
+                  </p>
                 </div>
               </div>
 
-              <div style={{ marginTop: 12, color: theme.muted, fontSize: 12.5, fontWeight: 800 }}>
-                Showing {monthLabel(selectedMonth)} report.
+              <div style={styles.bottomText}>
+                Showing professional monthly report for{" "}
+                <span style={{ color: theme.text }}>{monthLabel(selectedMonth)}</span>.
               </div>
             </div>
           </div>
         </div>
-
-        <div style={{ height: 8 }} />
       </div>
     </div>
   );

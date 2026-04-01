@@ -26,7 +26,7 @@ export default function Worknewtab() {
 
   const tabs = useMemo(
     () => [
-      { key: "measure", label: "MEASURE", component: <Measure /> },
+     
       { key: "add", label: "SITE KHARCH", component: <AddSitekharch /> },
       { key: "get", label: "SITE KHARCH GET", component: <SitekharchGet /> },
       { key: "total", label: "TOTAL KHARCH", component: <TotalSiteKharch /> },
@@ -39,6 +39,7 @@ export default function Worknewtab() {
       // New DPR Tabs
       { key: "adddpr", label: "ADD DPR", component: <AddMonthdpr /> },
       { key: "getdpr", label: "GET DPR", component: <GetMonthdpr /> },
+       { key: "measure", label: "MEASURE", component: <Measure /> },
     ],
     []
   );
