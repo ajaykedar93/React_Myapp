@@ -56,7 +56,7 @@ export default function Downloadpdf() {
       if (platformId.trim()) qs.set("platform_id", platformId.trim());
       if (segmentId.trim()) qs.set("segment_id", segmentId.trim());
 
-      const url = `${BASE_URL}/api/investment/tradingjournal-view/export/pdf?${qs.toString()}`;
+      const url = `${BASE_URL}/api/investment/tradingjournal-pdf/export/pdf?${qs.toString()}`;
 
       const response = await fetch(url, {
         method: "GET",

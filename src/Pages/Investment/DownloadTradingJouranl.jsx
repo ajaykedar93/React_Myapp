@@ -219,9 +219,10 @@ export default function DownloadTradingJouranl() {
 
   const buildEndpoint = (type) => {
     const query = buildQueryString();
+
     const path =
       type === "pdf"
-        ? "/api/investment/tradingjournal-view/export/pdf"
+        ? "/api/investment/tradingjournal-pdf/export/pdf"
         : "/api/investment/tradingjournal-view/export/txt";
 
     return query ? `${BASE_URL}${path}?${query}` : `${BASE_URL}${path}`;
@@ -283,7 +284,6 @@ export default function DownloadTradingJouranl() {
       setTimeout(() => {
         window.URL.revokeObjectURL(blobUrl);
       }, 15000);
-
       return true;
     } catch {
       setTimeout(() => {
@@ -396,7 +396,6 @@ export default function DownloadTradingJouranl() {
         return;
       }
 
-      // Final direct open fallback for mobile / Safari
       if ((isIOS || isSafari || isMobile) && type === "pdf") {
         const opened = openBlobInNewTab(blob);
         if (opened) {
@@ -410,7 +409,6 @@ export default function DownloadTradingJouranl() {
         }
       }
 
-      // Final fallback: direct endpoint open in new tab
       const finalUrl = endpoint;
       const openedWindow = window.open(finalUrl, "_blank", "noopener,noreferrer");
       if (openedWindow) {
@@ -423,7 +421,6 @@ export default function DownloadTradingJouranl() {
         return;
       }
 
-      // Final hidden iframe fallback
       const iframeOk = openByHiddenIframe(finalUrl);
       if (iframeOk) {
         openPopup(
