@@ -171,6 +171,27 @@ const GetMonthdpr = () => {
     fetchDprData();
   }, [selectedMonth]);
 
+  const groupedMobileData = useMemo(() => {
+    const groups = [];
+
+    dprList.forEach((item) => {
+      const existingGroup = groups.find(
+        (group) => group.display_date === item.display_date
+      );
+
+      if (existingGroup) {
+        existingGroup.items.push(item);
+      } else {
+        groups.push({
+          display_date: item.display_date,
+          items: [item],
+        });
+      }
+    });
+
+    return groups;
+  }, [dprList]);
+
   const startEdit = (item) => {
     setEditingId(item.sr_no);
     setEditForm({
@@ -388,9 +409,9 @@ const GetMonthdpr = () => {
           }
 
           .mini-btn {
-            min-width: 62px !important;
-            font-size: 11px !important;
-            padding: 7px 10px !important;
+            min-width: 56px !important;
+            font-size: 10px !important;
+            padding: 6px 8px !important;
           }
 
           .popup-card-mobile {
@@ -503,133 +524,154 @@ const GetMonthdpr = () => {
               {/* MOBILE LIST */}
               <div className="mobile-list">
                 <div style={styles.mobileListWrap}>
-                  {dprList.map((item) => (
-                    <div key={item.sr_no} style={styles.mobileCard}>
-                      {editingId === item.sr_no ? (
-                        <>
-                          <div style={styles.mobileCardTop}>
-                            <span style={styles.mobileSrBadge}>#{item.display_sequence}</span>
-                            <span style={styles.mobileDateBadge}>{item.display_date}</span>
-                          </div>
+                  {groupedMobileData.map((group, groupIndex) => (
+                    <div key={groupIndex} style={styles.mobileDateGroupCard}>
+                      <div style={styles.mobileDateGroupHeader}>
+                        <span style={styles.mobileDateGroupBadge}>
+                          {group.display_date}
+                        </span>
+                      </div>
 
-                          <div style={styles.mobileEditGrid}>
-                            <div style={styles.mobileField}>
-                              <label style={styles.mobileLabel}>Date</label>
-                              <input
-                                type="date"
-                                value={editForm.dpr_date}
-                                onChange={(e) =>
-                                  setEditForm((prev) => ({
-                                    ...prev,
-                                    dpr_date: e.target.value,
-                                  }))
-                                }
-                                style={styles.mobileInput}
-                                className="input-focus"
-                              />
-                            </div>
+                      <div style={styles.mobileEntriesWrap}>
+                        {group.items.map((item) => (
+                          <div key={item.sr_no} style={styles.mobileEntryCard}>
+                            {editingId === item.sr_no ? (
+                              <>
+                                <div style={styles.mobileEntryTop}>
+                                  <span style={styles.mobileSrBadge}>
+                                    #{item.display_sequence}
+                                  </span>
+                                </div>
 
-                            <div style={styles.mobileField}>
-                              <label style={styles.mobileLabel}>Work Details</label>
-                              <textarea
-                                rows="4"
-                                value={editForm.work_details}
-                                onChange={(e) =>
-                                  setEditForm((prev) => ({
-                                    ...prev,
-                                    work_details: e.target.value,
-                                  }))
-                                }
-                                style={styles.mobileTextarea}
-                                className="input-focus"
-                                placeholder="Enter work details"
-                              />
-                            </div>
+                                <div style={styles.mobileEditGrid}>
+                                  <div style={styles.mobileField}>
+                                    <label style={styles.mobileLabel}>Date</label>
+                                    <input
+                                      type="date"
+                                      value={editForm.dpr_date}
+                                      onChange={(e) =>
+                                        setEditForm((prev) => ({
+                                          ...prev,
+                                          dpr_date: e.target.value,
+                                        }))
+                                      }
+                                      style={styles.mobileInput}
+                                      className="input-focus"
+                                    />
+                                  </div>
 
-                            <div style={styles.mobileField}>
-                              <label style={styles.mobileLabel}>Time</label>
-                              <input
-                                type="text"
-                                value={editForm.work_time}
-                                onChange={(e) =>
-                                  setEditForm((prev) => ({
-                                    ...prev,
-                                    work_time: e.target.value,
-                                  }))
-                                }
-                                style={styles.mobileInput}
-                                className="input-focus"
-                                placeholder="Ex. 10 AM to 5 PM"
-                              />
-                            </div>
-                          </div>
+                                  <div style={styles.mobileField}>
+                                    <label style={styles.mobileLabel}>Work Details</label>
+                                    <textarea
+                                      rows="4"
+                                      value={editForm.work_details}
+                                      onChange={(e) =>
+                                        setEditForm((prev) => ({
+                                          ...prev,
+                                          work_details: e.target.value,
+                                        }))
+                                      }
+                                      style={styles.mobileTextarea}
+                                      className="input-focus"
+                                      placeholder="Enter work details"
+                                    />
+                                  </div>
 
-                          <div style={styles.mobileActionRow} className="mobile-card-actions">
-                            <button
-                              type="button"
-                              onClick={() => handleUpdate(item.sr_no)}
-                              style={styles.saveBtn}
-                              className="btn-anim mini-btn"
-                            >
-                              Save
-                            </button>
-                            <button
-                              type="button"
-                              onClick={cancelEdit}
-                              style={styles.cancelBtn}
-                              className="btn-anim mini-btn"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div style={styles.mobileCardTop}>
-                            <span style={styles.mobileSrBadge}>#{item.display_sequence}</span>
-                            <span style={styles.mobileDateBadge}>
-                              {item.display_date || "-"}
-                            </span>
-                          </div>
+                                  <div style={styles.mobileField}>
+                                    <label style={styles.mobileLabel}>Time</label>
+                                    <input
+                                      type="text"
+                                      value={editForm.work_time}
+                                      onChange={(e) =>
+                                        setEditForm((prev) => ({
+                                          ...prev,
+                                          work_time: e.target.value,
+                                        }))
+                                      }
+                                      style={styles.mobileInput}
+                                      className="input-focus"
+                                      placeholder="Ex. 10 AM to 5 PM"
+                                    />
+                                  </div>
+                                </div>
 
-                          <div style={styles.mobileFieldRow}>
-                            <span style={styles.mobileFieldTitle}>Work Details</span>
-                            <div style={styles.mobileFieldValue}>
-                              {item.work_details || "-"}
-                            </div>
-                          </div>
+                                <div
+                                  style={styles.mobileActionRow}
+                                  className="mobile-card-actions"
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdate(item.sr_no)}
+                                    style={styles.saveBtn}
+                                    className="btn-anim mini-btn"
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={cancelEdit}
+                                    style={styles.cancelBtn}
+                                    className="btn-anim mini-btn"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div style={styles.mobileEntryTop}>
+                                  <span style={styles.mobileSrBadge}>
+                                    #{item.display_sequence}
+                                  </span>
+                                </div>
 
-                          <div style={styles.mobileFieldRow}>
-                            <span style={styles.mobileFieldTitle}>Time</span>
-                            <div style={styles.mobileFieldValue}>
-                              {item.work_time && item.work_time.trim() !== ""
-                                ? item.work_time
-                                : "-"}
-                            </div>
-                          </div>
+                                <div style={styles.mobileFieldRow}>
+                                  <span style={styles.mobileFieldTitle}>Work Details</span>
+                                  <div style={styles.mobileFieldValue}>
+                                    {item.work_details || "-"}
+                                  </div>
+                                </div>
 
-                          <div style={styles.mobileActionRow} className="mobile-card-actions">
-                            <button
-                              type="button"
-                              onClick={() => startEdit(item)}
-                              style={styles.updateBtn}
-                              className="btn-anim mini-btn"
-                            >
-                              Update
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                openDeletePopup(item.sr_no, item.display_sequence)
-                              }
-                              style={styles.deleteBtn}
-                              className="btn-anim mini-btn"
-                            >
-                              Delete
-                            </button>
+                                <div style={styles.mobileFieldRow}>
+                                  <span style={styles.mobileFieldTitle}>Time</span>
+                                  <div style={styles.mobileFieldValue}>
+                                    {item.work_time && item.work_time.trim() !== ""
+                                      ? item.work_time
+                                      : "-"}
+                                  </div>
+                                </div>
+
+                                <div
+                                  style={styles.mobileActionRow}
+                                  className="mobile-card-actions"
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => startEdit(item)}
+                                    style={styles.updateBtn}
+                                    className="btn-anim mini-btn"
+                                  >
+                                    Update
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openDeletePopup(
+                                        item.sr_no,
+                                        item.display_sequence
+                                      )
+                                    }
+                                    style={styles.deleteBtn}
+                                    className="btn-anim mini-btn"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </>
+                            )}
                           </div>
-                        </>
-                      )}
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -788,7 +830,6 @@ const GetMonthdpr = () => {
           )}
         </div>
 
-        {/* extra bottom space for mobile bottom nav */}
         <div style={styles.mobileBottomSpace}></div>
       </div>
 
@@ -1198,23 +1239,57 @@ const styles = {
   mobileListWrap: {
     display: "flex",
     flexDirection: "column",
-    gap: "12px",
+    gap: "14px",
   },
 
-  mobileCard: {
-    background: "linear-gradient(180deg, #ffffff 0%, #fbfdff 100%)",
-    border: "1px solid #dfe8f5",
-    borderRadius: "16px",
+  mobileDateGroupCard: {
+    background: "linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)",
+    border: "1.5px solid #111827",
+    borderRadius: "18px",
     padding: "12px",
-    boxShadow: "0 8px 18px rgba(15, 23, 42, 0.05)",
+    boxShadow: "0 10px 24px rgba(15, 23, 42, 0.06)",
   },
 
-  mobileCardTop: {
+  mobileDateGroupHeader: {
+    marginBottom: "10px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "flex-start",
+  },
+
+  mobileDateGroupBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "7px 12px",
+    borderRadius: "999px",
+    background: "linear-gradient(135deg, #111827, #1f2937)",
+    color: "#ffffff",
+    fontSize: "12px",
+    fontWeight: "800",
+    letterSpacing: "0.2px",
+  },
+
+  mobileEntriesWrap: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
+  },
+
+  mobileEntryCard: {
+    background: "#ffffff",
+    border: "1px solid #dbe5f2",
+    borderRadius: "14px",
+    padding: "10px",
+    boxShadow: "0 4px 10px rgba(15, 23, 42, 0.04)",
+  },
+
+  mobileEntryTop: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     gap: "8px",
-    marginBottom: "12px",
+    marginBottom: "10px",
     flexWrap: "wrap",
   },
 
@@ -1222,23 +1297,11 @@ const styles = {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    padding: "5px 10px",
+    padding: "4px 9px",
     borderRadius: "999px",
     background: "#e8f0ff",
     color: "#173b77",
-    fontSize: "11px",
-    fontWeight: "800",
-  },
-
-  mobileDateBadge: {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "5px 10px",
-    borderRadius: "999px",
-    background: "#eef6ff",
-    color: "#1d4c8f",
-    fontSize: "11px",
+    fontSize: "10px",
     fontWeight: "800",
   },
 
@@ -1270,7 +1333,7 @@ const styles = {
   mobileActionRow: {
     display: "flex",
     justifyContent: "flex-end",
-    gap: "8px",
+    gap: "6px",
     flexWrap: "wrap",
     marginTop: "8px",
   },
