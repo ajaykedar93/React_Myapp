@@ -328,6 +328,7 @@ export default function TryNewPageTabs() {
         flex:1;
         padding:0 !important;
         margin:0 !important;
+        padding-bottom:20px !important;
       }
 
       .tnp-content > *{
@@ -343,6 +344,7 @@ export default function TryNewPageTabs() {
         margin:0 !important;
       }
 
+      /* IMPORTANT: mobile bottom space so content is not hidden */
       @media (max-width: 767.98px){
         .tnp-nav-inner{
           flex-direction:column;
@@ -413,6 +415,19 @@ export default function TryNewPageTabs() {
           padding:9px 14px;
           font-size:12px;
           border-radius:13px;
+        }
+
+        /* THIS FIX ADDS EXTRA SAFE SPACE AT PAGE END */
+        .tnp-main{
+          padding-bottom:90px;
+        }
+
+        .tnp-content{
+          padding-bottom:120px !important;
+        }
+
+        .tnp-content > *{
+          padding-bottom:40px !important;
         }
       }
 
