@@ -7,7 +7,10 @@ export default function InwardGet({ refreshToken = 0 }) {
   const LIST_API = `${API_BASE}/api/inward`;
   const ONE_API = (id) => `${API_BASE}/api/inward/${id}`;
   const DELETE_API = (id) => `${API_BASE}/api/inward/${id}`;
-  const PDF_API = `${API_BASE}/api/inward/pdf`;
+
+const PDF_API = `${API_BASE}/api/inward/pdf`;
+const EXCEL_API = `${API_BASE}/api/inward/excel`;
+
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -52,6 +55,9 @@ export default function InwardGet({ refreshToken = 0 }) {
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState([]);
   const [overlay, setOverlay] = useState({ open: false, text: "Please wait..." });
+// add near states
+
+const [downloadType, setDownloadType] = useState("pdf");
 
   const [dlg, setDlg] = useState({
     open: false,
@@ -227,23 +233,41 @@ export default function InwardGet({ refreshToken = 0 }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location?.state]);
 
-  const downloadPdf = () => {
-    const ym = selectedMonthYM;
-    if (!ym) {
-      openDlg({ type: "info", title: "Select Month", message: "Please select a month to download PDF." });
-      return;
-    }
-    const { from, to } = getMonthRange(ym);
-    if (!from || !to) {
-      openDlg({ type: "error", title: "Invalid Month", message: "Month value is invalid." });
-      return;
-    }
-    const qs = new URLSearchParams();
-    qs.set("from", from);
-    qs.set("to", to);
-    const url = `${PDF_API}?${qs.toString()}`;
-    window.open(url, "_blank");
-  };
+  const downloadReport = () => {
+  const ym = selectedMonthYM;
+
+  if (!ym) {
+    openDlg({
+      type: "info",
+      title: "Select Month",
+      message: "Please select a month to download report.",
+    });
+    return;
+  }
+
+  const { from, to } = getMonthRange(ym);
+
+  if (!from || !to) {
+    openDlg({
+      type: "error",
+      title: "Invalid Month",
+      message: "Month value is invalid.",
+    });
+    return;
+  }
+
+  const qs = new URLSearchParams();
+  qs.set("from", from);
+  qs.set("to", to);
+
+  const url =
+    downloadType === "excel"
+      ? `${EXCEL_API}?${qs.toString()}`
+      : `${PDF_API}?${qs.toString()}`;
+
+  window.open(url, "_blank");
+};
+
 
   const openImage = (row, displaySeq) => {
     const src = row?.image_url || "";
@@ -467,40 +491,51 @@ export default function InwardGet({ refreshToken = 0 }) {
           <div className="igTopbar__sub">{activeHeading}</div>
         </div>
 
-        <div className="igTopbarActions">
-          <select
-            className="igMonthSelect"
-            value={selectedMonthYM}
-            onChange={(e) => onChangeMonth(e.target.value)}
-            title="Select month"
-          >
-            {monthOptions.length === 0 ? <option value="">No months</option> : null}
-            {monthOptions.map((ym) => (
-              <option key={ym} value={ym}>
-                {formatMonthTitle(ym)}
-              </option>
-            ))}
-          </select>
+       <div className="igTopbarActions">
+  <select
+    className="igMonthSelect"
+    value={selectedMonthYM}
+    onChange={(e) => onChangeMonth(e.target.value)}
+    title="Select month"
+  >
+    {monthOptions.length === 0 ? <option value="">No months</option> : null}
+    {monthOptions.map((ym) => (
+      <option key={ym} value={ym}>
+        {formatMonthTitle(ym)}
+      </option>
+    ))}
+  </select>
 
-          <button
-            type="button"
-            className="igBtn igBtn--outline igRipple"
-            onPointerDown={setRipplePoint}
-            onClick={fetchList}
-          >
-            Refresh
-          </button>
+  <button
+    type="button"
+    className="igBtn igBtn--outline igRipple"
+    onPointerDown={setRipplePoint}
+    onClick={fetchList}
+  >
+    Refresh
+  </button>
 
-          <button
-            type="button"
-            className="igBtn igBtn--primary igRipple"
-            onPointerDown={setRipplePoint}
-            onClick={downloadPdf}
-            disabled={!selectedMonthYM}
-          >
-            Download PDF
-          </button>
-        </div>
+  <select
+    className="igMonthSelect"
+    value={downloadType}
+    onChange={(e) => setDownloadType(e.target.value)}
+    title="Select download type"
+  >
+    <option value="pdf">PDF</option>
+    <option value="excel">Excel</option>
+  </select>
+
+  <button
+    type="button"
+    className="igBtn igBtn--primary igRipple"
+    onPointerDown={setRipplePoint}
+    onClick={downloadReport}
+    disabled={!selectedMonthYM}
+  >
+    Download {downloadType === "excel" ? "Excel" : "PDF"}
+  </button>
+</div>
+
       </div>
 
       <div className="igFilters">
