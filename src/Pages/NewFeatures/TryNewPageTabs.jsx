@@ -9,12 +9,15 @@ import PasswordManager from "./PasswordManager";
 import GetPassword from "./GetPassword";
 import UserInvestment from "./UserInvestments";
 
+import InvoiceBill from "./Invoice_bill";
+import GetInvoice from "./Get_invoice";
+
 export default function TryNewPageTabs() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("get_transaction");
 
   useEffect(() => {
-    const id = "new-project-dashboard-tabs-v16";
+    const id = "new-project-dashboard-tabs-v17";
     if (document.getElementById(id)) return;
 
     const s = document.createElement("style");
@@ -69,6 +72,14 @@ export default function TryNewPageTabs() {
         --tabInvest1:#f59e0b;
         --tabInvest2:#f97316;
         --tabInvest3:#ef4444;
+
+        --tabInvoice1:#7c3aed;
+        --tabInvoice2:#ec4899;
+        --tabInvoice3:#f97316;
+
+        --tabGetInvoice1:#0f766e;
+        --tabGetInvoice2:#2563eb;
+        --tabGetInvoice3:#7c3aed;
 
         --line:#e2e8f0;
         --ink:#0f172a;
@@ -310,6 +321,20 @@ export default function TryNewPageTabs() {
         box-shadow:0 14px 28px rgba(245,158,11,.18);
       }
 
+      .tnp-tabbtn.invoice-active{
+        color:#fff;
+        border-color:transparent;
+        background:linear-gradient(135deg,var(--tabInvoice1),var(--tabInvoice2),var(--tabInvoice3));
+        box-shadow:0 14px 28px rgba(236,72,153,.18);
+      }
+
+      .tnp-tabbtn.getinvoice-active{
+        color:#fff;
+        border-color:transparent;
+        background:linear-gradient(135deg,var(--tabGetInvoice1),var(--tabGetInvoice2),var(--tabGetInvoice3));
+        box-shadow:0 14px 28px rgba(37,99,235,.18);
+      }
+
       .tnp-tabline{
         width:100%;
         height:1px;
@@ -344,7 +369,6 @@ export default function TryNewPageTabs() {
         margin:0 !important;
       }
 
-      /* IMPORTANT: mobile bottom space so content is not hidden */
       @media (max-width: 767.98px){
         .tnp-nav-inner{
           flex-direction:column;
@@ -417,7 +441,6 @@ export default function TryNewPageTabs() {
           border-radius:13px;
         }
 
-        /* THIS FIX ADDS EXTRA SAFE SPACE AT PAGE END */
         .tnp-main{
           padding-bottom:90px;
         }
@@ -600,6 +623,26 @@ export default function TryNewPageTabs() {
               >
                 Investment Manage
               </button>
+
+              <button
+                type="button"
+                className={`tnp-tabbtn ${
+                  activeTab === "invoice_bill" ? "invoice-active" : ""
+                }`}
+                onClick={() => setActiveTab("invoice_bill")}
+              >
+                Invoice
+              </button>
+
+              <button
+                type="button"
+                className={`tnp-tabbtn ${
+                  activeTab === "get_invoice" ? "getinvoice-active" : ""
+                }`}
+                onClick={() => setActiveTab("get_invoice")}
+              >
+                GET Invoice
+              </button>
             </div>
           </div>
 
@@ -613,6 +656,8 @@ export default function TryNewPageTabs() {
           {activeTab === "add_password" && <PasswordManager />}
           {activeTab === "get_password" && <GetPassword />}
           {activeTab === "investment_manage" && <UserInvestment />}
+          {activeTab === "invoice_bill" && <InvoiceBill />}
+          {activeTab === "get_invoice" && <GetInvoice />}
         </div>
       </main>
     </div>
