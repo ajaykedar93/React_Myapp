@@ -1,18 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
 
-/*
-  Get_invoice.jsx
-  --------------------------------------------------
-  Responsive saved invoice dashboard page.
-
-  APIs used:
-  GET    https://express-backend-myapp.onrender.com/api/invoices
-  GET    https://express-backend-myapp.onrender.com/api/invoices/:id
-  GET    https://express-backend-myapp.onrender.com/api/invoices/:id/pdf
-  PUT    https://express-backend-myapp.onrender.com/api/invoices/:id
-  DELETE https://express-backend-myapp.onrender.com/api/invoices/:id
-*/
-
 const API_BASE_URL = "https://express-backend-myapp.onrender.com/api";
 
 const emptyEditForm = {
@@ -83,12 +70,16 @@ function downloadBlob(blob, fileName) {
 
 export default function GetInvoice() {
   const [invoices, setInvoices] = useState([]);
+
+  const [expandedInvoiceId, setExpandedInvoiceId] = useState(null);
+  const [viewInvoice, setViewInvoice] = useState(null);
+
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [editForm, setEditForm] = useState(emptyEditForm);
   const [editItems, setEditItems] = useState([]);
 
   const [loading, setLoading] = useState(false);
-  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailsLoadingId, setDetailsLoadingId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [pdfLoadingId, setPdfLoadingId] = useState(null);
   const [deleteLoadingId, setDeleteLoadingId] = useState(null);
@@ -97,8 +88,10 @@ export default function GetInvoice() {
   const [sortBy, setSortBy] = useState("newest");
   const [toast, setToast] = useState("");
   const [error, setError] = useState("");
+
   const [showEditModal, setShowEditModal] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+
   const [formErrors, setFormErrors] = useState({});
   const [itemErrors, setItemErrors] = useState([]);
 
@@ -207,8 +200,13 @@ export default function GetInvoice() {
   }
 
   async function openInvoiceDetails(invoiceId) {
+    if (expandedInvoiceId === invoiceId) {
+      closeInvoiceDetails();
+      return;
+    }
+
     try {
-      setDetailsLoading(true);
+      setDetailsLoadingId(invoiceId);
       setError("");
 
       const response = await fetch(`${API_BASE_URL}/invoices/${invoiceId}`);
@@ -218,20 +216,27 @@ export default function GetInvoice() {
         throw new Error(data.message || "Failed to fetch invoice details");
       }
 
-      setSelectedInvoice({
+      setViewInvoice({
         ...data.invoice,
         items: data.items || [],
       });
+
+      setExpandedInvoiceId(invoiceId);
     } catch (err) {
       showToast(err.message || "Failed to load invoice details");
     } finally {
-      setDetailsLoading(false);
+      setDetailsLoadingId(null);
     }
+  }
+
+  function closeInvoiceDetails() {
+    setExpandedInvoiceId(null);
+    setViewInvoice(null);
   }
 
   async function openEditModal(invoiceId) {
     try {
-      setDetailsLoading(true);
+      setDetailsLoadingId(invoiceId);
       setFormErrors({});
       setItemErrors([]);
 
@@ -278,23 +283,44 @@ export default function GetInvoice() {
       });
 
       setEditItems(
-        items.map((item, index) => ({
-          sr_no: item.sr_no || index + 1,
-          description: item.description || "",
-          hsn_sac: item.hsn_sac || "251710",
-          gst_rate: item.gst_rate || invoice.igst_rate || 5,
-          quantity: item.quantity || "",
-          rate: item.rate || "",
-          per: item.per || "Brass",
-        }))
+        items.length
+          ? items.map((item, index) => ({
+              sr_no: item.sr_no || index + 1,
+              description: item.description || "",
+              hsn_sac: item.hsn_sac || "251710",
+              gst_rate: item.gst_rate || invoice.igst_rate || 5,
+              quantity: item.quantity || "",
+              rate: item.rate || "",
+              per: item.per || "Brass",
+            }))
+          : [
+              {
+                sr_no: 1,
+                description: "",
+                hsn_sac: "251710",
+                gst_rate: invoice.igst_rate || 5,
+                quantity: "",
+                rate: "",
+                per: "Brass",
+              },
+            ]
       );
 
       setShowEditModal(true);
+      document.body.style.overflow = "hidden";
     } catch (err) {
       showToast(err.message || "Failed to open edit form");
     } finally {
-      setDetailsLoading(false);
+      setDetailsLoadingId(null);
     }
+  }
+
+  function closeEditModal() {
+    setShowEditModal(false);
+    setSelectedInvoice(null);
+    setFormErrors({});
+    setItemErrors([]);
+    document.body.style.overflow = "";
   }
 
   function updateEditField(name, value) {
@@ -338,7 +364,7 @@ export default function GetInvoice() {
 
   function addEditItem() {
     if (editItems.length >= 8) {
-      showToast("Maximum 8 material rows allowed for one-page A4 PDF");
+      showToast("Maximum 8 material rows allowed");
       return;
     }
 
@@ -400,7 +426,10 @@ export default function GetInvoice() {
       }
     });
 
-    if (Number(editForm.igst_rate) < 0 || Number.isNaN(Number(editForm.igst_rate))) {
+    if (
+      Number(editForm.igst_rate) < 0 ||
+      Number.isNaN(Number(editForm.igst_rate))
+    ) {
       errors.igst_rate = "Invalid GST rate";
     }
 
@@ -471,13 +500,16 @@ export default function GetInvoice() {
     try {
       setSaving(true);
 
-      const response = await fetch(`${API_BASE_URL}/invoices/${selectedInvoice.id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(buildUpdatePayload()),
-      });
+      const response = await fetch(
+        `${API_BASE_URL}/invoices/${selectedInvoice.id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(buildUpdatePayload()),
+        }
+      );
 
       const data = await response.json();
 
@@ -486,8 +518,8 @@ export default function GetInvoice() {
       }
 
       showToast("Invoice updated successfully");
-      setShowEditModal(false);
-      setSelectedInvoice(null);
+      closeEditModal();
+      closeInvoiceDetails();
       await fetchInvoices();
     } catch (err) {
       showToast(err.message || "Update failed");
@@ -539,7 +571,7 @@ export default function GetInvoice() {
 
       setInvoices((prev) => prev.filter((item) => item.id !== deleteConfirm.id));
       setDeleteConfirm(null);
-      setSelectedInvoice(null);
+      closeInvoiceDetails();
       showToast("Invoice deleted successfully");
     } catch (err) {
       showToast(err.message || "Delete failed");
@@ -629,30 +661,49 @@ export default function GetInvoice() {
 
                 <tbody>
                   {filteredInvoices.map((invoice) => (
-                    <tr key={invoice.id}>
-                      <td>
-                        <strong>{invoice.invoice_no}</strong>
-                        <small>ID #{invoice.id}</small>
-                      </td>
-                      <td>{formatDate(invoice.invoice_date)}</td>
-                      <td className="buyer-cell">{invoice.buyer_name}</td>
-                      <td>{invoice.buyer_gstin}</td>
-                      <td>₹ {money(invoice.taxable_amount)}</td>
-                      <td>₹ {money(invoice.igst_amount)}</td>
-                      <td>
-                        <strong>₹ {money(invoice.grand_total)}</strong>
-                      </td>
-                      <td>
-                        <ActionButtons
-                          invoice={invoice}
-                          openInvoiceDetails={openInvoiceDetails}
-                          openEditModal={openEditModal}
-                          downloadPdf={downloadPdf}
-                          pdfLoadingId={pdfLoadingId}
-                          setDeleteConfirm={setDeleteConfirm}
-                        />
-                      </td>
-                    </tr>
+                    <React.Fragment key={invoice.id}>
+                      <tr>
+                        <td>
+                          <strong>{invoice.invoice_no}</strong>
+                          <small>ID #{invoice.id}</small>
+                        </td>
+                        <td>{formatDate(invoice.invoice_date)}</td>
+                        <td className="buyer-cell">{invoice.buyer_name}</td>
+                        <td>{invoice.buyer_gstin}</td>
+                        <td>₹ {money(invoice.taxable_amount)}</td>
+                        <td>₹ {money(invoice.igst_amount)}</td>
+                        <td>
+                          <strong>₹ {money(invoice.grand_total)}</strong>
+                        </td>
+                        <td>
+                          <ActionButtons
+                            invoice={invoice}
+                            isOpen={expandedInvoiceId === invoice.id}
+                            loading={detailsLoadingId === invoice.id}
+                            openInvoiceDetails={openInvoiceDetails}
+                            openEditModal={openEditModal}
+                            downloadPdf={downloadPdf}
+                            pdfLoadingId={pdfLoadingId}
+                            setDeleteConfirm={setDeleteConfirm}
+                          />
+                        </td>
+                      </tr>
+
+                      {expandedInvoiceId === invoice.id && (
+                        <tr className="desktop-details-row">
+                          <td colSpan="8">
+                            {detailsLoadingId === invoice.id ? (
+                              <div className="details-loading">Loading full details...</div>
+                            ) : (
+                              <InvoiceDetailsPanel
+                                invoice={viewInvoice}
+                                closeInvoiceDetails={closeInvoiceDetails}
+                              />
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>
@@ -667,6 +718,7 @@ export default function GetInvoice() {
                       <strong>{invoice.invoice_no}</strong>
                       <small>ID #{invoice.id}</small>
                     </div>
+
                     <div className="amount-pill">₹ {money(invoice.grand_total)}</div>
                   </div>
 
@@ -680,6 +732,8 @@ export default function GetInvoice() {
 
                   <ActionButtons
                     invoice={invoice}
+                    isOpen={expandedInvoiceId === invoice.id}
+                    loading={detailsLoadingId === invoice.id}
                     openInvoiceDetails={openInvoiceDetails}
                     openEditModal={openEditModal}
                     downloadPdf={downloadPdf}
@@ -687,92 +741,25 @@ export default function GetInvoice() {
                     setDeleteConfirm={setDeleteConfirm}
                     mobile
                   />
+
+                  {expandedInvoiceId === invoice.id && (
+                    <div className="mobile-expanded-box">
+                      {detailsLoadingId === invoice.id ? (
+                        <div className="details-loading">Loading full details...</div>
+                      ) : (
+                        <InvoiceDetailsPanel
+                          invoice={viewInvoice}
+                          closeInvoiceDetails={closeInvoiceDetails}
+                        />
+                      )}
+                    </div>
+                  )}
                 </article>
               ))}
             </div>
           </>
         )}
       </section>
-
-      {selectedInvoice && !showEditModal && (
-        <div className="modal-backdrop" onClick={() => setSelectedInvoice(null)}>
-          <div className="modal view-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <div>
-                <p className="eyebrow">INVOICE DETAILS</p>
-                <h2>{selectedInvoice.invoice_no}</h2>
-              </div>
-
-              <button className="close-btn" onClick={() => setSelectedInvoice(null)}>
-                ×
-              </button>
-            </div>
-
-            {detailsLoading ? (
-              <div className="empty-state">Loading details...</div>
-            ) : (
-              <>
-                <div className="details-grid">
-                  <Detail label="Date" value={formatDate(selectedInvoice.invoice_date)} />
-                  <Detail label="Buyer" value={selectedInvoice.buyer_name} />
-                  <Detail label="Buyer GSTIN" value={selectedInvoice.buyer_gstin} />
-                  <Detail label="Supplier" value={selectedInvoice.supplier_name} />
-                  <Detail label="Taxable" value={`₹ ${money(selectedInvoice.taxable_amount)}`} />
-                  <Detail label="IGST" value={`₹ ${money(selectedInvoice.igst_amount)}`} />
-                  <Detail label="Round Up" value={`₹ ${money(selectedInvoice.round_up)}`} />
-                  <Detail label="Grand Total" value={`₹ ${money(selectedInvoice.grand_total)}`} />
-                </div>
-
-                <h3 className="modal-subtitle">Material Details</h3>
-
-                <div className="mini-table-wrap">
-                  <table className="mini-table">
-                    <thead>
-                      <tr>
-                        <th>Sr</th>
-                        <th>Description</th>
-                        <th>Qty</th>
-                        <th>Rate</th>
-                        <th>Per</th>
-                        <th>Amount</th>
-                      </tr>
-                    </thead>
-
-                    <tbody>
-                      {(selectedInvoice.items || []).map((item, index) => (
-                        <tr key={item.id || index}>
-                          <td>{index + 1}</td>
-                          <td>{item.description}</td>
-                          <td>{Number(item.quantity || 0).toFixed(2)}</td>
-                          <td>{Number(item.rate || 0).toFixed(0)}</td>
-                          <td>{item.per}</td>
-                          <td>₹ {money(item.amount)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="modal-actions">
-                  <button
-                    className="btn btn-primary"
-                    onClick={() => openEditModal(selectedInvoice.id)}
-                  >
-                    Edit Invoice
-                  </button>
-
-                  <button
-                    className="btn btn-dark"
-                    onClick={() => downloadPdf(selectedInvoice)}
-                  >
-                    Download PDF
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
 
       {showEditModal && (
         <div className="modal-backdrop">
@@ -783,13 +770,7 @@ export default function GetInvoice() {
                 <h2>Edit Invoice Bill</h2>
               </div>
 
-              <button
-                className="close-btn"
-                onClick={() => {
-                  setShowEditModal(false);
-                  setSelectedInvoice(null);
-                }}
-              >
+              <button className="close-btn" onClick={closeEditModal} aria-label="Close edit form">
                 ×
               </button>
             </div>
@@ -1137,13 +1118,7 @@ export default function GetInvoice() {
             </div>
 
             <div className="modal-footer">
-              <button
-                className="btn btn-outline"
-                onClick={() => {
-                  setShowEditModal(false);
-                  setSelectedInvoice(null);
-                }}
-              >
+              <button className="btn btn-outline" onClick={closeEditModal}>
                 Cancel
               </button>
 
@@ -1189,8 +1164,138 @@ export default function GetInvoice() {
   );
 }
 
+function InvoiceDetailsPanel({ invoice, closeInvoiceDetails }) {
+  if (!invoice) {
+    return <div className="details-loading">No invoice details found.</div>;
+  }
+
+  return (
+    <div className="expanded-details">
+      <div className="expanded-head">
+        <div>
+          <p className="eyebrow">FULL INVOICE DETAILS</p>
+          <h3>{invoice.invoice_no}</h3>
+        </div>
+
+        <button className="close-inline-btn" onClick={closeInvoiceDetails}>
+          Close
+        </button>
+      </div>
+
+      <div className="details-section">
+        <h4>Invoice Summary</h4>
+        <div className="details-grid">
+          <Detail label="Invoice No" value={invoice.invoice_no} />
+          <Detail label="Date" value={formatDate(invoice.invoice_date)} />
+          <Detail label="IGST Rate" value={`${invoice.igst_rate || 0}%`} />
+          <Detail label="Grand Total" value={`₹ ${money(invoice.grand_total)}`} />
+        </div>
+      </div>
+
+      <div className="details-section">
+        <h4>Supplier Details</h4>
+        <div className="details-grid">
+          <Detail label="Supplier Name" value={invoice.supplier_name} />
+          <Detail label="Supplier GSTIN" value={invoice.supplier_gstin} />
+          <Detail label="Supplier State" value={invoice.supplier_state_name} />
+          <Detail label="Supplier Code" value={invoice.supplier_state_code} />
+          <Detail full label="Supplier Address" value={invoice.supplier_address} />
+        </div>
+      </div>
+
+      <div className="details-section">
+        <h4>Consignee Details</h4>
+        <div className="details-grid">
+          <Detail label="Consignee Name" value={invoice.consignee_name} />
+          <Detail label="Consignee State" value={invoice.consignee_state_name} />
+          <Detail label="Consignee Code" value={invoice.consignee_state_code} />
+        </div>
+      </div>
+
+      <div className="details-section">
+        <h4>Buyer Details</h4>
+        <div className="details-grid">
+          <Detail label="Buyer Name" value={invoice.buyer_name} />
+          <Detail label="Buyer GSTIN" value={invoice.buyer_gstin} />
+          <Detail label="Buyer State" value={invoice.buyer_state_name} />
+          <Detail label="Buyer Code" value={invoice.buyer_state_code} />
+          <Detail full label="Buyer Address" value={invoice.buyer_address} />
+        </div>
+      </div>
+
+      <div className="details-section">
+        <h4>Bank Details</h4>
+        <div className="details-grid">
+          <Detail label="Bank Name" value={invoice.bank_name} />
+          <Detail label="Account No" value={invoice.bank_account_no} />
+          <Detail label="Branch" value={invoice.bank_branch} />
+          <Detail label="IFSC" value={invoice.bank_ifsc} />
+        </div>
+      </div>
+
+      <div className="details-section">
+        <h4>Material Details</h4>
+
+        <div className="mini-table-wrap">
+          <table className="mini-table">
+            <thead>
+              <tr>
+                <th>Sr</th>
+                <th>Description</th>
+                <th>HSN/SAC</th>
+                <th>GST %</th>
+                <th>Qty</th>
+                <th>Rate</th>
+                <th>Per</th>
+                <th>Amount</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {(invoice.items || []).map((item, index) => {
+                const amount =
+                  item.amount || Number(item.quantity || 0) * Number(item.rate || 0);
+
+                return (
+                  <tr key={item.id || index}>
+                    <td>{index + 1}</td>
+                    <td>{item.description}</td>
+                    <td>{item.hsn_sac}</td>
+                    <td>{item.gst_rate || invoice.igst_rate || 0}%</td>
+                    <td>{Number(item.quantity || 0).toFixed(2)}</td>
+                    <td>₹ {money(item.rate)}</td>
+                    <td>{item.per}</td>
+                    <td>
+                      <strong>₹ {money(amount)}</strong>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="invoice-total-row">
+        <Detail label="Taxable Amount" value={`₹ ${money(invoice.taxable_amount)}`} />
+        <Detail label="IGST Amount" value={`₹ ${money(invoice.igst_amount)}`} />
+        <Detail label="Round Up" value={`₹ ${money(invoice.round_up)}`} />
+        <Detail label="Grand Total" value={`₹ ${money(invoice.grand_total)}`} />
+      </div>
+
+      <div className="only-close-row">
+        <button className="btn btn-dark" onClick={closeInvoiceDetails}>
+          Close Details
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ActionButtons({
   invoice,
+  isOpen,
+  loading,
   openInvoiceDetails,
   openEditModal,
   downloadPdf,
@@ -1204,8 +1309,9 @@ function ActionButtons({
         className="icon-action view"
         onClick={() => openInvoiceDetails(invoice.id)}
         title="View"
+        disabled={loading}
       >
-        View
+        {loading ? "Loading..." : isOpen ? "Close" : "View"}
       </button>
 
       <button
@@ -1245,9 +1351,9 @@ function StatCard({ label, value }) {
   );
 }
 
-function Detail({ label, value }) {
+function Detail({ label, value, full }) {
   return (
-    <div className="detail-card">
+    <div className={`detail-card ${full ? "full" : ""}`}>
       <span>{label}</span>
       <strong>{value || "-"}</strong>
     </div>
@@ -1317,34 +1423,50 @@ function TableInput({ value, onChange, error, type = "text" }) {
 }
 
 const styles = `
-.invoice-list-page {
-  min-height: 100vh;
-  padding: 24px;
-  padding-top: max(24px, env(safe-area-inset-top));
-  padding-bottom: max(28px, env(safe-area-inset-bottom));
-  background:
-    radial-gradient(circle at top left, rgba(37, 99, 235, 0.14), transparent 30rem),
-    linear-gradient(135deg, #f8fafc, #eef2ff);
-  color: #111827;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}
-
 * {
   box-sizing: border-box;
 }
 
+html,
+body {
+  overflow-x: hidden;
+}
+
+.invoice-list-page {
+  min-height: 100vh;
+  width: 100%;
+  padding: 12px;
+  padding-top: max(12px, env(safe-area-inset-top));
+  padding-bottom: max(24px, env(safe-area-inset-bottom));
+  background:
+    radial-gradient(circle at 0% 0%, rgba(37, 99, 235, 0.16), transparent 28rem),
+    radial-gradient(circle at 100% 0%, rgba(14, 165, 233, 0.12), transparent 24rem),
+    linear-gradient(135deg, #f8fafc, #eef2ff);
+  color: #0f172a;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+}
+
 .page-header {
+  width: 100%;
   max-width: 1480px;
-  margin: 0 auto 18px;
-  padding: 22px 24px;
-  border-radius: 26px;
-  background: rgba(255, 255, 255, 0.94);
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  box-shadow: 0 18px 55px rgba(15, 23, 42, 0.08);
+  margin: 0 auto 12px;
+  padding: 14px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  box-shadow: 0 16px 45px rgba(15, 23, 42, 0.08);
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
 }
 
 .header-copy {
@@ -1352,22 +1474,15 @@ const styles = `
 }
 
 .eyebrow {
-  margin: 0 0 7px;
+  margin: 0 0 6px;
   color: #2563eb;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.15em;
 }
 
-h1,
-h2,
-h3,
-p {
-  margin: 0;
-}
-
 h1 {
-  font-size: clamp(24px, 3vw, 36px);
+  font-size: 22px;
   letter-spacing: -0.04em;
   line-height: 1.12;
 }
@@ -1375,40 +1490,46 @@ h1 {
 .subtitle {
   margin-top: 7px;
   color: #64748b;
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.header-actions,
+.header-actions .btn {
+  width: 100%;
 }
 
 .stats-grid {
+  width: 100%;
   max-width: 1480px;
-  margin: 0 auto 18px;
+  margin: 0 auto 12px;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
 }
 
 .stat-card {
   min-width: 0;
-  background: rgba(255, 255, 255, 0.94);
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  box-shadow: 0 14px 35px rgba(15, 23, 42, 0.06);
-  border-radius: 22px;
-  padding: 16px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+  border-radius: 18px;
+  padding: 12px;
   overflow: hidden;
 }
 
 .stat-card span {
   display: block;
   color: #64748b;
-  font-size: 12px;
-  font-weight: 800;
-  margin-bottom: 6px;
+  font-size: 10.5px;
+  font-weight: 900;
+  margin-bottom: 4px;
   white-space: nowrap;
 }
 
 .stat-card strong {
   display: block;
-  font-size: clamp(18px, 2.2vw, 23px);
+  font-size: 15px;
   letter-spacing: -0.03em;
   white-space: nowrap;
   overflow: hidden;
@@ -1416,54 +1537,53 @@ h1 {
 }
 
 .panel {
+  width: 100%;
   max-width: 1480px;
   margin: 0 auto;
-  background: rgba(255, 255, 255, 0.96);
-  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(148, 163, 184, 0.28);
   box-shadow: 0 18px 55px rgba(15, 23, 42, 0.08);
-  border-radius: 26px;
-  padding: 22px;
+  border-radius: 22px;
+  padding: 14px;
 }
 
 .toolbar {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
 .toolbar h2 {
-  font-size: 21px;
+  font-size: 18px;
   letter-spacing: -0.02em;
 }
 
 .toolbar p {
   margin-top: 4px;
   color: #64748b;
-  font-size: 14px;
+  font-size: 12px;
 }
 
 .filters {
+  width: 100%;
   display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 9px;
 }
 
 .filters input,
 .filters select {
-  height: 43px;
+  width: 100%;
+  height: 42px;
   border: 1px solid #dbe3ef;
   background: #f8fafc;
   border-radius: 14px;
-  padding: 0 13px;
+  padding: 0 12px;
   outline: none;
+  font-size: 13px;
   font-weight: 700;
-  min-width: 250px;
-}
-
-.filters select {
-  min-width: 170px;
 }
 
 .filters input:focus,
@@ -1476,9 +1596,10 @@ h1 {
 .btn {
   border: none;
   min-height: 42px;
-  padding: 10px 15px;
+  padding: 10px 14px;
   border-radius: 14px;
   cursor: pointer;
+  font-size: 13px;
   font-weight: 900;
   transition: 0.15s ease;
   display: inline-flex;
@@ -1503,7 +1624,7 @@ h1 {
 }
 
 .btn-dark {
-  background: linear-gradient(135deg, #111827, #334155);
+  background: linear-gradient(135deg, #0f172a, #334155);
   color: white;
 }
 
@@ -1530,53 +1651,86 @@ h1 {
   font-size: 13px;
 }
 
-.table-wrap {
-  overflow-x: auto;
+.desktop-table {
+  display: none;
+}
+
+.mobile-cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.invoice-card {
+  background: white;
   border: 1px solid #e2e8f0;
-  border-radius: 18px;
+  border-radius: 20px;
+  padding: 14px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
 }
 
-.invoice-table {
-  width: 100%;
-  min-width: 1080px;
-  border-collapse: separate;
-  border-spacing: 0;
+.invoice-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #eef2f7;
 }
 
-.invoice-table th {
-  background: #111827;
+.invoice-card-head span,
+.mobile-info span {
+  display: block;
+  color: #64748b;
+  font-size: 10.5px;
+  font-weight: 900;
+  margin-bottom: 4px;
+}
+
+.invoice-card-head strong {
+  display: block;
+  font-size: 16px;
+  color: #111827;
+  word-break: break-word;
+}
+
+.invoice-card-head small {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.amount-pill {
+  flex-shrink: 0;
+  background: #0f172a;
   color: white;
-  padding: 13px 12px;
-  text-align: left;
-  font-size: 11.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  border-radius: 999px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 900;
   white-space: nowrap;
 }
 
-.invoice-table td {
-  padding: 13px 12px;
-  border-top: 1px solid #e2e8f0;
-  background: white;
-  vertical-align: middle;
-  font-size: 14px;
+.invoice-card-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 9px;
+  margin-top: 11px;
 }
 
-.invoice-table tbody tr:hover td {
+.mobile-info {
+  min-width: 0;
   background: #f8fafc;
+  border: 1px solid #edf2f7;
+  border-radius: 14px;
+  padding: 9px;
 }
 
-.invoice-table td small {
+.mobile-info strong {
   display: block;
-  margin-top: 4px;
-  color: #64748b;
-  font-size: 12px;
-}
-
-.buyer-cell {
-  max-width: 250px;
-  font-weight: 800;
-  white-space: normal;
+  font-size: 12.5px;
+  color: #111827;
   word-break: break-word;
 }
 
@@ -1586,14 +1740,37 @@ h1 {
   flex-wrap: wrap;
 }
 
+.mobile-action-group {
+  margin-top: 11px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
 .icon-action {
   border: none;
   cursor: pointer;
   padding: 8px 10px;
-  border-radius: 11px;
+  border-radius: 12px;
   font-size: 12px;
   font-weight: 900;
-  min-height: 34px;
+  min-height: 36px;
+  transition: 0.15s ease;
+}
+
+.icon-action:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.icon-action:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.mobile-action-group .icon-action {
+  width: 100%;
+  padding: 8px 5px;
+  font-size: 11.5px;
 }
 
 .icon-action.view {
@@ -1614,6 +1791,138 @@ h1 {
 .icon-action.delete {
   background: #fee2e2;
   color: #b91c1c;
+}
+
+.mobile-expanded-box {
+  margin-top: 13px;
+}
+
+.expanded-details {
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
+  border: 1px solid #dbe3ef;
+  border-radius: 20px;
+  padding: 14px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
+}
+
+.expanded-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.expanded-head h3 {
+  font-size: 18px;
+  word-break: break-word;
+}
+
+.close-inline-btn {
+  border: none;
+  background: #0f172a;
+  color: white;
+  min-height: 36px;
+  padding: 8px 13px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 900;
+  flex-shrink: 0;
+}
+
+.details-section {
+  margin-top: 14px;
+}
+
+.details-section h4 {
+  font-size: 14px;
+  margin-bottom: 10px;
+  color: #0f172a;
+}
+
+.details-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 9px;
+}
+
+.detail-card {
+  min-width: 0;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 15px;
+  padding: 11px;
+}
+
+.detail-card span {
+  display: block;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+  margin-bottom: 6px;
+}
+
+.detail-card strong {
+  display: block;
+  font-size: 13px;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.invoice-total-row {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 9px;
+}
+
+.only-close-row {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.only-close-row .btn {
+  width: 100%;
+}
+
+.details-loading {
+  padding: 20px;
+  text-align: center;
+  color: #64748b;
+  font-weight: 900;
+}
+
+.mini-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: white;
+}
+
+.mini-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.mini-table th {
+  background: #f1f5f9;
+  color: #334155;
+  padding: 11px;
+  text-align: left;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.mini-table td {
+  border-top: 1px solid #e2e8f0;
+  padding: 11px;
+  font-size: 13px;
+  vertical-align: top;
 }
 
 .error-box {
@@ -1638,48 +1947,54 @@ h1 {
 
 .toast {
   position: fixed;
-  top: max(18px, env(safe-area-inset-top));
-  right: 18px;
+  top: max(12px, env(safe-area-inset-top));
+  right: 12px;
+  left: 12px;
   z-index: 9999;
-  background: #111827;
+  background: #0f172a;
   color: white;
-  padding: 13px 17px;
+  padding: 12px 14px;
   border-radius: 16px;
   box-shadow: 0 18px 45px rgba(15, 23, 42, 0.24);
   font-weight: 900;
-  max-width: min(360px, calc(100vw - 32px));
+  max-width: none;
+  text-align: center;
+  font-size: 13px;
 }
 
+/* MAIN FIX: Edit popup always full-screen responsive and centered */
 .modal-backdrop {
   position: fixed;
   inset: 0;
   z-index: 9000;
-  background: rgba(15, 23, 42, 0.62);
-  backdrop-filter: blur(7px);
+  width: 100vw;
+  height: 100dvh;
+  background: rgba(15, 23, 42, 0.68);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding:
-    max(18px, env(safe-area-inset-top))
-    18px
-    max(18px, env(safe-area-inset-bottom));
+  padding: 0;
+  overflow: hidden;
 }
 
 .modal {
-  width: min(1100px, calc(100vw - 36px));
-  max-height: calc(100dvh - 36px);
+  width: 100vw;
+  height: 100dvh;
+  max-width: 100vw;
+  max-height: 100dvh;
+  margin: 0;
   overflow: hidden;
   background: white;
-  border-radius: 26px;
-  box-shadow: 0 30px 90px rgba(15, 23, 42, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 0;
+  box-shadow: none;
+  border: none;
   animation: modalPop 0.18s ease-out;
 }
 
 @keyframes modalPop {
   from {
     opacity: 0;
-    transform: translateY(14px) scale(0.98);
+    transform: translateY(10px) scale(0.99);
   }
   to {
     opacity: 1;
@@ -1687,18 +2002,13 @@ h1 {
   }
 }
 
-.view-modal {
-  padding: 22px;
-  overflow-y: auto;
-}
-
 .edit-modal {
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 .modal-header {
-  padding-bottom: 16px;
   border-bottom: 1px solid #e2e8f0;
   display: flex;
   align-items: center;
@@ -1707,117 +2017,68 @@ h1 {
 }
 
 .sticky-header {
-  padding: 20px 22px;
-  background: white;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  padding: max(14px, env(safe-area-inset-top)) 14px 14px;
+  background: rgba(255, 255, 255, 0.98);
   flex-shrink: 0;
 }
 
-.close-btn {
-  width: 40px;
-  height: 40px;
-  border: none;
-  border-radius: 14px;
-  background: #f1f5f9;
-  color: #334155;
-  font-size: 27px;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.details-grid {
-  margin-top: 20px;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.detail-card {
-  min-width: 0;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 17px;
-  padding: 14px;
-}
-
-.detail-card span {
-  display: block;
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 900;
-  margin-bottom: 7px;
-}
-
-.detail-card strong {
-  display: block;
-  font-size: 14px;
+.modal-header h2 {
+  font-size: 18px;
   word-break: break-word;
 }
 
-.modal-subtitle {
-  margin-top: 22px;
-  margin-bottom: 12px;
+.close-btn {
+  width: 42px;
+  height: 42px;
+  border: none;
+  border-radius: 14px;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-size: 30px;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  font-weight: 900;
 }
 
-.mini-table-wrap {
-  overflow-x: auto;
-  border: 1px solid #e2e8f0;
-  border-radius: 18px;
-}
-
-.mini-table {
-  width: 100%;
-  min-width: 650px;
-  border-collapse: separate;
-  border-spacing: 0;
-}
-
-.mini-table th {
-  background: #f1f5f9;
-  color: #334155;
-  padding: 11px;
-  text-align: left;
-  font-size: 11.5px;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.mini-table td {
-  border-top: 1px solid #e2e8f0;
-  padding: 11px;
-  font-size: 14px;
-}
-
-.modal-actions {
-  margin-top: 20px;
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
+.close-btn:hover {
+  background: #fecaca;
 }
 
 .edit-content {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 22px;
+  overflow-x: hidden;
+  padding: 14px;
   overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .form-section {
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 20px;
-  padding: 16px;
-  margin-bottom: 16px;
+  border-radius: 18px;
+  padding: 13px;
+  margin-bottom: 12px;
 }
 
 .form-section h3 {
-  margin-bottom: 14px;
-  font-size: 17px;
+  margin-bottom: 12px;
+  font-size: 15px;
 }
 
 .section-row {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
+  align-items: stretch;
+  flex-direction: column;
+  gap: 9px;
   margin-bottom: 14px;
 }
 
@@ -1825,21 +2086,19 @@ h1 {
   margin-bottom: 0;
 }
 
+.section-row .btn {
+  width: 100%;
+}
+
 .form-grid {
   display: grid;
   gap: 13px;
 }
 
-.form-grid.two {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.form-grid.three {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
+.form-grid.two,
+.form-grid.three,
 .form-grid.four {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: 1fr;
 }
 
 .form-grid.inner {
@@ -1855,7 +2114,7 @@ h1 {
 
 .field span {
   color: #334155;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 900;
 }
 
@@ -1870,10 +2129,10 @@ h1 {
   width: 100%;
   border: 1px solid #dbe3ef;
   background: white;
-  border-radius: 14px;
+  border-radius: 13px;
   outline: none;
-  padding: 11px 12px;
-  font-size: 14px;
+  padding: 10px 11px;
+  font-size: 13px;
   transition: 0.15s ease;
 }
 
@@ -1905,18 +2164,19 @@ h1 {
 .edit-table-wrap {
   overflow-x: auto;
   border: 1px solid #dbe3ef;
-  border-radius: 18px;
+  border-radius: 16px;
+  background: white;
 }
 
 .edit-items-table {
   width: 100%;
-  min-width: 1020px;
+  min-width: 940px;
   border-collapse: separate;
   border-spacing: 0;
 }
 
 .edit-items-table th {
-  background: #111827;
+  background: #0f172a;
   color: white;
   padding: 11px 10px;
   text-align: left;
@@ -1958,16 +2218,16 @@ h1 {
 .total-box {
   margin-top: 14px;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: 1fr;
+  gap: 8px;
 }
 
 .total-box div {
   min-width: 0;
   background: white;
   border: 1px solid #e2e8f0;
-  border-radius: 17px;
-  padding: 13px;
+  border-radius: 15px;
+  padding: 10px;
 }
 
 .total-box span {
@@ -1979,12 +2239,12 @@ h1 {
 }
 
 .total-box strong {
-  font-size: 16px;
+  font-size: 14px;
   word-break: break-word;
 }
 
 .total-box .grand {
-  background: #111827;
+  background: #0f172a;
   color: white;
 }
 
@@ -1993,29 +2253,38 @@ h1 {
 }
 
 .modal-footer {
-  background: white;
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  background: rgba(255, 255, 255, 0.98);
   border-top: 1px solid #e2e8f0;
-  padding: 16px 22px;
+  padding: 12px 14px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
   gap: 10px;
   flex-shrink: 0;
-  padding-bottom: max(16px, env(safe-area-inset-bottom));
+}
+
+.modal-footer .btn {
+  width: 100%;
 }
 
 .delete-modal {
-  width: min(420px, calc(100vw - 36px));
+  width: min(420px, calc(100vw - 28px));
+  max-height: calc(100dvh - 28px);
+  overflow-y: auto;
   background: white;
-  border-radius: 26px;
-  padding: 26px;
+  border-radius: 22px;
+  padding: 20px;
   text-align: center;
-  box-shadow: 0 30px 90px rgba(15, 23, 42, 0.3);
+  box-shadow: 0 30px 90px rgba(15, 23, 42, 0.35);
   animation: modalPop 0.18s ease-out;
 }
 
 .delete-icon {
-  width: 58px;
-  height: 58px;
+  width: 52px;
+  height: 52px;
   margin: 0 auto 15px;
   border-radius: 50%;
   background: #fee2e2;
@@ -2023,450 +2292,322 @@ h1 {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 900;
+}
+
+.delete-modal h2 {
+  font-size: 20px;
 }
 
 .delete-modal p {
   margin-top: 12px;
   color: #64748b;
   line-height: 1.6;
+  font-size: 13px;
 }
 
 .delete-actions {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
   gap: 10px;
   margin-top: 22px;
 }
 
-.mobile-cards {
-  display: none;
+.delete-actions .btn {
+  width: 100%;
 }
 
-@media (max-width: 1100px) {
-  .stats-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+@media (min-width: 381px) {
+  .invoice-card-grid {
+    grid-template-columns: 1fr 1fr;
   }
 
-  .toolbar {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .filters {
-    width: 100%;
-  }
-
-  .filters input,
-  .filters select {
-    flex: 1;
-    min-width: 220px;
-  }
-
-  .details-grid,
-  .form-grid.four,
-  .form-grid.three {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .total-box {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .mobile-action-group {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
-@media (max-width: 760px) {
+@media (min-width: 640px) {
   .invoice-list-page {
-    padding: 12px;
-    padding-top: max(12px, env(safe-area-inset-top));
-    padding-bottom: max(90px, env(safe-area-inset-bottom));
+    padding: 18px;
   }
 
   .page-header {
     flex-direction: row;
     align-items: center;
-    border-radius: 20px;
-    padding: 14px;
-    gap: 10px;
-    margin-bottom: 12px;
-  }
-
-  .page-header h1 {
-    font-size: 20px;
-  }
-
-  .subtitle {
-    font-size: 12px;
-    line-height: 1.35;
-  }
-
-  .eyebrow {
-    font-size: 9.5px;
-    margin-bottom: 5px;
-  }
-
-  .header-actions {
-    flex-shrink: 0;
-  }
-
-  .header-actions .btn {
-    min-height: 36px;
-    padding: 8px 11px;
-    font-size: 12px;
-    border-radius: 12px;
-    width: auto;
-  }
-
-  .stats-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 9px;
-    margin-bottom: 12px;
-  }
-
-  .stat-card {
-    border-radius: 16px;
-    padding: 11px;
-    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
-  }
-
-  .stat-card span {
-    font-size: 10.5px;
-    margin-bottom: 4px;
-  }
-
-  .stat-card strong {
-    font-size: 15px;
-  }
-
-  .panel {
-    border-radius: 20px;
-    padding: 14px;
-  }
-
-  .toolbar {
-    gap: 12px;
-    margin-bottom: 12px;
-  }
-
-  .toolbar h2 {
-    font-size: 18px;
-  }
-
-  .toolbar p {
-    font-size: 12px;
-  }
-
-  .filters {
-    flex-direction: column;
-    gap: 9px;
-  }
-
-  .filters input,
-  .filters select {
-    width: 100%;
-    min-width: 0;
-    height: 40px;
-    border-radius: 12px;
-    font-size: 13px;
-  }
-
-  .desktop-table {
-    display: none;
-  }
-
-  .mobile-cards {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-
-  .invoice-card {
-    background: white;
-    border: 1px solid #e2e8f0;
-    border-radius: 18px;
-    padding: 13px;
-    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
-  }
-
-  .invoice-card-head {
-    display: flex;
-    align-items: flex-start;
     justify-content: space-between;
-    gap: 10px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid #eef2f7;
-  }
-
-  .invoice-card-head span,
-  .mobile-info span {
-    display: block;
-    color: #64748b;
-    font-size: 10.5px;
-    font-weight: 900;
-    margin-bottom: 4px;
-  }
-
-  .invoice-card-head strong {
-    display: block;
-    font-size: 16px;
-    color: #111827;
-    word-break: break-word;
-  }
-
-  .invoice-card-head small {
-    display: block;
-    margin-top: 3px;
-    font-size: 11px;
-    color: #64748b;
-  }
-
-  .amount-pill {
-    flex-shrink: 0;
-    background: #111827;
-    color: white;
-    border-radius: 999px;
-    padding: 7px 10px;
-    font-size: 12px;
-    font-weight: 900;
-    white-space: nowrap;
-  }
-
-  .invoice-card-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 9px;
-    margin-top: 11px;
-  }
-
-  .mobile-info {
-    min-width: 0;
-    background: #f8fafc;
-    border: 1px solid #edf2f7;
-    border-radius: 13px;
-    padding: 9px;
-  }
-
-  .mobile-info strong {
-    display: block;
-    font-size: 12.5px;
-    color: #111827;
-    word-break: break-word;
-  }
-
-  .mobile-action-group {
-    margin-top: 11px;
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 7px;
-  }
-
-  .mobile-action-group .icon-action {
-    width: 100%;
-    padding: 8px 5px;
-    font-size: 11.5px;
-    min-height: 34px;
-  }
-
-  .modal-backdrop {
-    align-items: center;
-    justify-content: center;
-    padding:
-      max(14px, env(safe-area-inset-top))
-      12px
-      max(14px, env(safe-area-inset-bottom));
-  }
-
-  .modal {
-    width: calc(100vw - 24px);
-    max-height: calc(100dvh - 28px);
-    border-radius: 20px;
-  }
-
-  .view-modal {
-    padding: 16px;
-  }
-
-  .modal-header {
-    padding-bottom: 12px;
-  }
-
-  .modal-header h2 {
-    font-size: 18px;
-    word-break: break-word;
-  }
-
-  .close-btn {
-    width: 36px;
-    height: 36px;
-    border-radius: 12px;
-    font-size: 25px;
-  }
-
-  .details-grid,
-  .form-grid.two,
-  .form-grid.three,
-  .form-grid.four,
-  .total-box {
-    grid-template-columns: 1fr;
-  }
-
-  .details-grid {
-    gap: 9px;
-    margin-top: 14px;
-  }
-
-  .detail-card {
-    border-radius: 14px;
-    padding: 11px;
-  }
-
-  .detail-card strong {
-    font-size: 13px;
-  }
-
-  .mini-table {
-    min-width: 560px;
-  }
-
-  .modal-actions,
-  .modal-footer,
-  .delete-actions {
-    flex-direction: column;
-  }
-
-  .modal-actions .btn,
-  .modal-footer .btn,
-  .delete-actions .btn {
-    width: 100%;
-  }
-
-  .sticky-header {
-    padding: 15px;
-  }
-
-  .edit-content {
-    padding: 14px;
-  }
-
-  .form-section {
-    border-radius: 17px;
-    padding: 13px;
-    margin-bottom: 12px;
-  }
-
-  .form-section h3 {
-    font-size: 15px;
-    margin-bottom: 12px;
-  }
-
-  .section-row {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 9px;
-  }
-
-  .section-row .btn {
-    width: 100%;
-  }
-
-  .field span {
-    font-size: 12px;
-  }
-
-  .field input,
-  .field textarea,
-  .table-field input {
-    padding: 10px 11px;
-    font-size: 13px;
-    border-radius: 12px;
-  }
-
-  .edit-table-wrap {
-    border-radius: 15px;
-  }
-
-  .edit-items-table {
-    min-width: 940px;
-  }
-
-  .total-box {
-    gap: 8px;
-  }
-
-  .total-box div {
-    border-radius: 14px;
-    padding: 10px;
-  }
-
-  .total-box strong {
-    font-size: 14px;
-  }
-
-  .modal-footer {
-    padding: 12px 14px;
-    padding-bottom: max(12px, env(safe-area-inset-bottom));
-  }
-
-  .delete-modal {
-    width: calc(100vw - 28px);
-    border-radius: 20px;
-    padding: 20px;
-  }
-
-  .delete-modal h2 {
-    font-size: 20px;
-  }
-
-  .delete-modal p {
-    font-size: 13px;
-  }
-
-  .delete-icon {
-    width: 52px;
-    height: 52px;
-    font-size: 28px;
-  }
-
-  .toast {
-    top: max(12px, env(safe-area-inset-top));
-    right: 12px;
-    left: 12px;
-    max-width: none;
-    text-align: center;
-    font-size: 13px;
-    padding: 12px 14px;
-  }
-
-  .btn {
-    min-height: 40px;
-    font-size: 13px;
-  }
-}
-
-@media (max-width: 380px) {
-  .page-header {
-    flex-direction: column;
-    align-items: flex-start;
+    padding: 18px;
   }
 
   .header-actions,
   .header-actions .btn {
-    width: 100%;
+    width: auto;
   }
 
-  .invoice-card-grid {
-    grid-template-columns: 1fr;
+  h1 {
+    font-size: 28px;
   }
 
-  .mobile-action-group {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .subtitle {
+    font-size: 14px;
   }
 
   .stats-grid {
-    gap: 8px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .stat-card {
+    padding: 15px;
   }
 
   .stat-card strong {
+    font-size: 20px;
+  }
+
+  .panel {
+    padding: 18px;
+  }
+
+  .filters {
+    flex-direction: row;
+  }
+
+  .details-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .detail-card.full {
+    grid-column: span 2;
+  }
+
+  .invoice-total-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .only-close-row .btn {
+    width: auto;
+    min-width: 160px;
+  }
+
+  .form-grid.two,
+  .form-grid.three,
+  .form-grid.four {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .total-box {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .modal-footer {
+    flex-direction: row;
+    justify-content: flex-end;
+  }
+
+  .modal-footer .btn {
+    width: auto;
+    min-width: 140px;
+  }
+
+  .delete-actions {
+    flex-direction: row;
+    justify-content: center;
+  }
+
+  .delete-actions .btn {
+    width: auto;
+  }
+
+  .toast {
+    left: auto;
+    right: 18px;
+    max-width: min(360px, calc(100vw - 32px));
+  }
+}
+
+@media (min-width: 900px) {
+  .desktop-table {
+    display: block;
+  }
+
+  .mobile-cards {
+    display: none;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+  }
+
+  .invoice-table {
+    width: 100%;
+    min-width: 1080px;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .invoice-table th {
+    background: #0f172a;
+    color: white;
+    padding: 13px 12px;
+    text-align: left;
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+  }
+
+  .invoice-table td {
+    padding: 13px 12px;
+    border-top: 1px solid #e2e8f0;
+    background: white;
+    vertical-align: middle;
+    font-size: 14px;
+  }
+
+  .invoice-table tbody tr:hover td {
+    background: #f8fafc;
+  }
+
+  .invoice-table td small {
+    display: block;
+    margin-top: 4px;
+    color: #64748b;
+    font-size: 12px;
+  }
+
+  .buyer-cell {
+    max-width: 250px;
+    font-weight: 800;
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  .desktop-details-row td {
+    background: #f8fafc !important;
+    padding: 14px !important;
+  }
+
+  .expanded-details {
+    border-radius: 20px;
+    padding: 16px;
+  }
+
+  .details-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .detail-card.full {
+    grid-column: span 4;
+  }
+
+  .invoice-total-row {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .toolbar {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .filters {
+    width: auto;
+  }
+
+  .filters input {
+    min-width: 280px;
+  }
+
+  .filters select {
+    min-width: 170px;
+  }
+
+  /* Laptop/Desktop edit screen: almost full page, centered with proper gap */
+  .modal-backdrop {
+    padding: 24px;
+  }
+
+  .modal {
+    width: calc(100vw - 48px);
+    height: calc(100dvh - 48px);
+    max-width: 1480px;
+    max-height: calc(100dvh - 48px);
+    border-radius: 28px;
+    box-shadow: 0 30px 90px rgba(15, 23, 42, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.55);
+  }
+
+  .sticky-header {
+    padding: 18px 22px;
+  }
+
+  .modal-header h2 {
+    font-size: 22px;
+  }
+
+  .edit-content {
+    padding: 22px;
+  }
+
+  .form-section {
+    border-radius: 22px;
+    padding: 18px;
+    margin-bottom: 16px;
+  }
+
+  .form-grid.three {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .form-grid.four {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .modal-footer {
+    padding: 16px 22px;
+  }
+}
+
+@media (min-width: 1100px) {
+  .invoice-list-page {
+    padding: 24px;
+  }
+
+  .page-header {
+    padding: 22px 24px;
+    border-radius: 28px;
+    margin-bottom: 18px;
+  }
+
+  h1 {
+    font-size: 36px;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+
+  .stat-card {
+    border-radius: 22px;
+    padding: 16px;
+  }
+
+  .panel {
+    border-radius: 28px;
+    padding: 22px;
+  }
+
+  .toolbar h2 {
+    font-size: 21px;
+  }
+
+  .toolbar p {
     font-size: 14px;
   }
 }
