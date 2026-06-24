@@ -32,6 +32,10 @@ import WorkDetails from "./Pages/WorkDetails/Worknewtab.jsx"; // ✅ PUBLIC PAGE
 import InwardViewOnly from "./Pages/WorkDetails/InwardViewOnly";
 import CheckInwardView from "./Pages/WorkDetails/CheckInwardView.jsx"; // OPTIONAL PAGE NOT ADD ONLY PUBLIC LINK ADD CHECK
 
+import Teligram from "./Pages/Teligram_message/Teligram.jsx";
+
+
+
 import InwardUpdate from "./Pages/WorkDetails/InwardUpdate";
 
 // Investment pages
