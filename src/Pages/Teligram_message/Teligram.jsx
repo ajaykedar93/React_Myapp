@@ -1,64 +1,231 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import DOMPurify from "dompurify";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const PUBLIC_USER_ID = 7;
 
 export default function Teligram() {
   const editorRef = useRef(null);
-  const fileRef = useRef(null);
+  const imageRef = useRef(null);
+  const colorRef = useRef(null);
   const bottomRef = useRef(null);
+  const savedRangeRef = useRef(null);
 
+  const [selectedChannel, setSelectedChannel] = useState(null);
   const [notes, setNotes] = useState([]);
-  const [title, setTitle] = useState("");
-  const [textColor, setTextColor] = useState("#111827");
+
+  const [textColor, setTextColor] = useState("#111111");
   const [selectedImage, setSelectedImage] = useState(null);
   const [previewImage, setPreviewImage] = useState("");
-  const [editingNoteId, setEditingNoteId] = useState(null);
   const [removeOldImage, setRemoveOldImage] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState(null);
+
+  const [activeMenuId, setActiveMenuId] = useState(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchText, setSearchText] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // IMPORTANT:
-  // Your login page should save admin user_id like this:
-  // localStorage.setItem("user_id", admin.user_id);
-  const userId = localStorage.getItem("user_id");
+  const [toast, setToast] = useState({
+    show: false,
+    type: "success",
+    message: "",
+  });
+
+  const [confirmBox, setConfirmBox] = useState({
+    show: false,
+    title: "",
+    message: "",
+    action: null,
+  });
 
   useEffect(() => {
-    fetchNotes();
+    loadSelectedChannel();
   }, []);
 
   useEffect(() => {
-    scrollToBottom();
+    if (selectedChannel?.channel_id) {
+      fetchNotes(selectedChannel.channel_id);
+    }
+  }, [selectedChannel]);
+
+  useEffect(() => {
+    setTimeout(() => {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 80);
   }, [notes]);
 
-  const fetchNotes = async () => {
-    try {
-      if (!userId) return;
+  const loadSelectedChannel = async () => {
+    const channelId = localStorage.getItem("selected_channel_id");
 
-      const res = await fetch(`${API_URL}/api/telegram-notes?user_id=${userId}`);
+    if (!channelId) {
+      window.location.hash = "/teligram-channels";
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/api/telegram-channels/${channelId}`);
       const data = await res.json();
 
       if (res.ok) {
-        setNotes(data.notes || data || []);
+        setSelectedChannel(data.channel);
+      } else {
+        showToast("Channel not found", "error");
+        setTimeout(() => {
+          window.location.hash = "/teligram-channels";
+        }, 1000);
       }
     } catch (error) {
-      console.error("Fetch notes error:", error);
+      console.error("Channel load error:", error);
+      showToast("Server error while opening channel", "error");
     }
   };
 
-  const scrollToBottom = () => {
+  const fetchNotes = async (channelId) => {
+    try {
+      const res = await fetch(
+        `${API_URL}/api/telegram-notes?user_id=${PUBLIC_USER_ID}&channel_id=${channelId}`
+      );
+
+      const data = await res.json();
+
+      if (res.ok) {
+        const allNotes = data.notes || [];
+
+        const channelNotes = allNotes.filter(
+          (note) => Number(note.channel_id) === Number(channelId)
+        );
+
+        setNotes(channelNotes);
+      }
+    } catch (error) {
+      console.error("Fetch notes error:", error);
+      showToast("Unable to load messages", "error");
+    }
+  };
+
+  const stripHtml = (html) => {
+    const div = document.createElement("div");
+    div.innerHTML = html || "";
+    return div.textContent || div.innerText || "";
+  };
+
+  const getEditorHtml = () => {
+    const html = editorRef.current?.innerHTML || "";
+    const text = editorRef.current?.textContent?.trim() || "";
+
+    if (!text && (html === "<br>" || html === "<div><br></div>")) {
+      return "";
+    }
+
+    return html.trim();
+  };
+
+  const filteredNotes = useMemo(() => {
+    if (!searchText.trim()) return notes;
+
+    const q = searchText.toLowerCase();
+
+    return notes.filter((note) => {
+      const plainText = stripHtml(note.content_html || "");
+      return plainText.toLowerCase().includes(q);
+    });
+  }, [notes, searchText]);
+
+  const showToast = (message, type = "success") => {
+    setToast({
+      show: true,
+      type,
+      message,
+    });
+
     setTimeout(() => {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, 100);
+      setToast({
+        show: false,
+        type: "success",
+        message: "",
+      });
+    }, 1700);
+  };
+
+  const openConfirm = (title, message, action) => {
+    setConfirmBox({
+      show: true,
+      title,
+      message,
+      action,
+    });
+  };
+
+  const closeConfirm = () => {
+    setConfirmBox({
+      show: false,
+      title: "",
+      message: "",
+      action: null,
+    });
+  };
+
+  const saveSelection = () => {
+    const selection = window.getSelection();
+
+    if (!selection || selection.rangeCount === 0) return;
+
+    const range = selection.getRangeAt(0);
+
+    if (
+      editorRef.current &&
+      editorRef.current.contains(range.commonAncestorContainer)
+    ) {
+      savedRangeRef.current = range.cloneRange();
+    }
+  };
+
+  const restoreSelection = () => {
+    const selection = window.getSelection();
+
+    if (!selection || !savedRangeRef.current) return;
+
+    selection.removeAllRanges();
+    selection.addRange(savedRangeRef.current);
   };
 
   const formatCommand = (command, value = null) => {
-    document.execCommand(command, false, value);
     editorRef.current?.focus();
+    restoreSelection();
+
+    setTimeout(() => {
+      document.execCommand(command, false, value);
+      saveSelection();
+      editorRef.current?.focus();
+    }, 0);
   };
 
-  const handleColorChange = (color) => {
+  const applyBold = (e) => {
+    e.preventDefault();
+    formatCommand("bold");
+  };
+
+  const applyUnderline = (e) => {
+    e.preventDefault();
+    formatCommand("underline");
+  };
+
+  const openColorPicker = (e) => {
+    e.preventDefault();
+    saveSelection();
+    colorRef.current?.click();
+  };
+
+  const changeColor = (color) => {
     setTextColor(color);
-    formatCommand("foreColor", color);
+    editorRef.current?.focus();
+    restoreSelection();
+
+    setTimeout(() => {
+      document.execCommand("foreColor", false, color);
+      saveSelection();
+      editorRef.current?.focus();
+    }, 0);
   };
 
   const handleImageSelect = (e) => {
@@ -67,7 +234,7 @@ export default function Teligram() {
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
-      alert("Please select only image file");
+      showToast("Please select only image", "error");
       return;
     }
 
@@ -76,65 +243,107 @@ export default function Teligram() {
     setRemoveOldImage(false);
   };
 
-  const removeImagePreview = () => {
+  const removeImage = () => {
     setSelectedImage(null);
     setPreviewImage("");
     setRemoveOldImage(true);
 
-    if (fileRef.current) {
-      fileRef.current.value = "";
+    if (imageRef.current) {
+      imageRef.current.value = "";
     }
   };
 
   const resetForm = () => {
-    setTitle("");
-    setTextColor("#111827");
+    setTextColor("#111111");
     setSelectedImage(null);
     setPreviewImage("");
-    setEditingNoteId(null);
     setRemoveOldImage(false);
+    setEditingNoteId(null);
+    setActiveMenuId(null);
+    savedRangeRef.current = null;
 
     if (editorRef.current) {
       editorRef.current.innerHTML = "";
     }
 
-    if (fileRef.current) {
-      fileRef.current.value = "";
+    if (imageRef.current) {
+      imageRef.current.value = "";
     }
   };
 
   const saveNote = async () => {
+    if (!selectedChannel?.channel_id) {
+      showToast("Please open channel first", "error");
+      return;
+    }
+
+    const contentHtml = getEditorHtml();
+    const plainText = stripHtml(contentHtml).trim();
+
+    if (!plainText && !selectedImage && !previewImage) {
+      showToast("Please add text or image", "error");
+      return;
+    }
+
+    const currentImageFile = selectedImage;
+    const currentPreviewImage = previewImage;
+    const currentRemoveImage = removeOldImage;
+    const currentTextColor = textColor;
+    const oldEditingId = editingNoteId;
+    const oldNotes = notes;
+    const now = new Date().toISOString();
+    const tempId = oldEditingId || `temp-${Date.now()}`;
+
+    const oldNote = oldEditingId
+      ? notes.find((note) => note.note_id === oldEditingId)
+      : null;
+
+    const optimisticNote = {
+      note_id: tempId,
+      user_id: PUBLIC_USER_ID,
+      channel_id: selectedChannel.channel_id,
+      title: "",
+      content_html: contentHtml,
+      text_color: currentTextColor,
+      image_url: currentRemoveImage ? null : currentPreviewImage || null,
+      image_path: null,
+      created_at: oldEditingId ? oldNote?.created_at || now : now,
+      updated_at: now,
+      is_temp: true,
+    };
+
+    if (oldEditingId) {
+      setNotes((prev) =>
+        prev.map((note) =>
+          note.note_id === oldEditingId ? { ...note, ...optimisticNote } : note
+        )
+      );
+    } else {
+      setNotes((prev) => [...prev, optimisticNote]);
+    }
+
+    resetForm();
+
     try {
-      if (!userId) {
-        alert("User ID not found. Please login again.");
-        return;
-      }
-
-      const contentHtml = editorRef.current?.innerHTML.trim() || "";
-
-      if (!title.trim() && !contentHtml && !selectedImage && !previewImage) {
-        alert("Please add title, text, or image");
-        return;
-      }
-
-      const formData = new FormData();
-      formData.append("user_id", userId);
-      formData.append("title", title.trim());
-      formData.append("content_html", contentHtml);
-      formData.append("text_color", textColor);
-      formData.append("remove_image", removeOldImage ? "true" : "false");
-
-      if (selectedImage) {
-        formData.append("image", selectedImage);
-      }
-
       setLoading(true);
 
-      const url = editingNoteId
-        ? `${API_URL}/api/telegram-notes/${editingNoteId}`
+      const formData = new FormData();
+      formData.append("user_id", PUBLIC_USER_ID);
+      formData.append("channel_id", selectedChannel.channel_id);
+      formData.append("title", "");
+      formData.append("content_html", contentHtml);
+      formData.append("text_color", currentTextColor);
+      formData.append("remove_image", currentRemoveImage ? "true" : "false");
+
+      if (currentImageFile) {
+        formData.append("image", currentImageFile);
+      }
+
+      const url = oldEditingId
+        ? `${API_URL}/api/telegram-notes/${oldEditingId}`
         : `${API_URL}/api/telegram-notes`;
 
-      const method = editingNoteId ? "PUT" : "POST";
+      const method = oldEditingId ? "PUT" : "POST";
 
       const res = await fetch(url, {
         method,
@@ -144,27 +353,71 @@ export default function Teligram() {
       const data = await res.json();
 
       if (!res.ok) {
-        alert(data.message || "Something went wrong");
+        showToast(data.message || "Action failed", "error");
+        setNotes(oldNotes);
         return;
       }
 
-      resetForm();
-      fetchNotes();
+      const backendNote = data.note || {};
+
+      const savedNote = {
+        ...optimisticNote,
+        ...backendNote,
+        channel_id: selectedChannel.channel_id,
+        text_color: backendNote.text_color || currentTextColor,
+        content_html: backendNote.content_html || contentHtml,
+        image_url:
+          backendNote.image_url ||
+          backendNote.logo_url ||
+          optimisticNote.image_url ||
+          null,
+        created_at: optimisticNote.created_at,
+        updated_at: new Date().toISOString(),
+        is_temp: false,
+      };
+
+      if (oldEditingId) {
+        setNotes((prev) =>
+          prev.map((note) => (note.note_id === oldEditingId ? savedNote : note))
+        );
+      } else {
+        setNotes((prev) =>
+          prev.map((note) => (note.note_id === tempId ? savedNote : note))
+        );
+      }
+
+      fetch(
+        `${API_URL}/api/telegram-channels/${selectedChannel.channel_id}/last-message`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            last_message: plainText.slice(0, 80) || "Image message",
+          }),
+        }
+      );
+
+      showToast(oldEditingId ? "Message updated" : "Message sent", "success");
     } catch (error) {
       console.error("Save note error:", error);
-      alert("Server error");
+      showToast("Server error", "error");
+      setNotes(oldNotes);
     } finally {
       setLoading(false);
     }
   };
 
-  const editNote = (note) => {
+  const startEdit = (note) => {
+    if (note.is_temp) return;
+
     setEditingNoteId(note.note_id);
-    setTitle(note.title || "");
-    setTextColor(note.text_color || "#111827");
+    setTextColor(note.text_color || "#111111");
     setPreviewImage(note.image_url || "");
     setSelectedImage(null);
     setRemoveOldImage(false);
+    setActiveMenuId(null);
 
     if (editorRef.current) {
       editorRef.current.innerHTML = note.content_html || "";
@@ -172,15 +425,19 @@ export default function Teligram() {
 
     setTimeout(() => {
       editorRef.current?.focus();
+      saveSelection();
     }, 100);
   };
 
   const deleteNote = async (noteId) => {
-    const confirmDelete = window.confirm("Are you sure you want to delete this note?");
+    const oldNotes = notes;
 
-    if (!confirmDelete) return;
+    setNotes((prev) => prev.filter((note) => note.note_id !== noteId));
+    setActiveMenuId(null);
 
     try {
+      setLoading(true);
+
       const res = await fetch(`${API_URL}/api/telegram-notes/${noteId}`, {
         method: "DELETE",
       });
@@ -188,652 +445,857 @@ export default function Teligram() {
       const data = await res.json();
 
       if (!res.ok) {
-        alert(data.message || "Delete failed");
+        showToast(data.message || "Delete failed", "error");
+        setNotes(oldNotes);
         return;
       }
 
-      fetchNotes();
+      showToast("Message deleted", "success");
     } catch (error) {
       console.error("Delete note error:", error);
-      alert("Server error");
+      showToast("Server error while deleting", "error");
+      setNotes(oldNotes);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const formatTime = (dateValue) => {
+  const backToChannels = () => {
+    resetForm();
+    window.location.hash = "/teligram-channels";
+  };
+
+  const formatDateTime = (dateValue) => {
     if (!dateValue) return "";
 
-    return new Date(dateValue).toLocaleTimeString("en-IN", {
+    const date = new Date(dateValue);
+
+    const dateText = date.toLocaleDateString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+
+    const timeText = date.toLocaleTimeString("en-IN", {
+      timeZone: "Asia/Kolkata",
       hour: "2-digit",
       minute: "2-digit",
+      hour12: true,
     });
+
+    return `${dateText} • ${timeText}`;
+  };
+
+  const getInitial = (name) => {
+    return name?.charAt(0)?.toUpperCase() || "N";
   };
 
   return (
-    <div className="tg-page">
-      <div className="tg-app">
-        <aside className="tg-sidebar">
-          <div className="tg-sidebar-top">
-            <div>
-              <h2>Teligram Notes</h2>
-              <p>Professional saved notes</p>
-            </div>
-          </div>
+    <div className="nm-screen">
+      <div className="nm-phone">
+        <header className="nm-header">
+          <button className="back-btn" onClick={backToChannels}>
+            ‹
+          </button>
 
-          <div className="tg-search-box">
-            <input type="text" placeholder="Search notes..." disabled />
-          </div>
-
-          <div className="tg-chat-user active">
-            <div className="tg-avatar">N</div>
-            <div className="tg-chat-info">
-              <h4>Saved Notes</h4>
-              <p>Text, images, title, colors</p>
-            </div>
-            <span>{notes.length}</span>
-          </div>
-        </aside>
-
-        <main className="tg-main">
-          <header className="tg-header">
-            <div className="tg-avatar small">N</div>
-            <div>
-              <h3>Saved Notes</h3>
-              <p>{userId ? "Online notes storage" : "User ID not found"}</p>
-            </div>
-          </header>
-
-          <section className="tg-messages">
-            {!userId && (
-              <div className="tg-empty">
-                <h3>User ID not found</h3>
-                <p>Please login first and save user_id in localStorage.</p>
-              </div>
+          <div className="header-logo">
+            {selectedChannel?.logo_url ? (
+              <img src={selectedChannel.logo_url} alt="logo" />
+            ) : (
+              <span>{getInitial(selectedChannel?.channel_name)}</span>
             )}
+          </div>
 
-            {userId && notes.length === 0 && (
-              <div className="tg-empty">
-                <h3>No notes yet</h3>
-                <p>Create your first Telegram-style professional note.</p>
-              </div>
-            )}
+          <div className="header-title">
+            <h2>{selectedChannel?.channel_name || "Notes"}</h2>
+          </div>
 
-            {notes.map((note) => (
-              <div className="tg-message-row" key={note.note_id}>
-                <div className="tg-bubble">
-                  {note.title && (
-                    <h4 style={{ color: note.text_color || "#111827" }}>
-                      {note.title}
-                    </h4>
-                  )}
+          <button
+            className="search-btn"
+            onClick={() => {
+              setSearchOpen(!searchOpen);
+              setSearchText("");
+            }}
+          >
+            🔍
+          </button>
+        </header>
 
-                  {note.content_html && (
-                    <div
-                      className="tg-content"
-                      style={{ color: note.text_color || "#111827" }}
-                      dangerouslySetInnerHTML={{
-                        __html: DOMPurify.sanitize(note.content_html),
-                      }}
-                    />
-                  )}
-
-                  {note.image_url && (
-                    <img
-                      src={note.image_url}
-                      alt="note"
-                      className="tg-note-image"
-                    />
-                  )}
-
-                  <div className="tg-message-footer">
-                    <span>{formatTime(note.created_at)}</span>
-
-                    <button onClick={() => editNote(note)} title="Edit">
-                      ✏️
-                    </button>
-
-                    <button onClick={() => deleteNote(note.note_id)} title="Delete">
-                      🗑️
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-
-            <div ref={bottomRef}></div>
-          </section>
-
-          {previewImage && (
-            <div className="tg-preview">
-              <img src={previewImage} alt="preview" />
-              <div>
-                <strong>Image selected</strong>
-                <p>{selectedImage ? selectedImage.name : "Current uploaded image"}</p>
-              </div>
-              <button onClick={removeImagePreview}>✕</button>
-            </div>
-          )}
-
-          {editingNoteId && (
-            <div className="tg-editing-bar">
-              <span>Editing note</span>
-              <button onClick={resetForm}>Cancel</button>
-            </div>
-          )}
-
-          <section className="tg-composer">
+        {searchOpen && (
+          <div className="search-box">
             <input
-              className="tg-title-input"
               type="text"
-              placeholder="Enter title..."
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Search..."
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              autoFocus
             />
 
-            <div className="tg-toolbar">
-              <button onClick={() => formatCommand("bold")} title="Bold">
-                <b>B</b>
-              </button>
+            <button
+              onClick={() => {
+                setSearchOpen(false);
+                setSearchText("");
+              }}
+            >
+              ×
+            </button>
+          </div>
+        )}
 
-              <button onClick={() => formatCommand("italic")} title="Italic">
-                <i>I</i>
-              </button>
-
-              <button onClick={() => formatCommand("underline")} title="Underline">
-                <u>U</u>
-              </button>
-
-              <label className="tg-color">
-                🎨
-                <input
-                  type="color"
-                  value={textColor}
-                  onChange={(e) => handleColorChange(e.target.value)}
-                />
-              </label>
+        <main className="chat-body" onClick={() => setActiveMenuId(null)}>
+          {filteredNotes.length === 0 && (
+            <div className="empty-card">
+              <h3>{searchText ? "No match found" : "No messages yet"}</h3>
+              <p>{searchText ? "Try another word" : "Start adding notes below"}</p>
             </div>
+          )}
 
+          {filteredNotes.map((note) => (
+            <div className="msg-row" key={note.note_id}>
+              <div className="msg-card" onClick={(e) => e.stopPropagation()}>
+                <button
+                  className="dot-btn"
+                  onClick={() =>
+                    setActiveMenuId(
+                      activeMenuId === note.note_id ? null : note.note_id
+                    )
+                  }
+                >
+                  ⋮
+                </button>
+
+                {activeMenuId === note.note_id && !note.is_temp && (
+                  <div className="action-menu">
+                    <button className="update-action" onClick={() => startEdit(note)}>
+                      Update
+                    </button>
+
+                    <button
+                      className="delete-action"
+                      onClick={() =>
+                        openConfirm(
+                          "Delete Message?",
+                          "This message will be deleted permanently.",
+                          () => deleteNote(note.note_id)
+                        )
+                      }
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
+
+                <div className="msg-date">{formatDateTime(note.created_at)}</div>
+
+                {note.content_html && (
+                  <div
+                    className="msg-text"
+                    style={{ color: note.text_color || "#111111" }}
+                    dangerouslySetInnerHTML={{
+                      __html: DOMPurify.sanitize(note.content_html),
+                    }}
+                  />
+                )}
+
+                {note.image_url && (
+                  <img src={note.image_url} alt="note" className="msg-image" />
+                )}
+
+                {note.is_temp && <div className="sending-text">sending...</div>}
+              </div>
+            </div>
+          ))}
+
+          <div ref={bottomRef}></div>
+        </main>
+
+        {previewImage && (
+          <div className="preview-strip">
+            <img src={previewImage} alt="preview" />
+            <span>{selectedImage ? selectedImage.name : "Current image"}</span>
+            <button onClick={removeImage}>×</button>
+          </div>
+        )}
+
+        {editingNoteId && (
+          <div className="edit-strip">
+            <span>Updating message</span>
+            <button onClick={resetForm}>Cancel</button>
+          </div>
+        )}
+
+        <footer className="composer">
+          <div className="input-card">
             <div
               ref={editorRef}
-              className="tg-editor"
+              className="text-input"
               contentEditable
-              data-placeholder="Write your note..."
+              data-placeholder="Type message..."
               style={{ color: textColor }}
+              onMouseUp={saveSelection}
+              onKeyUp={saveSelection}
+              onInput={saveSelection}
+              onBlur={saveSelection}
             ></div>
 
-            <div className="tg-send-row">
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                hidden
-                onChange={handleImageSelect}
-              />
+            <input
+              ref={imageRef}
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={handleImageSelect}
+            />
 
-              <button
-                className="tg-attach-btn"
-                onClick={() => fileRef.current.click()}
-              >
-                📎
+            <button
+              className="tool-btn"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => imageRef.current.click()}
+            >
+              🖼️
+            </button>
+
+            <button className="tool-btn" onMouseDown={applyBold}>
+              <b>B</b>
+            </button>
+
+            <button className="tool-btn" onMouseDown={applyUnderline}>
+              <u>U</u>
+            </button>
+
+            <input
+              ref={colorRef}
+              type="color"
+              value={textColor}
+              hidden
+              onChange={(e) => changeColor(e.target.value)}
+            />
+
+            <button className="tool-btn" onMouseDown={openColorPicker}>
+              🎨
+            </button>
+
+            <button className="send-btn" onClick={saveNote} disabled={loading}>
+              {loading ? "…" : editingNoteId ? "✓" : "➤"}
+            </button>
+          </div>
+        </footer>
+      </div>
+
+      {toast.show && (
+        <div className="popup-layer">
+          <div className={`toast ${toast.type}`}>
+            <div className="toast-icon">{toast.type === "success" ? "✓" : "!"}</div>
+            <p>{toast.message}</p>
+          </div>
+        </div>
+      )}
+
+      {confirmBox.show && (
+        <div className="confirm-layer">
+          <div className="confirm-card">
+            <div className="confirm-icon">?</div>
+            <h3>{confirmBox.title}</h3>
+            <p>{confirmBox.message}</p>
+
+            <div className="confirm-actions">
+              <button className="cancel-confirm" onClick={closeConfirm}>
+                Cancel
               </button>
 
               <button
-                className="tg-send-btn"
-                onClick={saveNote}
-                disabled={loading || !userId}
+                className="delete-confirm"
+                onClick={() => {
+                  closeConfirm();
+                  confirmBox.action && confirmBox.action();
+                }}
               >
-                {loading ? "Saving..." : editingNoteId ? "Update" : "Send"}
+                Delete
               </button>
             </div>
-          </section>
-        </main>
-      </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         * {
           box-sizing: border-box;
         }
 
-        .tg-page {
-          min-height: 100vh;
+        body {
+          margin: 0;
+        }
+
+        .nm-screen {
           width: 100%;
-          background: linear-gradient(135deg, #d9e6ef, #f5f8fb);
+          min-height: 100vh;
+          background: linear-gradient(145deg, #111827, #334155, #0f766e);
           display: flex;
-          align-items: center;
           justify-content: center;
+          align-items: center;
           font-family: Arial, sans-serif;
-          padding: 20px;
         }
 
-        .tg-app {
-          width: 1150px;
-          height: 92vh;
-          background: #ffffff;
-          border-radius: 18px;
-          overflow: hidden;
-          box-shadow: 0 25px 70px rgba(15, 23, 42, 0.22);
-          display: grid;
-          grid-template-columns: 330px 1fr;
-        }
-
-        .tg-sidebar {
-          background: #ffffff;
-          border-right: 1px solid #dbe4ea;
+        .nm-phone {
+          width: 100%;
+          max-width: 430px;
+          height: 100vh;
+          background: linear-gradient(145deg, #d8f3e7, #eef7ff, #d9e7ff);
           display: flex;
           flex-direction: column;
+          overflow: hidden;
+          position: relative;
         }
 
-        .tg-sidebar-top {
-          background: #229ed9;
+        .nm-header {
+          height: 64px;
+          background: linear-gradient(135deg, #00695c, #009688);
           color: white;
-          padding: 24px;
-        }
-
-        .tg-sidebar-top h2 {
-          margin: 0;
-          font-size: 24px;
-          font-weight: 700;
-        }
-
-        .tg-sidebar-top p {
-          margin: 6px 0 0;
-          font-size: 14px;
-          opacity: 0.9;
-        }
-
-        .tg-search-box {
-          padding: 14px;
-          border-bottom: 1px solid #edf2f5;
-        }
-
-        .tg-search-box input {
-          width: 100%;
-          height: 42px;
-          border: none;
-          outline: none;
-          background: #eef3f7;
-          border-radius: 22px;
-          padding: 0 16px;
-          font-size: 14px;
-          color: #6b7280;
-        }
-
-        .tg-chat-user {
           display: flex;
           align-items: center;
-          gap: 12px;
-          padding: 15px;
-          cursor: pointer;
-          border-bottom: 1px solid #f1f5f9;
+          gap: 10px;
+          padding: 8px 10px;
+          flex-shrink: 0;
+          box-shadow: 0 4px 18px rgba(15, 23, 42, 0.18);
+          z-index: 10;
         }
 
-        .tg-chat-user.active {
-          background: #eaf6fd;
-        }
-
-        .tg-avatar {
-          width: 48px;
-          height: 48px;
-          border-radius: 50%;
-          background: linear-gradient(135deg, #37aee2, #1e96c8);
+        .back-btn {
+          border: none;
+          background: transparent;
           color: white;
+          font-size: 38px;
+          line-height: 1;
+          cursor: pointer;
+          width: 32px;
+          height: 42px;
+        }
+
+        .header-logo {
+          width: 42px;
+          height: 42px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #14b8a6, #0f766e);
+          overflow: hidden;
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 20px;
-          font-weight: 700;
+          font-weight: 800;
+          color: white;
           flex-shrink: 0;
         }
 
-        .tg-avatar.small {
-          width: 42px;
-          height: 42px;
-          font-size: 17px;
+        .header-logo img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
         }
 
-        .tg-chat-info {
+        .header-title {
           flex: 1;
-        }
-
-        .tg-chat-info h4 {
-          margin: 0;
-          font-size: 16px;
-          color: #17212b;
-        }
-
-        .tg-chat-info p {
-          margin: 4px 0 0;
-          font-size: 13px;
-          color: #6b7280;
-        }
-
-        .tg-chat-user span {
-          background: #229ed9;
-          color: white;
-          font-size: 12px;
-          min-width: 24px;
-          height: 24px;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-
-        .tg-main {
-          display: flex;
-          flex-direction: column;
-          background: #e6ebee;
           min-width: 0;
         }
 
-        .tg-header {
-          height: 72px;
-          background: #ffffff;
-          border-bottom: 1px solid #dbe4ea;
+        .header-title h2 {
+          margin: 0;
+          font-size: 18px;
+          font-weight: 800;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .search-btn {
+          width: 38px;
+          height: 38px;
+          border: none;
+          border-radius: 50%;
+          background: rgba(255,255,255,0.16);
+          color: white;
+          cursor: pointer;
+          font-size: 17px;
+        }
+
+        .search-box {
+          background: white;
+          padding: 8px 10px;
           display: flex;
           align-items: center;
-          gap: 12px;
-          padding: 0 22px;
+          gap: 8px;
+          border-bottom: 1px solid #e5e7eb;
           flex-shrink: 0;
         }
 
-        .tg-header h3 {
-          margin: 0;
-          font-size: 17px;
-          color: #17212b;
-        }
-
-        .tg-header p {
-          margin: 3px 0 0;
-          font-size: 13px;
-          color: #6b7280;
-        }
-
-        .tg-messages {
+        .search-box input {
           flex: 1;
-          overflow-y: auto;
-          padding: 24px;
-          background:
-            linear-gradient(rgba(230, 235, 238, 0.88), rgba(230, 235, 238, 0.88)),
-            radial-gradient(circle at 15% 20%, #ffffff 0, transparent 28%),
-            radial-gradient(circle at 90% 85%, #c9e7f6 0, transparent 30%);
-        }
-
-        .tg-empty {
-          height: 100%;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          text-align: center;
-          color: #64748b;
-        }
-
-        .tg-empty h3 {
-          margin: 0 0 8px;
-          color: #334155;
-        }
-
-        .tg-empty p {
-          margin: 0;
+          height: 36px;
+          border: none;
+          outline: none;
+          background: #f1f5f9;
+          border-radius: 18px;
+          padding: 0 14px;
           font-size: 14px;
         }
 
-        .tg-message-row {
-          display: flex;
-          justify-content: flex-end;
-          margin-bottom: 14px;
+        .search-box button {
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          border: none;
+          background: #e2e8f0;
+          font-size: 20px;
+          cursor: pointer;
+          color: #475569;
         }
 
-        .tg-bubble {
-          max-width: 68%;
-          background: #effdde;
-          border-radius: 17px 17px 5px 17px;
-          padding: 12px 12px 8px;
-          box-shadow: 0 2px 8px rgba(15, 23, 42, 0.15);
-          animation: bubblePop 0.18s ease;
+        .chat-body {
+          flex: 1;
+          overflow-y: auto;
+          padding: 12px 10px 16px;
+          background:
+            radial-gradient(circle at 18% 12%, rgba(255,255,255,0.45), transparent 28%),
+            radial-gradient(circle at 84% 82%, rgba(14,165,233,0.18), transparent 30%),
+            linear-gradient(135deg, #d7f4df, #edf5ff 45%, #dce7ff);
+        }
+
+        .empty-card {
+          width: fit-content;
+          max-width: 82%;
+          margin: 90px auto 0;
+          background: rgba(255,255,255,0.88);
+          backdrop-filter: blur(8px);
+          padding: 18px 20px;
+          border-radius: 18px;
+          text-align: center;
+          box-shadow: 0 8px 28px rgba(15,23,42,0.12);
+        }
+
+        .empty-card h3 {
+          margin: 0 0 6px;
+          color: #1f2937;
+          font-size: 16px;
+        }
+
+        .empty-card p {
+          margin: 0;
+          color: #64748b;
+          font-size: 13px;
+        }
+
+        .msg-row {
+          display: flex;
+          justify-content: flex-start;
+          margin-bottom: 10px;
+        }
+
+        .msg-card {
+          max-width: 88%;
+          min-width: 120px;
+          position: relative;
+          background: rgba(255,255,255,0.97);
+          border-radius: 6px 17px 17px 17px;
+          padding: 9px 30px 7px 10px;
+          box-shadow: 0 2px 10px rgba(15,23,42,0.13);
           word-break: break-word;
         }
 
-        @keyframes bubblePop {
+        .dot-btn {
+          position: absolute;
+          top: 4px;
+          right: 4px;
+          width: 22px;
+          height: 22px;
+          border: none;
+          background: transparent;
+          color: #64748b;
+          font-size: 16px;
+          cursor: pointer;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .dot-btn:hover {
+          background: #f1f5f9;
+        }
+
+        .action-menu {
+          position: absolute;
+          top: 26px;
+          right: 5px;
+          background: white;
+          border-radius: 10px;
+          box-shadow: 0 12px 36px rgba(15,23,42,0.22);
+          padding: 5px;
+          z-index: 8;
+          min-width: 82px;
+          animation: menuIn 0.14s ease;
+        }
+
+        @keyframes menuIn {
           from {
-            transform: scale(0.96);
+            opacity: 0;
+            transform: translateY(-5px) scale(0.96);
+          }
+
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+
+        .action-menu button {
+          width: 100%;
+          border: none;
+          background: transparent;
+          padding: 6px 8px;
+          text-align: left;
+          cursor: pointer;
+          font-size: 12px;
+          font-weight: 800;
+          border-radius: 7px;
+        }
+
+        .update-action {
+          color: #2563eb;
+        }
+
+        .delete-action {
+          color: #dc2626;
+        }
+
+        .action-menu button:hover {
+          background: #f8fafc;
+        }
+
+        .msg-date {
+          font-size: 11px;
+          color: #64748b;
+          font-weight: 700;
+          margin-bottom: 6px;
+          padding-right: 8px;
+        }
+
+        .msg-text {
+          font-size: 16px;
+          line-height: 1.42;
+          color: #111111;
+          padding-right: 2px;
+        }
+
+        .msg-text div,
+        .msg-text p {
+          margin: 0;
+        }
+
+        .msg-image {
+          display: block;
+          width: 100%;
+          max-width: 285px;
+          max-height: 330px;
+          object-fit: cover;
+          border-radius: 12px;
+          margin-top: 7px;
+        }
+
+        .sending-text {
+          margin-top: 5px;
+          text-align: right;
+          color: #94a3b8;
+          font-size: 11px;
+        }
+
+        .preview-strip {
+          background: rgba(255,255,255,0.96);
+          border-top: 1px solid #e5e7eb;
+          padding: 7px 9px;
+          display: flex;
+          align-items: center;
+          gap: 9px;
+          flex-shrink: 0;
+        }
+
+        .preview-strip img {
+          width: 44px;
+          height: 44px;
+          border-radius: 9px;
+          object-fit: cover;
+        }
+
+        .preview-strip span {
+          flex: 1;
+          font-size: 12px;
+          color: #475569;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .preview-strip button {
+          width: 28px;
+          height: 28px;
+          border-radius: 50%;
+          border: none;
+          background: #fee2e2;
+          color: #dc2626;
+          font-size: 18px;
+          cursor: pointer;
+        }
+
+        .edit-strip {
+          background: #eff6ff;
+          color: #2563eb;
+          border-top: 1px solid #bfdbfe;
+          padding: 7px 10px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          font-size: 13px;
+          font-weight: 700;
+          flex-shrink: 0;
+        }
+
+        .edit-strip button {
+          border: none;
+          background: #2563eb;
+          color: white;
+          border-radius: 13px;
+          padding: 5px 10px;
+          font-size: 12px;
+          cursor: pointer;
+        }
+
+        .composer {
+          background: rgba(255,255,255,0.98);
+          padding: 8px;
+          flex-shrink: 0;
+          box-shadow: 0 -4px 18px rgba(15,23,42,0.08);
+        }
+
+        .input-card {
+          min-height: 44px;
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          border-radius: 22px;
+          padding: 5px 5px 5px 12px;
+        }
+
+        .text-input {
+          flex: 1;
+          min-width: 0;
+          max-height: 76px;
+          overflow-y: auto;
+          outline: none;
+          font-size: 15px;
+          line-height: 1.35;
+          padding: 6px 0;
+        }
+
+        .text-input:empty::before {
+          content: attr(data-placeholder);
+          color: #94a3b8;
+        }
+
+        .tool-btn {
+          width: 29px;
+          height: 29px;
+          border: none;
+          border-radius: 50%;
+          background: #e2e8f0;
+          color: #334155;
+          cursor: pointer;
+          font-size: 13px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+
+        .send-btn {
+          width: 34px;
+          height: 34px;
+          border-radius: 50%;
+          border: none;
+          background: linear-gradient(135deg, #00897b, #00a693);
+          color: white;
+          font-size: 16px;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+
+        .send-btn:disabled {
+          opacity: 0.65;
+          cursor: not-allowed;
+        }
+
+        .popup-layer {
+          position: fixed;
+          inset: 0;
+          z-index: 100;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          pointer-events: none;
+        }
+
+        .toast {
+          width: 245px;
+          background: white;
+          border-radius: 22px;
+          padding: 20px 16px;
+          text-align: center;
+          box-shadow: 0 20px 70px rgba(15,23,42,0.28);
+          animation: popupScale 0.16s ease;
+        }
+
+        .toast-icon {
+          width: 46px;
+          height: 46px;
+          border-radius: 50%;
+          margin: 0 auto 10px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 23px;
+          font-weight: 900;
+        }
+
+        .toast.success .toast-icon {
+          background: #dcfce7;
+          color: #16a34a;
+        }
+
+        .toast.error .toast-icon {
+          background: #fee2e2;
+          color: #dc2626;
+        }
+
+        .toast p {
+          margin: 0;
+          color: #1f2937;
+          font-size: 14px;
+          font-weight: 800;
+        }
+
+        .confirm-layer {
+          position: fixed;
+          inset: 0;
+          background: rgba(15,23,42,0.48);
+          z-index: 110;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 18px;
+        }
+
+        .confirm-card {
+          width: 100%;
+          max-width: 330px;
+          background: white;
+          border-radius: 24px;
+          padding: 23px 18px 18px;
+          text-align: center;
+          box-shadow: 0 28px 80px rgba(15,23,42,0.36);
+          animation: popupScale 0.16s ease;
+        }
+
+        @keyframes popupScale {
+          from {
+            transform: scale(0.92);
             opacity: 0;
           }
+
           to {
             transform: scale(1);
             opacity: 1;
           }
         }
 
-        .tg-bubble h4 {
-          margin: 0 0 7px;
-          font-size: 16px;
-          font-weight: 700;
-        }
-
-        .tg-content {
-          font-size: 15px;
-          line-height: 1.45;
-        }
-
-        .tg-content div,
-        .tg-content p {
-          margin: 0;
-        }
-
-        .tg-note-image {
-          display: block;
-          width: 100%;
-          max-width: 380px;
-          max-height: 420px;
-          object-fit: cover;
-          border-radius: 13px;
-          margin-top: 10px;
-        }
-
-        .tg-message-footer {
-          display: flex;
-          align-items: center;
-          justify-content: flex-end;
-          gap: 8px;
-          margin-top: 8px;
-          color: #64748b;
-          font-size: 11px;
-        }
-
-        .tg-message-footer button {
-          border: none;
-          background: transparent;
-          cursor: pointer;
-          font-size: 13px;
-          padding: 2px;
-        }
-
-        .tg-preview {
-          background: #ffffff;
-          border-top: 1px solid #dbe4ea;
-          padding: 10px 18px;
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          flex-shrink: 0;
-        }
-
-        .tg-preview img {
-          width: 64px;
-          height: 64px;
-          object-fit: cover;
-          border-radius: 12px;
-        }
-
-        .tg-preview div {
-          flex: 1;
-        }
-
-        .tg-preview strong {
-          font-size: 14px;
-          color: #111827;
-        }
-
-        .tg-preview p {
-          margin: 4px 0 0;
-          font-size: 12px;
-          color: #64748b;
-        }
-
-        .tg-preview button {
-          width: 34px;
-          height: 34px;
+        .confirm-icon {
+          width: 52px;
+          height: 52px;
           border-radius: 50%;
-          border: none;
-          background: #f1f5f9;
-          cursor: pointer;
-          font-size: 16px;
-        }
-
-        .tg-editing-bar {
-          background: #fff7ed;
-          border-top: 1px solid #fed7aa;
-          color: #9a3412;
-          padding: 8px 18px;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          font-size: 14px;
-          flex-shrink: 0;
-        }
-
-        .tg-editing-bar button {
-          border: none;
-          background: #fb923c;
-          color: white;
-          padding: 6px 12px;
-          border-radius: 16px;
-          cursor: pointer;
-        }
-
-        .tg-composer {
-          background: #ffffff;
-          border-top: 1px solid #dbe4ea;
-          padding: 12px 16px 14px;
-          flex-shrink: 0;
-        }
-
-        .tg-title-input {
-          width: 100%;
-          border: none;
-          outline: none;
-          font-size: 15px;
-          font-weight: 700;
-          color: #111827;
-          margin-bottom: 8px;
-        }
-
-        .tg-title-input::placeholder {
-          color: #94a3b8;
-        }
-
-        .tg-toolbar {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          margin-bottom: 8px;
-        }
-
-        .tg-toolbar button,
-        .tg-color {
-          width: 34px;
-          height: 34px;
-          border-radius: 50%;
-          border: none;
-          background: #eef3f7;
-          color: #334155;
+          background: #fee2e2;
+          color: #dc2626;
           display: flex;
           align-items: center;
           justify-content: center;
-          cursor: pointer;
-          font-size: 14px;
+          margin: 0 auto 12px;
+          font-size: 26px;
+          font-weight: 900;
         }
 
-        .tg-color input {
-          display: none;
-        }
-
-        .tg-editor {
-          min-height: 55px;
-          max-height: 130px;
-          overflow-y: auto;
-          border: none;
-          outline: none;
-          font-size: 15px;
-          line-height: 1.45;
+        .confirm-card h3 {
+          margin: 0;
           color: #111827;
-          padding: 2px 0;
-        }
-
-        .tg-editor:empty::before {
-          content: attr(data-placeholder);
-          color: #94a3b8;
-        }
-
-        .tg-send-row {
-          margin-top: 10px;
-          display: flex;
-          align-items: center;
-          justify-content: flex-end;
-          gap: 10px;
-        }
-
-        .tg-attach-btn {
-          width: 44px;
-          height: 44px;
-          border-radius: 50%;
-          border: none;
-          background: #eef3f7;
-          cursor: pointer;
           font-size: 20px;
         }
 
-        .tg-send-btn {
-          min-width: 105px;
-          height: 44px;
-          border-radius: 24px;
+        .confirm-card p {
+          margin: 9px 0 18px;
+          color: #64748b;
+          font-size: 14px;
+          line-height: 1.4;
+        }
+
+        .confirm-actions {
+          display: flex;
+          gap: 10px;
+        }
+
+        .confirm-actions button {
+          flex: 1;
+          height: 41px;
           border: none;
-          background: #229ed9;
-          color: white;
-          font-size: 15px;
-          font-weight: 700;
+          border-radius: 14px;
+          font-size: 14px;
+          font-weight: 800;
           cursor: pointer;
-          padding: 0 22px;
         }
 
-        .tg-send-btn:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
+        .cancel-confirm {
+          background: #f1f5f9;
+          color: #475569;
         }
 
-        @media (max-width: 850px) {
-          .tg-page {
-            padding: 0;
+        .delete-confirm {
+          background: #dc2626;
+          color: white;
+        }
+
+        @media (min-width: 431px) {
+          .nm-phone {
+            height: 92vh;
+            border-radius: 22px;
+            box-shadow: 0 28px 90px rgba(0,0,0,0.38);
+          }
+        }
+
+        @media (max-width: 360px) {
+          .tool-btn {
+            width: 27px;
+            height: 27px;
+            font-size: 12px;
           }
 
-          .tg-app {
-            width: 100%;
-            height: 100vh;
-            border-radius: 0;
-            grid-template-columns: 1fr;
+          .send-btn {
+            width: 32px;
+            height: 32px;
           }
 
-          .tg-sidebar {
-            display: none;
+          .msg-card {
+            max-width: 90%;
           }
 
-          .tg-bubble {
-            max-width: 88%;
-          }
-
-          .tg-messages {
-            padding: 16px;
+          .header-title h2 {
+            font-size: 16px;
           }
         }
       `}</style>

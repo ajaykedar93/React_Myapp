@@ -32,8 +32,6 @@ import WorkDetails from "./Pages/WorkDetails/Worknewtab.jsx"; // ✅ PUBLIC PAGE
 import InwardViewOnly from "./Pages/WorkDetails/InwardViewOnly";
 import CheckInwardView from "./Pages/WorkDetails/CheckInwardView.jsx"; // OPTIONAL PAGE NOT ADD ONLY PUBLIC LINK ADD CHECK
 
-import Teligram from "./Pages/Teligram_message/Teligram.jsx";
-
 
 
 import InwardUpdate from "./Pages/WorkDetails/InwardUpdate";
@@ -56,8 +54,8 @@ import TryNewPageTabs from "./Pages/NewFeatures/TryNewPageTabs.jsx";
 import Wakeup from "./Pages/Public/Wakeup.jsx";
 import PublicTradeReport from "./Pages/Public/PublicTradeReport.jsx";
 
-
-
+import ChannelList from "./Pages/Teligram_message/ChannelList.jsx";
+import Teligram from "./Pages/Teligram_message/Teligram.jsx";
 
 
 // ✅ Private Route Wrapper
@@ -84,9 +82,12 @@ function AppRoutes() {
       <Route path="/inward-view" element={<InwardViewOnly />} />
       <Route path="/Check-inward-view" element={<CheckInwardView />} />
 
+   
+      <Route path="/teligram-channels" element={<ChannelList />} />
+       <Route path="/teligram-notes" element={<Teligram />} />
       {/* ✅ PUBLIC: Wakeup Page */}
       <Route path="/wakeup-api" element={<Wakeup />} />
-
+      
       {/* ✅ PUBLIC: Trade Report Page */}
       <Route path="/public-trade-report" element={<PublicTradeReport />} />
 
