@@ -1,7 +1,22 @@
 import React, { useEffect, useRef, useState } from "react";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL =
+  import.meta.env.VITE_API_URL || "https://express-backend-myapp.onrender.com";
+
 const PUBLIC_USER_ID = 7;
+
+const themes = [
+  ["#0f766e", "#14b8a6"],
+  ["#1d4ed8", "#38bdf8"],
+  ["#7c3aed", "#c084fc"],
+  ["#be123c", "#fb7185"],
+  ["#b45309", "#fbbf24"],
+  ["#047857", "#34d399"],
+  ["#4338ca", "#818cf8"],
+  ["#0f172a", "#64748b"],
+  ["#c2410c", "#fb923c"],
+  ["#0e7490", "#22d3ee"],
+];
 
 export default function ChannelList() {
   const fileRef = useRef(null);
@@ -34,28 +49,15 @@ export default function ChannelList() {
   }, []);
 
   const showToast = (message, type = "success") => {
-    setToast({
-      show: true,
-      type,
-      message,
-    });
+    setToast({ show: true, type, message });
 
     setTimeout(() => {
-      setToast({
-        show: false,
-        type: "success",
-        message: "",
-      });
-    }, 2200);
+      setToast({ show: false, type: "success", message: "" });
+    }, 1800);
   };
 
   const openConfirm = (title, message, action) => {
-    setConfirmBox({
-      show: true,
-      title,
-      message,
-      action,
-    });
+    setConfirmBox({ show: true, title, message, action });
   };
 
   const closeConfirm = () => {
@@ -65,6 +67,46 @@ export default function ChannelList() {
       message: "",
       action: null,
     });
+  };
+
+  const getTheme = (index) => {
+    return themes[index % themes.length];
+  };
+
+  const getInitial = (name) => {
+    return name?.trim()?.charAt(0)?.toUpperCase() || "N";
+  };
+
+  const getLogoUrl = (url) => {
+    if (!url) return "";
+
+    if (url.startsWith("blob:")) return url;
+    if (url.startsWith("http://") || url.startsWith("https://")) return url;
+    if (url.startsWith("/uploads")) return `${API_URL}${url}`;
+
+    return url;
+  };
+
+  const getDefaultLogo = (name, index) => {
+    const [color1, color2] = getTheme(index);
+    const initial = getInitial(name);
+
+    const svg = `
+      <svg width="120" height="120" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
+            <stop stop-color="${color1}" offset="0%"/>
+            <stop stop-color="${color2}" offset="100%"/>
+          </linearGradient>
+        </defs>
+        <rect width="120" height="120" rx="60" fill="url(#g)"/>
+        <circle cx="86" cy="32" r="18" fill="rgba(255,255,255,0.18)"/>
+        <circle cx="34" cy="88" r="24" fill="rgba(255,255,255,0.12)"/>
+        <text x="60" y="72" text-anchor="middle" font-size="48" font-family="Arial, sans-serif" font-weight="800" fill="white">${initial}</text>
+      </svg>
+    `;
+
+    return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
   };
 
   const fetchChannels = async () => {
@@ -135,6 +177,9 @@ export default function ChannelList() {
       return;
     }
 
+    const currentEditingId = editingId;
+    const oldChannels = channels;
+
     try {
       setLoading(true);
 
@@ -147,11 +192,11 @@ export default function ChannelList() {
         formData.append("logo", channelLogo);
       }
 
-      const url = editingId
-        ? `${API_URL}/api/telegram-channels/${editingId}`
+      const url = currentEditingId
+        ? `${API_URL}/api/telegram-channels/${currentEditingId}`
         : `${API_URL}/api/telegram-channels`;
 
-      const method = editingId ? "PUT" : "POST";
+      const method = currentEditingId ? "PUT" : "POST";
 
       const res = await fetch(url, {
         method,
@@ -165,15 +210,31 @@ export default function ChannelList() {
         return;
       }
 
-      showToast(
-        editingId ? "Channel updated successfully" : "Channel created successfully",
-        "success"
-      );
+      const savedChannel = data.channel;
+
+      if (currentEditingId) {
+        setChannels((prev) =>
+          prev.map((channel) =>
+            Number(channel.channel_id) === Number(currentEditingId)
+              ? { ...channel, ...savedChannel }
+              : channel
+          )
+        );
+
+        showToast("Channel updated successfully", "success");
+      } else {
+        setChannels((prev) => [savedChannel, ...prev]);
+        showToast("Channel created successfully", "success");
+      }
 
       resetForm();
-      fetchChannels();
+
+      setTimeout(() => {
+        fetchChannels();
+      }, 500);
     } catch (error) {
       console.error("Create/update channel error:", error);
+      setChannels(oldChannels);
       showToast("Server error", "error");
     } finally {
       setLoading(false);
@@ -183,7 +244,7 @@ export default function ChannelList() {
   const startEdit = (channel) => {
     setEditingId(channel.channel_id);
     setChannelName(channel.channel_name || "");
-    setLogoPreview(channel.logo_url || "");
+    setLogoPreview(getLogoUrl(channel.logo_url || ""));
     setChannelLogo(null);
     setRemoveLogo(false);
     setActiveMenuId(null);
@@ -195,6 +256,18 @@ export default function ChannelList() {
   };
 
   const deleteChannel = async (channelId) => {
+    const oldChannels = channels;
+
+    setChannels((prev) =>
+      prev.filter((channel) => Number(channel.channel_id) !== Number(channelId))
+    );
+
+    setActiveMenuId(null);
+
+    if (Number(editingId) === Number(channelId)) {
+      resetForm();
+    }
+
     try {
       setLoading(true);
 
@@ -205,19 +278,15 @@ export default function ChannelList() {
       const data = await res.json();
 
       if (!res.ok) {
+        setChannels(oldChannels);
         showToast(data.message || "Delete failed", "error");
         return;
       }
 
       showToast("Channel deleted successfully", "success");
-
-      if (editingId === channelId) {
-        resetForm();
-      }
-
-      fetchChannels();
     } catch (error) {
       console.error("Delete channel error:", error);
+      setChannels(oldChannels);
       showToast("Server error while deleting", "error");
     } finally {
       setLoading(false);
@@ -230,15 +299,14 @@ export default function ChannelList() {
     window.location.hash = "/teligram-notes";
   };
 
-  const getInitial = (name) => {
-    return name?.charAt(0)?.toUpperCase() || "N";
-  };
-
   return (
     <div className="nm-page" onClick={() => setActiveMenuId(null)}>
       <div className="nm-mobile">
         <header className="nm-header">
-          <h1>Notes Management</h1>
+          <div>
+            <h1>Notes Management</h1>
+            <p>Organize your channels professionally</p>
+          </div>
         </header>
 
         <section className="create-card" onClick={(e) => e.stopPropagation()}>
@@ -247,7 +315,7 @@ export default function ChannelList() {
               {logoPreview ? (
                 <img src={logoPreview} alt="channel logo" />
               ) : (
-                <span>+</span>
+                <img src={getDefaultLogo(channelName || "N", 0)} alt="default logo" />
               )}
             </div>
 
@@ -267,9 +335,11 @@ export default function ChannelList() {
           />
 
           <div className="form-area">
+            <label>{editingId ? "Update Channel" : "Create Channel"}</label>
+
             <input
               type="text"
-              placeholder="Channel name"
+              placeholder="Enter channel name"
               value={channelName}
               onChange={(e) => setChannelName(e.target.value)}
             />
@@ -286,7 +356,7 @@ export default function ChannelList() {
                 onClick={createOrUpdateChannel}
                 disabled={loading}
               >
-                {loading ? "Wait..." : editingId ? "Update" : "Create"}
+                {loading ? "Please wait..." : editingId ? "Update" : "Create"}
               </button>
             </div>
           </div>
@@ -296,80 +366,100 @@ export default function ChannelList() {
           {loading && channels.length === 0 && (
             <div className="empty-box">
               <div className="loader"></div>
-              <p>Loading...</p>
+              <p>Loading channels...</p>
             </div>
           )}
 
           {!loading && channels.length === 0 && (
             <div className="empty-box">
-              <h3>No channels</h3>
-              <p>Create your first channel</p>
+              <img src={getDefaultLogo("N", 2)} alt="empty" />
+              <h3>No channels yet</h3>
+              <p>Create your first professional notes channel</p>
             </div>
           )}
 
-          {channels.map((channel) => (
-            <div className="channel-row" key={channel.channel_id}>
-              <div className="channel-click" onClick={() => openChannel(channel)}>
-                <div className="channel-logo">
-                  {channel.logo_url ? (
-                    <img src={channel.logo_url} alt={channel.channel_name} />
-                  ) : (
-                    <span>{getInitial(channel.channel_name)}</span>
+          {channels.map((channel, index) => {
+            const [color1, color2] = getTheme(index);
+
+            return (
+              <div
+                className="channel-row"
+                key={channel.channel_id}
+                style={{
+                  "--c1": color1,
+                  "--c2": color2,
+                }}
+              >
+                <div
+                  className="channel-click"
+                  onClick={() => openChannel(channel)}
+                >
+                  <div className="channel-logo">
+                    <img
+                      src={
+                        channel.logo_url
+                          ? getLogoUrl(channel.logo_url)
+                          : getDefaultLogo(channel.channel_name, index)
+                      }
+                      alt={channel.channel_name}
+                    />
+                  </div>
+
+                  <div className="channel-name">
+                    <h3>{channel.channel_name}</h3>
+                  </div>
+                </div>
+
+                <div className="menu-wrap" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    className="dot-btn"
+                    onClick={() =>
+                      setActiveMenuId(
+                        activeMenuId === channel.channel_id
+                          ? null
+                          : channel.channel_id
+                      )
+                    }
+                  >
+                    ⋮
+                  </button>
+
+                  {activeMenuId === channel.channel_id && (
+                    <div className="channel-menu">
+                      <button
+                        className="update-text"
+                        onClick={() => startEdit(channel)}
+                      >
+                        Update
+                      </button>
+
+                      <button
+                        className="delete-text"
+                        onClick={() =>
+                          openConfirm(
+                            "Delete Channel?",
+                            `Do you want to delete "${channel.channel_name}"?`,
+                            () => deleteChannel(channel.channel_id)
+                          )
+                        }
+                      >
+                        Delete
+                      </button>
+                    </div>
                   )}
                 </div>
-
-                <div className="channel-name">
-                  <h3>{channel.channel_name}</h3>
-                </div>
               </div>
-
-              <div className="menu-wrap" onClick={(e) => e.stopPropagation()}>
-                <button
-                  className="dot-btn"
-                  onClick={() =>
-                    setActiveMenuId(
-                      activeMenuId === channel.channel_id
-                        ? null
-                        : channel.channel_id
-                    )
-                  }
-                >
-                  ⋮
-                </button>
-
-                {activeMenuId === channel.channel_id && (
-                  <div className="channel-menu">
-                    <button
-                      className="update-text"
-                      onClick={() => startEdit(channel)}
-                    >
-                      Update
-                    </button>
-
-                    <button
-                      className="delete-text"
-                      onClick={() =>
-                        openConfirm(
-                          "Delete Channel?",
-                          `Do you want to delete "${channel.channel_name}"?`,
-                          () => deleteChannel(channel.channel_id)
-                        )
-                      }
-                    >
-                      Delete
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </main>
       </div>
 
       {toast.show && (
         <div className="popup-layer">
           <div className={`toast ${toast.type}`}>
-            <div className="toast-icon">{toast.type === "success" ? "✓" : "!"}</div>
+            <div className="toast-icon">
+              {toast.type === "success" ? "✓" : "!"}
+            </div>
             <p>{toast.message}</p>
           </div>
         </div>
@@ -413,51 +503,68 @@ export default function ChannelList() {
         .nm-page {
           width: 100%;
           min-height: 100vh;
-          background: linear-gradient(145deg, #111827, #334155, #0f766e);
+          background:
+            radial-gradient(circle at top left, rgba(20, 184, 166, 0.28), transparent 35%),
+            radial-gradient(circle at bottom right, rgba(59, 130, 246, 0.22), transparent 32%),
+            linear-gradient(145deg, #020617, #0f172a 42%, #134e4a);
           display: flex;
           justify-content: center;
           align-items: center;
-          font-family: Arial, sans-serif;
+          font-family: Inter, Arial, sans-serif;
         }
 
         .nm-mobile {
           width: 100%;
           max-width: 430px;
           height: 100vh;
-          background: linear-gradient(145deg, #f8fafc, #eef7ff, #e0f2f1);
+          background:
+            linear-gradient(180deg, #ecfeff 0%, #f8fafc 40%, #eef2ff 100%);
           overflow-y: auto;
           position: relative;
         }
 
         .nm-header {
-          height: 66px;
-          background: linear-gradient(135deg, #00695c, #009688);
+          min-height: 92px;
+          background:
+            radial-gradient(circle at 82% 18%, rgba(255,255,255,0.22), transparent 28%),
+            linear-gradient(135deg, #0f766e, #0ea5e9);
           color: white;
           display: flex;
           align-items: center;
-          padding: 0 18px;
+          padding: 20px 18px 17px;
           position: sticky;
           top: 0;
           z-index: 10;
-          box-shadow: 0 5px 20px rgba(15, 23, 42, 0.18);
+          box-shadow: 0 12px 32px rgba(15, 23, 42, 0.22);
+          border-bottom-left-radius: 24px;
+          border-bottom-right-radius: 24px;
         }
 
         .nm-header h1 {
           margin: 0;
-          font-size: 22px;
+          font-size: 24px;
           font-weight: 900;
           letter-spacing: 0.2px;
         }
 
+        .nm-header p {
+          margin: 4px 0 0;
+          font-size: 13px;
+          color: rgba(255,255,255,0.82);
+          font-weight: 600;
+        }
+
         .create-card {
-          margin: 14px 12px;
-          background: rgba(255, 255, 255, 0.96);
-          border-radius: 22px;
-          padding: 14px;
+          margin: 16px 13px 14px;
+          background: rgba(255, 255, 255, 0.92);
+          border: 1px solid rgba(226, 232, 240, 0.9);
+          border-radius: 26px;
+          padding: 15px;
           display: flex;
-          gap: 13px;
+          gap: 14px;
           align-items: center;
-          box-shadow: 0 10px 34px rgba(15, 23, 42, 0.1);
+          box-shadow: 0 18px 45px rgba(15, 23, 42, 0.12);
+          backdrop-filter: blur(12px);
         }
 
         .logo-area {
@@ -466,16 +573,17 @@ export default function ChannelList() {
         }
 
         .logo-picker {
-          width: 68px;
-          height: 68px;
-          border-radius: 50%;
+          width: 72px;
+          height: 72px;
+          border-radius: 22px;
           background: #f1f5f9;
-          border: 2px dashed #cbd5e1;
+          border: 1px solid #dbe4f0;
           display: flex;
           align-items: center;
           justify-content: center;
           overflow: hidden;
           cursor: pointer;
+          box-shadow: inset 0 0 0 4px rgba(255,255,255,0.55);
         }
 
         .logo-picker img {
@@ -484,24 +592,19 @@ export default function ChannelList() {
           object-fit: cover;
         }
 
-        .logo-picker span {
-          font-size: 32px;
-          color: #64748b;
-          font-weight: 800;
-        }
-
         .remove-logo {
           position: absolute;
-          top: -4px;
-          right: -4px;
-          width: 24px;
-          height: 24px;
+          top: -7px;
+          right: -7px;
+          width: 25px;
+          height: 25px;
           border-radius: 50%;
-          border: none;
+          border: 2px solid white;
           background: #ef4444;
           color: white;
           font-size: 17px;
           cursor: pointer;
+          box-shadow: 0 8px 16px rgba(239, 68, 68, 0.35);
         }
 
         .form-area {
@@ -509,21 +612,32 @@ export default function ChannelList() {
           min-width: 0;
         }
 
+        .form-area label {
+          display: block;
+          margin-bottom: 7px;
+          font-size: 12px;
+          font-weight: 900;
+          color: #0f766e;
+          letter-spacing: 0.3px;
+          text-transform: uppercase;
+        }
+
         .form-area input {
           width: 100%;
           height: 42px;
           border: 1px solid #cbd5e1;
-          border-radius: 14px;
+          border-radius: 15px;
           padding: 0 13px;
           font-size: 14px;
           outline: none;
           color: #111827;
           background: #ffffff;
+          font-weight: 700;
         }
 
         .form-area input:focus {
-          border-color: #00897b;
-          box-shadow: 0 0 0 3px rgba(0, 137, 123, 0.12);
+          border-color: #0ea5e9;
+          box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.13);
         }
 
         .form-buttons {
@@ -536,17 +650,18 @@ export default function ChannelList() {
         .cancel-btn {
           height: 38px;
           border: none;
-          border-radius: 13px;
+          border-radius: 14px;
           font-size: 13px;
-          font-weight: 800;
+          font-weight: 900;
           cursor: pointer;
           padding: 0 14px;
         }
 
         .save-btn {
           flex: 1;
-          background: #00897b;
+          background: linear-gradient(135deg, #0f766e, #0ea5e9);
           color: white;
+          box-shadow: 0 10px 24px rgba(14, 165, 233, 0.22);
         }
 
         .save-btn:disabled {
@@ -560,19 +675,33 @@ export default function ChannelList() {
         }
 
         .channel-list {
-          padding: 4px 0 18px;
+          padding: 3px 0 22px;
         }
 
         .channel-row {
           position: relative;
-          background: rgba(255, 255, 255, 0.94);
-          min-height: 76px;
+          min-height: 78px;
           display: flex;
           align-items: center;
-          margin: 0 10px 8px;
-          border-radius: 18px;
-          box-shadow: 0 4px 18px rgba(15, 23, 42, 0.07);
+          margin: 0 12px 10px;
+          border-radius: 23px;
           overflow: visible;
+          background:
+            linear-gradient(white, white) padding-box,
+            linear-gradient(135deg, var(--c1), var(--c2)) border-box;
+          border: 1px solid transparent;
+          box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+        }
+
+        .channel-row::before {
+          content: "";
+          position: absolute;
+          left: 0;
+          top: 14px;
+          bottom: 14px;
+          width: 4px;
+          border-radius: 10px;
+          background: linear-gradient(180deg, var(--c1), var(--c2));
         }
 
         .channel-click {
@@ -581,15 +710,15 @@ export default function ChannelList() {
           display: flex;
           align-items: center;
           gap: 13px;
-          padding: 10px 6px 10px 12px;
+          padding: 11px 6px 11px 14px;
           cursor: pointer;
         }
 
         .channel-logo {
-          width: 56px;
-          height: 56px;
-          border-radius: 50%;
-          background: linear-gradient(135deg, #14b8a6, #0f766e);
+          width: 58px;
+          height: 58px;
+          border-radius: 19px;
+          background: linear-gradient(135deg, var(--c1), var(--c2));
           display: flex;
           align-items: center;
           justify-content: center;
@@ -598,6 +727,7 @@ export default function ChannelList() {
           font-weight: 900;
           overflow: hidden;
           flex-shrink: 0;
+          box-shadow: 0 12px 24px color-mix(in srgb, var(--c1) 34%, transparent);
         }
 
         .channel-logo img {
@@ -614,11 +744,12 @@ export default function ChannelList() {
         .channel-name h3 {
           margin: 0;
           font-size: 17px;
-          font-weight: 850;
-          color: #111827;
+          font-weight: 900;
+          color: #0f172a;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+          letter-spacing: 0.1px;
         }
 
         .menu-wrap {
@@ -632,29 +763,33 @@ export default function ChannelList() {
         }
 
         .dot-btn {
-          width: 34px;
-          height: 34px;
+          width: 32px;
+          height: 32px;
           border: none;
           border-radius: 50%;
-          background: transparent;
-          color: #64748b;
-          font-size: 23px;
+          background: #f1f5f9;
+          color: #475569;
+          font-size: 21px;
           cursor: pointer;
           line-height: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
         }
 
         .dot-btn:hover {
-          background: #eef2f7;
+          background: #e2e8f0;
         }
 
         .channel-menu {
           position: absolute;
           top: 54px;
           right: 8px;
-          width: 108px;
+          width: 104px;
           background: white;
+          border: 1px solid #e2e8f0;
           border-radius: 14px;
-          box-shadow: 0 15px 45px rgba(15, 23, 42, 0.22);
+          box-shadow: 0 18px 45px rgba(15, 23, 42, 0.22);
           padding: 6px;
           z-index: 30;
           animation: menuPop 0.15s ease;
@@ -676,11 +811,11 @@ export default function ChannelList() {
           width: 100%;
           border: none;
           background: transparent;
-          padding: 8px 10px;
+          padding: 8px 9px;
           border-radius: 10px;
           text-align: left;
-          font-size: 13px;
-          font-weight: 850;
+          font-size: 12px;
+          font-weight: 900;
           cursor: pointer;
         }
 
@@ -697,24 +832,33 @@ export default function ChannelList() {
         }
 
         .empty-box {
-          margin: 60px 22px;
+          margin: 58px 24px;
           padding: 28px 16px;
           background: rgba(255, 255, 255, 0.9);
-          border-radius: 20px;
+          border-radius: 24px;
           text-align: center;
-          box-shadow: 0 10px 34px rgba(15, 23, 42, 0.08);
+          box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+        }
+
+        .empty-box img {
+          width: 72px;
+          height: 72px;
+          border-radius: 24px;
+          margin-bottom: 12px;
         }
 
         .empty-box h3 {
           margin: 0 0 6px;
           color: #1f2937;
-          font-size: 17px;
+          font-size: 18px;
+          font-weight: 900;
         }
 
         .empty-box p {
           margin: 0;
           color: #64748b;
           font-size: 14px;
+          font-weight: 600;
         }
 
         .loader {
@@ -722,7 +866,7 @@ export default function ChannelList() {
           height: 30px;
           border-radius: 50%;
           border: 3px solid #d1d5db;
-          border-top-color: #00897b;
+          border-top-color: #0ea5e9;
           margin: 0 auto 12px;
           animation: spin 0.8s linear infinite;
         }
@@ -779,7 +923,7 @@ export default function ChannelList() {
           margin: 0;
           color: #1f2937;
           font-size: 14px;
-          font-weight: 800;
+          font-weight: 900;
         }
 
         .confirm-layer {
@@ -854,7 +998,7 @@ export default function ChannelList() {
           border: none;
           border-radius: 14px;
           font-size: 14px;
-          font-weight: 800;
+          font-weight: 900;
           cursor: pointer;
         }
 
@@ -871,8 +1015,8 @@ export default function ChannelList() {
         @media (min-width: 431px) {
           .nm-mobile {
             height: 92vh;
-            border-radius: 22px;
-            box-shadow: 0 28px 90px rgba(0, 0, 0, 0.38);
+            border-radius: 26px;
+            box-shadow: 0 32px 95px rgba(0, 0, 0, 0.42);
           }
         }
 
@@ -882,17 +1026,23 @@ export default function ChannelList() {
           }
 
           .logo-picker {
-            width: 60px;
-            height: 60px;
+            width: 62px;
+            height: 62px;
+            border-radius: 20px;
           }
 
           .channel-logo {
             width: 52px;
             height: 52px;
+            border-radius: 17px;
           }
 
           .channel-name h3 {
             font-size: 16px;
+          }
+
+          .nm-header h1 {
+            font-size: 21px;
           }
         }
       `}</style>

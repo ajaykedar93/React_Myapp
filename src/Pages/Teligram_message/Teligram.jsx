@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import DOMPurify from "dompurify";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL = import.meta.env.VITE_API_URL || "https://express-backend-myapp.onrender.com" || "http://localhost:5000";
 const PUBLIC_USER_ID = 7;
 
 export default function Teligram() {
@@ -66,14 +66,15 @@ export default function Teligram() {
       const res = await fetch(`${API_URL}/api/telegram-channels/${channelId}`);
       const data = await res.json();
 
-      if (res.ok) {
-        setSelectedChannel(data.channel);
-      } else {
+      if (!res.ok) {
         showToast("Channel not found", "error");
         setTimeout(() => {
           window.location.hash = "/teligram-channels";
-        }, 1000);
+        }, 900);
+        return;
       }
+
+      setSelectedChannel(data.channel);
     } catch (error) {
       console.error("Channel load error:", error);
       showToast("Server error while opening channel", "error");
@@ -88,19 +89,44 @@ export default function Teligram() {
 
       const data = await res.json();
 
-      if (res.ok) {
-        const allNotes = data.notes || [];
-
-        const channelNotes = allNotes.filter(
-          (note) => Number(note.channel_id) === Number(channelId)
-        );
-
-        setNotes(channelNotes);
+      if (!res.ok) {
+        showToast(data.message || "Unable to load messages", "error");
+        return;
       }
+
+      const allNotes = data.notes || [];
+
+      const channelNotes = allNotes
+        .filter((note) => {
+          if (note.channel_id === null || note.channel_id === undefined) {
+            return true;
+          }
+
+          return Number(note.channel_id) === Number(channelId);
+        })
+        .map((note) => ({
+          ...note,
+          channel_id: note.channel_id || channelId,
+        }));
+
+      setNotes(channelNotes);
     } catch (error) {
       console.error("Fetch notes error:", error);
       showToast("Unable to load messages", "error");
     }
+  };
+
+  const getFileUrl = (url) => {
+    if (!url) return "";
+
+    if (url.startsWith("blob:")) return url;
+    if (url.startsWith("http://") || url.startsWith("https://")) return url;
+
+    if (url.startsWith("/uploads")) {
+      return `${API_URL}${url}`;
+    }
+
+    return url;
   };
 
   const stripHtml = (html) => {
@@ -183,31 +209,105 @@ export default function Teligram() {
   const restoreSelection = () => {
     const selection = window.getSelection();
 
-    if (!selection || !savedRangeRef.current) return;
+    if (!selection || !savedRangeRef.current) return false;
 
     selection.removeAllRanges();
     selection.addRange(savedRangeRef.current);
+
+    return true;
   };
 
-  const formatCommand = (command, value = null) => {
-    editorRef.current?.focus();
-    restoreSelection();
+  const applySelectedFormat = (type, value = null) => {
+    if (!editorRef.current) return;
 
-    setTimeout(() => {
-      document.execCommand(command, false, value);
+    editorRef.current.focus();
+
+    const restored = restoreSelection();
+    const selection = window.getSelection();
+
+    if (!selection || selection.rangeCount === 0 || !restored) {
+      editorRef.current.focus();
+
+      if (type === "bold") {
+        document.execCommand("bold", false, null);
+      }
+
+      if (type === "underline") {
+        document.execCommand("underline", false, null);
+      }
+
+      if (type === "color") {
+        setTextColor(value);
+        document.execCommand("foreColor", false, value);
+      }
+
       saveSelection();
-      editorRef.current?.focus();
-    }, 0);
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+
+    if (!editorRef.current.contains(range.commonAncestorContainer)) {
+      return;
+    }
+
+    if (range.collapsed) {
+      if (type === "bold") {
+        document.execCommand("bold", false, null);
+      }
+
+      if (type === "underline") {
+        document.execCommand("underline", false, null);
+      }
+
+      if (type === "color") {
+        setTextColor(value);
+        document.execCommand("foreColor", false, value);
+      }
+
+      saveSelection();
+      return;
+    }
+
+    let wrapper;
+
+    if (type === "bold") {
+      wrapper = document.createElement("strong");
+    }
+
+    if (type === "underline") {
+      wrapper = document.createElement("u");
+    }
+
+    if (type === "color") {
+      wrapper = document.createElement("span");
+      wrapper.style.color = value;
+      setTextColor(value);
+    }
+
+    const selectedContent = range.extractContents();
+    wrapper.appendChild(selectedContent);
+    range.insertNode(wrapper);
+
+    const newRange = document.createRange();
+    newRange.selectNodeContents(wrapper);
+    newRange.collapse(false);
+
+    selection.removeAllRanges();
+    selection.addRange(newRange);
+
+    editorRef.current.normalize();
+    saveSelection();
   };
 
   const applyBold = (e) => {
     e.preventDefault();
-    formatCommand("bold");
+    applySelectedFormat("bold");
   };
 
   const applyUnderline = (e) => {
     e.preventDefault();
-    formatCommand("underline");
+    applySelectedFormat("underline");
   };
 
   const openColorPicker = (e) => {
@@ -217,15 +317,7 @@ export default function Teligram() {
   };
 
   const changeColor = (color) => {
-    setTextColor(color);
-    editorRef.current?.focus();
-    restoreSelection();
-
-    setTimeout(() => {
-      document.execCommand("foreColor", false, color);
-      saveSelection();
-      editorRef.current?.focus();
-    }, 0);
+    applySelectedFormat("color", color);
   };
 
   const handleImageSelect = (e) => {
@@ -363,16 +455,16 @@ export default function Teligram() {
       const savedNote = {
         ...optimisticNote,
         ...backendNote,
-        channel_id: selectedChannel.channel_id,
+        channel_id: backendNote.channel_id || selectedChannel.channel_id,
         text_color: backendNote.text_color || currentTextColor,
         content_html: backendNote.content_html || contentHtml,
         image_url:
           backendNote.image_url ||
-          backendNote.logo_url ||
+          backendNote.image_path ||
           optimisticNote.image_url ||
           null,
-        created_at: optimisticNote.created_at,
-        updated_at: new Date().toISOString(),
+        created_at: backendNote.created_at || optimisticNote.created_at,
+        updated_at: backendNote.updated_at || new Date().toISOString(),
         is_temp: false,
       };
 
@@ -414,7 +506,7 @@ export default function Teligram() {
 
     setEditingNoteId(note.note_id);
     setTextColor(note.text_color || "#111111");
-    setPreviewImage(note.image_url || "");
+    setPreviewImage(getFileUrl(note.image_url || note.image_path || ""));
     setSelectedImage(null);
     setRemoveOldImage(false);
     setActiveMenuId(null);
@@ -501,7 +593,7 @@ export default function Teligram() {
 
           <div className="header-logo">
             {selectedChannel?.logo_url ? (
-              <img src={selectedChannel.logo_url} alt="logo" />
+              <img src={getFileUrl(selectedChannel.logo_url)} alt="logo" />
             ) : (
               <span>{getInitial(selectedChannel?.channel_name)}</span>
             )}
@@ -598,8 +690,12 @@ export default function Teligram() {
                   />
                 )}
 
-                {note.image_url && (
-                  <img src={note.image_url} alt="note" className="msg-image" />
+                {(note.image_url || note.image_path) && (
+                  <img
+                    src={getFileUrl(note.image_url || note.image_path)}
+                    alt="note"
+                    className="msg-image"
+                  />
                 )}
 
                 {note.is_temp && <div className="sending-text">sending...</div>}
@@ -612,7 +708,7 @@ export default function Teligram() {
 
         {previewImage && (
           <div className="preview-strip">
-            <img src={previewImage} alt="preview" />
+            <img src={getFileUrl(previewImage)} alt="preview" />
             <span>{selectedImage ? selectedImage.name : "Current image"}</span>
             <button onClick={removeImage}>×</button>
           </div>
@@ -637,6 +733,12 @@ export default function Teligram() {
               onKeyUp={saveSelection}
               onInput={saveSelection}
               onBlur={saveSelection}
+              onPaste={(e) => {
+                e.preventDefault();
+                const text = e.clipboardData.getData("text/plain");
+                document.execCommand("insertText", false, text);
+                saveSelection();
+              }}
             ></div>
 
             <input

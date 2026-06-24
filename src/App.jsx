@@ -82,9 +82,8 @@ function AppRoutes() {
       <Route path="/inward-view" element={<InwardViewOnly />} />
       <Route path="/Check-inward-view" element={<CheckInwardView />} />
 
-   
-      <Route path="/teligram-channels" element={<ChannelList />} />
-       <Route path="/teligram-notes" element={<Teligram />} />
+   <Route path="/teligram-channels" element={<ChannelList />} />
+<Route path="/teligram-notes" element={<Teligram />} />
       {/* ✅ PUBLIC: Wakeup Page */}
       <Route path="/wakeup-api" element={<Wakeup />} />
       
