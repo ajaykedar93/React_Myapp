@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import DOMPurify from "dompurify";
 
-const API_URL = import.meta.env.VITE_API_URL || "https://express-backend-myapp.onrender.com" || "http://localhost:5000";
+const API_URL =
+  import.meta.env.VITE_API_URL || "https://express-backend-myapp.onrender.com";
+
 const PUBLIC_USER_ID = 7;
 
 export default function Teligram() {
@@ -51,7 +53,7 @@ export default function Teligram() {
   useEffect(() => {
     setTimeout(() => {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, 80);
+    }, 100);
   }, [notes]);
 
   const loadSelectedChannel = async () => {
@@ -170,7 +172,7 @@ export default function Teligram() {
         type: "success",
         message: "",
       });
-    }, 1700);
+    }, 1800);
   };
 
   const openConfirm = (title, message, action) => {
@@ -557,26 +559,37 @@ export default function Teligram() {
     window.location.hash = "/teligram-channels";
   };
 
-  const formatDateTime = (dateValue) => {
+  const formatDateOnly = (dateValue) => {
     if (!dateValue) return "";
 
     const date = new Date(dateValue);
 
-    const dateText = date.toLocaleDateString("en-IN", {
+    return date.toLocaleDateString("en-IN", {
       timeZone: "Asia/Kolkata",
       day: "2-digit",
       month: "short",
       year: "numeric",
     });
+  };
 
-    const timeText = date.toLocaleTimeString("en-IN", {
+  const formatTimeOnly = (dateValue) => {
+    if (!dateValue) return "";
+
+    const date = new Date(dateValue);
+
+    return date.toLocaleTimeString("en-IN", {
       timeZone: "Asia/Kolkata",
       hour: "2-digit",
       minute: "2-digit",
       hour12: true,
     });
+  };
 
-    return `${dateText} • ${timeText}`;
+  const isNewMessage = (dateValue) => {
+    if (!dateValue) return false;
+
+    const diff = Date.now() - new Date(dateValue).getTime();
+    return diff >= 0 && diff <= 1000 * 60 * 10;
   };
 
   const getInitial = (name) => {
@@ -618,7 +631,7 @@ export default function Teligram() {
           <div className="search-box">
             <input
               type="text"
-              placeholder="Search..."
+              placeholder="Search messages..."
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
               autoFocus
@@ -638,8 +651,9 @@ export default function Teligram() {
         <main className="chat-body" onClick={() => setActiveMenuId(null)}>
           {filteredNotes.length === 0 && (
             <div className="empty-card">
+              <div className="empty-icon">✦</div>
               <h3>{searchText ? "No match found" : "No messages yet"}</h3>
-              <p>{searchText ? "Try another word" : "Start adding notes below"}</p>
+              <p>{searchText ? "Try another search word" : "Start adding notes below"}</p>
             </div>
           )}
 
@@ -678,7 +692,10 @@ export default function Teligram() {
                   </div>
                 )}
 
-                <div className="msg-date">{formatDateTime(note.created_at)}</div>
+                <div className="msg-meta">
+                  <span className="date-badge">{formatDateOnly(note.created_at)}</span>
+                  {isNewMessage(note.created_at) && <span className="new-badge">New</span>}
+                </div>
 
                 {note.content_html && (
                   <div
@@ -698,7 +715,10 @@ export default function Teligram() {
                   />
                 )}
 
-                {note.is_temp && <div className="sending-text">sending...</div>}
+                <div className="msg-footer">
+                  <span>{formatTimeOnly(note.created_at)}</span>
+                  {note.is_temp && <span>sending...</span>}
+                </div>
               </div>
             </div>
           ))}
@@ -831,18 +851,21 @@ export default function Teligram() {
         .nm-screen {
           width: 100%;
           min-height: 100vh;
-          background: linear-gradient(145deg, #111827, #334155, #0f766e);
+          background:
+            radial-gradient(circle at top left, rgba(20, 184, 166, 0.28), transparent 34%),
+            radial-gradient(circle at bottom right, rgba(59, 130, 246, 0.22), transparent 34%),
+            linear-gradient(145deg, #020617, #0f172a 45%, #134e4a);
           display: flex;
           justify-content: center;
           align-items: center;
-          font-family: Arial, sans-serif;
+          font-family: Inter, Arial, sans-serif;
         }
 
         .nm-phone {
           width: 100%;
           max-width: 430px;
           height: 100vh;
-          background: linear-gradient(145deg, #d8f3e7, #eef7ff, #d9e7ff);
+          background: #edf7f4;
           display: flex;
           flex-direction: column;
           overflow: hidden;
@@ -850,41 +873,50 @@ export default function Teligram() {
         }
 
         .nm-header {
-          height: 64px;
-          background: linear-gradient(135deg, #00695c, #009688);
+          height: 72px;
+          background:
+            radial-gradient(circle at 90% 10%, rgba(255,255,255,0.23), transparent 28%),
+            linear-gradient(135deg, #0f766e, #0ea5e9);
           color: white;
           display: flex;
           align-items: center;
           gap: 10px;
-          padding: 8px 10px;
+          padding: 9px 12px;
           flex-shrink: 0;
-          box-shadow: 0 4px 18px rgba(15, 23, 42, 0.18);
-          z-index: 10;
+          box-shadow: 0 10px 30px rgba(15, 23, 42, 0.24);
+          z-index: 20;
+          border-bottom-left-radius: 20px;
+          border-bottom-right-radius: 20px;
         }
 
         .back-btn {
           border: none;
-          background: transparent;
+          background: rgba(255,255,255,0.14);
           color: white;
-          font-size: 38px;
+          font-size: 36px;
           line-height: 1;
           cursor: pointer;
-          width: 32px;
+          width: 36px;
           height: 42px;
+          border-radius: 14px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
         }
 
         .header-logo {
-          width: 42px;
-          height: 42px;
-          border-radius: 50%;
+          width: 46px;
+          height: 46px;
+          border-radius: 16px;
           background: linear-gradient(135deg, #14b8a6, #0f766e);
           overflow: hidden;
           display: flex;
           align-items: center;
           justify-content: center;
-          font-weight: 800;
+          font-weight: 900;
           color: white;
           flex-shrink: 0;
+          box-shadow: 0 10px 22px rgba(15, 23, 42, 0.18);
         }
 
         .header-logo img {
@@ -901,17 +933,18 @@ export default function Teligram() {
         .header-title h2 {
           margin: 0;
           font-size: 18px;
-          font-weight: 800;
+          font-weight: 900;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+          letter-spacing: 0.1px;
         }
 
         .search-btn {
-          width: 38px;
-          height: 38px;
+          width: 40px;
+          height: 40px;
           border: none;
-          border-radius: 50%;
+          border-radius: 15px;
           background: rgba(255,255,255,0.16);
           color: white;
           cursor: pointer;
@@ -919,29 +952,33 @@ export default function Teligram() {
         }
 
         .search-box {
-          background: white;
-          padding: 8px 10px;
+          background: rgba(255,255,255,0.96);
+          padding: 9px 10px;
           display: flex;
           align-items: center;
           gap: 8px;
-          border-bottom: 1px solid #e5e7eb;
+          border-bottom: 1px solid rgba(226,232,240,0.9);
           flex-shrink: 0;
+          z-index: 15;
+          box-shadow: 0 8px 24px rgba(15,23,42,0.06);
         }
 
         .search-box input {
           flex: 1;
-          height: 36px;
+          height: 38px;
           border: none;
           outline: none;
           background: #f1f5f9;
           border-radius: 18px;
-          padding: 0 14px;
+          padding: 0 15px;
           font-size: 14px;
+          font-weight: 650;
+          color: #0f172a;
         }
 
         .search-box button {
-          width: 32px;
-          height: 32px;
+          width: 34px;
+          height: 34px;
           border-radius: 50%;
           border: none;
           background: #e2e8f0;
@@ -952,59 +989,110 @@ export default function Teligram() {
 
         .chat-body {
           flex: 1;
+          min-height: 0;
           overflow-y: auto;
-          padding: 12px 10px 16px;
+          padding: 14px 10px 16px;
           background:
-            radial-gradient(circle at 18% 12%, rgba(255,255,255,0.45), transparent 28%),
-            radial-gradient(circle at 84% 82%, rgba(14,165,233,0.18), transparent 30%),
-            linear-gradient(135deg, #d7f4df, #edf5ff 45%, #dce7ff);
+            radial-gradient(circle at 12% 15%, rgba(255,255,255,0.7), transparent 26%),
+            radial-gradient(circle at 84% 84%, rgba(14,165,233,0.18), transparent 30%),
+            linear-gradient(135deg, #e2f8ed, #f4f8ff 44%, #e5ebff);
+        }
+
+        .chat-body::-webkit-scrollbar {
+          width: 5px;
+        }
+
+        .chat-body::-webkit-scrollbar-thumb {
+          background: rgba(15, 118, 110, 0.35);
+          border-radius: 20px;
         }
 
         .empty-card {
           width: fit-content;
           max-width: 82%;
           margin: 90px auto 0;
-          background: rgba(255,255,255,0.88);
-          backdrop-filter: blur(8px);
-          padding: 18px 20px;
-          border-radius: 18px;
+          background: rgba(255,255,255,0.84);
+          backdrop-filter: blur(12px);
+          padding: 20px 22px;
+          border-radius: 24px;
           text-align: center;
-          box-shadow: 0 8px 28px rgba(15,23,42,0.12);
+          box-shadow: 0 18px 45px rgba(15,23,42,0.12);
+          border: 1px solid rgba(255,255,255,0.72);
+        }
+
+        .empty-icon {
+          width: 48px;
+          height: 48px;
+          margin: 0 auto 10px;
+          border-radius: 18px;
+          background: linear-gradient(135deg, #0f766e, #0ea5e9);
+          color: white;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 22px;
+          font-weight: 900;
         }
 
         .empty-card h3 {
           margin: 0 0 6px;
-          color: #1f2937;
+          color: #0f172a;
           font-size: 16px;
+          font-weight: 900;
         }
 
         .empty-card p {
           margin: 0;
           color: #64748b;
           font-size: 13px;
+          font-weight: 650;
         }
 
         .msg-row {
           display: flex;
           justify-content: flex-start;
-          margin-bottom: 10px;
+          margin-bottom: 11px;
+          animation: msgIn 0.18s ease;
+        }
+
+        @keyframes msgIn {
+          from {
+            opacity: 0;
+            transform: translateY(7px) scale(0.98);
+          }
+
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
         }
 
         .msg-card {
           max-width: 88%;
-          min-width: 120px;
+          min-width: 128px;
           position: relative;
-          background: rgba(255,255,255,0.97);
-          border-radius: 6px 17px 17px 17px;
-          padding: 9px 30px 7px 10px;
-          box-shadow: 0 2px 10px rgba(15,23,42,0.13);
+          background: rgba(255,255,255,0.96);
+          border: 1px solid rgba(226,232,240,0.7);
+          border-radius: 8px 20px 20px 20px;
+          padding: 10px 31px 7px 11px;
+          box-shadow: 0 8px 24px rgba(15,23,42,0.12);
           word-break: break-word;
+          backdrop-filter: blur(12px);
+        }
+
+        .msg-card::before {
+          content: "";
+          position: absolute;
+          left: -5px;
+          top: 0;
+          border-top: 10px solid rgba(255,255,255,0.96);
+          border-left: 8px solid transparent;
         }
 
         .dot-btn {
           position: absolute;
-          top: 4px;
-          right: 4px;
+          top: 5px;
+          right: 5px;
           width: 22px;
           height: 22px;
           border: none;
@@ -1024,15 +1112,16 @@ export default function Teligram() {
 
         .action-menu {
           position: absolute;
-          top: 26px;
-          right: 5px;
-          background: white;
-          border-radius: 10px;
-          box-shadow: 0 12px 36px rgba(15,23,42,0.22);
+          top: 28px;
+          right: 6px;
+          background: rgba(255,255,255,0.98);
+          border: 1px solid #e2e8f0;
+          border-radius: 12px;
+          box-shadow: 0 18px 45px rgba(15,23,42,0.22);
           padding: 5px;
-          z-index: 8;
-          min-width: 82px;
-          animation: menuIn 0.14s ease;
+          z-index: 30;
+          min-width: 88px;
+          animation: menuIn 0.16s ease;
         }
 
         @keyframes menuIn {
@@ -1051,12 +1140,12 @@ export default function Teligram() {
           width: 100%;
           border: none;
           background: transparent;
-          padding: 6px 8px;
+          padding: 7px 9px;
           text-align: left;
           cursor: pointer;
           font-size: 12px;
-          font-weight: 800;
-          border-radius: 7px;
+          font-weight: 900;
+          border-radius: 8px;
         }
 
         .update-action {
@@ -1071,17 +1160,45 @@ export default function Teligram() {
           background: #f8fafc;
         }
 
-        .msg-date {
-          font-size: 11px;
-          color: #64748b;
-          font-weight: 700;
-          margin-bottom: 6px;
-          padding-right: 8px;
+        .msg-meta {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          margin-bottom: 7px;
+          padding-right: 6px;
+        }
+
+        .date-badge {
+          display: inline-flex;
+          align-items: center;
+          height: 20px;
+          padding: 0 8px;
+          border-radius: 999px;
+          background: #eef6ff;
+          color: #2563eb;
+          font-size: 10.5px;
+          font-weight: 900;
+          letter-spacing: 0.1px;
+          white-space: nowrap;
+        }
+
+        .new-badge {
+          display: inline-flex;
+          align-items: center;
+          height: 20px;
+          padding: 0 7px;
+          border-radius: 999px;
+          background: linear-gradient(135deg, #16a34a, #22c55e);
+          color: white;
+          font-size: 10px;
+          font-weight: 900;
+          letter-spacing: 0.2px;
+          box-shadow: 0 6px 14px rgba(22, 163, 74, 0.22);
         }
 
         .msg-text {
-          font-size: 16px;
-          line-height: 1.42;
+          font-size: 15.8px;
+          line-height: 1.45;
           color: #111111;
           padding-right: 2px;
         }
@@ -1091,44 +1208,62 @@ export default function Teligram() {
           margin: 0;
         }
 
+        .msg-text strong,
+        .msg-text b {
+          font-weight: 900;
+        }
+
+        .msg-text u {
+          text-underline-offset: 3px;
+        }
+
         .msg-image {
           display: block;
           width: 100%;
-          max-width: 285px;
-          max-height: 330px;
+          max-width: 292px;
+          max-height: 340px;
           object-fit: cover;
-          border-radius: 12px;
-          margin-top: 7px;
+          border-radius: 16px;
+          margin-top: 8px;
+          border: 1px solid rgba(226,232,240,0.8);
+          box-shadow: 0 8px 18px rgba(15,23,42,0.12);
         }
 
-        .sending-text {
-          margin-top: 5px;
-          text-align: right;
+        .msg-footer {
+          margin-top: 6px;
+          display: flex;
+          justify-content: flex-end;
+          gap: 8px;
           color: #94a3b8;
-          font-size: 11px;
+          font-size: 10.8px;
+          font-weight: 800;
+          white-space: nowrap;
         }
 
         .preview-strip {
-          background: rgba(255,255,255,0.96);
+          background: rgba(255,255,255,0.98);
           border-top: 1px solid #e5e7eb;
-          padding: 7px 9px;
+          padding: 8px 10px;
           display: flex;
           align-items: center;
           gap: 9px;
           flex-shrink: 0;
+          box-shadow: 0 -8px 24px rgba(15,23,42,0.06);
         }
 
         .preview-strip img {
-          width: 44px;
-          height: 44px;
-          border-radius: 9px;
+          width: 46px;
+          height: 46px;
+          border-radius: 13px;
           object-fit: cover;
+          border: 1px solid #e2e8f0;
         }
 
         .preview-strip span {
           flex: 1;
           font-size: 12px;
           color: #475569;
+          font-weight: 750;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -1149,12 +1284,12 @@ export default function Teligram() {
           background: #eff6ff;
           color: #2563eb;
           border-top: 1px solid #bfdbfe;
-          padding: 7px 10px;
+          padding: 8px 11px;
           display: flex;
           justify-content: space-between;
           align-items: center;
           font-size: 13px;
-          font-weight: 700;
+          font-weight: 900;
           flex-shrink: 0;
         }
 
@@ -1162,49 +1297,54 @@ export default function Teligram() {
           border: none;
           background: #2563eb;
           color: white;
-          border-radius: 13px;
-          padding: 5px 10px;
+          border-radius: 14px;
+          padding: 6px 11px;
           font-size: 12px;
+          font-weight: 900;
           cursor: pointer;
         }
 
         .composer {
           background: rgba(255,255,255,0.98);
-          padding: 8px;
+          padding: 9px;
           flex-shrink: 0;
-          box-shadow: 0 -4px 18px rgba(15,23,42,0.08);
+          box-shadow: 0 -8px 26px rgba(15,23,42,0.08);
+          z-index: 20;
         }
 
         .input-card {
-          min-height: 44px;
+          min-height: 46px;
           display: flex;
           align-items: center;
           gap: 5px;
           background: #f8fafc;
-          border: 1px solid #e2e8f0;
-          border-radius: 22px;
-          padding: 5px 5px 5px 12px;
+          border: 1px solid #dbe4f0;
+          border-radius: 24px;
+          padding: 5px 5px 5px 13px;
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.9);
         }
 
         .text-input {
           flex: 1;
           min-width: 0;
-          max-height: 76px;
+          max-height: 82px;
           overflow-y: auto;
           outline: none;
           font-size: 15px;
-          line-height: 1.35;
+          line-height: 1.38;
           padding: 6px 0;
+          font-weight: 650;
         }
 
         .text-input:empty::before {
           content: attr(data-placeholder);
           color: #94a3b8;
+          font-weight: 600;
         }
 
         .tool-btn {
-          width: 29px;
-          height: 29px;
+          width: 30px;
+          height: 30px;
           border: none;
           border-radius: 50%;
           background: #e2e8f0;
@@ -1215,14 +1355,19 @@ export default function Teligram() {
           align-items: center;
           justify-content: center;
           flex-shrink: 0;
+          font-weight: 900;
+        }
+
+        .tool-btn:hover {
+          background: #cbd5e1;
         }
 
         .send-btn {
-          width: 34px;
-          height: 34px;
+          width: 36px;
+          height: 36px;
           border-radius: 50%;
           border: none;
-          background: linear-gradient(135deg, #00897b, #00a693);
+          background: linear-gradient(135deg, #0f766e, #0ea5e9);
           color: white;
           font-size: 16px;
           cursor: pointer;
@@ -1230,6 +1375,7 @@ export default function Teligram() {
           align-items: center;
           justify-content: center;
           flex-shrink: 0;
+          box-shadow: 0 8px 18px rgba(14, 165, 233, 0.28);
         }
 
         .send-btn:disabled {
@@ -1250,10 +1396,10 @@ export default function Teligram() {
         .toast {
           width: 245px;
           background: white;
-          border-radius: 22px;
+          border-radius: 24px;
           padding: 20px 16px;
           text-align: center;
-          box-shadow: 0 20px 70px rgba(15,23,42,0.28);
+          box-shadow: 0 24px 80px rgba(15,23,42,0.3);
           animation: popupScale 0.16s ease;
         }
 
@@ -1283,28 +1429,29 @@ export default function Teligram() {
           margin: 0;
           color: #1f2937;
           font-size: 14px;
-          font-weight: 800;
+          font-weight: 900;
         }
 
         .confirm-layer {
           position: fixed;
           inset: 0;
-          background: rgba(15,23,42,0.48);
+          background: rgba(15,23,42,0.52);
           z-index: 110;
           display: flex;
           align-items: center;
           justify-content: center;
           padding: 18px;
+          backdrop-filter: blur(6px);
         }
 
         .confirm-card {
           width: 100%;
           max-width: 330px;
           background: white;
-          border-radius: 24px;
+          border-radius: 26px;
           padding: 23px 18px 18px;
           text-align: center;
-          box-shadow: 0 28px 80px rgba(15,23,42,0.36);
+          box-shadow: 0 28px 90px rgba(15,23,42,0.38);
           animation: popupScale 0.16s ease;
         }
 
@@ -1354,11 +1501,11 @@ export default function Teligram() {
 
         .confirm-actions button {
           flex: 1;
-          height: 41px;
+          height: 42px;
           border: none;
-          border-radius: 14px;
+          border-radius: 15px;
           font-size: 14px;
-          font-weight: 800;
+          font-weight: 900;
           cursor: pointer;
         }
 
@@ -1375,12 +1522,12 @@ export default function Teligram() {
         @media (min-width: 431px) {
           .nm-phone {
             height: 92vh;
-            border-radius: 22px;
-            box-shadow: 0 28px 90px rgba(0,0,0,0.38);
+            border-radius: 26px;
+            box-shadow: 0 34px 100px rgba(0,0,0,0.42);
           }
         }
 
-        @media (max-width: 360px) {
+        @media (max-width: 370px) {
           .tool-btn {
             width: 27px;
             height: 27px;
@@ -1388,16 +1535,25 @@ export default function Teligram() {
           }
 
           .send-btn {
-            width: 32px;
-            height: 32px;
+            width: 33px;
+            height: 33px;
           }
 
           .msg-card {
-            max-width: 90%;
+            max-width: 91%;
           }
 
           .header-title h2 {
             font-size: 16px;
+          }
+
+          .header-logo {
+            width: 42px;
+            height: 42px;
+          }
+
+          .nm-header {
+            padding: 8px 9px;
           }
         }
       `}</style>
