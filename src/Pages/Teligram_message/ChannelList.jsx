@@ -19,6 +19,8 @@ const themes = [
 
 export default function ChannelList() {
   const fileRef = useRef(null);
+  const pinRequestRef = useRef(0);
+  const pinAbortRef = useRef(null);
 
   const [channels, setChannels] = useState([]);
   const [channelName, setChannelName] = useState("");
@@ -146,6 +148,13 @@ export default function ChannelList() {
   };
 
   const closePinBox = () => {
+    pinRequestRef.current += 1;
+
+    if (pinAbortRef.current) {
+      pinAbortRef.current.abort();
+      pinAbortRef.current = null;
+    }
+
     setPinBox({
       show: false,
       channel: null,
@@ -431,6 +440,16 @@ export default function ChannelList() {
     setActiveMenuId(null);
 
     if (isTrue(channel.is_private)) {
+      pinRequestRef.current += 1;
+
+      if (pinAbortRef.current) {
+        pinAbortRef.current.abort();
+        pinAbortRef.current = null;
+      }
+
+      setPinChecking(false);
+      localStorage.removeItem("selected_channel_pin");
+
       setPinBox({
         show: true,
         channel,
@@ -444,55 +463,122 @@ export default function ChannelList() {
   };
 
   const verifyChannelPin = async () => {
-    if (!pinBox.channel || pinChecking) return;
+    const selectedChannel = pinBox.channel;
+    const typedPin = String(pinBox.pin || "").replace(/\D/g, "").slice(0, 4);
 
-    if (!/^[0-9]{4}$/.test(pinBox.pin)) {
+    if (!selectedChannel || pinChecking) return;
+
+    if (!/^[0-9]{4}$/.test(typedPin)) {
       setPinBox((prev) => ({
         ...prev,
+        pin: typedPin,
         error: "Enter valid 4 digit PIN",
       }));
       return;
     }
 
+    if (pinAbortRef.current) {
+      pinAbortRef.current.abort();
+    }
+
+    const controller = new AbortController();
+    const requestId = pinRequestRef.current + 1;
+
+    pinRequestRef.current = requestId;
+    pinAbortRef.current = controller;
+
     try {
       setPinChecking(true);
+      setPinBox((prev) => ({
+        ...prev,
+        pin: typedPin,
+        error: "",
+      }));
 
       const res = await fetch(
-        `${API_URL}/api/telegram-channels/${pinBox.channel.channel_id}/verify-pin`,
+        `${API_URL}/api/telegram-channels/${selectedChannel.channel_id}/verify-pin`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
+          signal: controller.signal,
           body: JSON.stringify({
-            pin: pinBox.pin,
+            pin: typedPin,
           }),
         }
       );
 
       const data = await res.json();
 
-      if (!res.ok || !data.unlocked) {
-        setPinBox((prev) => ({
-          ...prev,
-          error: data.message || "Wrong PIN",
-        }));
+      const isLatestRequest =
+        pinRequestRef.current === requestId && !controller.signal.aborted;
+
+      if (!isLatestRequest) return;
+
+      const unlocked =
+        isTrue(data?.unlocked) ||
+        isTrue(data?.success) ||
+        isTrue(data?.verified) ||
+        isTrue(data?.valid);
+
+      if (!res.ok || !unlocked) {
+        setPinBox((prev) => {
+          const sameChannel =
+            Number(prev.channel?.channel_id) ===
+            Number(selectedChannel.channel_id);
+
+          /*
+            Important fix:
+            If an old/wrong PIN request finishes after the user has already typed
+            the correct PIN, do not show a stale "PIN mismatch" message.
+          */
+          if (!prev.show || !sameChannel || prev.pin !== typedPin) {
+            return prev;
+          }
+
+          return {
+            ...prev,
+            error: data?.message || "PIN mismatch",
+          };
+        });
         return;
       }
 
-      const selectedChannel = pinBox.channel;
-      const correctPin = pinBox.pin;
+      /*
+        Correct PIN:
+        invalidate all older responses before routing so a delayed mismatch
+        response cannot flash for 1-2 seconds while the chat opens.
+      */
+      pinRequestRef.current += 1;
+      pinAbortRef.current = null;
+      setPinChecking(false);
+      setPinBox({
+        show: false,
+        channel: null,
+        pin: "",
+        error: "",
+      });
 
-      closePinBox();
-      goToChannel(selectedChannel, correctPin);
+      goToChannel(selectedChannel, typedPin);
     } catch (error) {
+      if (error?.name === "AbortError") {
+        return;
+      }
+
       console.error("Verify PIN error:", error);
+
+      if (pinRequestRef.current !== requestId) return;
+
       setPinBox((prev) => ({
         ...prev,
         error: "Server error",
       }));
     } finally {
-      setPinChecking(false);
+      if (pinRequestRef.current === requestId) {
+        pinAbortRef.current = null;
+        setPinChecking(false);
+      }
     }
   };
 
