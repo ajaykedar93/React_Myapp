@@ -1,8 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import DOMPurify from "dompurify";
 
-const API_URL =
-  import.meta.env.VITE_API_URL || "https://express-backend-myapp.onrender.com";
+const DEFAULT_BACKEND_URL = "https://express-backend-myapp.onrender.com";
+
+const API_URL = (
+  import.meta.env.VITE_API_URL ||
+  (typeof window !== "undefined" &&
+  ["localhost", "127.0.0.1"].includes(window.location.hostname)
+    ? "http://localhost:5000"
+    : DEFAULT_BACKEND_URL)
+).replace(/\/$/, "");
 
 const PUBLIC_USER_ID = 7;
 
@@ -199,12 +206,170 @@ export default function Teligram() {
     return name?.trim()?.charAt(0)?.toUpperCase() || "N";
   };
 
-  const getFileUrl = (url) => {
-    if (!url) return "";
-    if (url.startsWith("blob:")) return url;
-    if (url.startsWith("http://") || url.startsWith("https://")) return url;
-    if (url.startsWith("/uploads")) return `${API_URL}${url}`;
-    return url;
+  const getFileNameFromUrl = (url) => {
+    const rawUrl = String(url || "").trim();
+    if (!rawUrl) return "";
+
+    const cleaned = rawUrl
+      .replace(/\\/g, "/")
+      .split("?")[0]
+      .split("#")[0];
+
+    const fileName = cleaned.split("/").pop() || "";
+    return fileName;
+  };
+
+  const joinApiUrl = (pathValue) => {
+    const cleanPath = String(pathValue || "").trim();
+    if (!cleanPath) return "";
+    if (/^https?:\/\//i.test(cleanPath)) return cleanPath;
+    return `${API_URL}${cleanPath.startsWith("/") ? "" : "/"}${cleanPath}`;
+  };
+
+  const getFileUrl = (url, folder = "telegram-notes") => {
+    const rawUrl = String(url || "").trim();
+
+    if (!rawUrl) return "";
+    if (rawUrl.startsWith("blob:") || rawUrl.startsWith("data:")) return rawUrl;
+    if (/^https?:\/\//i.test(rawUrl)) return rawUrl;
+
+    const cleanedUrl = rawUrl.replace(/\\/g, "/").replace(/^\.\//, "");
+
+    if (cleanedUrl.startsWith("/api/") || cleanedUrl.startsWith("api/")) {
+      return encodeURI(joinApiUrl(cleanedUrl));
+    }
+
+    if (cleanedUrl.startsWith("/uploads/") || cleanedUrl.startsWith("uploads/")) {
+      return encodeURI(joinApiUrl(cleanedUrl));
+    }
+
+    const uploadIndex = cleanedUrl.indexOf("uploads/");
+    if (uploadIndex !== -1) {
+      return encodeURI(joinApiUrl(cleanedUrl.slice(uploadIndex)));
+    }
+
+    const fileName = getFileNameFromUrl(cleanedUrl);
+    if (!fileName) return "";
+
+    return encodeURI(
+      joinApiUrl(`/uploads/${folder}/${encodeURIComponent(fileName)}`)
+    );
+  };
+
+  const buildImageFallbacks = (source, folder = "telegram-notes") => {
+    const rawSource = String(source || "").trim();
+    const fileName = getFileNameFromUrl(rawSource);
+    const urls = [];
+
+    const add = (value) => {
+      if (!value) return;
+      const finalUrl = encodeURI(String(value));
+      if (!urls.includes(finalUrl)) urls.push(finalUrl);
+    };
+
+    // First try exact URL/path received from backend/database.
+    add(getFileUrl(rawSource, folder));
+
+    if (fileName) {
+      const safeFile = encodeURIComponent(fileName);
+
+      // Common note image paths.
+      add(joinApiUrl(`/uploads/telegram-notes/${safeFile}`));
+      add(joinApiUrl(`/api/telegram-notes/image/${safeFile}`));
+
+      // Common channel/logo paths.
+      add(joinApiUrl(`/uploads/telegram-channels/${safeFile}`));
+      add(joinApiUrl(`/uploads/telegram-channel/${safeFile}`));
+      add(joinApiUrl(`/uploads/channel-logos/${safeFile}`));
+      add(joinApiUrl(`/uploads/channels/${safeFile}`));
+      add(joinApiUrl(`/uploads/logos/${safeFile}`));
+
+      // Folder selected by caller and root upload fallback.
+      add(joinApiUrl(`/uploads/${folder}/${safeFile}`));
+      add(joinApiUrl(`/uploads/${safeFile}`));
+    }
+
+    return urls;
+  };
+
+  const getImagePlaceholder = (folder = "telegram-notes") => {
+    const label = folder === "telegram-channels" ? "Logo" : "Image";
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="640" height="420" viewBox="0 0 640 420">
+        <rect width="640" height="420" rx="24" fill="#e5e7eb"/>
+        <rect x="28" y="28" width="584" height="364" rx="20" fill="#f8fafc" stroke="#cbd5e1" stroke-width="3"/>
+        <circle cx="228" cy="168" r="42" fill="#cbd5e1"/>
+        <path d="M98 336 L244 218 L336 288 L406 230 L542 336 Z" fill="#cbd5e1"/>
+        <text x="320" y="382" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="#64748b">${label} not found</text>
+      </svg>
+    `;
+    return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+  };
+
+  const getNoteImageUrl = (note) => {
+    const source = note?.image_url || note?.image_path || "";
+    return buildImageFallbacks(source, "telegram-notes")[0] || "";
+  };
+
+  const getChannelLogoUrl = (logoUrl) => {
+    return buildImageFallbacks(logoUrl, "telegram-channels")[0] || "";
+  };
+
+  const getNoteDownloadUrl = (note) => {
+    if (note?.download_url) return getFileUrl(note.download_url, "telegram-notes");
+
+    const source = note?.image_path || note?.image_url || "";
+    if (!source) return "";
+
+    const fileName = getFileNameFromUrl(source);
+    if (!fileName) return getFileUrl(source, "telegram-notes");
+
+    return encodeURI(
+      joinApiUrl(`/api/telegram-notes/image/download/${encodeURIComponent(fileName)}`)
+    );
+  };
+
+  const downloadNoteImage = (event, note) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const downloadUrl = getNoteDownloadUrl(note);
+    if (!downloadUrl) return;
+
+    const source = note?.image_path || note?.image_url || note?.download_url || "";
+    const fileName = getFileNameFromUrl(source) || "image.jpg";
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = fileName;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
+  const handleImageError = (event, originalUrl, folder = "telegram-notes") => {
+    const img = event.currentTarget;
+    const fallbacks = buildImageFallbacks(originalUrl || img.getAttribute("src"), folder);
+    const step = Number(img.dataset.fallbackStep || "0") + 1;
+
+    if (step >= fallbacks.length) {
+      img.onerror = null;
+
+      const logoBox = img.closest(".header-logo, .unlock-logo");
+      if (logoBox) {
+        logoBox.classList.add("logo-load-failed");
+        img.style.display = "none";
+        return;
+      }
+
+      img.classList.add("image-load-failed");
+      img.src = getImagePlaceholder(folder);
+      return;
+    }
+
+    img.dataset.fallbackStep = String(step);
+    img.src = fallbacks[step];
   };
 
   const stripHtml = (html) => {
@@ -744,11 +909,18 @@ export default function Teligram() {
         title: backendNote.title !== undefined ? backendNote.title : noteTitle,
         text_color: backendNote.text_color || currentTextColor,
         content_html: backendNote.content_html || contentHtml,
-        image_url:
-          backendNote.image_url ||
-          backendNote.image_path ||
-          optimisticNote.image_url ||
-          null,
+        image_url: currentRemoveImage
+          ? null
+          : backendNote.image_url ||
+            backendNote.image_path ||
+            optimisticNote.image_url ||
+            null,
+        image_path: currentRemoveImage
+          ? null
+          : backendNote.image_path ||
+            backendNote.image_url ||
+            optimisticNote.image_path ||
+            null,
         created_at: backendNote.created_at || optimisticNote.created_at,
         updated_at: backendNote.updated_at || new Date().toISOString(),
         is_temp: false,
@@ -969,11 +1141,16 @@ export default function Teligram() {
           </button>
 
           <div className="header-logo">
-            {selectedChannel?.logo_url ? (
-              <img src={getFileUrl(selectedChannel.logo_url)} alt="logo" />
-            ) : (
-              <span>{getInitial(selectedChannel?.channel_name)}</span>
+            {selectedChannel?.logo_url && (
+              <img
+                src={getChannelLogoUrl(selectedChannel.logo_url)}
+                alt="logo"
+                onError={(e) => handleImageError(e, selectedChannel.logo_url, "telegram-channels")}
+              />
             )}
+            <span className="logo-fallback-letter">
+              {getInitial(selectedChannel?.channel_name)}
+            </span>
           </div>
 
           <div className="header-title">
@@ -1001,11 +1178,16 @@ export default function Teligram() {
           <main className="unlock-screen">
             <div className="unlock-card">
               <div className="unlock-logo">
-                {selectedChannel?.logo_url ? (
-                  <img src={getFileUrl(selectedChannel.logo_url)} alt="logo" />
-                ) : (
-                  <span>{getInitial(selectedChannel?.channel_name)}</span>
+                {selectedChannel?.logo_url && (
+                  <img
+                    src={getChannelLogoUrl(selectedChannel.logo_url)}
+                    alt="logo"
+                    onError={(e) => handleImageError(e, selectedChannel.logo_url, "telegram-channels")}
+                  />
                 )}
+                <span className="logo-fallback-letter">
+                  {getInitial(selectedChannel?.channel_name)}
+                </span>
               </div>
 
               <div className="unlock-lock">🔐</div>
@@ -1148,11 +1330,17 @@ export default function Teligram() {
 
                           {hasImage && (
                             <div className={`image-message-wrap ${hasText ? "with-description" : ""}`}>
-                              <img
-                                src={getFileUrl(note.image_url || note.image_path)}
-                                alt="note"
-                                className="message-image"
-                              />
+                              <div className="whatsapp-image-frame">
+                                <img
+                                  src={getNoteImageUrl(note)}
+                                  alt="note"
+                                  className="message-image"
+                                  loading="lazy"
+                                  onError={(e) =>
+                                    handleImageError(e, note.image_url || note.image_path)
+                                  }
+                                />
+                              </div>
 
                               {hasText && (
                                 <div
@@ -1200,6 +1388,13 @@ export default function Teligram() {
                                   onClick={() => startImageCaption(note)}
                                 >
                                   {hasText ? "Text" : "Add Text"}
+                                </button>
+
+                                <button
+                                  className="square-action download-square"
+                                  onClick={(e) => downloadNoteImage(e, note)}
+                                >
+                                  Download
                                 </button>
                               </>
                             ) : (
@@ -1867,6 +2062,12 @@ export default function Teligram() {
           color: #dc2626;
           background: #fff1f2;
           border-color: #fecdd3;
+        }
+
+        .download-square {
+          color: #047857;
+          background: #ecfdf5;
+          border-color: #a7f3d0;
         }
 
         .preview-strip {
@@ -3128,6 +3329,881 @@ export default function Teligram() {
             font-size: 7.4px;
           }
         }
+
+        /* ===== Full screen Telegram/WhatsApp style fixed responsive page ===== */
+        html,
+        body,
+        #root {
+          width: 100%;
+          height: 100%;
+          min-height: 100%;
+          margin: 0;
+          padding: 0;
+          overflow: hidden;
+        }
+
+        .nm-screen {
+          width: 100vw;
+          height: 100dvh;
+          min-height: 100dvh;
+          display: block;
+          background: #efeae2;
+          overflow: hidden;
+        }
+
+        .nm-phone {
+          width: 100vw;
+          max-width: none;
+          height: 100dvh;
+          min-height: 100dvh;
+          margin: 0;
+          border-radius: 0;
+          background: #efeae2;
+          overflow: hidden;
+        }
+
+        .nm-header {
+          min-height: 64px;
+          padding: max(8px, env(safe-area-inset-top)) 10px 8px;
+          gap: 9px;
+          background: #008069;
+          box-shadow: none;
+        }
+
+        .header-icon-btn {
+          width: 36px;
+          height: 36px;
+          border: none;
+          border-radius: 50%;
+          background: transparent;
+          box-shadow: none;
+        }
+
+        .back-btn {
+          font-size: 38px;
+          font-weight: 300;
+        }
+
+        .search-btn {
+          font-size: 18px;
+        }
+
+        .header-logo {
+          width: 44px;
+          height: 44px;
+          border-radius: 50%;
+          background: #e2e8f0;
+          box-shadow: none;
+        }
+
+        .header-title h2 {
+          font-size: 20px;
+          font-weight: 700;
+          letter-spacing: 0;
+        }
+
+        .header-title p {
+          margin-top: 2px;
+          font-size: 13px;
+          font-weight: 500;
+          color: rgba(255, 255, 255, 0.72);
+        }
+
+        .chat-body {
+          flex: 1;
+          min-height: 0;
+          overflow-y: auto;
+          overflow-x: hidden;
+          padding: 8px 8px 12px;
+          background-color: #d9f0c7;
+          background-image:
+            radial-gradient(circle at 20px 24px, rgba(0, 0, 0, 0.035) 1.5px, transparent 2px),
+            radial-gradient(circle at 78px 54px, rgba(0, 0, 0, 0.03) 1.2px, transparent 2px),
+            linear-gradient(0deg, rgba(255,255,255,0.28), rgba(255,255,255,0.28));
+          background-size: 105px 105px, 130px 130px, auto;
+          scroll-behavior: smooth;
+        }
+
+        .date-separator {
+          margin: 8px 0 10px;
+        }
+
+        .date-separator span {
+          min-height: 24px;
+          padding: 4px 11px;
+          border-radius: 9px;
+          color: #ffffff;
+          background: rgba(96, 137, 82, 0.72);
+          box-shadow: none;
+          font-size: 12px;
+          font-weight: 700;
+        }
+
+        .message-line {
+          align-items: flex-start;
+          margin: 0 0 6px;
+        }
+
+        .message-bubble {
+          width: fit-content;
+          max-width: min(78vw, 640px);
+          min-width: 56px;
+          padding: 7px 68px 18px 10px;
+          border: none;
+          border-radius: 0 8px 8px 8px;
+          background: #ffffff;
+          color: #111827;
+          box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13);
+          backdrop-filter: none;
+          overflow: visible;
+        }
+
+        .message-bubble::before {
+          left: -7px;
+          top: 0;
+          border-top: 8px solid #ffffff;
+          border-left: 8px solid transparent;
+        }
+
+        .message-dot-btn {
+          top: 2px;
+          right: 2px;
+          width: 22px;
+          height: 22px;
+          border-radius: 50%;
+          background: rgba(255, 255, 255, 0.65);
+          color: #667781;
+          font-size: 16px;
+          opacity: 0.8;
+        }
+
+        .message-text,
+        .image-description-text {
+          max-width: 100%;
+          padding: 0;
+          color: #111827;
+          font-size: 16px;
+          line-height: 1.36;
+          font-weight: 500;
+          word-break: break-word;
+          overflow-wrap: anywhere;
+          white-space: pre-wrap;
+        }
+
+        .message-text div,
+        .message-text p,
+        .image-description-text div,
+        .image-description-text p {
+          margin: 0;
+        }
+
+        .message-time {
+          position: absolute;
+          right: 7px;
+          bottom: 4px;
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+          color: #8696a0;
+          font-size: 10.5px;
+          line-height: 1;
+          font-weight: 500;
+          white-space: nowrap;
+          user-select: none;
+        }
+
+        .image-message-wrap {
+          width: fit-content;
+          max-width: min(330px, calc(100vw - 34px));
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .whatsapp-image-frame {
+          position: relative;
+          width: fit-content;
+          max-width: min(330px, calc(100vw - 34px));
+          overflow: hidden;
+          border-radius: 6px;
+          background: #111827;
+        }
+
+        .whatsapp-image-frame .message-image {
+          opacity: 0.78;
+          filter: saturate(0.85) contrast(0.96);
+        }
+
+        .message-bubble:has(.image-message-wrap) {
+          padding: 4px 4px 19px 4px;
+          max-width: min(82vw, 340px);
+        }
+
+        .message-bubble:has(.image-message-wrap.with-description) {
+          padding: 4px 10px 19px 4px;
+        }
+
+        .message-bubble.image-only {
+          padding: 4px 4px 19px 4px;
+          max-width: min(82vw, 340px);
+          min-width: 90px;
+        }
+
+        .message-image {
+          width: 100%;
+          max-width: min(330px, calc(100vw - 34px));
+          max-height: 420px;
+          height: auto;
+          display: block;
+          object-fit: contain;
+          border: none;
+          border-radius: 6px;
+          box-shadow: none;
+          background: #f8fafc;
+        }
+
+        .image-only .message-time {
+          right: 8px;
+          bottom: 7px;
+          padding: 3px 6px;
+          border-radius: 999px;
+          background: rgba(0, 0, 0, 0.38);
+          color: #ffffff;
+          font-size: 10px;
+        }
+
+        .message-action-row {
+          margin-top: 5px;
+          padding-left: 1px;
+        }
+
+        .composer {
+          padding: 6px 8px;
+          padding-bottom: max(6px, env(safe-area-inset-bottom));
+          background: #f0f2f5;
+          border-top: 1px solid rgba(0,0,0,0.06);
+          box-shadow: none;
+        }
+
+        .composer-card {
+          border: none;
+          border-radius: 18px;
+          background: #ffffff;
+          padding: 5px;
+          box-shadow: none;
+        }
+
+        .text-input {
+          min-height: 38px;
+          max-height: 120px;
+          border: none;
+          border-radius: 16px;
+          padding: 9px 11px;
+          font-size: 16px;
+          font-weight: 500;
+          box-shadow: none;
+        }
+
+        .text-input:focus {
+          border: none;
+          box-shadow: none;
+        }
+
+        @media (min-width: 768px) {
+          .message-bubble {
+            max-width: min(64vw, 760px);
+          }
+
+          .message-bubble:has(.image-message-wrap),
+          .message-bubble.image-only {
+            max-width: min(48vw, 420px);
+          }
+
+          .image-message-wrap,
+          .message-image {
+            max-width: min(420px, 48vw);
+          }
+        }
+
+        @media (max-width: 370px) {
+          .message-bubble {
+            max-width: 88vw;
+            padding-right: 62px;
+          }
+
+          .message-bubble:has(.image-message-wrap),
+          .message-bubble.image-only {
+            max-width: calc(100vw - 22px);
+          }
+
+          .image-message-wrap,
+          .message-image {
+            max-width: calc(100vw - 30px);
+          }
+        }
+
+
+        /* ===== Final image fix: bigger WhatsApp-style images, proper logo, no tiny display ===== */
+        .header-logo,
+        .unlock-logo {
+          background: #ffffff;
+        }
+
+        .header-logo img,
+        .unlock-logo img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+
+
+        .logo-fallback-letter {
+          position: absolute;
+          inset: 0;
+          z-index: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #0f766e;
+          font-size: 18px;
+          font-weight: 900;
+        }
+
+        .header-logo,
+        .unlock-logo {
+          position: relative;
+        }
+
+        .header-logo img,
+        .unlock-logo img {
+          position: relative;
+          z-index: 2;
+        }
+
+        .header-logo.logo-load-failed img,
+        .unlock-logo.logo-load-failed img {
+          display: none !important;
+        }
+
+        .message-bubble:has(.image-message-wrap),
+        .message-bubble.image-only {
+          width: fit-content;
+          max-width: calc(100vw - 14px);
+          padding: 3px 3px 21px 3px;
+          border-radius: 7px 13px 13px 13px;
+          background: #ffffff;
+        }
+
+        .image-message-wrap,
+        .whatsapp-image-frame {
+          width: min(96vw, 430px);
+          max-width: calc(100vw - 14px);
+        }
+
+        .whatsapp-image-frame {
+          position: relative;
+          overflow: hidden;
+          border-radius: 7px;
+          background: #111827;
+        }
+
+        .whatsapp-image-frame .message-image,
+        .message-image {
+          width: 100%;
+          height: auto;
+          max-width: 100%;
+          max-height: none;
+          display: block;
+          object-fit: contain;
+          border: none;
+          border-radius: 7px;
+          box-shadow: none;
+          background: #f8fafc;
+        }
+
+        .whatsapp-image-frame .message-image {
+          opacity: 0.82;
+          filter: saturate(0.9) contrast(0.96);
+        }
+
+        .message-bubble:has(.image-message-wrap) .message-time,
+        .image-only .message-time {
+          right: 8px;
+          bottom: 6px;
+          padding: 3px 7px;
+          border-radius: 999px;
+          background: rgba(0, 0, 0, 0.42);
+          color: #ffffff;
+          font-size: 10px;
+        }
+
+        @media (min-width: 768px) {
+          .message-bubble:has(.image-message-wrap),
+          .message-bubble.image-only {
+            max-width: min(72vw, 540px);
+          }
+
+          .image-message-wrap,
+          .whatsapp-image-frame {
+            width: min(72vw, 540px);
+            max-width: min(72vw, 540px);
+          }
+        }
+
+        @media (max-width: 370px) {
+          .message-bubble:has(.image-message-wrap),
+          .message-bubble.image-only,
+          .image-message-wrap,
+          .whatsapp-image-frame {
+            width: calc(100vw - 12px);
+            max-width: calc(100vw - 12px);
+          }
+        }
+
+
+        /* ===== FINAL RESPONSIVE FULL-PAGE FIX =====
+           Header and composer always stay visible.
+           Only .chat-body scrolls.
+           Laptop/tablet/mobile use full available page width.
+        */
+        html,
+        body,
+        #root {
+          width: 100% !important;
+          height: 100% !important;
+          min-height: 100% !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          overflow: hidden !important;
+        }
+
+        body {
+          overscroll-behavior: none;
+          background: #e7f2df !important;
+        }
+
+        .nm-screen {
+          width: 100vw !important;
+          height: 100dvh !important;
+          min-height: 100dvh !important;
+          max-height: 100dvh !important;
+          display: flex !important;
+          align-items: stretch !important;
+          justify-content: stretch !important;
+          padding: 0 !important;
+          overflow: hidden !important;
+          background: #e7f2df !important;
+        }
+
+        .nm-phone {
+          width: 100vw !important;
+          max-width: none !important;
+          height: 100dvh !important;
+          min-height: 100dvh !important;
+          max-height: 100dvh !important;
+          border-radius: 0 !important;
+          box-shadow: none !important;
+          display: flex !important;
+          flex-direction: column !important;
+          overflow: hidden !important;
+          background: #e7f2df !important;
+        }
+
+        .nm-header {
+          height: clamp(58px, 8dvh, 74px) !important;
+          min-height: clamp(58px, 8dvh, 74px) !important;
+          max-height: 74px !important;
+          flex: 0 0 auto !important;
+          position: relative !important;
+          z-index: 50 !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: clamp(7px, 1.2vw, 12px) !important;
+          padding: max(7px, env(safe-area-inset-top)) clamp(8px, 1.5vw, 16px) 7px !important;
+          overflow: visible !important;
+          background: #00796b !important;
+          box-shadow: 0 1px 0 rgba(0,0,0,0.08) !important;
+        }
+
+        .header-logo {
+          width: clamp(40px, 5vw, 52px) !important;
+          height: clamp(40px, 5vw, 52px) !important;
+          min-width: clamp(40px, 5vw, 52px) !important;
+          min-height: clamp(40px, 5vw, 52px) !important;
+          border-radius: 50% !important;
+          flex: 0 0 auto !important;
+          background: #ffffff !important;
+          overflow: hidden !important;
+        }
+
+        .header-logo img {
+          width: 100% !important;
+          height: 100% !important;
+          object-fit: cover !important;
+          display: block !important;
+        }
+
+        .header-title {
+          flex: 1 1 auto !important;
+          min-width: 0 !important;
+          max-width: none !important;
+          display: block !important;
+          overflow: hidden !important;
+        }
+
+        .header-title h2 {
+          display: block !important;
+          max-width: 100% !important;
+          margin: 0 !important;
+          font-size: clamp(16px, 2.1vw, 20px) !important;
+          line-height: 1.1 !important;
+          font-weight: 800 !important;
+          color: #ffffff !important;
+          white-space: nowrap !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+        }
+
+        .header-title p {
+          display: block !important;
+          max-width: 100% !important;
+          margin: 3px 0 0 !important;
+          font-size: clamp(11px, 1.45vw, 14px) !important;
+          line-height: 1.15 !important;
+          font-weight: 500 !important;
+          color: rgba(255,255,255,0.9) !important;
+          white-space: nowrap !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+        }
+
+        .header-icon-btn {
+          width: clamp(32px, 4.2vw, 40px) !important;
+          height: clamp(32px, 4.2vw, 40px) !important;
+          flex: 0 0 auto !important;
+          border: none !important;
+          border-radius: 50% !important;
+          background: transparent !important;
+          box-shadow: none !important;
+        }
+
+        .search-box,
+        .preview-strip,
+        .edit-strip {
+          flex: 0 0 auto !important;
+          position: relative !important;
+          z-index: 45 !important;
+        }
+
+        .chat-body {
+          flex: 1 1 auto !important;
+          min-height: 0 !important;
+          height: auto !important;
+          overflow-y: auto !important;
+          overflow-x: hidden !important;
+          -webkit-overflow-scrolling: touch !important;
+          overscroll-behavior: contain !important;
+          padding: clamp(7px, 1.2vw, 12px) clamp(7px, 1.2vw, 14px) clamp(9px, 1.3vw, 14px) !important;
+          background-color: #e7f2df !important;
+          background-image:
+            radial-gradient(circle at 20px 20px, rgba(107, 114, 128, 0.08) 1.5px, transparent 2px),
+            radial-gradient(circle at 140px 90px, rgba(107, 114, 128, 0.06) 1.5px, transparent 2px) !important;
+          background-size: 260px 180px !important;
+        }
+
+        .composer {
+          flex: 0 0 auto !important;
+          position: relative !important;
+          z-index: 55 !important;
+          padding: 7px clamp(7px, 1.3vw, 14px) max(7px, env(safe-area-inset-bottom)) !important;
+          background: #ffffff !important;
+          border-top: 1px solid #d8ded6 !important;
+          box-shadow: none !important;
+        }
+
+        .composer-card {
+          border-radius: 14px !important;
+          border-color: #d9e0d7 !important;
+          background: #ffffff !important;
+          padding: 5px !important;
+          max-height: 28dvh !important;
+          overflow: hidden !important;
+        }
+
+        .composer-tools {
+          gap: 6px !important;
+          margin-bottom: 5px !important;
+        }
+
+        .tool-left {
+          gap: 5px !important;
+          overflow-x: auto !important;
+          scrollbar-width: none !important;
+        }
+
+        .tool-left::-webkit-scrollbar {
+          display: none !important;
+        }
+
+        .tool-btn {
+          width: 30px !important;
+          height: 30px !important;
+          min-width: 30px !important;
+          border-radius: 9px !important;
+          font-size: 12px !important;
+        }
+
+        .send-btn {
+          width: 38px !important;
+          height: 32px !important;
+          min-width: 38px !important;
+          border-radius: 11px !important;
+          font-size: 15px !important;
+        }
+
+        .text-input {
+          min-height: 34px !important;
+          max-height: 86px !important;
+          padding: 8px 10px !important;
+          border-radius: 13px !important;
+          font-size: 14px !important;
+          line-height: 1.32 !important;
+          font-weight: 500 !important;
+        }
+
+        .note-block,
+        .message-line {
+          width: 100% !important;
+          max-width: 100% !important;
+        }
+
+        .message-line {
+          margin-bottom: 7px !important;
+        }
+
+        .message-bubble {
+          max-width: min(76vw, 520px) !important;
+          min-width: 46px !important;
+          padding: 6px 28px 17px 9px !important;
+          border-radius: 6px 13px 13px 13px !important;
+          border: none !important;
+          background: #ffffff !important;
+          box-shadow: 0 1px 1px rgba(0,0,0,0.08) !important;
+          overflow: visible !important;
+        }
+
+        .message-bubble::before {
+          border-top-color: #ffffff !important;
+        }
+
+        .message-text,
+        .image-description-text {
+          font-size: clamp(13px, 1.7vw, 14px) !important;
+          line-height: 1.34 !important;
+          font-weight: 500 !important;
+          color: #111827 !important;
+        }
+
+        .message-title-text {
+          font-size: clamp(14px, 1.8vw, 15px) !important;
+          line-height: 1.25 !important;
+          font-weight: 650 !important;
+        }
+
+        .message-dot-btn {
+          top: 2px !important;
+          right: 2px !important;
+          width: 22px !important;
+          height: 22px !important;
+          border-radius: 8px !important;
+          font-size: 14px !important;
+          background: transparent !important;
+          color: #7b8794 !important;
+        }
+
+        .message-time {
+          right: 7px !important;
+          bottom: 4px !important;
+          font-size: 9.5px !important;
+          line-height: 1 !important;
+          font-weight: 600 !important;
+          color: #6b7280 !important;
+          background: transparent !important;
+          padding: 0 !important;
+        }
+
+        .message-bubble:has(.image-message-wrap),
+        .message-bubble.image-only {
+          width: fit-content !important;
+          max-width: min(78vw, 560px) !important;
+          padding: 3px 3px 18px 3px !important;
+          overflow: visible !important;
+        }
+
+        .image-message-wrap {
+          width: fit-content !important;
+          max-width: 100% !important;
+          display: block !important;
+        }
+
+        .whatsapp-image-frame {
+          width: min(76vw, 430px) !important;
+          max-width: min(76vw, 430px) !important;
+          min-width: min(190px, calc(100vw - 32px)) !important;
+          display: block !important;
+          border-radius: 6px !important;
+          overflow: hidden !important;
+          background: #eef2f7 !important;
+        }
+
+        .whatsapp-image-frame .message-image,
+        .message-image {
+          display: block !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          height: auto !important;
+          max-height: min(48dvh, 460px) !important;
+          object-fit: contain !important;
+          opacity: 1 !important;
+          filter: none !important;
+          visibility: visible !important;
+          border: none !important;
+          border-radius: 6px !important;
+          box-shadow: none !important;
+          background: #eef2f7 !important;
+        }
+
+        .message-image.image-load-failed {
+          min-height: 170px !important;
+          object-fit: cover !important;
+        }
+
+        .image-only .message-time {
+          right: 7px !important;
+          bottom: 5px !important;
+          color: #ffffff !important;
+          background: rgba(0,0,0,0.38) !important;
+          padding: 3px 6px !important;
+          border-radius: 999px !important;
+          font-size: 9.5px !important;
+        }
+
+        .message-action-row {
+          gap: 5px !important;
+          margin-top: 5px !important;
+          padding-left: 1px !important;
+        }
+
+        .square-action {
+          min-width: 70px !important;
+          height: 30px !important;
+          border-radius: 10px !important;
+          padding: 0 9px !important;
+          font-size: 11px !important;
+          font-weight: 800 !important;
+        }
+
+        .date-separator {
+          margin: 7px 0 10px !important;
+        }
+
+        .date-separator span {
+          min-height: 24px !important;
+          padding: 5px 12px !important;
+          font-size: 11px !important;
+        }
+
+        @media (min-width: 768px) {
+          .chat-body {
+            padding-left: 14px !important;
+            padding-right: 14px !important;
+          }
+
+          .message-bubble {
+            max-width: min(54vw, 600px) !important;
+          }
+
+          .message-bubble:has(.image-message-wrap),
+          .message-bubble.image-only {
+            max-width: min(48vw, 560px) !important;
+          }
+
+          .whatsapp-image-frame {
+            width: min(38vw, 430px) !important;
+            max-width: min(38vw, 430px) !important;
+            min-width: 240px !important;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .nm-header {
+            height: 58px !important;
+            min-height: 58px !important;
+            gap: 7px !important;
+          }
+
+          .header-logo {
+            width: 42px !important;
+            height: 42px !important;
+            min-width: 42px !important;
+            min-height: 42px !important;
+          }
+
+          .header-title h2 {
+            font-size: 16px !important;
+          }
+
+          .header-title p {
+            font-size: 11.5px !important;
+          }
+
+          .chat-body {
+            padding-left: 7px !important;
+            padding-right: 7px !important;
+          }
+
+          .message-bubble {
+            max-width: 84vw !important;
+          }
+
+          .message-bubble:has(.image-message-wrap),
+          .message-bubble.image-only {
+            max-width: calc(100vw - 18px) !important;
+          }
+
+          .whatsapp-image-frame {
+            width: min(82vw, 360px) !important;
+            max-width: calc(100vw - 18px) !important;
+            min-width: min(180px, calc(100vw - 18px)) !important;
+          }
+
+          .message-image {
+            max-height: 44dvh !important;
+          }
+        }
+
+        @media (max-width: 360px) {
+          .message-text,
+          .image-description-text,
+          .text-input {
+            font-size: 13px !important;
+          }
+
+          .message-bubble {
+            max-width: 88vw !important;
+          }
+
+          .whatsapp-image-frame {
+            width: min(86vw, 320px) !important;
+          }
+
+          .tool-btn {
+            width: 29px !important;
+            height: 29px !important;
+            min-width: 29px !important;
+          }
+        }
+
 
       `}</style>
     </div>

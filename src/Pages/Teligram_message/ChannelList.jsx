@@ -1,6 +1,14 @@
 import React, { useEffect, useRef, useState } from "react";
 
-const API_URL = import.meta.env.VITE_API_URL || "https://express-backend-myapp.onrender.com";
+const DEFAULT_BACKEND_URL = "https://express-backend-myapp.onrender.com";
+
+const API_URL = (
+  import.meta.env.VITE_API_URL ||
+  (typeof window !== "undefined" &&
+  ["localhost", "127.0.0.1"].includes(window.location.hostname)
+    ? "http://localhost:5000"
+    : DEFAULT_BACKEND_URL)
+).replace(/\/$/, "");
 
 const PUBLIC_USER_ID = 7;
 
@@ -176,14 +184,160 @@ export default function ChannelList() {
     return name?.trim()?.charAt(0)?.toUpperCase() || "N";
   };
 
+  const getChannelLogoSource = (channel) => {
+    return (
+      channel?.logo_url ||
+      channel?.logo_path ||
+      channel?.logo ||
+      channel?.channel_logo ||
+      channel?.channel_logo_url ||
+      channel?.image_url ||
+      channel?.image_path ||
+      ""
+    );
+  };
+
+  const isLocalhostUrl = (url) => {
+    try {
+      const parsed = new URL(url);
+      return ["localhost", "127.0.0.1", "0.0.0.0"].includes(parsed.hostname);
+    } catch {
+      return false;
+    }
+  };
+
+  const normalizeAbsoluteUrl = (url) => {
+    const rawUrl = String(url || "").trim();
+    if (!rawUrl) return "";
+
+    if (!/^https?:\/\//i.test(rawUrl)) return rawUrl;
+
+    try {
+      const parsed = new URL(rawUrl);
+
+      // If backend saved localhost URL in DB, deployed frontend cannot load it.
+      // Keep the path and move it to the active API_URL.
+      if (["localhost", "127.0.0.1", "0.0.0.0"].includes(parsed.hostname)) {
+        return joinApiUrl(`${parsed.pathname}${parsed.search || ""}`);
+      }
+
+      return rawUrl;
+    } catch {
+      return rawUrl;
+    }
+  };
+
+  const joinApiUrl = (pathValue) => {
+    const cleanPath = String(pathValue || "").trim();
+
+    if (!cleanPath) return "";
+    if (/^https?:\/\//i.test(cleanPath)) return cleanPath;
+
+    return `${API_URL}${cleanPath.startsWith("/") ? "" : "/"}${cleanPath}`;
+  };
+
+  const getFileNameFromUrl = (url) => {
+    const rawUrl = String(url || "").trim();
+
+    if (!rawUrl) return "";
+
+    const cleanUrl = rawUrl
+      .replace(/\\/g, "/")
+      .split("?")[0]
+      .split("#")[0];
+
+    const fileName = cleanUrl.split("/").pop() || "";
+
+    try {
+      return decodeURIComponent(fileName);
+    } catch {
+      return fileName;
+    }
+  };
+
   const getLogoUrl = (url) => {
-    if (!url) return "";
+    const rawUrl = String(url || "").trim();
 
-    if (url.startsWith("blob:")) return url;
-    if (url.startsWith("http://") || url.startsWith("https://")) return url;
-    if (url.startsWith("/uploads")) return `${API_URL}${url}`;
+    if (!rawUrl) return "";
+    if (rawUrl.startsWith("blob:") || rawUrl.startsWith("data:")) return rawUrl;
+    if (/^https?:\/\//i.test(rawUrl)) return normalizeAbsoluteUrl(rawUrl);
 
-    return url;
+    const cleanUrl = rawUrl.replace(/\\/g, "/").replace(/^\.\//, "");
+
+    if (cleanUrl.startsWith("/api/") || cleanUrl.startsWith("api/")) {
+      return encodeURI(joinApiUrl(cleanUrl));
+    }
+
+    if (cleanUrl.startsWith("/uploads/") || cleanUrl.startsWith("uploads/")) {
+      return encodeURI(joinApiUrl(cleanUrl));
+    }
+
+    const uploadIndex = cleanUrl.indexOf("uploads/");
+    if (uploadIndex !== -1) {
+      return encodeURI(joinApiUrl(cleanUrl.slice(uploadIndex)));
+    }
+
+    const fileName = getFileNameFromUrl(cleanUrl);
+    if (!fileName) return "";
+
+    return encodeURI(
+      joinApiUrl(`/uploads/telegram-channels/${encodeURIComponent(fileName)}`)
+    );
+  };
+
+  const buildLogoFallbacks = (source) => {
+    const rawSource = String(source || "").trim();
+    const fileName = getFileNameFromUrl(rawSource);
+    const urls = [];
+
+    const add = (value) => {
+      if (!value) return;
+      const finalUrl = encodeURI(value);
+      if (!urls.includes(finalUrl)) urls.push(finalUrl);
+    };
+
+    add(getLogoUrl(rawSource));
+    add(normalizeAbsoluteUrl(rawSource));
+
+    if (fileName) {
+      add(joinApiUrl(`/uploads/telegram-channels/${encodeURIComponent(fileName)}`));
+      add(joinApiUrl(`/uploads/telegram-channel/${encodeURIComponent(fileName)}`));
+      add(joinApiUrl(`/uploads/channels/${encodeURIComponent(fileName)}`));
+      add(joinApiUrl(`/uploads/channel-logos/${encodeURIComponent(fileName)}`));
+      add(joinApiUrl(`/uploads/logos/${encodeURIComponent(fileName)}`));
+      add(joinApiUrl(`/api/telegram-channels/logo/${encodeURIComponent(fileName)}`));
+      add(joinApiUrl(`/api/telegram-channels/image/${encodeURIComponent(fileName)}`));
+      add(joinApiUrl(`/api/telegram-channels/file/${encodeURIComponent(fileName)}`));
+      add(joinApiUrl(`/uploads/${encodeURIComponent(fileName)}`));
+      add(joinApiUrl(`/uploads/telegram-notes/${encodeURIComponent(fileName)}`));
+    }
+
+    return urls;
+  };
+
+  const handleLogoError = (event, channelOrName, index = 0) => {
+    const img = event.currentTarget;
+    const source =
+      typeof channelOrName === "object"
+        ? channelOrName?.logo_url || channelOrName?.logo_path || img.getAttribute("src")
+        : channelOrName || img.getAttribute("src");
+
+    const fallbacks = buildLogoFallbacks(source);
+    const nextStep = Number(img.dataset.fallbackStep || "0") + 1;
+
+    if (nextStep < fallbacks.length) {
+      img.dataset.fallbackStep = String(nextStep);
+      img.src = fallbacks[nextStep];
+      return;
+    }
+
+    const name =
+      typeof channelOrName === "object"
+        ? channelOrName?.channel_name || "N"
+        : String(channelOrName || "N");
+
+    img.dataset.fallbackStep = "done";
+    img.src = getDefaultLogo(name, index);
   };
 
   const getDefaultLogo = (name, index) => {
@@ -363,15 +517,12 @@ export default function ChannelList() {
     setEditingId(channel.channel_id);
     setChannelName(channel.channel_name || "");
     setChannelTagline(channel.channel_tagline || "");
-    setLogoPreview(getLogoUrl(channel.logo_url || ""));
+    setLogoPreview(getLogoUrl(getChannelLogoSource(channel)));
     setChannelLogo(null);
     setRemoveLogo(false);
     setActiveMenuId(null);
 
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
+    // Header and create form stay fixed; only channel list scrolls.
   };
 
   const deleteChannel = async (channelId) => {
@@ -440,6 +591,21 @@ export default function ChannelList() {
     setActiveMenuId(null);
 
     if (isTrue(channel.is_private)) {
+      const savedChannelId = localStorage.getItem("selected_channel_id");
+      const savedPin = localStorage.getItem("selected_channel_pin") || "";
+      const sameChannel =
+        String(savedChannelId || "") === String(channel.channel_id || "");
+
+      /*
+        If the same private channel was already verified in this browser,
+        open it directly. Otherwise ask PIN once and save it only after the
+        backend confirms it.
+      */
+      if (sameChannel && /^[0-9]{4}$/.test(savedPin)) {
+        goToChannel(channel, savedPin);
+        return;
+      }
+
       pinRequestRef.current += 1;
 
       if (pinAbortRef.current) {
@@ -552,6 +718,13 @@ export default function ChannelList() {
       */
       pinRequestRef.current += 1;
       pinAbortRef.current = null;
+
+      /*
+        Save the verified PIN before navigation so the chat page receives
+        the correct PIN immediately and does not show the PIN screen again.
+      */
+      saveSelectedChannel(selectedChannel, typedPin);
+
       setPinChecking(false);
       setPinBox({
         show: false,
@@ -560,7 +733,7 @@ export default function ChannelList() {
         error: "",
       });
 
-      goToChannel(selectedChannel, typedPin);
+      window.location.hash = "/teligram-notes";
     } catch (error) {
       if (error?.name === "AbortError") {
         return;
@@ -614,7 +787,13 @@ export default function ChannelList() {
                 aria-label="Choose channel logo"
               >
                 {logoPreview ? (
-                  <img src={logoPreview} alt="channel logo" />
+                  <img
+                    src={logoPreview}
+                    alt="channel logo"
+                    onError={(e) =>
+                      handleLogoError(e, channelName || "Channel", 0)
+                    }
+                  />
                 ) : (
                   <img
                     src={getDefaultLogo(channelName || "N", 0)}
@@ -746,6 +925,7 @@ export default function ChannelList() {
           {channels.map((channel, index) => {
             const [color1, color2] = getTheme(index);
             const privateChannel = isTrue(channel.is_private);
+            const channelLogoSource = getChannelLogoSource(channel);
             const createdTime = getChannelCreateTime(channel);
             const formattedCreatedTime = formatIndiaDateTime(createdTime);
 
@@ -765,11 +945,13 @@ export default function ChannelList() {
                   <div className="channel-logo">
                     <img
                       src={
-                        channel.logo_url
-                          ? getLogoUrl(channel.logo_url)
+                        channelLogoSource
+                          ? getLogoUrl(channelLogoSource)
                           : getDefaultLogo(channel.channel_name, index)
                       }
                       alt={channel.channel_name}
+                      loading="lazy"
+                      onError={(e) => handleLogoError(e, channel, index)}
                     />
                   </div>
 
@@ -896,8 +1078,12 @@ export default function ChannelList() {
             <div className="pin-top-glow"></div>
 
             <div className="pin-logo-circle">
-              {pinBox.channel?.logo_url ? (
-                <img src={getLogoUrl(pinBox.channel.logo_url)} alt="channel" />
+              {getChannelLogoSource(pinBox.channel) ? (
+                <img
+                  src={getLogoUrl(getChannelLogoSource(pinBox.channel))}
+                  alt="channel"
+                  onError={(e) => handleLogoError(e, pinBox.channel, 0)}
+                />
               ) : (
                 <span>{getInitial(pinBox.channel?.channel_name)}</span>
               )}
@@ -936,6 +1122,7 @@ export default function ChannelList() {
               }
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
+                  e.preventDefault();
                   verifyChannelPin();
                 }
               }}
@@ -977,9 +1164,11 @@ export default function ChannelList() {
         body,
         #root {
           width: 100%;
+          height: 100%;
           min-height: 100%;
           margin: 0;
-          overflow-x: hidden;
+          padding: 0;
+          overflow: hidden;
         }
 
         body {
@@ -992,29 +1181,34 @@ export default function ChannelList() {
         }
 
         .nm-page {
-          width: 100vw;
+          position: fixed;
+          inset: 0;
+          width: 100dvw;
+          height: 100dvh;
           min-height: 100dvh;
           background:
-            radial-gradient(circle at top left, rgba(59, 130, 246, 0.26), transparent 35%),
-            radial-gradient(circle at bottom right, rgba(20, 184, 166, 0.22), transparent 34%),
+            radial-gradient(circle at top left, rgba(59, 130, 246, 0.18), transparent 32%),
+            radial-gradient(circle at bottom right, rgba(20, 184, 166, 0.18), transparent 34%),
             linear-gradient(145deg, #020617, #0f172a 45%, #111827);
           display: flex;
           justify-content: center;
           align-items: stretch;
           font-family: Inter, Arial, sans-serif;
-          overflow-x: hidden;
+          overflow: hidden;
         }
 
         .nm-mobile {
           width: 100%;
-          max-width: 430px;
-          min-height: 100dvh;
+          max-width: none;
+          height: 100dvh;
+          min-height: 0;
           background:
             linear-gradient(180deg, #f8fafc 0%, #eef2ff 45%, #ecfeff 100%);
-          overflow-y: auto;
-          overflow-x: hidden;
+          overflow: hidden;
           position: relative;
-          padding-bottom: max(20px, env(safe-area-inset-bottom));
+          display: flex;
+          flex-direction: column;
+          padding-bottom: max(8px, env(safe-area-inset-bottom));
           scrollbar-width: none;
         }
 
@@ -1023,7 +1217,7 @@ export default function ChannelList() {
         }
 
         .nm-header {
-          min-height: 86px;
+          min-height: 68px;
           background:
             radial-gradient(circle at 84% 15%, rgba(255,255,255,0.20), transparent 26%),
             linear-gradient(135deg, #2563eb, #0891b2);
@@ -1031,20 +1225,20 @@ export default function ChannelList() {
           display: flex;
           align-items: center;
           justify-content: center;
-          padding: max(18px, env(safe-area-inset-top)) 16px 18px;
-          position: sticky;
-          top: 0;
+          padding: max(10px, env(safe-area-inset-top)) 14px 12px;
+          position: relative;
+          flex-shrink: 0;
           z-index: 10;
           box-shadow: 0 12px 32px rgba(15, 23, 42, 0.24);
-          border-bottom-left-radius: 24px;
-          border-bottom-right-radius: 24px;
+          border-bottom-left-radius: 0;
+          border-bottom-right-radius: 0;
         }
 
         .nm-header h1 {
           width: 100%;
           margin: 0;
           color: #ffffff;
-          font-size: clamp(24px, 6.2vw, 31px);
+          font-size: clamp(20px, 5.2vw, 28px);
           font-weight: 950;
           line-height: 1.15;
           letter-spacing: 0.2px;
@@ -1056,7 +1250,8 @@ export default function ChannelList() {
 
         .create-button-wrap {
           width: 100%;
-          padding: 16px 12px 10px;
+          flex-shrink: 0;
+          padding: 10px 10px 8px;
           display: flex;
           justify-content: center;
           align-items: center;
@@ -1109,7 +1304,8 @@ export default function ChannelList() {
         }
 
         .create-card {
-          margin: 13px 12px 14px;
+          margin: 8px 10px 10px;
+          flex-shrink: 0;
           background: rgba(255, 255, 255, 0.96);
           border: 1px solid rgba(226, 232, 240, 0.9);
           border-radius: 24px;
@@ -1351,7 +1547,23 @@ export default function ChannelList() {
 
         .channel-list {
           width: 100%;
-          padding: 2px 0 26px;
+          flex: 1 1 auto;
+          min-height: 0;
+          overflow-y: auto;
+          overflow-x: hidden;
+          padding: 2px 0 18px;
+          overscroll-behavior: contain;
+          scrollbar-width: thin;
+          -webkit-overflow-scrolling: touch;
+        }
+
+        .channel-list::-webkit-scrollbar {
+          width: 4px;
+        }
+
+        .channel-list::-webkit-scrollbar-thumb {
+          background: rgba(37, 99, 235, 0.25);
+          border-radius: 99px;
         }
 
         .channel-row {
@@ -1957,15 +2169,29 @@ export default function ChannelList() {
 
         @media (min-width: 431px) {
           .nm-page {
-            align-items: center;
-            padding: 18px;
+            align-items: stretch;
+            padding: 0;
           }
 
           .nm-mobile {
-            height: 92dvh;
-            min-height: 620px;
-            border-radius: 28px;
-            box-shadow: 0 32px 95px rgba(0, 0, 0, 0.42);
+            width: 100%;
+            height: 100dvh;
+            min-height: 0;
+            border-radius: 0;
+            box-shadow: none;
+          }
+
+          .channel-row,
+          .create-card {
+            max-width: 760px;
+            margin-left: auto;
+            margin-right: auto;
+          }
+
+          .create-button-wrap {
+            max-width: 760px;
+            margin-left: auto;
+            margin-right: auto;
           }
         }
 
@@ -1978,7 +2204,7 @@ export default function ChannelList() {
 
         @media (max-width: 380px) {
           .nm-header {
-            min-height: 80px;
+            min-height: 64px;
             padding-left: 12px;
             padding-right: 12px;
           }
