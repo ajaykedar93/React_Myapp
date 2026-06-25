@@ -4205,6 +4205,489 @@ export default function Teligram() {
         }
 
 
+        /* ===== FINAL MOBILE HEADER + TIME FIX ===== */
+        .nm-header {
+          height: auto !important;
+          min-height: clamp(92px, 12.5dvh, 112px) !important;
+          max-height: none !important;
+          padding: max(30px, calc(env(safe-area-inset-top) + 22px)) clamp(10px, 2vw, 16px) 10px !important;
+          align-items: center !important;
+          background: #00796b !important;
+          overflow: visible !important;
+        }
+
+        .header-logo {
+          width: clamp(44px, 6vw, 54px) !important;
+          height: clamp(44px, 6vw, 54px) !important;
+          min-width: clamp(44px, 6vw, 54px) !important;
+          min-height: clamp(44px, 6vw, 54px) !important;
+        }
+
+        .header-title h2 {
+          font-size: clamp(17px, 4.7vw, 22px) !important;
+          line-height: 1.12 !important;
+        }
+
+        .header-title p {
+          font-size: clamp(11.5px, 3.2vw, 14px) !important;
+          line-height: 1.15 !important;
+          margin-top: 3px !important;
+        }
+
+        .header-icon-btn {
+          width: 38px !important;
+          height: 38px !important;
+          min-width: 38px !important;
+          min-height: 38px !important;
+        }
+
+        .back-btn {
+          font-size: 34px !important;
+          padding-bottom: 4px !important;
+        }
+
+        .chat-body {
+          padding-top: 10px !important;
+        }
+
+        .message-bubble {
+          min-width: 96px !important;
+          padding: 8px 31px 23px 12px !important;
+          border-radius: 8px 15px 15px 15px !important;
+        }
+
+        .message-text,
+        .image-description-text {
+          font-size: clamp(13.5px, 3.75vw, 15px) !important;
+          line-height: 1.36 !important;
+        }
+
+        .message-time {
+          right: 8px !important;
+          bottom: 6px !important;
+          font-size: 10.2px !important;
+          line-height: 1 !important;
+          font-weight: 700 !important;
+          color: #64748b !important;
+          background: transparent !important;
+          max-width: calc(100% - 16px) !important;
+          white-space: nowrap !important;
+        }
+
+        .message-bubble:has(.image-message-wrap),
+        .message-bubble.image-only {
+          min-width: 130px !important;
+          padding: 4px 4px 24px 4px !important;
+          border-radius: 8px 16px 16px 16px !important;
+        }
+
+        .image-only .message-time,
+        .message-bubble:has(.image-message-wrap) .message-time {
+          right: 9px !important;
+          bottom: 7px !important;
+          color: #ffffff !important;
+          background: rgba(0, 0, 0, 0.48) !important;
+          padding: 4px 7px !important;
+          border-radius: 999px !important;
+          font-size: 10.4px !important;
+          font-weight: 800 !important;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.18) !important;
+        }
+
+        .whatsapp-image-frame {
+          width: min(82vw, 390px) !important;
+          max-width: calc(100vw - 24px) !important;
+          min-width: min(210px, calc(100vw - 24px)) !important;
+          border-radius: 8px !important;
+        }
+
+        .whatsapp-image-frame .message-image,
+        .message-image {
+          border-radius: 8px !important;
+          max-height: min(45dvh, 470px) !important;
+        }
+
+        @media (max-width: 480px) {
+          .nm-header {
+            min-height: 100px !important;
+            height: 100px !important;
+            padding: max(32px, calc(env(safe-area-inset-top) + 24px)) 9px 10px !important;
+            gap: 7px !important;
+          }
+
+          .header-logo {
+            width: 45px !important;
+            height: 45px !important;
+            min-width: 45px !important;
+            min-height: 45px !important;
+          }
+
+          .header-title h2 {
+            font-size: 17.5px !important;
+          }
+
+          .header-title p {
+            font-size: 12px !important;
+          }
+
+          .message-bubble {
+            min-width: 98px !important;
+            max-width: 86vw !important;
+            padding: 8px 31px 23px 12px !important;
+          }
+
+          .message-bubble:has(.image-message-wrap),
+          .message-bubble.image-only {
+            min-width: min(220px, calc(100vw - 20px)) !important;
+            max-width: calc(100vw - 18px) !important;
+            padding: 4px 4px 24px 4px !important;
+          }
+
+          .whatsapp-image-frame {
+            width: min(84vw, 380px) !important;
+            max-width: calc(100vw - 26px) !important;
+            min-width: min(210px, calc(100vw - 26px)) !important;
+          }
+        }
+
+        @media (max-width: 360px) {
+          .nm-header {
+            min-height: 96px !important;
+            height: 96px !important;
+            padding-top: max(30px, calc(env(safe-area-inset-top) + 22px)) !important;
+          }
+
+          .header-logo {
+            width: 42px !important;
+            height: 42px !important;
+            min-width: 42px !important;
+            min-height: 42px !important;
+          }
+
+          .header-title h2 {
+            font-size: 16px !important;
+          }
+
+          .header-title p {
+            font-size: 11px !important;
+          }
+
+          .message-bubble {
+            min-width: 96px !important;
+          }
+        }
+
+
+
+
+        /* ===== FINAL USER REQUEST FIX: HEADER SAFE AREA, COMPACT CARDS, SMALL DROPDOWN ===== */
+        .nm-header {
+          height: auto !important;
+          min-height: clamp(112px, 15dvh, 132px) !important;
+          max-height: none !important;
+          padding: max(42px, calc(env(safe-area-inset-top) + 34px)) 9px 7px !important;
+          align-items: flex-end !important;
+          gap: 7px !important;
+          background: #00796b !important;
+          overflow: visible !important;
+        }
+
+        .header-logo {
+          width: clamp(40px, 11vw, 48px) !important;
+          height: clamp(40px, 11vw, 48px) !important;
+          min-width: clamp(40px, 11vw, 48px) !important;
+          min-height: clamp(40px, 11vw, 48px) !important;
+          align-self: flex-end !important;
+          margin-bottom: 0 !important;
+        }
+
+        .header-title {
+          flex: 1 1 auto !important;
+          min-width: 0 !important;
+          overflow: visible !important;
+          align-self: flex-end !important;
+          padding-bottom: 1px !important;
+        }
+
+        .header-title h2 {
+          font-size: clamp(14.5px, 4.25vw, 18px) !important;
+          line-height: 1.08 !important;
+          font-weight: 850 !important;
+          white-space: normal !important;
+          overflow: visible !important;
+          text-overflow: unset !important;
+          display: -webkit-box !important;
+          -webkit-line-clamp: 2 !important;
+          -webkit-box-orient: vertical !important;
+          word-break: break-word !important;
+          overflow-wrap: anywhere !important;
+          max-height: 40px !important;
+        }
+
+        .header-title p {
+          font-size: clamp(10px, 3.05vw, 12px) !important;
+          line-height: 1.08 !important;
+          margin-top: 2px !important;
+          white-space: normal !important;
+          overflow: visible !important;
+          text-overflow: unset !important;
+          display: -webkit-box !important;
+          -webkit-line-clamp: 1 !important;
+          -webkit-box-orient: vertical !important;
+          overflow-wrap: anywhere !important;
+          max-height: 15px !important;
+        }
+
+        .header-icon-btn {
+          width: 34px !important;
+          height: 34px !important;
+          min-width: 34px !important;
+          min-height: 34px !important;
+          align-self: flex-end !important;
+          margin-bottom: 3px !important;
+        }
+
+        .back-btn {
+          font-size: 31px !important;
+          padding-bottom: 4px !important;
+        }
+
+        .search-btn {
+          font-size: 14px !important;
+        }
+
+        .chat-body {
+          padding-top: 9px !important;
+        }
+
+        .message-line {
+          position: relative !important;
+          margin-bottom: 7px !important;
+        }
+
+        .message-bubble {
+          width: fit-content !important;
+          min-width: 0 !important;
+          max-width: min(80vw, 430px) !important;
+          padding: 7px 47px 19px 10px !important;
+          border-radius: 7px 14px 14px 14px !important;
+          background: #ffffff !important;
+          box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12) !important;
+          overflow: visible !important;
+        }
+
+        .message-text,
+        .image-description-text {
+          font-size: clamp(13px, 3.55vw, 14.5px) !important;
+          line-height: 1.33 !important;
+          font-weight: 500 !important;
+          max-width: 100% !important;
+        }
+
+        .message-title-text {
+          font-size: clamp(13.5px, 3.75vw, 15px) !important;
+          line-height: 1.25 !important;
+        }
+
+        .message-time {
+          right: 8px !important;
+          bottom: 5px !important;
+          font-size: 10px !important;
+          line-height: 1 !important;
+          font-weight: 700 !important;
+          color: #64748b !important;
+          background: transparent !important;
+          padding: 0 !important;
+          border-radius: 0 !important;
+          white-space: nowrap !important;
+          max-width: none !important;
+        }
+
+        .message-bubble:has(.image-message-wrap),
+        .message-bubble.image-only {
+          width: fit-content !important;
+          min-width: 0 !important;
+          max-width: calc(100vw - 18px) !important;
+          padding: 4px 4px 25px 4px !important;
+          border-radius: 8px 15px 15px 15px !important;
+        }
+
+        .image-message-wrap {
+          width: fit-content !important;
+          max-width: 100% !important;
+        }
+
+        .whatsapp-image-frame {
+          width: min(82vw, 380px) !important;
+          max-width: calc(100vw - 26px) !important;
+          min-width: min(170px, calc(100vw - 26px)) !important;
+          border-radius: 8px !important;
+        }
+
+        .whatsapp-image-frame .message-image,
+        .message-image {
+          width: 100% !important;
+          max-width: 100% !important;
+          height: auto !important;
+          max-height: min(44dvh, 440px) !important;
+          object-fit: contain !important;
+          border-radius: 8px !important;
+          visibility: visible !important;
+          opacity: 1 !important;
+        }
+
+        .image-only .message-time,
+        .message-bubble:has(.image-message-wrap) .message-time {
+          right: 9px !important;
+          bottom: 7px !important;
+          color: #ffffff !important;
+          background: rgba(0, 0, 0, 0.50) !important;
+          padding: 3px 7px !important;
+          border-radius: 999px !important;
+          font-size: 10px !important;
+          font-weight: 800 !important;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.18) !important;
+        }
+
+        .message-dot-btn {
+          top: 3px !important;
+          right: 3px !important;
+          width: 20px !important;
+          height: 20px !important;
+          border-radius: 7px !important;
+          font-size: 13px !important;
+          z-index: 9 !important;
+          background: rgba(255,255,255,0.52) !important;
+        }
+
+        .message-action-row {
+          position: absolute !important;
+          top: 27px !important;
+          left: 8px !important;
+          width: 108px !important;
+          max-width: calc(100vw - 28px) !important;
+          display: grid !important;
+          grid-template-columns: 1fr !important;
+          gap: 4px !important;
+          margin: 0 !important;
+          padding: 5px !important;
+          background: rgba(255,255,255,0.98) !important;
+          border: 1px solid #e2e8f0 !important;
+          border-radius: 12px !important;
+          box-shadow: 0 14px 36px rgba(15, 23, 42, 0.20) !important;
+          z-index: 85 !important;
+          overflow: visible !important;
+        }
+
+        .square-action {
+          width: 100% !important;
+          min-width: 0 !important;
+          height: 24px !important;
+          min-height: 24px !important;
+          padding: 0 7px !important;
+          border-radius: 8px !important;
+          font-size: 10.5px !important;
+          line-height: 1 !important;
+          font-weight: 850 !important;
+          box-shadow: none !important;
+          justify-content: center !important;
+        }
+
+        .composer {
+          padding: 7px clamp(8px, 2vw, 14px) max(8px, env(safe-area-inset-bottom)) !important;
+        }
+
+        .send-btn {
+          width: 64px !important;
+          min-width: 64px !important;
+          height: 42px !important;
+          min-height: 42px !important;
+          border-radius: 14px !important;
+          font-size: 20px !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+        }
+
+        .date-separator span {
+          background: linear-gradient(135deg, var(--badge1), var(--badge2)) !important;
+        }
+
+        @media (max-width: 480px) {
+          .nm-header {
+            min-height: 112px !important;
+            height: auto !important;
+            padding: max(42px, calc(env(safe-area-inset-top) + 34px)) 8px 7px !important;
+          }
+
+          .header-title h2 {
+            font-size: 15.5px !important;
+            max-height: 36px !important;
+          }
+
+          .header-title p {
+            font-size: 10.8px !important;
+          }
+
+          .message-bubble {
+            max-width: 82vw !important;
+            padding: 7px 46px 19px 10px !important;
+          }
+
+          .message-bubble:has(.image-message-wrap),
+          .message-bubble.image-only {
+            max-width: calc(100vw - 16px) !important;
+            padding: 4px 4px 25px 4px !important;
+          }
+
+          .whatsapp-image-frame {
+            width: min(82vw, 372px) !important;
+            max-width: calc(100vw - 24px) !important;
+            min-width: min(165px, calc(100vw - 24px)) !important;
+          }
+
+          .send-btn {
+            width: 62px !important;
+            min-width: 62px !important;
+          }
+        }
+
+        @media (max-width: 360px) {
+          .nm-header {
+            min-height: 108px !important;
+            padding-top: max(40px, calc(env(safe-area-inset-top) + 32px)) !important;
+          }
+
+          .header-logo {
+            width: 39px !important;
+            height: 39px !important;
+            min-width: 39px !important;
+            min-height: 39px !important;
+          }
+
+          .header-title h2 {
+            font-size: 14px !important;
+          }
+
+          .header-title p {
+            font-size: 10px !important;
+          }
+
+          .message-bubble {
+            max-width: 86vw !important;
+            padding-right: 44px !important;
+          }
+
+          .message-action-row {
+            width: 102px !important;
+          }
+
+          .send-btn {
+            width: 58px !important;
+            min-width: 58px !important;
+          }
+        }
+
       `}</style>
     </div>
   );

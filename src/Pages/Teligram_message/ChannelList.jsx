@@ -1217,7 +1217,7 @@ export default function ChannelList() {
         }
 
         .nm-header {
-          min-height: 68px;
+          min-height: 96px;
           background:
             radial-gradient(circle at 84% 15%, rgba(255,255,255,0.20), transparent 26%),
             linear-gradient(135deg, #2563eb, #0891b2);
@@ -1225,7 +1225,7 @@ export default function ChannelList() {
           display: flex;
           align-items: center;
           justify-content: center;
-          padding: max(10px, env(safe-area-inset-top)) 14px 12px;
+          padding: calc(env(safe-area-inset-top, 0px) + 24px) 14px 18px;
           position: relative;
           flex-shrink: 0;
           z-index: 10;
@@ -2204,9 +2204,8 @@ export default function ChannelList() {
 
         @media (max-width: 380px) {
           .nm-header {
-            min-height: 64px;
-            padding-left: 12px;
-            padding-right: 12px;
+            min-height: 92px;
+            padding: calc(env(safe-area-inset-top, 0px) + 22px) 12px 16px;
           }
 
           .create-card {
