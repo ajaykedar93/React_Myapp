@@ -54,9 +54,9 @@ import TryNewPageTabs from "./Pages/NewFeatures/TryNewPageTabs.jsx";
 import Wakeup from "./Pages/Public/Wakeup.jsx";
 import PublicTradeReport from "./Pages/Public/PublicTradeReport.jsx";
 
+import TelegramLoading from "./Pages/Teligram_message/TelegramLoading.jsx";
 import ChannelList from "./Pages/Teligram_message/ChannelList.jsx";
 import Teligram from "./Pages/Teligram_message/Teligram.jsx";
-
 
 // ✅ Private Route Wrapper
 function PrivateRoute({ children }) {
@@ -82,8 +82,15 @@ function AppRoutes() {
       <Route path="/inward-view" element={<InwardViewOnly />} />
       <Route path="/Check-inward-view" element={<CheckInwardView />} />
 
-   <Route path="/teligram-channels" element={<ChannelList />} />
-<Route path="/teligram-notes" element={<Teligram />} />
+       {/* First show loading page */}
+        <Route path="/teligram-loading" element={<TelegramLoading />} />
+
+        {/* After loading, open this page */}
+        <Route path="/teligram-channels" element={<ChannelList />} />
+
+        {/* Notes page */}
+        <Route path="/teligram-notes" element={<Teligram />} />
+
       {/* ✅ PUBLIC: Wakeup Page */}
       <Route path="/wakeup-api" element={<Wakeup />} />
       
