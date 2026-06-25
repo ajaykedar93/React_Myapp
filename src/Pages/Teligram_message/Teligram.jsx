@@ -1133,7 +1133,7 @@ export default function Teligram() {
     selectedChannel && isTrue(selectedChannel.is_private) && !channelUnlocked;
 
   return (
-    <div className="nm-screen">
+    <div className="nm-screen" onClick={() => setActiveMenuId(null)}>
       <div className="nm-phone">
         <header className="nm-header">
           <button className="header-icon-btn back-btn" onClick={backToChannels}>
@@ -1307,7 +1307,7 @@ export default function Teligram() {
                         className={`message-line ${
                           activeMenuId === note.note_id ? "message-active" : ""
                         }`}
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={() => setActiveMenuId(null)}
                       >
                         <div
                           className={`message-bubble ${
@@ -1316,13 +1316,14 @@ export default function Teligram() {
                         >
                           <button
                             className="message-dot-btn"
-                            onClick={() =>
+                            onClick={(e) => {
+                              e.stopPropagation();
                               setActiveMenuId(
                                 activeMenuId === note.note_id
                                   ? null
                                   : note.note_id
-                              )
-                            }
+                              );
+                            }}
                             title="Options"
                           >
                             ⋮
@@ -1373,7 +1374,7 @@ export default function Teligram() {
                         </div>
 
                         {activeMenuId === note.note_id && !note.is_temp && (
-                          <div className="message-action-row">
+                          <div className="message-action-row" onClick={(e) => e.stopPropagation()}>
                             {hasImage ? (
                               <>
                                 <button
@@ -1417,13 +1418,11 @@ export default function Teligram() {
 
                             <button
                               className="square-action delete-square"
-                              onClick={() =>
-                                openConfirm(
-                                  "Delete Message?",
-                                  "This message will be deleted permanently.",
-                                  () => deleteNote(note.note_id)
-                                )
-                              }
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveMenuId(null);
+                                deleteNote(note.note_id);
+                              }}
                             >
                               Delete
                             </button>
@@ -4685,6 +4684,541 @@ export default function Teligram() {
           .send-btn {
             width: 58px !important;
             min-width: 58px !important;
+          }
+        }
+
+
+        /* ===============================
+           Final professional UI overrides
+           Keeps the same page and features
+        =============================== */
+
+        .nm-screen {
+          background:
+            radial-gradient(circle at 12% 6%, rgba(45, 212, 191, 0.35), transparent 28%),
+            radial-gradient(circle at 92% 14%, rgba(56, 189, 248, 0.28), transparent 30%),
+            radial-gradient(circle at 78% 92%, rgba(129, 140, 248, 0.24), transparent 34%),
+            linear-gradient(145deg, #020617 0%, #0f172a 46%, #0f766e 100%) !important;
+        }
+
+        .nm-phone {
+          background:
+            radial-gradient(circle at 5% 0%, rgba(204, 251, 241, 0.55), transparent 28%),
+            radial-gradient(circle at 95% 100%, rgba(219, 234, 254, 0.70), transparent 32%),
+            linear-gradient(135deg, #eefdf7 0%, #f8fbff 50%, #eef2ff 100%) !important;
+        }
+
+        .chat-body {
+          background:
+            radial-gradient(circle at 8% 8%, rgba(255, 255, 255, 0.78), transparent 29%),
+            radial-gradient(circle at 92% 94%, rgba(14, 165, 233, 0.18), transparent 31%),
+            linear-gradient(135deg, #e8fff5 0%, #f8fbff 48%, #ecf1ff 100%) !important;
+        }
+
+        .message-dot-btn,
+        .message-dot-btn:hover,
+        .message-dot-btn:focus,
+        .message-dot-btn:active,
+        .message-bubble:has(.image-message-wrap) .message-dot-btn,
+        .message-bubble:has(.message-image) .message-dot-btn,
+        .image-only .message-dot-btn {
+          top: 2px !important;
+          right: 2px !important;
+          width: 18px !important;
+          height: 18px !important;
+          min-width: 18px !important;
+          min-height: 18px !important;
+          padding: 0 !important;
+          margin: 0 !important;
+          border: none !important;
+          border-radius: 0 !important;
+          background: transparent !important;
+          background-color: transparent !important;
+          color: #111111 !important;
+          box-shadow: none !important;
+          outline: none !important;
+          filter: none !important;
+          opacity: 1 !important;
+          font-size: 13px !important;
+          font-weight: 900 !important;
+          line-height: 1 !important;
+          text-shadow: none !important;
+        }
+
+        .message-dot-btn::before,
+        .message-dot-btn::after {
+          display: none !important;
+          content: none !important;
+        }
+
+        .composer {
+          background: rgba(248, 250, 252, 0.72) !important;
+          border-top: 1px solid rgba(226, 232, 240, 0.72) !important;
+          backdrop-filter: blur(18px) !important;
+          -webkit-backdrop-filter: blur(18px) !important;
+        }
+
+        .composer-card {
+          background: rgba(255, 255, 255, 0.92) !important;
+          border: 1px solid rgba(226, 232, 240, 0.88) !important;
+          border-radius: 20px !important;
+          box-shadow: 0 12px 34px rgba(15, 23, 42, 0.12) !important;
+          overflow: hidden !important;
+        }
+
+        .text-input {
+          border: none !important;
+          border-radius: 0 !important;
+          border-bottom: 2px solid rgba(14, 165, 233, 0.62) !important;
+          background:
+            linear-gradient(90deg, rgba(240, 253, 250, 0.95), rgba(239, 246, 255, 0.95)) !important;
+          box-shadow: none !important;
+          margin: 0 10px 10px !important;
+          padding: 11px 4px 8px !important;
+          min-height: 42px !important;
+          transition: border-color 0.18s ease, background 0.18s ease !important;
+        }
+
+        .text-input:focus,
+        .text-input:focus-visible {
+          border-bottom-color: #0f766e !important;
+          outline: none !important;
+          box-shadow: none !important;
+          background:
+            linear-gradient(90deg, rgba(236, 253, 245, 1), rgba(239, 246, 255, 1)) !important;
+        }
+
+        .send-btn {
+          background: linear-gradient(135deg, #0f766e, #0ea5e9) !important;
+          color: #ffffff !important;
+          box-shadow: 0 8px 20px rgba(14, 165, 233, 0.25) !important;
+          transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease !important;
+          will-change: transform !important;
+        }
+
+        .send-btn:active:not(:disabled) {
+          transform: translateY(1px) scale(0.94) !important;
+          box-shadow: 0 4px 12px rgba(15, 118, 110, 0.22) !important;
+          filter: brightness(0.98) !important;
+        }
+
+        .send-btn:disabled {
+          cursor: not-allowed !important;
+          opacity: 0.82 !important;
+        }
+
+        .message-time span:nth-child(2) {
+          display: inline-flex !important;
+          align-items: center !important;
+          gap: 2px !important;
+          color: #16a34a !important;
+          font-size: 7px !important;
+          line-height: 1 !important;
+          font-weight: 900 !important;
+          letter-spacing: 0 !important;
+          text-transform: lowercase !important;
+          animation: tinySendPulse 0.65s ease-in-out infinite !important;
+        }
+
+        .message-time span:nth-child(2)::before {
+          content: "" !important;
+          width: 4px !important;
+          height: 4px !important;
+          border-radius: 999px !important;
+          background: #22c55e !important;
+          box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.45) !important;
+          animation: tinyGreenDot 0.65s ease-in-out infinite !important;
+        }
+
+        @keyframes tinySendPulse {
+          0%, 100% {
+            opacity: 0.55;
+            transform: translateY(0);
+          }
+          50% {
+            opacity: 1;
+            transform: translateY(-1px);
+          }
+        }
+
+        @keyframes tinyGreenDot {
+          0%, 100% {
+            transform: scale(0.8);
+            box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.30);
+          }
+          50% {
+            transform: scale(1);
+            box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.10);
+          }
+        }
+
+        @media (max-width: 480px) {
+          .text-input {
+            margin: 0 9px 9px !important;
+          }
+
+          .message-dot-btn,
+          .message-dot-btn:hover,
+          .message-dot-btn:focus,
+          .message-dot-btn:active {
+            width: 18px !important;
+            height: 18px !important;
+            font-size: 13px !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            color: #111111 !important;
+          }
+        }
+
+
+        /* =========================================
+           Final requested fixes - full page safe
+           - outside tap closes options
+           - plain black three dots
+           - no content hidden behind dots
+           - fresh modern channel header
+        ========================================= */
+
+        .nm-header {
+          background:
+            radial-gradient(circle at 6% 0%, rgba(255, 255, 255, 0.28), transparent 28%),
+            radial-gradient(circle at 94% 12%, rgba(187, 247, 208, 0.26), transparent 34%),
+            linear-gradient(135deg, #075985 0%, #0f766e 46%, #10b981 100%) !important;
+          color: #ffffff !important;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.20) !important;
+          box-shadow: 0 12px 30px rgba(8, 47, 73, 0.20) !important;
+        }
+
+        .header-logo {
+          background: linear-gradient(135deg, rgba(255,255,255,0.24), rgba(204,251,241,0.18)) !important;
+          border: 1px solid rgba(255,255,255,0.34) !important;
+          box-shadow: 0 8px 22px rgba(8, 47, 73, 0.18) !important;
+        }
+
+        .header-title h2,
+        .header-title p {
+          text-shadow: none !important;
+        }
+
+        .message-line {
+          cursor: default !important;
+        }
+
+        .message-bubble {
+          overflow: visible !important;
+          padding-right: 44px !important;
+        }
+
+        .message-bubble:has(.image-message-wrap),
+        .message-bubble.image-only,
+        .message-bubble:has(.message-image) {
+          padding: 23px 5px 23px 5px !important;
+        }
+
+        .message-bubble:has(.image-message-wrap.with-description) {
+          padding: 23px 7px 22px 7px !important;
+        }
+
+        .message-text,
+        .image-description-text {
+          padding-right: 0 !important;
+        }
+
+        .message-dot-btn,
+        .message-dot-btn:hover,
+        .message-dot-btn:focus,
+        .message-dot-btn:active,
+        .message-active .message-dot-btn,
+        .message-bubble:has(.image-message-wrap) .message-dot-btn,
+        .message-bubble:has(.message-image) .message-dot-btn,
+        .message-bubble.image-only .message-dot-btn,
+        .image-only .message-dot-btn {
+          position: absolute !important;
+          top: 3px !important;
+          right: 6px !important;
+          width: 22px !important;
+          height: 18px !important;
+          min-width: 22px !important;
+          min-height: 18px !important;
+          padding: 0 !important;
+          margin: 0 !important;
+          border: 0 !important;
+          border-radius: 0 !important;
+          background: transparent !important;
+          background-color: transparent !important;
+          background-image: none !important;
+          color: #000000 !important;
+          box-shadow: none !important;
+          outline: none !important;
+          filter: none !important;
+          opacity: 1 !important;
+          font-family: Arial, sans-serif !important;
+          font-size: 14px !important;
+          font-weight: 900 !important;
+          line-height: 1 !important;
+          text-shadow: none !important;
+          transform: none !important;
+          appearance: none !important;
+          -webkit-appearance: none !important;
+        }
+
+        .message-dot-btn::before,
+        .message-dot-btn::after,
+        .message-active .message-dot-btn::before,
+        .message-active .message-dot-btn::after {
+          display: none !important;
+          content: none !important;
+          background: transparent !important;
+          box-shadow: none !important;
+        }
+
+        .message-action-row {
+          z-index: 120 !important;
+        }
+
+        @media (max-width: 480px) {
+          .nm-header {
+            background:
+              radial-gradient(circle at 8% 0%, rgba(255,255,255,0.26), transparent 28%),
+              radial-gradient(circle at 92% 10%, rgba(187,247,208,0.25), transparent 34%),
+              linear-gradient(135deg, #075985 0%, #0f766e 48%, #10b981 100%) !important;
+          }
+
+          .message-bubble {
+            padding-right: 44px !important;
+          }
+
+          .message-bubble:has(.image-message-wrap),
+          .message-bubble.image-only,
+          .message-bubble:has(.message-image) {
+            padding: 23px 4px 24px 4px !important;
+          }
+
+          .message-dot-btn,
+          .message-dot-btn:hover,
+          .message-dot-btn:focus,
+          .message-dot-btn:active,
+          .message-active .message-dot-btn,
+          .message-bubble:has(.image-message-wrap) .message-dot-btn,
+          .message-bubble:has(.message-image) .message-dot-btn,
+          .message-bubble.image-only .message-dot-btn,
+          .image-only .message-dot-btn {
+            top: 3px !important;
+            right: 6px !important;
+            width: 22px !important;
+            height: 18px !important;
+            min-width: 22px !important;
+            min-height: 18px !important;
+            background: transparent !important;
+            color: #000000 !important;
+            box-shadow: none !important;
+            filter: none !important;
+            font-size: 14px !important;
+            text-shadow: none !important;
+          }
+        }
+
+
+        /* =========================================
+           Final clean toast + compact actions
+           - no large delete/update popup
+           - small center toast alerts
+           - compact smooth Update/Delete tabs
+        ========================================= */
+
+        .message-action-row {
+          gap: 5px !important;
+          margin-top: 5px !important;
+          padding: 3px 0 0 2px !important;
+          max-width: min(94vw, 360px) !important;
+          animation: miniActionsIn 0.16s ease both !important;
+        }
+
+        @keyframes miniActionsIn {
+          from {
+            opacity: 0;
+            transform: translateY(-3px) scale(0.98);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+
+        .square-action {
+          height: 27px !important;
+          min-width: auto !important;
+          padding: 0 10px !important;
+          border-radius: 999px !important;
+          font-size: 10.5px !important;
+          font-weight: 900 !important;
+          line-height: 1 !important;
+          box-shadow: none !important;
+          transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease !important;
+        }
+
+        .square-action:active {
+          transform: scale(0.95) !important;
+        }
+
+        .update-square,
+        .text-square,
+        .title-square,
+        .download-square,
+        .delete-square {
+          border-width: 1px !important;
+          box-shadow: none !important;
+        }
+
+        .update-square {
+          color: #075985 !important;
+          background: #e0f2fe !important;
+          border-color: #bae6fd !important;
+        }
+
+        .text-square,
+        .title-square {
+          color: #0f766e !important;
+          background: #ccfbf1 !important;
+          border-color: #99f6e4 !important;
+        }
+
+        .download-square {
+          color: #047857 !important;
+          background: #dcfce7 !important;
+          border-color: #bbf7d0 !important;
+        }
+
+        .delete-square {
+          color: #b91c1c !important;
+          background: #fee2e2 !important;
+          border-color: #fecaca !important;
+        }
+
+        .popup-layer {
+          z-index: 180 !important;
+          padding: 18px !important;
+          pointer-events: none !important;
+          background: transparent !important;
+          backdrop-filter: none !important;
+        }
+
+        .toast {
+          width: auto !important;
+          min-width: 132px !important;
+          max-width: min(220px, calc(100vw - 44px)) !important;
+          min-height: 42px !important;
+          padding: 9px 13px !important;
+          border-radius: 999px !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          gap: 8px !important;
+          background: rgba(255, 255, 255, 0.97) !important;
+          border: 1px solid rgba(226, 232, 240, 0.9) !important;
+          box-shadow: 0 12px 34px rgba(15, 23, 42, 0.16) !important;
+          text-align: left !important;
+          backdrop-filter: blur(14px) !important;
+          animation: cleanToastIn 0.18s cubic-bezier(.2,.9,.3,1) both !important;
+        }
+
+        @keyframes cleanToastIn {
+          from {
+            opacity: 0;
+            transform: translateY(8px) scale(0.96);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+
+        .toast-icon {
+          width: 21px !important;
+          height: 21px !important;
+          min-width: 21px !important;
+          margin: 0 !important;
+          font-size: 12px !important;
+          border-radius: 999px !important;
+        }
+
+        .toast.success .toast-icon {
+          background: #dcfce7 !important;
+          color: #16a34a !important;
+        }
+
+        .toast.error .toast-icon {
+          background: #fee2e2 !important;
+          color: #dc2626 !important;
+        }
+
+        .toast p {
+          margin: 0 !important;
+          color: #0f172a !important;
+          font-size: 12px !important;
+          line-height: 1.15 !important;
+          font-weight: 900 !important;
+          white-space: nowrap !important;
+        }
+
+        .confirm-layer {
+          z-index: 175 !important;
+          background: transparent !important;
+          backdrop-filter: none !important;
+          pointer-events: none !important;
+          padding: 18px !important;
+        }
+
+        .confirm-card {
+          width: auto !important;
+          max-width: 260px !important;
+          padding: 12px 13px !important;
+          border-radius: 18px !important;
+          box-shadow: 0 14px 40px rgba(15, 23, 42, 0.18) !important;
+          pointer-events: auto !important;
+        }
+
+        .confirm-icon {
+          display: none !important;
+        }
+
+        .confirm-card h3 {
+          font-size: 13px !important;
+          margin: 0 0 4px !important;
+        }
+
+        .confirm-card p {
+          font-size: 11px !important;
+          margin: 0 0 9px !important;
+        }
+
+        .confirm-actions button {
+          height: 29px !important;
+          border-radius: 999px !important;
+          font-size: 11px !important;
+        }
+
+        @media (max-width: 480px) {
+          .message-action-row {
+            gap: 4px !important;
+            padding-left: 1px !important;
+          }
+
+          .square-action {
+            height: 26px !important;
+            padding: 0 9px !important;
+            font-size: 10px !important;
+          }
+
+          .toast {
+            min-width: 124px !important;
+            max-width: calc(100vw - 54px) !important;
+            min-height: 40px !important;
+            padding: 8px 12px !important;
+          }
+
+          .toast p {
+            font-size: 11.5px !important;
           }
         }
 

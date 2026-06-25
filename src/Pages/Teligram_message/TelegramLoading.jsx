@@ -60,6 +60,11 @@ const TelegramLoading = () => {
         </div>
 
         <div className="tg-bottom-text">Please wait, preparing your access</div>
+
+        <div className="tg-credit">
+          <span className="tg-code-icon">&lt;/&gt;</span>
+          <span className="tg-credit-name">Ajay kedar</span>
+        </div>
       </div>
 
       <style>{`
@@ -303,6 +308,27 @@ const TelegramLoading = () => {
           color: rgba(255, 255, 255, 0.58);
           font-size: 12px;
           letter-spacing: 0.3px;
+        }
+
+        .tg-credit {
+          margin-top: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          font-size: 11px;
+          font-weight: 800;
+          letter-spacing: 0.35px;
+        }
+
+        .tg-code-icon {
+          color: #ff3333;
+          font-size: 12px;
+          font-weight: 900;
+        }
+
+        .tg-credit-name {
+          color: #ffffff;
         }
 
         @keyframes spin {

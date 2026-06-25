@@ -1029,6 +1029,12 @@ export default function ChannelList() {
             );
           })}
         </main>
+
+        <footer className="developer-footer" aria-label="Developer credit">
+          <span className="developer-code-icon">&lt;/&gt;</span>
+          <span className="developer-text">Developed By</span>
+          <span className="developer-name">Ajay Kedar</span>
+        </footer>
       </div>
 
       {toast.show && (
@@ -1219,8 +1225,9 @@ export default function ChannelList() {
         .nm-header {
           min-height: 96px;
           background:
-            radial-gradient(circle at 84% 15%, rgba(255,255,255,0.20), transparent 26%),
-            linear-gradient(135deg, #2563eb, #0891b2);
+            radial-gradient(circle at 84% 12%, rgba(255,255,255,0.22), transparent 28%),
+            radial-gradient(circle at 12% 88%, rgba(249,115,22,0.24), transparent 28%),
+            linear-gradient(135deg, #0f172a 0%, #1d4ed8 47%, #0891b2 100%);
           color: white;
           display: flex;
           align-items: center;
@@ -1229,23 +1236,41 @@ export default function ChannelList() {
           position: relative;
           flex-shrink: 0;
           z-index: 10;
-          box-shadow: 0 12px 32px rgba(15, 23, 42, 0.24);
+          box-shadow: 0 14px 34px rgba(15, 23, 42, 0.28);
           border-bottom-left-radius: 0;
           border-bottom-right-radius: 0;
+        }
+
+        .nm-header::after {
+          content: "";
+          position: absolute;
+          left: 50%;
+          bottom: 11px;
+          width: 74px;
+          height: 3px;
+          border-radius: 999px;
+          transform: translateX(-50%);
+          background: linear-gradient(90deg, #f97316, #facc15, #22d3ee);
+          box-shadow: 0 6px 14px rgba(14, 165, 233, 0.22);
         }
 
         .nm-header h1 {
           width: 100%;
           margin: 0;
           color: #ffffff;
-          font-size: clamp(20px, 5.2vw, 28px);
+          font-family: "Poppins", "Montserrat", "Trebuchet MS", "Segoe UI", Arial, sans-serif;
+          font-size: clamp(22px, 5.6vw, 32px);
           font-weight: 950;
-          line-height: 1.15;
-          letter-spacing: 0.2px;
+          line-height: 1.12;
+          letter-spacing: 0.8px;
           text-align: center;
+          text-transform: uppercase;
           white-space: normal;
           overflow: visible;
           overflow-wrap: anywhere;
+          text-shadow:
+            0 2px 8px rgba(15, 23, 42, 0.35),
+            0 0 18px rgba(34, 211, 238, 0.18);
         }
 
         .create-button-wrap {
@@ -1564,6 +1589,43 @@ export default function ChannelList() {
         .channel-list::-webkit-scrollbar-thumb {
           background: rgba(37, 99, 235, 0.25);
           border-radius: 99px;
+        }
+
+        .developer-footer {
+          width: 100%;
+          flex-shrink: 0;
+          min-height: 34px;
+          padding: 6px 10px max(7px, env(safe-area-inset-bottom));
+          background: rgba(255, 255, 255, 0.98);
+          border-top: 1px solid rgba(29, 78, 216, 0.16);
+          box-shadow: 0 -8px 22px rgba(15, 23, 42, 0.07);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 5px;
+          font-family: "Poppins", "Montserrat", "Trebuchet MS", "Segoe UI", Arial, sans-serif;
+          font-size: 11.5px;
+          line-height: 1;
+          font-weight: 900;
+          letter-spacing: 0.15px;
+          color: #111827;
+          z-index: 25;
+        }
+
+        .developer-code-icon {
+          color: #dc2626;
+          font-size: 13px;
+          font-weight: 950;
+          line-height: 1;
+        }
+
+        .developer-text {
+          color: #111827;
+        }
+
+        .developer-name {
+          color: #ea580c;
+          font-weight: 950;
         }
 
         .channel-row {
@@ -2206,6 +2268,11 @@ export default function ChannelList() {
           .nm-header {
             min-height: 92px;
             padding: calc(env(safe-area-inset-top, 0px) + 22px) 12px 16px;
+          }
+
+          .nm-header h1 {
+            font-size: clamp(20px, 5.7vw, 27px);
+            letter-spacing: 0.55px;
           }
 
           .create-card {
