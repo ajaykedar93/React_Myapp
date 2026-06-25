@@ -27,6 +27,11 @@ export default function Teligram() {
   const colorRef = useRef(null);
   const bottomRef = useRef(null);
   const savedRangeRef = useRef(null);
+  const verifiedPinRef = useRef("");
+  const unlockCheckingRef = useRef(false);
+  const unlockRequestIdRef = useRef(0);
+  const channelLoadIdRef = useRef(0);
+  const notesRequestIdRef = useRef(0);
 
   const [selectedChannel, setSelectedChannel] = useState(null);
   const [notes, setNotes] = useState([]);
@@ -74,7 +79,7 @@ export default function Teligram() {
       selectedChannel?.channel_id &&
       (!isTrue(selectedChannel.is_private) || channelUnlocked)
     ) {
-      fetchNotes(selectedChannel.channel_id);
+      fetchNotes(selectedChannel.channel_id, verifiedPinRef.current || getSavedChannelPin());
     }
   }, [selectedChannel, channelUnlocked]);
 
@@ -156,21 +161,21 @@ export default function Teligram() {
     return localStorage.getItem("selected_channel_pin") || "";
   };
 
-  const getAccessHeaders = () => {
+  const getAccessHeaders = (channelOverride = selectedChannel, pinOverride = "") => {
     const headers = {};
-    const savedPin = getSavedChannelPin();
+    const savedPin = pinOverride || verifiedPinRef.current || getSavedChannelPin();
 
-    if (isTrue(selectedChannel?.is_private) && savedPin) {
+    if (isTrue(channelOverride?.is_private) && savedPin) {
       headers["x-channel-pin"] = savedPin;
     }
 
     return headers;
   };
 
-  const getJsonHeaders = () => {
+  const getJsonHeaders = (channelOverride = selectedChannel, pinOverride = "") => {
     return {
       "Content-Type": "application/json",
-      ...getAccessHeaders(),
+      ...getAccessHeaders(channelOverride, pinOverride),
     };
   };
 
@@ -239,6 +244,7 @@ export default function Teligram() {
   };
 
   const loadSelectedChannel = async () => {
+    const loadId = ++channelLoadIdRef.current;
     const channelId = localStorage.getItem("selected_channel_id");
 
     if (!channelId) {
@@ -249,6 +255,8 @@ export default function Teligram() {
     try {
       const res = await fetch(`${API_URL}/api/telegram-channels/${channelId}`);
       const data = await res.json();
+
+      if (loadId !== channelLoadIdRef.current) return;
 
       if (!res.ok) {
         showToast("Channel not found", "error");
@@ -269,7 +277,10 @@ export default function Teligram() {
         if (savedPin && /^[0-9]{4}$/.test(savedPin)) {
           const verified = await verifyPinFromApi(channel.channel_id, savedPin);
 
+          if (loadId !== channelLoadIdRef.current) return;
+
           if (verified) {
+            verifiedPinRef.current = savedPin;
             setChannelUnlocked(true);
             setUnlockPin("");
             setUnlockError("");
@@ -277,13 +288,22 @@ export default function Teligram() {
           }
         }
 
-        setChannelUnlocked(false);
-        setNotes([]);
-      } else {
+        verifiedPinRef.current = "";
         localStorage.removeItem("selected_channel_pin");
-        setChannelUnlocked(true);
+        setChannelUnlocked(false);
+        setUnlockPin("");
+        setUnlockError("");
+        setNotes([]);
+        return;
       }
+
+      verifiedPinRef.current = "";
+      localStorage.removeItem("selected_channel_pin");
+      setChannelUnlocked(true);
+      setUnlockPin("");
+      setUnlockError("");
     } catch (error) {
+      if (loadId !== channelLoadIdRef.current) return;
       console.error("Channel load error:", error);
       showToast("Server error while opening channel", "error");
     }
@@ -309,58 +329,96 @@ export default function Teligram() {
   };
 
   const verifyPrivateChannelPin = async () => {
-    if (!selectedChannel || unlockChecking) return;
+    if (!selectedChannel || unlockCheckingRef.current) return;
 
-    if (!/^[0-9]{4}$/.test(unlockPin)) {
+    const pin = unlockPin.replace(/\D/g, "").slice(0, 4);
+
+    if (!/^[0-9]{4}$/.test(pin)) {
       setUnlockError("Enter valid 4 digit PIN");
       return;
     }
 
+    const requestId = ++unlockRequestIdRef.current;
+    unlockCheckingRef.current = true;
+
     try {
       setUnlockChecking(true);
+      setUnlockError("");
 
-      const verified = await verifyPinFromApi(
-        selectedChannel.channel_id,
-        unlockPin
-      );
+      const verified = await verifyPinFromApi(selectedChannel.channel_id, pin);
+
+      if (requestId !== unlockRequestIdRef.current) return;
 
       if (!verified) {
+        verifiedPinRef.current = "";
+        localStorage.removeItem("selected_channel_pin");
         setUnlockError("Wrong PIN");
         return;
       }
 
-      localStorage.setItem("selected_channel_pin", unlockPin);
+      verifiedPinRef.current = pin;
+      localStorage.setItem("selected_channel_pin", pin);
       localStorage.setItem("selected_channel_is_private", "true");
 
       setUnlockError("");
       setUnlockPin("");
       setChannelUnlocked(true);
-      showToast("Channel unlocked successfully", "success");
+
+      fetchNotes(selectedChannel.channel_id, pin);
     } catch (error) {
+      if (requestId !== unlockRequestIdRef.current) return;
       console.error("Unlock error:", error);
       setUnlockError("Server error");
     } finally {
-      setUnlockChecking(false);
+      if (requestId === unlockRequestIdRef.current) {
+        unlockCheckingRef.current = false;
+        setUnlockChecking(false);
+      }
     }
   };
 
-  const fetchNotes = async (channelId) => {
+  const fetchNotes = async (channelId, pinOverride = "") => {
+    const requestId = ++notesRequestIdRef.current;
+    const pinForRequest = pinOverride || verifiedPinRef.current || getSavedChannelPin();
+    const channelForHeaders = selectedChannel || {
+      channel_id: channelId,
+      is_private: localStorage.getItem("selected_channel_is_private") === "true",
+    };
+
     try {
       const res = await fetch(
         `${API_URL}/api/telegram-notes?user_id=${PUBLIC_USER_ID}&channel_id=${channelId}`,
-        { headers: getAccessHeaders() }
+        { headers: getAccessHeaders(channelForHeaders, pinForRequest) }
       );
 
       const data = await res.json();
 
-      if (!res.ok) {
-        showToast(data.message || "Unable to load messages", "error");
+      if (requestId !== notesRequestIdRef.current) return;
 
-        if (res.status === 403) {
-          setChannelUnlocked(false);
+      if (!res.ok) {
+        if (res.status === 403 && isTrue(channelForHeaders?.is_private)) {
+          const stillValid =
+            pinForRequest && (await verifyPinFromApi(channelId, pinForRequest));
+
+          if (requestId !== notesRequestIdRef.current) return;
+
+          if (stillValid) {
+            verifiedPinRef.current = pinForRequest;
+            localStorage.setItem("selected_channel_pin", pinForRequest);
+            setChannelUnlocked(true);
+            showToast(data.message || "Unable to load messages", "error");
+            return;
+          }
+
+          verifiedPinRef.current = "";
           localStorage.removeItem("selected_channel_pin");
+          setChannelUnlocked(false);
+          setNotes([]);
+          setUnlockError("");
+          return;
         }
 
+        showToast(data.message || "Unable to load messages", "error");
         return;
       }
 
@@ -381,6 +439,7 @@ export default function Teligram() {
 
       setNotes(channelNotes);
     } catch (error) {
+      if (requestId !== notesRequestIdRef.current) return;
       console.error("Fetch notes error:", error);
       showToast("Unable to load messages", "error");
     }
@@ -976,7 +1035,10 @@ export default function Teligram() {
                   setUnlockError("");
                 }}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") verifyPrivateChannelPin();
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    verifyPrivateChannelPin();
+                  }
                 }}
               />
 
