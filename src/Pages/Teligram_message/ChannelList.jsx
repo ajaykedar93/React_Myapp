@@ -14,6 +14,12 @@ const API_URL = (
 const PUBLIC_USER_ID = 7;
 
 const DEVICE_ID_KEY = `notes_management_device_id_${PUBLIC_USER_ID}`;
+const SELECTED_CHANNEL_PIN_KEY = "selected_channel_pin";
+const SELECTED_CHANNEL_TRUST_KEY = "selected_channel_trusted_device";
+const SELECTED_CHANNEL_SKIP_VERIFY_KEY = "selected_channel_skip_pin_verify";
+const SELECTED_CHANNEL_DEVICE_KEY = "selected_channel_device_id";
+const SELECTED_CHANNEL_VERIFIED_AT_KEY = "selected_channel_verified_at";
+const PIN_OPEN_DELAY_MS = 30;
 
 const themes = [
   ["#2563eb", "#06b6d4"],
@@ -373,6 +379,38 @@ export default function ChannelList() {
     localStorage.removeItem(getTrustedPinKey(channelId));
   };
 
+  const getSessionVerifiedKey = (channelId) => {
+    return `verified_private_channel_session_${PUBLIC_USER_ID}_${channelId}`;
+  };
+
+  const markSelectedChannelVerified = (channelId, trustThisDevice = false) => {
+    if (!channelId) return;
+
+    const currentDeviceId = getCurrentDeviceId();
+
+    sessionStorage.setItem(getSessionVerifiedKey(channelId), "true");
+    localStorage.setItem(SELECTED_CHANNEL_DEVICE_KEY, currentDeviceId);
+    localStorage.setItem(SELECTED_CHANNEL_SKIP_VERIFY_KEY, "true");
+    localStorage.setItem(SELECTED_CHANNEL_VERIFIED_AT_KEY, String(Date.now()));
+
+    if (trustThisDevice) {
+      localStorage.setItem(SELECTED_CHANNEL_TRUST_KEY, "true");
+    } else {
+      localStorage.removeItem(SELECTED_CHANNEL_TRUST_KEY);
+    }
+  };
+
+  const clearSelectedChannelVerified = (channelId = "") => {
+    if (channelId) {
+      sessionStorage.removeItem(getSessionVerifiedKey(channelId));
+    }
+
+    localStorage.removeItem(SELECTED_CHANNEL_TRUST_KEY);
+    localStorage.removeItem(SELECTED_CHANNEL_SKIP_VERIFY_KEY);
+    localStorage.removeItem(SELECTED_CHANNEL_VERIFIED_AT_KEY);
+    localStorage.removeItem(SELECTED_CHANNEL_DEVICE_KEY);
+  };
+
   const getTheme = (index) => {
     return themes[index % themes.length];
   };
@@ -685,6 +723,7 @@ export default function ChannelList() {
       }
 
       removeTrustedPin(channelId);
+      clearSelectedChannelVerified(channelId);
       closeDeletePinBox();
 
       setChannels((prev) =>
@@ -762,7 +801,7 @@ export default function ChannelList() {
       setPinChecking(false);
       setPinBox(getClosedPinBox());
       setToast((prev) => {
-        const pinError = /pin|wrong/i.test(String(prev?.message || ""));
+        const pinError = /pin|wrong|mismatch|incorrect/i.test(String(prev?.message || ""));
         if (prev?.show && prev?.type === "error" && pinError) {
           return { show: false, type: "success", message: "" };
         }
@@ -771,28 +810,32 @@ export default function ChannelList() {
     });
   };
 
-  const saveSelectedChannel = (channel, pin = "") => {
+  const saveSelectedChannel = (channel, pin = "", trustThisDevice = false) => {
+    const privateChannel = isTrue(channel.is_private);
+
     localStorage.setItem("selected_channel_id", channel.channel_id);
-    localStorage.setItem("selected_channel_name", channel.channel_name);
+    localStorage.setItem("selected_channel_name", channel.channel_name || "");
     localStorage.setItem(
       "selected_channel_tagline",
       channel.channel_tagline || ""
     );
     localStorage.setItem(
       "selected_channel_is_private",
-      isTrue(channel.is_private) ? "true" : "false"
+      privateChannel ? "true" : "false"
     );
 
-    if (isTrue(channel.is_private) && pin) {
-      localStorage.setItem("selected_channel_pin", pin);
+    if (privateChannel && pin) {
+      localStorage.setItem(SELECTED_CHANNEL_PIN_KEY, pin);
+      markSelectedChannelVerified(channel.channel_id, trustThisDevice);
     } else {
-      localStorage.removeItem("selected_channel_pin");
+      localStorage.removeItem(SELECTED_CHANNEL_PIN_KEY);
+      clearSelectedChannelVerified(channel.channel_id);
     }
   };
 
-  const goToChannel = (channel, pin = "") => {
+  const goToChannel = (channel, pin = "", trustThisDevice = false) => {
     beginChannelOpening();
-    saveSelectedChannel(channel, pin);
+    saveSelectedChannel(channel, pin, trustThisDevice);
 
     if (navigationTimerRef.current) {
       clearTimeout(navigationTimerRef.current);
@@ -800,10 +843,12 @@ export default function ChannelList() {
     }
 
     navigationTimerRef.current = window.setTimeout(() => {
+      if (!openingChannelRef.current) return;
+
       if (!isNotesRoute()) {
         window.location.hash = "/teligram-notes";
       }
-    }, 0);
+    }, PIN_OPEN_DELAY_MS);
   };
 
   const openChannel = (channel) => {
@@ -825,7 +870,7 @@ export default function ChannelList() {
         will ask the PIN again.
       */
       if (/^[0-9]{4}$/.test(trustedPin)) {
-        goToChannel(channel, trustedPin);
+        goToChannel(channel, trustedPin, true);
         return;
       }
 
@@ -841,7 +886,8 @@ export default function ChannelList() {
         channel.channel_tagline || ""
       );
       localStorage.setItem("selected_channel_is_private", "true");
-      localStorage.removeItem("selected_channel_pin");
+      localStorage.removeItem(SELECTED_CHANNEL_PIN_KEY);
+      clearSelectedChannelVerified(channel.channel_id);
 
       setPinChecking(false);
       setPinBox({
@@ -986,7 +1032,7 @@ export default function ChannelList() {
 
           return {
             ...prev,
-            error: data?.message || "Wrong PIN",
+            error: data?.message || "PIN mismatch",
           };
         });
         return;
@@ -1004,7 +1050,7 @@ export default function ChannelList() {
         removeTrustedPin(selectedChannel.channel_id);
       }
 
-      goToChannel(selectedChannel, typedPin);
+      goToChannel(selectedChannel, typedPin, trustThisDevice);
 
     } catch (error) {
       if (error?.name === "AbortError") {

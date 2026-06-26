@@ -13,6 +13,15 @@ const API_URL = (
 
 const PUBLIC_USER_ID = 7;
 
+const DEVICE_ID_KEY = `notes_management_device_id_${PUBLIC_USER_ID}`;
+const SELECTED_CHANNEL_PIN_KEY = "selected_channel_pin";
+const SELECTED_CHANNEL_TRUST_KEY = "selected_channel_trusted_device";
+const SELECTED_CHANNEL_SKIP_VERIFY_KEY = "selected_channel_skip_pin_verify";
+const SELECTED_CHANNEL_DEVICE_KEY = "selected_channel_device_id";
+const SELECTED_CHANNEL_VERIFIED_AT_KEY = "selected_channel_verified_at";
+const TRUSTED_PIN_PREFIX = `trusted_private_channel_pin_${PUBLIC_USER_ID}_`;
+const SESSION_VERIFIED_PREFIX = `verified_private_channel_session_${PUBLIC_USER_ID}_`;
+
 const dateBadgeThemes = [
   ["#0f766e", "#14b8a6"],
   ["#2563eb", "#38bdf8"],
@@ -43,6 +52,7 @@ export default function Teligram() {
   const channelLoadIdRef = useRef(0);
   const notesRequestIdRef = useRef(0);
   const channelAccessGrantedRef = useRef(false);
+  const currentDeviceIdRef = useRef("");
 
   const [selectedChannel, setSelectedChannel] = useState(null);
   const [notes, setNotes] = useState([]);
@@ -86,6 +96,7 @@ export default function Teligram() {
   });
 
   useEffect(() => {
+    currentDeviceIdRef.current = getCurrentDeviceId();
     loadSelectedChannel();
   }, []);
 
@@ -108,6 +119,156 @@ export default function Teligram() {
 
   const isTrue = (value) => {
     return value === true || value === "true" || value === 1 || value === "1";
+  };
+
+  const cleanDeviceId = (value) => {
+    return String(value || "")
+      .trim()
+      .replace(/[^a-zA-Z0-9._:-]/g, "")
+      .slice(0, 120);
+  };
+
+  const getCurrentDeviceId = () => {
+    if (typeof window === "undefined") return "";
+
+    if (currentDeviceIdRef.current) {
+      return currentDeviceIdRef.current;
+    }
+
+    const oldDeviceId = cleanDeviceId(localStorage.getItem(DEVICE_ID_KEY));
+
+    if (oldDeviceId) {
+      currentDeviceIdRef.current = oldDeviceId;
+      return oldDeviceId;
+    }
+
+    const newDeviceId = cleanDeviceId(
+      window.crypto?.randomUUID?.() ||
+        `device_${Date.now()}_${Math.random().toString(36).slice(2)}`
+    );
+
+    localStorage.setItem(DEVICE_ID_KEY, newDeviceId);
+    currentDeviceIdRef.current = newDeviceId;
+
+    return newDeviceId;
+  };
+
+  const getTrustedPinKey = (channelId) => {
+    return `${TRUSTED_PIN_PREFIX}${channelId}`;
+  };
+
+  const getTrustedPin = (channelId) => {
+    if (!channelId || typeof window === "undefined") return "";
+    return localStorage.getItem(getTrustedPinKey(channelId)) || "";
+  };
+
+  const saveTrustedPin = (channelId, pin) => {
+    const cleanPinValue = String(pin || "").replace(/\D/g, "").slice(0, 4);
+
+    if (!channelId || !/^[0-9]{4}$/.test(cleanPinValue)) return;
+
+    localStorage.setItem(getTrustedPinKey(channelId), cleanPinValue);
+  };
+
+  const removeTrustedPin = (channelId) => {
+    if (!channelId || typeof window === "undefined") return;
+    localStorage.removeItem(getTrustedPinKey(channelId));
+  };
+
+  const getSessionVerifiedKey = (channelId) => {
+    return `${SESSION_VERIFIED_PREFIX}${channelId}`;
+  };
+
+  const hasFrontendVerifiedAccess = (channelId, pin = "") => {
+    if (!channelId || typeof window === "undefined") return false;
+
+    const currentDeviceId = getCurrentDeviceId();
+    const savedDeviceId = cleanDeviceId(
+      localStorage.getItem(SELECTED_CHANNEL_DEVICE_KEY)
+    );
+
+    if (!currentDeviceId || !savedDeviceId || currentDeviceId !== savedDeviceId) {
+      return false;
+    }
+
+    const cleanPinValue = String(pin || "").replace(/\D/g, "").slice(0, 4);
+    const savedPin = getSavedChannelPin();
+    const trustedPin = getTrustedPin(channelId);
+
+    const pinMatches =
+      !cleanPinValue ||
+      cleanPinValue === savedPin ||
+      cleanPinValue === trustedPin;
+
+    if (!pinMatches) return false;
+
+    const skipVerify =
+      localStorage.getItem(SELECTED_CHANNEL_SKIP_VERIFY_KEY) === "true";
+
+    const sessionVerified =
+      sessionStorage.getItem(getSessionVerifiedKey(channelId)) === "true";
+
+    const trustedSelected =
+      localStorage.getItem(SELECTED_CHANNEL_TRUST_KEY) === "true" &&
+      /^[0-9]{4}$/.test(trustedPin);
+
+    return Boolean((skipVerify && sessionVerified) || trustedSelected);
+  };
+
+  const markFrontendVerifiedAccess = (
+    channelId,
+    pin = "",
+    trustThisDevice = false
+  ) => {
+    if (!channelId || typeof window === "undefined") return;
+
+    const currentDeviceId = getCurrentDeviceId();
+    const cleanPinValue = String(pin || "").replace(/\D/g, "").slice(0, 4);
+
+    sessionStorage.setItem(getSessionVerifiedKey(channelId), "true");
+    localStorage.setItem(SELECTED_CHANNEL_DEVICE_KEY, currentDeviceId);
+    localStorage.setItem(SELECTED_CHANNEL_SKIP_VERIFY_KEY, "true");
+    localStorage.setItem(SELECTED_CHANNEL_VERIFIED_AT_KEY, String(Date.now()));
+
+    if (/^[0-9]{4}$/.test(cleanPinValue)) {
+      localStorage.setItem(SELECTED_CHANNEL_PIN_KEY, cleanPinValue);
+    }
+
+    if (trustThisDevice && /^[0-9]{4}$/.test(cleanPinValue)) {
+      saveTrustedPin(channelId, cleanPinValue);
+      localStorage.setItem(SELECTED_CHANNEL_TRUST_KEY, "true");
+    }
+  };
+
+  const clearFrontendVerifiedAccess = (channelId = "") => {
+    if (typeof window === "undefined") return;
+
+    if (channelId) {
+      sessionStorage.removeItem(getSessionVerifiedKey(channelId));
+    }
+
+    localStorage.removeItem(SELECTED_CHANNEL_TRUST_KEY);
+    localStorage.removeItem(SELECTED_CHANNEL_SKIP_VERIFY_KEY);
+    localStorage.removeItem(SELECTED_CHANNEL_DEVICE_KEY);
+    localStorage.removeItem(SELECTED_CHANNEL_VERIFIED_AT_KEY);
+  };
+
+  const getNoteSenderDeviceId = (note) => {
+    return cleanDeviceId(
+      note?.sender_device_id ||
+        note?.device_id ||
+        note?.created_device_id ||
+        note?.senderDeviceId ||
+        note?.deviceId ||
+        ""
+    );
+  };
+
+  const isMyDeviceNote = (note) => {
+    const noteDeviceId = getNoteSenderDeviceId(note);
+    const currentDeviceId = getCurrentDeviceId();
+
+    return Boolean(noteDeviceId && currentDeviceId && noteDeviceId === currentDeviceId);
   };
 
   const parseDateValue = (dateValue) => {
@@ -173,11 +334,14 @@ export default function Teligram() {
   };
 
   const getSavedChannelPin = () => {
-    return localStorage.getItem("selected_channel_pin") || "";
+    return localStorage.getItem(SELECTED_CHANNEL_PIN_KEY) || "";
   };
 
   const getAccessHeaders = (channelOverride = selectedChannel, pinOverride = "") => {
-    const headers = {};
+    const headers = {
+      "x-device-id": getCurrentDeviceId(),
+    };
+
     const savedPin = pinOverride || verifiedPinRef.current || getSavedChannelPin();
 
     if (isTrue(channelOverride?.is_private) && savedPin) {
@@ -588,7 +752,13 @@ export default function Teligram() {
     }
 
     try {
-      const res = await fetch(`${API_URL}/api/telegram-channels/${channelId}`);
+      getCurrentDeviceId();
+
+      const res = await fetch(`${API_URL}/api/telegram-channels/${channelId}`, {
+        headers: {
+          "x-device-id": getCurrentDeviceId(),
+        },
+      });
       const data = await res.json();
 
       if (loadId !== channelLoadIdRef.current) return;
@@ -609,25 +779,36 @@ export default function Teligram() {
 
       if (isTrue(channel.is_private)) {
         const savedPin = getSavedChannelPin();
+        const trustedPin = getTrustedPin(channel.channel_id);
+        const finalPin = /^[0-9]{4}$/.test(savedPin) ? savedPin : trustedPin;
+        const trustedDevice =
+          localStorage.getItem(SELECTED_CHANNEL_TRUST_KEY) === "true" &&
+          /^[0-9]{4}$/.test(trustedPin) &&
+          trustedPin === finalPin;
 
-        if (savedPin && /^[0-9]{4}$/.test(savedPin)) {
-          const verified = await verifyPinFromApi(channel.channel_id, savedPin);
-
-          if (loadId !== channelLoadIdRef.current) return;
-
-          if (verified) {
-            verifiedPinRef.current = savedPin;
-            channelAccessGrantedRef.current = true;
-            setChannelUnlocked(true);
-            setUnlockPin("");
-            setUnlockError("");
-            return;
-          }
+        /*
+          Important:
+          This page must not call verify-pin again when ChannelList already
+          verified the PIN and marked this same browser/device as verified.
+          This prevents the small mismatch popup/lock flash after a correct PIN.
+        */
+        if (
+          /^[0-9]{4}$/.test(finalPin) &&
+          hasFrontendVerifiedAccess(channel.channel_id, finalPin)
+        ) {
+          verifiedPinRef.current = finalPin;
+          channelAccessGrantedRef.current = true;
+          markFrontendVerifiedAccess(channel.channel_id, finalPin, trustedDevice);
+          setChannelUnlocked(true);
+          setUnlockPin("");
+          setUnlockError("");
+          return;
         }
 
         verifiedPinRef.current = "";
         channelAccessGrantedRef.current = false;
-        localStorage.removeItem("selected_channel_pin");
+        localStorage.removeItem(SELECTED_CHANNEL_PIN_KEY);
+        clearFrontendVerifiedAccess(channel.channel_id);
         setChannelUnlocked(false);
         setUnlockPin("");
         setUnlockError("");
@@ -637,7 +818,8 @@ export default function Teligram() {
 
       verifiedPinRef.current = "";
       channelAccessGrantedRef.current = true;
-      localStorage.removeItem("selected_channel_pin");
+      localStorage.removeItem(SELECTED_CHANNEL_PIN_KEY);
+      clearFrontendVerifiedAccess(channel.channel_id);
       setChannelUnlocked(true);
       setUnlockPin("");
       setUnlockError("");
@@ -727,22 +909,24 @@ export default function Teligram() {
       if (!verified) {
         verifiedPinRef.current = "";
         channelAccessGrantedRef.current = false;
-        localStorage.removeItem("selected_channel_pin");
+        localStorage.removeItem(SELECTED_CHANNEL_PIN_KEY);
+        clearFrontendVerifiedAccess(selectedChannel.channel_id);
         setUnlockError("Wrong PIN");
         return;
       }
 
       verifiedPinRef.current = pin;
       channelAccessGrantedRef.current = true;
-      localStorage.setItem("selected_channel_pin", pin);
+      localStorage.setItem(SELECTED_CHANNEL_PIN_KEY, pin);
       localStorage.setItem("selected_channel_is_private", "true");
+      markFrontendVerifiedAccess(selectedChannel.channel_id, pin, false);
 
       setUnlockError("");
       setUnlockPin("");
       setChannelUnlocked(true);
 
-      // Notes load once through the channelUnlocked effect. This prevents double requests
-      // and avoids any old response showing the PIN screen again after a correct PIN.
+      // Notes load once through the channelUnlocked effect.
+      // After this, fetchNotes will not call verify-pin again.
     } catch (error) {
       if (requestId !== unlockRequestIdRef.current) return;
       console.error("Unlock error:", error);
@@ -775,22 +959,16 @@ export default function Teligram() {
 
       if (!res.ok) {
         if (res.status === 403 && isTrue(channelForHeaders?.is_private)) {
-          const stillValid =
-            pinForRequest && (await verifyPinFromApi(channelId, pinForRequest));
-
-          if (requestId !== notesRequestIdRef.current) return;
-
-          if (stillValid || channelAccessGrantedRef.current) {
-            verifiedPinRef.current = pinForRequest;
-            channelAccessGrantedRef.current = true;
-            localStorage.setItem("selected_channel_pin", pinForRequest);
-            setChannelUnlocked(true);
-            return;
-          }
-
+          /*
+            Do not call verify-pin API here.
+            If ChannelList already verified the PIN/trusted this device, this
+            page simply uses the saved PIN header. A 403 means notes API access
+            failed, so show the lock screen without a mismatch popup.
+          */
           verifiedPinRef.current = "";
           channelAccessGrantedRef.current = false;
-          localStorage.removeItem("selected_channel_pin");
+          localStorage.removeItem(SELECTED_CHANNEL_PIN_KEY);
+          clearFrontendVerifiedAccess(channelId);
           setChannelUnlocked(false);
           setNotes([]);
           setUnlockError("");
@@ -814,6 +992,11 @@ export default function Teligram() {
         .map((note) => ({
           ...note,
           channel_id: note.channel_id || channelId,
+          sender_device_id:
+            note.sender_device_id ||
+            note.device_id ||
+            note.created_device_id ||
+            "",
         }));
 
       setNotes(channelNotes);
@@ -1117,6 +1300,7 @@ export default function Teligram() {
     const currentPreviewFile = previewFile;
     const currentRemoveFile = removeOldFile;
     const currentTextColor = selectedTextColorRef.current || textColor || "#111111";
+    const currentDeviceId = getCurrentDeviceId();
     const oldEditingId = editingNoteId;
     const oldNotes = notes;
     const now = new Date().toISOString();
@@ -1127,11 +1311,15 @@ export default function Teligram() {
       : null;
 
     const noteTitle = getComposerTitleValue(oldNote);
+    const originalDeviceId = getNoteSenderDeviceId(oldNote) || currentDeviceId;
 
     const optimisticNote = {
       note_id: tempId,
       user_id: PUBLIC_USER_ID,
       channel_id: selectedChannel.channel_id,
+      sender_device_id: originalDeviceId,
+      device_id: originalDeviceId,
+      created_device_id: originalDeviceId,
       title: noteTitle,
       content_html: contentHtml,
       text_color: currentTextColor,
@@ -1174,6 +1362,9 @@ export default function Teligram() {
       const formData = new FormData();
       formData.append("user_id", PUBLIC_USER_ID);
       formData.append("channel_id", selectedChannel.channel_id);
+      formData.append("device_id", originalDeviceId);
+      formData.append("sender_device_id", originalDeviceId);
+      formData.append("created_device_id", originalDeviceId);
       formData.append("title", noteTitle);
       formData.append("content_html", contentHtml);
       formData.append("text_color", currentTextColor);
@@ -1208,7 +1399,7 @@ export default function Teligram() {
 
         if (res.status === 403 && !channelAccessGrantedRef.current) {
           setChannelUnlocked(false);
-          localStorage.removeItem("selected_channel_pin");
+          localStorage.removeItem(SELECTED_CHANNEL_PIN_KEY);
         }
 
         return;
@@ -1220,6 +1411,21 @@ export default function Teligram() {
         ...optimisticNote,
         ...backendNote,
         channel_id: backendNote.channel_id || selectedChannel.channel_id,
+        sender_device_id:
+          backendNote.sender_device_id ||
+          backendNote.device_id ||
+          backendNote.created_device_id ||
+          originalDeviceId,
+        device_id:
+          backendNote.device_id ||
+          backendNote.sender_device_id ||
+          backendNote.created_device_id ||
+          originalDeviceId,
+        created_device_id:
+          backendNote.created_device_id ||
+          backendNote.sender_device_id ||
+          backendNote.device_id ||
+          originalDeviceId,
         title: backendNote.title !== undefined ? backendNote.title : noteTitle,
         text_color: backendNote.text_color || currentTextColor,
         content_html: backendNote.content_html || contentHtml,
@@ -1464,8 +1670,13 @@ export default function Teligram() {
       setLoading(true);
 
       const formData = new FormData();
+      const noteDeviceId = getNoteSenderDeviceId(note) || getCurrentDeviceId();
+
       formData.append("user_id", PUBLIC_USER_ID);
       formData.append("channel_id", selectedChannel.channel_id);
+      formData.append("device_id", noteDeviceId);
+      formData.append("sender_device_id", noteDeviceId);
+      formData.append("created_device_id", noteDeviceId);
       formData.append("title", "title");
       formData.append("content_html", note.content_html || "");
       formData.append("text_color", note.text_color || "#111111");
@@ -1531,7 +1742,7 @@ export default function Teligram() {
 
         if (res.status === 403 && !channelAccessGrantedRef.current) {
           setChannelUnlocked(false);
-          localStorage.removeItem("selected_channel_pin");
+          localStorage.removeItem(SELECTED_CHANNEL_PIN_KEY);
         }
 
         return;
@@ -1722,6 +1933,7 @@ export default function Teligram() {
                   const hasImage = hasNoteImage(note);
                   const hasAttachment = hasNoteAttachment(note);
                   const titleMessage = isTitleNote(note);
+                  const messageFromThisDevice = isMyDeviceNote(note);
 
                   return (
                     <div className="note-block" key={note.note_id}>
@@ -1740,12 +1952,20 @@ export default function Teligram() {
 
                       <div
                         className={`message-line ${
+                          messageFromThisDevice
+                            ? "my-message-line"
+                            : "other-message-line"
+                        } ${
                           activeMenuId === note.note_id ? "message-active" : ""
                         }`}
                         onClick={() => setActiveMenuId(null)}
                       >
                         <div
                           className={`message-bubble ${
+                            messageFromThisDevice
+                              ? "my-message-bubble"
+                              : "other-message-bubble"
+                          } ${
                             hasImage && !hasText ? "image-only" : ""
                           } ${hasAttachment && !hasText ? "file-only" : ""} ${
                             titleMessage ? "title-bubble" : ""
@@ -2412,6 +2632,14 @@ export default function Teligram() {
           position: relative;
         }
 
+        .message-line.my-message-line {
+          align-items: flex-end;
+        }
+
+        .message-line.other-message-line {
+          align-items: flex-start;
+        }
+
         .message-active {
           z-index: 10;
         }
@@ -2453,6 +2681,38 @@ export default function Teligram() {
           height: 0;
           border-top: 10px solid rgba(255,255,255,0.98);
           border-left: 8px solid transparent;
+        }
+
+        .message-bubble.my-message-bubble {
+          border-radius: 18px 7px 18px 18px;
+          background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+          border-color: rgba(22, 163, 74, 0.28);
+          box-shadow: 0 8px 22px rgba(22, 163, 74, 0.12);
+        }
+
+        .message-bubble.my-message-bubble::before {
+          left: auto;
+          right: -5px;
+          border-left: 0;
+          border-right: 8px solid transparent;
+          border-top-color: #dcfce7;
+        }
+
+        .message-bubble.other-message-bubble {
+          background: linear-gradient(135deg, #ffffff 0%, #eff6ff 100%);
+          border-color: rgba(37, 99, 235, 0.18);
+        }
+
+        .message-bubble.other-message-bubble::before {
+          border-top-color: #ffffff;
+        }
+
+        .message-bubble.my-message-bubble .message-time {
+          color: #047857;
+        }
+
+        .message-bubble.other-message-bubble .message-time {
+          color: #2563eb;
         }
 
         .message-bubble.image-only {
