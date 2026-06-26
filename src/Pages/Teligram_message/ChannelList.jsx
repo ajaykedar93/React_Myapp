@@ -33,6 +33,8 @@ export default function ChannelList() {
   const pinAbortRef = useRef(null);
   const pinCheckingRef = useRef(false);
   const pinSuccessRef = useRef(false);
+  const openingChannelRef = useRef(false);
+  const ownerAlertTimerRef = useRef(null);
 
   const [channels, setChannels] = useState([]);
   const [channelName, setChannelName] = useState("");
@@ -53,6 +55,11 @@ export default function ChannelList() {
   const [toast, setToast] = useState({
     show: false,
     type: "success",
+    message: "",
+  });
+
+  const [ownerDeleteAlert, setOwnerDeleteAlert] = useState({
+    show: false,
     message: "",
   });
 
@@ -82,6 +89,12 @@ export default function ChannelList() {
 
   useEffect(() => {
     fetchChannels();
+
+    return () => {
+      if (ownerAlertTimerRef.current) {
+        clearTimeout(ownerAlertTimerRef.current);
+      }
+    };
   }, []);
 
   const parseIndiaDate = (value) => {
@@ -156,6 +169,38 @@ export default function ChannelList() {
     }, 1800);
   };
 
+  const showOwnerDeleteAlert = (
+    message = "Only owner can delete this channel."
+  ) => {
+    if (ownerAlertTimerRef.current) {
+      clearTimeout(ownerAlertTimerRef.current);
+    }
+
+    setOwnerDeleteAlert({
+      show: true,
+      message,
+    });
+
+    ownerAlertTimerRef.current = setTimeout(() => {
+      setOwnerDeleteAlert({
+        show: false,
+        message: "",
+      });
+    }, 2800);
+  };
+
+  const clearOwnerDeleteAlert = () => {
+    if (ownerAlertTimerRef.current) {
+      clearTimeout(ownerAlertTimerRef.current);
+      ownerAlertTimerRef.current = null;
+    }
+
+    setOwnerDeleteAlert({
+      show: false,
+      message: "",
+    });
+  };
+
   const openConfirm = (title, message, action) => {
     setConfirmBox({ show: true, title, message, action });
   };
@@ -170,6 +215,8 @@ export default function ChannelList() {
   };
 
   const closePinBox = () => {
+    if (openingChannelRef.current) return;
+
     pinSuccessRef.current = false;
     pinRequestRef.current += 1;
     pinCheckingRef.current = false;
@@ -222,6 +269,7 @@ export default function ChannelList() {
 
   const requestDeleteChannel = (channel) => {
     setActiveMenuId(null);
+    clearOwnerDeleteAlert();
 
     if (isTrue(channel.is_private)) {
       setDeletePinBox({
@@ -235,7 +283,7 @@ export default function ChannelList() {
 
     openConfirm(
       "Delete Channel?",
-      `Only the device that created this channel can delete it. Do you want to delete "${channel.channel_name}"?`,
+      `Do you want to delete "${channel.channel_name}"?`,
       () => deleteChannel(channel.channel_id)
     );
   };
@@ -550,19 +598,10 @@ export default function ChannelList() {
   };
 
   const deleteChannel = async (channelId, pin = "") => {
-    const oldChannels = channels;
     const oldEditingId = editingId;
-    const oldShowCreateForm = showCreateForm;
-
-    setChannels((prev) =>
-      prev.filter((channel) => Number(channel.channel_id) !== Number(channelId))
-    );
+    const cleanDeletePin = String(pin || "").replace(/\D/g, "").slice(0, 4);
 
     setActiveMenuId(null);
-
-    if (Number(editingId) === Number(channelId)) {
-      resetForm();
-    }
 
     try {
       setLoading(true);
@@ -575,24 +614,28 @@ export default function ChannelList() {
         },
         body: JSON.stringify({
           device_id: getCurrentDeviceId(),
-          pin: String(pin || "").replace(/\D/g, "").slice(0, 4),
+          pin: cleanDeletePin,
         }),
       });
 
       const data = await res.json().catch(() => ({}));
+      const apiMessage = String(data?.message || "");
+      const ownerBlocked =
+        res.status === 403 ||
+        /only.*device|created.*device|owner|blocked/i.test(apiMessage);
 
       if (!res.ok) {
-        setChannels(oldChannels);
-
-        if (oldEditingId) {
-          setEditingId(oldEditingId);
-          setShowCreateForm(oldShowCreateForm);
+        if (ownerBlocked) {
+          closeConfirm();
+          closeDeletePinBox();
+          showOwnerDeleteAlert("Only owner can delete this channel.");
+          return;
         }
 
-        if (isTrue(deletePinBox.show)) {
+        if (deletePinBox.show) {
           setDeletePinBox((prev) => ({
             ...prev,
-            error: data.message || "Delete failed",
+            error: data.message || "PIN mismatch",
           }));
         } else {
           showToast(data.message || "Delete failed", "error");
@@ -603,12 +646,20 @@ export default function ChannelList() {
 
       removeTrustedPin(channelId);
       closeDeletePinBox();
+
+      setChannels((prev) =>
+        prev.filter((channel) => Number(channel.channel_id) !== Number(channelId))
+      );
+
+      if (Number(oldEditingId) === Number(channelId)) {
+        resetForm();
+      }
+
       showToast("Channel deleted successfully", "success");
     } catch (error) {
       console.error("Delete channel error:", error);
-      setChannels(oldChannels);
 
-      if (isTrue(deletePinBox.show)) {
+      if (deletePinBox.show) {
         setDeletePinBox((prev) => ({
           ...prev,
           error: "Server error while deleting",
@@ -641,13 +692,38 @@ export default function ChannelList() {
   };
 
   const goToChannel = (channel, pin = "") => {
+    openingChannelRef.current = true;
+    pinSuccessRef.current = true;
+    pinRequestRef.current += 1;
+    pinCheckingRef.current = false;
+
+    if (pinAbortRef.current) {
+      pinAbortRef.current.abort();
+      pinAbortRef.current = null;
+    }
+
     saveSelectedChannel(channel, pin);
-    window.location.hash = "/teligram-notes";
+
+    setPinChecking(false);
+    setPinBox({
+      show: false,
+      channel: null,
+      pin: "",
+      error: "",
+      trustDevice: false,
+    });
+
+    requestAnimationFrame(() => {
+      window.location.hash = "/teligram-notes";
+    });
   };
 
   const openChannel = (channel) => {
+    if (openingChannelRef.current) return;
+
     pinSuccessRef.current = false;
     setActiveMenuId(null);
+    clearOwnerDeleteAlert();
 
     if (isTrue(channel.is_private)) {
       const trustedPin = getTrustedPin(channel.channel_id);
@@ -810,32 +886,16 @@ export default function ChannelList() {
 
       /*
         Correct PIN:
-        Invalidate all older requests before navigation so no delayed
-        mismatch/error can appear after successful verification.
+        Close popup first, lock re-open, then navigate.
+        This prevents the old PIN popup from flashing again for 1-2 seconds.
       */
-      pinSuccessRef.current = true;
-      pinRequestRef.current += 1;
-      pinAbortRef.current = null;
-      pinCheckingRef.current = false;
-
       if (trustThisDevice) {
         saveTrustedPin(selectedChannel.channel_id, typedPin);
       } else {
         removeTrustedPin(selectedChannel.channel_id);
       }
 
-      saveSelectedChannel(selectedChannel, typedPin);
-
-      setPinChecking(false);
-      setPinBox({
-        show: false,
-        channel: null,
-        pin: "",
-        error: "",
-        trustDevice: false,
-      });
-
-      window.location.hash = "/teligram-notes";
+      goToChannel(selectedChannel, typedPin);
     } catch (error) {
       if (error?.name === "AbortError") {
         return;
@@ -1015,6 +1075,12 @@ export default function ChannelList() {
           </section>
         )}
 
+        {ownerDeleteAlert.show && (
+          <div className="owner-delete-alert" role="alert">
+            {ownerDeleteAlert.message}
+          </div>
+        )}
+
         <main className="channel-list">
           {loading && channels.length === 0 && (
             <div className="empty-box">
@@ -1175,7 +1241,7 @@ export default function ChannelList() {
         </div>
       )}
 
-      {pinBox.show && (
+      {pinBox.show && !openingChannelRef.current && (
         <div className="pin-overlay" onClick={closePinBox}>
           <div
             className="professional-pin-card"
@@ -1770,6 +1836,34 @@ export default function ChannelList() {
         .cancel-btn {
           background: #e2e8f0;
           color: #475569;
+        }
+
+
+        .owner-delete-alert {
+          margin: 7px 10px 8px;
+          padding: 10px 13px;
+          border-radius: 15px;
+          background: #fef2f2;
+          border: 1px solid #fecaca;
+          color: #dc2626;
+          font-size: 12.5px;
+          font-weight: 950;
+          text-align: center;
+          box-shadow: 0 10px 24px rgba(220, 38, 38, 0.1);
+          animation: alertSlide 0.18s ease;
+          flex-shrink: 0;
+        }
+
+        @keyframes alertSlide {
+          from {
+            opacity: 0;
+            transform: translateY(-5px);
+          }
+
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
         }
 
         .channel-list {
@@ -2529,7 +2623,8 @@ export default function ChannelList() {
           }
 
           .channel-row,
-          .create-card {
+          .create-card,
+          .owner-delete-alert {
             max-width: 760px;
             margin-left: auto;
             margin-right: auto;
