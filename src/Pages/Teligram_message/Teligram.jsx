@@ -32,6 +32,7 @@ export default function Teligram() {
   const editorRef = useRef(null);
   const imageRef = useRef(null);
   const colorRef = useRef(null);
+  const selectedTextColorRef = useRef("#111111");
   const bottomRef = useRef(null);
   const savedRangeRef = useRef(null);
   const verifiedPinRef = useRef("");
@@ -204,6 +205,29 @@ export default function Teligram() {
 
   const getInitial = (name) => {
     return name?.trim()?.charAt(0)?.toUpperCase() || "N";
+  };
+
+  const normalizeTextColor = (color) => {
+    const value = String(color || "").trim();
+    return /^#[0-9A-Fa-f]{6}$/.test(value) ? value : "#111111";
+  };
+
+  const getNoteTextColor = (note) => {
+    return normalizeTextColor(note?.text_color || note?.textColor || "#111111");
+  };
+
+  const setComposerTextColor = (color) => {
+    const finalColor = normalizeTextColor(color);
+    selectedTextColorRef.current = finalColor;
+    setTextColor(finalColor);
+
+    if (editorRef.current) {
+      editorRef.current.style.setProperty("--composerColor", finalColor);
+      editorRef.current.style.color = finalColor;
+      editorRef.current.style.caretColor = finalColor;
+    }
+
+    return finalColor;
   };
 
 
@@ -719,7 +743,21 @@ export default function Teligram() {
   };
 
   const changeColor = (color) => {
-    applySelectedFormat("color", color);
+    const finalColor = setComposerTextColor(color);
+
+    if (editorRef.current) {
+      editorRef.current.focus();
+    }
+
+    try {
+      restoreSelection();
+      document.execCommand("styleWithCSS", false, true);
+      document.execCommand("foreColor", false, finalColor);
+    } catch (error) {
+      console.error("Color apply error:", error);
+    }
+
+    saveSelection();
   };
 
   const handleImageSelect = (e) => {
@@ -747,7 +785,7 @@ export default function Teligram() {
   };
 
   const resetForm = () => {
-    setTextColor("#111111");
+    setComposerTextColor("#111111");
     setSelectedImage(null);
     setPreviewImage("");
     setRemoveOldImage(false);
@@ -797,7 +835,7 @@ export default function Teligram() {
     const currentImageFile = selectedImage;
     const currentPreviewImage = previewImage;
     const currentRemoveImage = removeOldImage;
-    const currentTextColor = textColor;
+    const currentTextColor = selectedTextColorRef.current || textColor || "#111111";
     const oldEditingId = editingNoteId;
     const oldNotes = notes;
     const now = new Date().toISOString();
@@ -941,7 +979,7 @@ export default function Teligram() {
 
     setEditingNoteId(note.note_id);
     setComposerMode(isTitleNote(note) ? "title" : hasNoteImage(note) ? "image-caption" : "message");
-    setTextColor(note.text_color || "#111111");
+    setComposerTextColor(getNoteTextColor(note));
     setPreviewImage(getNoteImageUrl(note));
     setSelectedImage(null);
     setRemoveOldImage(false);
@@ -962,7 +1000,7 @@ export default function Teligram() {
 
     setEditingNoteId(note.note_id);
     setComposerMode("image-update");
-    setTextColor(note.text_color || "#111111");
+    setComposerTextColor(getNoteTextColor(note));
     setPreviewImage(getNoteImageUrl(note));
     setSelectedImage(null);
     setRemoveOldImage(false);
@@ -982,7 +1020,7 @@ export default function Teligram() {
 
     setEditingNoteId(note.note_id);
     setComposerMode("image-caption");
-    setTextColor(note.text_color || "#111111");
+    setComposerTextColor(getNoteTextColor(note));
     setPreviewImage(getNoteImageUrl(note));
     setSelectedImage(null);
     setRemoveOldImage(false);
@@ -1113,24 +1151,26 @@ export default function Teligram() {
             ‹
           </button>
 
-          <div className="header-logo">
-            {(selectedChannel?.logo_url || selectedChannel?.has_logo) && (
-              <img
-                src={getChannelLogoUrl(selectedChannel)}
-                alt="logo"
-                onError={(e) => handleImageError(e, "", "telegram-channels")}
-              />
-            )}
-            <span className="logo-fallback-letter">
-              {getInitial(selectedChannel?.channel_name)}
-            </span>
-          </div>
+          <div className="header-brand-row">
+            <div className="header-logo">
+              {(selectedChannel?.logo_url || selectedChannel?.has_logo) && (
+                <img
+                  src={getChannelLogoUrl(selectedChannel)}
+                  alt="logo"
+                  onError={(e) => handleImageError(e, "", "telegram-channels")}
+                />
+              )}
+              <span className="logo-fallback-letter">
+                {getInitial(selectedChannel?.channel_name)}
+              </span>
+            </div>
 
-          <div className="header-title">
-            <h2>{selectedChannel?.channel_name || "Notes"}</h2>
-            {selectedChannel?.channel_tagline && (
-              <p>{selectedChannel.channel_tagline}</p>
-            )}
+            <div className="header-title">
+              <h2>{selectedChannel?.channel_name || "Notes"}</h2>
+              {selectedChannel?.channel_tagline && (
+                <p>{selectedChannel.channel_tagline}</p>
+              )}
+            </div>
           </div>
 
           {!privateChannelLocked && (
@@ -1235,6 +1275,12 @@ export default function Teligram() {
               </div>
             )}
 
+            {searchOpen && searchText.trim() && (
+              <div className="search-result-bar">
+                Showing {filteredNotes.length} result{filteredNotes.length === 1 ? "" : "s"} for "{searchText.trim()}"
+              </div>
+            )}
+
             <main className="chat-body" onClick={() => setActiveMenuId(null)}>
               {groupedNotes.length === 0 && (
                 <div className="empty-card">
@@ -1317,7 +1363,7 @@ export default function Teligram() {
                               {hasText && (
                                 <div
                                   className="image-description-text"
-                                  style={{ color: note.text_color || "#111111" }}
+                                  style={{ "--noteColor": getNoteTextColor(note), color: getNoteTextColor(note) }}
                                   dangerouslySetInnerHTML={{
                                     __html: DOMPurify.sanitize(note.content_html),
                                   }}
@@ -1331,7 +1377,7 @@ export default function Teligram() {
                               className={`message-text ${
                                 titleMessage ? "message-title-text" : ""
                               }`}
-                              style={{ color: note.text_color || "#111111" }}
+                              style={{ "--noteColor": getNoteTextColor(note), color: getNoteTextColor(note) }}
                               dangerouslySetInnerHTML={{
                                 __html: DOMPurify.sanitize(note.content_html),
                               }}
@@ -1493,7 +1539,7 @@ export default function Teligram() {
                   className="text-input"
                   contentEditable
                   data-placeholder={composerMode === "title" ? "Type title..." : composerMode === "image-update" ? "Select new image, then tap send" : composerMode === "image-caption" ? "Add image description..." : "Type message..."}
-                  style={{ color: textColor }}
+                  style={{ "--composerColor": textColor, color: textColor, caretColor: textColor }}
                   onFocus={saveSelection}
                   onMouseUp={saveSelection}
                   onKeyUp={saveSelection}
@@ -5190,6 +5236,606 @@ export default function Teligram() {
 
           .toast p {
             font-size: 11.5px !important;
+          }
+        }
+
+
+
+        /* ===== FINAL UI FIX: normal text, tiny time, larger search, smaller images ===== */
+        .search-btn {
+          width: 40px !important;
+          height: 40px !important;
+          border-radius: 14px !important;
+          font-size: 18px !important;
+        }
+
+        .search-box {
+          padding: 10px 12px !important;
+          gap: 10px !important;
+          background: rgba(255,255,255,0.98) !important;
+        }
+
+        .search-box span {
+          width: 35px !important;
+          height: 35px !important;
+          border-radius: 13px !important;
+          font-size: 16px !important;
+        }
+
+        .search-box input {
+          height: 44px !important;
+          border-radius: 18px !important;
+          font-size: 15.5px !important;
+          font-weight: 800 !important;
+        }
+
+        .search-box button {
+          width: 36px !important;
+          height: 36px !important;
+          border-radius: 13px !important;
+          font-size: 22px !important;
+        }
+
+        .search-result-bar {
+          flex-shrink: 0;
+          padding: 7px 14px 9px;
+          background: rgba(236, 254, 255, 0.96);
+          color: #0f766e;
+          border-bottom: 1px solid rgba(14, 165, 233, 0.16);
+          font-size: 12px;
+          line-height: 1.25;
+          font-weight: 900;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .message-bubble {
+          padding: 8px 39px 18px 11px !important;
+          min-height: 35px !important;
+        }
+
+        .message-text,
+        .message-text div,
+        .message-text p {
+          font-size: 15.5px !important;
+          line-height: 1.42 !important;
+          font-weight: 600 !important;
+          color: inherit;
+        }
+
+        .image-description-text {
+          font-size: 15px !important;
+          line-height: 1.42 !important;
+          font-weight: 600 !important;
+          padding: 7px 8px 3px !important;
+        }
+
+        .message-time,
+        .image-only .message-time {
+          position: absolute !important;
+          right: 7px !important;
+          bottom: 5px !important;
+          font-size: 8.4px !important;
+          line-height: 1 !important;
+          font-weight: 800 !important;
+          color: #64748b !important;
+          opacity: 0.72 !important;
+          white-space: nowrap !important;
+          transform: none !important;
+        }
+
+        .message-dot-btn {
+          top: 4px !important;
+          right: 4px !important;
+          width: 23px !important;
+          height: 23px !important;
+          font-size: 15px !important;
+        }
+
+        .whatsapp-image-frame {
+          width: fit-content !important;
+          max-width: min(238px, 62vw) !important;
+          border-radius: 10px !important;
+          background: #f8fafc !important;
+        }
+
+        .whatsapp-image-frame .message-image {
+          opacity: 1 !important;
+          filter: none !important;
+        }
+
+        .message-image {
+          width: auto !important;
+          max-width: min(238px, 62vw) !important;
+          max-height: 260px !important;
+          height: auto !important;
+          object-fit: contain !important;
+          border-radius: 10px !important;
+          border: none !important;
+          box-shadow: none !important;
+          background: #f8fafc !important;
+        }
+
+        .message-bubble:has(.image-message-wrap),
+        .message-bubble.image-only {
+          max-width: min(260px, 68vw) !important;
+          min-width: 86px !important;
+          padding: 4px 4px 18px 4px !important;
+        }
+
+        .message-bubble:has(.image-message-wrap.with-description) {
+          padding: 4px 8px 18px 4px !important;
+        }
+
+        .preview-strip img {
+          width: 42px !important;
+          height: 42px !important;
+          object-fit: cover !important;
+          border-radius: 10px !important;
+        }
+
+        @media (max-width: 380px) {
+          .message-image,
+          .whatsapp-image-frame {
+            max-width: min(218px, 61vw) !important;
+          }
+
+          .message-bubble:has(.image-message-wrap),
+          .message-bubble.image-only {
+            max-width: min(238px, 68vw) !important;
+          }
+
+          .message-text,
+          .message-text div,
+          .message-text p {
+            font-size: 15px !important;
+          }
+        }
+
+
+        /* =========================================
+           FINAL COLOR + INPUT + TIME FIX
+           Selected color must show while typing and after send.
+           Inner HTML colors are overridden, but bold/underline stay.
+        ========================================= */
+
+        .text-input {
+          color: var(--composerColor, #111111) !important;
+          caret-color: var(--composerColor, #111111) !important;
+          background: #ffffff !important;
+          min-height: 40px !important;
+          max-height: 96px !important;
+          padding: 9px 11px !important;
+          font-size: 15px !important;
+          line-height: 1.38 !important;
+          font-weight: 500 !important;
+          opacity: 1 !important;
+          -webkit-text-fill-color: var(--composerColor, #111111) !important;
+        }
+
+        .text-input *,
+        .text-input div,
+        .text-input p,
+        .text-input span,
+        .text-input font {
+          color: inherit !important;
+          font-size: inherit !important;
+          line-height: inherit !important;
+          -webkit-text-fill-color: var(--composerColor, #111111) !important;
+        }
+
+        .text-input:empty::before {
+          color: #94a3b8 !important;
+          -webkit-text-fill-color: #94a3b8 !important;
+        }
+
+        .message-bubble {
+          width: fit-content !important;
+          max-width: min(80vw, 330px) !important;
+          min-width: 46px !important;
+          padding: 6px 31px 17px 9px !important;
+          border-radius: 7px 15px 15px 15px !important;
+          background: #ffffff !important;
+          overflow: visible !important;
+        }
+
+        .message-bubble.image-only,
+        .message-bubble:has(.image-message-wrap),
+        .message-bubble:has(.message-image) {
+          max-width: min(252px, 70vw) !important;
+          min-width: 92px !important;
+          padding: 22px 4px 22px 4px !important;
+        }
+
+        .message-text,
+        .image-description-text {
+          color: var(--noteColor, #111111) !important;
+          font-size: 15px !important;
+          line-height: 1.36 !important;
+          font-weight: 500 !important;
+          padding-right: 0 !important;
+          margin: 0 !important;
+          -webkit-text-fill-color: var(--noteColor, #111111) !important;
+        }
+
+        .message-text *,
+        .image-description-text *,
+        .message-text div,
+        .message-text p,
+        .message-text span,
+        .message-text font,
+        .image-description-text div,
+        .image-description-text p,
+        .image-description-text span,
+        .image-description-text font {
+          color: inherit !important;
+          font-size: inherit !important;
+          line-height: inherit !important;
+          -webkit-text-fill-color: var(--noteColor, #111111) !important;
+        }
+
+        .message-text b,
+        .message-text strong,
+        .image-description-text b,
+        .image-description-text strong {
+          font-weight: 900 !important;
+        }
+
+        .message-text u,
+        .image-description-text u {
+          text-decoration: underline !important;
+          text-underline-offset: 3px !important;
+        }
+
+        .message-time {
+          position: absolute !important;
+          right: 7px !important;
+          bottom: 4px !important;
+          font-size: 8.8px !important;
+          line-height: 1 !important;
+          font-weight: 800 !important;
+          color: #64748b !important;
+          background: rgba(248, 250, 252, 0.82) !important;
+          border-radius: 999px !important;
+          padding: 2px 5px !important;
+          max-width: calc(100% - 14px) !important;
+          white-space: nowrap !important;
+          user-select: none !important;
+          box-shadow: none !important;
+          z-index: 2 !important;
+        }
+
+        .message-bubble:has(.image-message-wrap) .message-time,
+        .message-bubble:has(.message-image) .message-time,
+        .image-only .message-time {
+          right: 7px !important;
+          bottom: 5px !important;
+          font-size: 8.8px !important;
+          color: #ffffff !important;
+          background: rgba(15, 23, 42, 0.62) !important;
+          padding: 2px 6px !important;
+          border-radius: 999px !important;
+        }
+
+        .message-image,
+        .whatsapp-image-frame {
+          max-width: min(224px, 64vw) !important;
+          max-height: 260px !important;
+        }
+
+        /* ===============================
+           FINAL HEADER FIX
+           Logo + title always in one professional row
+        ================================ */
+        .nm-header {
+          height: 74px !important;
+          min-height: 74px !important;
+          max-height: 74px !important;
+          display: flex !important;
+          flex-direction: row !important;
+          align-items: center !important;
+          justify-content: flex-start !important;
+          gap: 9px !important;
+          padding: max(10px, env(safe-area-inset-top)) 11px 10px !important;
+          overflow: hidden !important;
+          background:
+            radial-gradient(circle at 6% 0%, rgba(255, 255, 255, 0.25), transparent 30%),
+            radial-gradient(circle at 94% 10%, rgba(187, 247, 208, 0.22), transparent 32%),
+            linear-gradient(135deg, #075985 0%, #0f766e 48%, #10b981 100%) !important;
+          box-shadow: 0 10px 26px rgba(8, 47, 73, 0.22) !important;
+        }
+
+        .header-brand-row {
+          flex: 1 1 auto !important;
+          min-width: 0 !important;
+          height: 52px !important;
+          display: flex !important;
+          flex-direction: row !important;
+          align-items: center !important;
+          justify-content: flex-start !important;
+          gap: 10px !important;
+          padding: 5px 10px 5px 6px !important;
+          border-radius: 19px !important;
+          background: rgba(255, 255, 255, 0.14) !important;
+          border: 1px solid rgba(255, 255, 255, 0.18) !important;
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.20),
+            0 8px 20px rgba(8, 47, 73, 0.14) !important;
+          backdrop-filter: blur(12px) !important;
+        }
+
+        .header-brand-row .header-logo {
+          width: 42px !important;
+          height: 42px !important;
+          min-width: 42px !important;
+          max-width: 42px !important;
+          flex: 0 0 42px !important;
+          margin: 0 !important;
+          border-radius: 15px !important;
+          position: relative !important;
+          overflow: hidden !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          background: linear-gradient(135deg, #ecfeff, #dbeafe) !important;
+          color: #0f766e !important;
+          box-shadow:
+            0 8px 18px rgba(8, 47, 73, 0.22),
+            inset 0 0 0 2px rgba(255, 255, 255, 0.40) !important;
+        }
+
+        .header-brand-row .header-logo img {
+          width: 100% !important;
+          height: 100% !important;
+          object-fit: cover !important;
+          display: block !important;
+          position: relative !important;
+          z-index: 2 !important;
+        }
+
+        .header-brand-row .logo-fallback-letter {
+          position: absolute !important;
+          inset: 0 !important;
+          z-index: 1 !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          color: #0f766e !important;
+          font-size: 18px !important;
+          font-weight: 950 !important;
+          line-height: 1 !important;
+        }
+
+        .header-brand-row .header-title {
+          flex: 1 1 auto !important;
+          min-width: 0 !important;
+          height: 42px !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          display: flex !important;
+          flex-direction: column !important;
+          align-items: flex-start !important;
+          justify-content: center !important;
+          text-align: left !important;
+          overflow: hidden !important;
+        }
+
+        .header-brand-row .header-title h2 {
+          width: 100% !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          color: #ffffff !important;
+          font-size: clamp(15px, 4.2vw, 18px) !important;
+          line-height: 1.12 !important;
+          font-weight: 950 !important;
+          letter-spacing: 0.1px !important;
+          text-align: left !important;
+          white-space: nowrap !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+        }
+
+        .header-brand-row .header-title p {
+          width: 100% !important;
+          margin: 3px 0 0 !important;
+          padding: 0 !important;
+          color: rgba(255, 255, 255, 0.86) !important;
+          font-size: 10.8px !important;
+          line-height: 1.1 !important;
+          font-weight: 800 !important;
+          text-align: left !important;
+          white-space: nowrap !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+        }
+
+        .nm-header > .header-icon-btn {
+          width: 36px !important;
+          height: 36px !important;
+          min-width: 36px !important;
+          flex: 0 0 36px !important;
+          border-radius: 14px !important;
+          margin: 0 !important;
+        }
+
+        .nm-header .back-btn {
+          font-size: 32px !important;
+          line-height: 1 !important;
+          padding-bottom: 4px !important;
+        }
+
+        .nm-header .search-btn {
+          font-size: 17px !important;
+        }
+
+        @media (max-width: 360px) {
+          .nm-header {
+            gap: 7px !important;
+            padding-left: 8px !important;
+            padding-right: 8px !important;
+          }
+
+          .header-brand-row {
+            gap: 8px !important;
+            padding-right: 8px !important;
+          }
+
+          .header-brand-row .header-logo {
+            width: 40px !important;
+            height: 40px !important;
+            min-width: 40px !important;
+            flex-basis: 40px !important;
+          }
+
+          .header-brand-row .header-title h2 {
+            font-size: 15px !important;
+          }
+
+          .header-brand-row .header-title p {
+            font-size: 10px !important;
+          }
+        }
+
+
+        /* =====================================================
+           FINAL SAFE HEADER UPDATE
+           - Extra top space for mobile notch/camera
+           - Logo + title stay in one professional row
+           - Big channel title wraps and stays fully visible
+        ====================================================== */
+        .nm-header {
+          height: auto !important;
+          min-height: 96px !important;
+          max-height: none !important;
+          display: flex !important;
+          flex-direction: row !important;
+          align-items: center !important;
+          justify-content: flex-start !important;
+          gap: 9px !important;
+          padding-top: calc(env(safe-area-inset-top, 0px) + 18px) !important;
+          padding-right: 11px !important;
+          padding-bottom: 10px !important;
+          padding-left: 11px !important;
+          overflow: visible !important;
+          background:
+            linear-gradient(180deg, rgba(255,255,255,0.08) 0 18px, transparent 18px),
+            radial-gradient(circle at 6% 0%, rgba(255, 255, 255, 0.25), transparent 30%),
+            radial-gradient(circle at 94% 10%, rgba(187, 247, 208, 0.22), transparent 32%),
+            linear-gradient(135deg, #075985 0%, #0f766e 48%, #10b981 100%) !important;
+          box-shadow: 0 10px 26px rgba(8, 47, 73, 0.22) !important;
+        }
+
+        .header-brand-row {
+          flex: 1 1 auto !important;
+          min-width: 0 !important;
+          height: auto !important;
+          min-height: 56px !important;
+          max-height: none !important;
+          display: flex !important;
+          flex-direction: row !important;
+          align-items: center !important;
+          justify-content: flex-start !important;
+          gap: 10px !important;
+          padding: 7px 10px 7px 7px !important;
+          border-radius: 20px !important;
+          overflow: visible !important;
+        }
+
+        .header-brand-row .header-logo {
+          width: 42px !important;
+          height: 42px !important;
+          min-width: 42px !important;
+          max-width: 42px !important;
+          flex: 0 0 42px !important;
+          align-self: center !important;
+          margin: 0 !important;
+          border-radius: 15px !important;
+        }
+
+        .header-brand-row .header-title {
+          flex: 1 1 auto !important;
+          min-width: 0 !important;
+          height: auto !important;
+          min-height: 42px !important;
+          max-height: none !important;
+          display: flex !important;
+          flex-direction: column !important;
+          align-items: flex-start !important;
+          justify-content: center !important;
+          text-align: left !important;
+          overflow: visible !important;
+        }
+
+        .header-brand-row .header-title h2 {
+          width: 100% !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          color: #ffffff !important;
+          font-size: clamp(13px, 3.75vw, 17px) !important;
+          line-height: 1.16 !important;
+          font-weight: 950 !important;
+          letter-spacing: 0.08px !important;
+          text-align: left !important;
+          white-space: normal !important;
+          overflow: visible !important;
+          text-overflow: clip !important;
+          overflow-wrap: anywhere !important;
+          word-break: break-word !important;
+          display: block !important;
+        }
+
+        .header-brand-row .header-title p {
+          width: 100% !important;
+          margin: 3px 0 0 !important;
+          padding: 0 !important;
+          color: rgba(255, 255, 255, 0.88) !important;
+          font-size: clamp(9.5px, 2.8vw, 11px) !important;
+          line-height: 1.15 !important;
+          font-weight: 800 !important;
+          text-align: left !important;
+          white-space: normal !important;
+          overflow: visible !important;
+          text-overflow: clip !important;
+          overflow-wrap: anywhere !important;
+          word-break: break-word !important;
+          display: block !important;
+        }
+
+        .nm-header > .header-icon-btn {
+          align-self: center !important;
+        }
+
+        @media (max-width: 360px) {
+          .nm-header {
+            min-height: 94px !important;
+            gap: 7px !important;
+            padding-top: calc(env(safe-area-inset-top, 0px) + 17px) !important;
+            padding-left: 8px !important;
+            padding-right: 8px !important;
+          }
+
+          .header-brand-row {
+            gap: 8px !important;
+            min-height: 54px !important;
+            padding: 7px 8px 7px 6px !important;
+          }
+
+          .header-brand-row .header-logo {
+            width: 40px !important;
+            height: 40px !important;
+            min-width: 40px !important;
+            max-width: 40px !important;
+            flex-basis: 40px !important;
+          }
+
+          .header-brand-row .header-title h2 {
+            font-size: clamp(12.2px, 3.65vw, 15px) !important;
+            line-height: 1.14 !important;
+          }
+
+          .header-brand-row .header-title p {
+            font-size: 9.5px !important;
           }
         }
 
