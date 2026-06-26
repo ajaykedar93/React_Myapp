@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 
 const DEFAULT_BACKEND_URL = "https://express-backend-myapp.onrender.com";
 
@@ -674,7 +675,7 @@ export default function ChannelList() {
         if (deletePinBox.show) {
           setDeletePinBox((prev) => ({
             ...prev,
-            error: data.message || "PIN mismatch",
+            error: data.message || "Wrong PIN",
           }));
         } else {
           showToast(data.message || "Delete failed", "error");
@@ -711,6 +712,19 @@ export default function ChannelList() {
     }
   };
 
+  const getClosedPinBox = () => ({
+    show: false,
+    channel: null,
+    pin: "",
+    error: "",
+    trustDevice: false,
+  });
+
+  const isNotesRoute = () => {
+    if (typeof window === "undefined") return false;
+    return String(window.location.hash || "").includes("/teligram-notes");
+  };
+
   const clearActivePinRequest = () => {
     pinRequestRef.current += 1;
     pinCheckingRef.current = false;
@@ -724,26 +738,37 @@ export default function ChannelList() {
   };
 
   const hidePinPopupNow = () => {
-    setPinBox({
-      show: false,
-      channel: null,
-      pin: "",
-      error: "",
-      trustDevice: false,
-    });
+    setPinBox(getClosedPinBox());
   };
 
   const beginChannelOpening = () => {
     /*
-      This state + ref combination prevents a stale API response or React
-      re-render from showing the PIN popup again after the correct PIN.
+      Lock navigation first, then synchronously remove the PIN UI before
+      changing route. This prevents stale API/state updates from showing any
+      wrong PIN popup after a correct PIN.
     */
     openingChannelRef.current = true;
     pinSuccessRef.current = true;
+    pinRequestRef.current += 1;
     pinCheckingRef.current = false;
-    setIsOpeningChannel(true);
-    clearActivePinRequest();
-    hidePinPopupNow();
+
+    if (pinAbortRef.current) {
+      pinAbortRef.current.abort();
+      pinAbortRef.current = null;
+    }
+
+    flushSync(() => {
+      setIsOpeningChannel(true);
+      setPinChecking(false);
+      setPinBox(getClosedPinBox());
+      setToast((prev) => {
+        const pinError = /pin|wrong/i.test(String(prev?.message || ""));
+        if (prev?.show && prev?.type === "error" && pinError) {
+          return { show: false, type: "success", message: "" };
+        }
+        return prev;
+      });
+    });
   };
 
   const saveSelectedChannel = (channel, pin = "") => {
@@ -769,13 +794,15 @@ export default function ChannelList() {
     beginChannelOpening();
     saveSelectedChannel(channel, pin);
 
-    /*
-      A tiny timeout after hiding the PIN UI gives React one paint to remove
-      the popup before the hash route changes. This removes the visible
-      mismatch/popup flash on slower phones.
-    */
-    window.setTimeout(() => {
-      window.location.hash = "/teligram-notes";
+    if (navigationTimerRef.current) {
+      clearTimeout(navigationTimerRef.current);
+      navigationTimerRef.current = null;
+    }
+
+    navigationTimerRef.current = window.setTimeout(() => {
+      if (!isNotesRoute()) {
+        window.location.hash = "/teligram-notes";
+      }
     }, 0);
   };
 
@@ -898,7 +925,7 @@ export default function ChannelList() {
         Some backends return 200 OK with a message like "PIN matched" instead
         of { success: true }. Treat any OK response as success unless the
         response clearly says invalid/mismatch. This removes the 1-3 second
-        "PIN mismatch" flash after a correct PIN.
+        wrong PIN flash after a correct PIN.
       */
       const explicitSuccess =
         isTrue(data?.unlocked) ||
@@ -943,7 +970,7 @@ export default function ChannelList() {
             Number(selectedChannel.channel_id);
 
           /*
-            Do not show a mismatch from an old/stale request after the user has
+            Do not show a wrong PIN error from an old/stale request after the user has
             already changed the PIN, closed the popup, or started navigation.
           */
           if (
@@ -959,7 +986,7 @@ export default function ChannelList() {
 
           return {
             ...prev,
-            error: data?.message || "PIN mismatch",
+            error: data?.message || "Wrong PIN",
           };
         });
         return;
@@ -1019,6 +1046,13 @@ export default function ChannelList() {
       }
     }
   };
+
+  const shouldShowPinPopup =
+    pinBox.show &&
+    !pinSuccessRef.current &&
+    !openingChannelRef.current &&
+    !isOpeningChannel &&
+    !isNotesRoute();
 
   return (
     <div className="nm-page" onClick={() => setActiveMenuId(null)}>
@@ -1340,7 +1374,7 @@ export default function ChannelList() {
         </div>
       )}
 
-      {pinBox.show && !openingChannelRef.current && !isOpeningChannel && (
+      {shouldShowPinPopup && (
         <div className="pin-overlay" onClick={closePinBox}>
           <div
             className="professional-pin-card"
@@ -1385,13 +1419,14 @@ export default function ChannelList() {
               autoFocus
               autoComplete="off"
               disabled={pinChecking}
-              onChange={(e) =>
+              onChange={(e) => {
+                if (openingChannelRef.current || isOpeningChannel) return;
                 setPinBox((prev) => ({
                   ...prev,
                   pin: e.target.value.replace(/\D/g, "").slice(0, 4),
                   error: "",
-                }))
-              }
+                }));
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
@@ -1436,7 +1471,7 @@ export default function ChannelList() {
                 type="button"
                 className="pin-open-btn"
                 onClick={verifyChannelPin}
-                disabled={pinChecking || String(pinBox.pin || "").length !== 4}
+                disabled={pinChecking || isOpeningChannel || String(pinBox.pin || "").length !== 4}
               >
                 {pinChecking ? "Checking..." : "Open"}
               </button>
