@@ -7,7 +7,12 @@ import React, { useEffect, useMemo, useState } from "react";
   GET  /api/invoices/next-no
   POST /api/invoices
   GET  /api/invoices/:id/pdf
-  https://express-backend-myapp.onrender.com
+  GET  /api/invoices/:id/pdf-view
+  POST /api/invoices/pdf-preview
+
+  Logic:
+  Supplier State Code === Buyer State Code  => CGST + SGST
+  Supplier State Code !== Buyer State Code  => IGST
 */
 
 const API_BASE_URL =
@@ -22,20 +27,19 @@ const defaultForm = {
   supplier_name: "ARVIND NAVNATH SHELKE",
   supplier_address:
     "1 Adgaon Kh, Pimpli Lokai Shirdi, Tal:- Rahata Dist :- Ahmednagar",
-  supplier_gstin: "27KNWPS8477J1ZE",
+  supplier_gstin: "27KNNVPS8477J1ZE",
   supplier_state_name: "Maharashtra",
   supplier_state_code: "27",
 
-  consignee_name: "BIOSEL SOLAR PRIVATE LIMITED",
-  consignee_state_name: "Gujrat",
-  consignee_state_code: "24",
+  consignee_name: "BABA ENTERPRISES",
+  consignee_state_name: "Maharashtra",
+  consignee_state_code: "27",
 
-  buyer_name: "BIOSEL SOLAR PRIVATE LIMITED",
-  buyer_gstin: "24AALCB1497J1ZE",
-  buyer_state_name: "Gujrat",
-  buyer_state_code: "24",
-  buyer_address:
-    "BUNGLOWS NO.82, GULMAHOR-ENCLAV, 2, GULMAHOR GREEN AND GOLF COUNTRY, COUNTRY CLUB, Kolat, Ahmedabad, Gurjarat,382210",
+  buyer_name: "BABA ENTERPRISES",
+  buyer_gstin: "27AATFB5667K1ZO",
+  buyer_state_name: "Maharashtra",
+  buyer_state_code: "27",
+  buyer_address: "324/12 NAGAR MANMAD ROAD RAHATA",
 
   bank_name: "STATE BANK OF INDIA",
   bank_account_no: "41116710845",
@@ -45,35 +49,11 @@ const defaultForm = {
 
 const defaultItems = [
   {
-    description: "Supply Material 10mm",
+    description: "Supply Material Wash Sand",
     hsn_sac: "251710",
     gst_rate: 5,
-    quantity: 7,
-    rate: 3000,
-    per: "Brass",
-  },
-  {
-    description: "Supply Material 20mm",
-    hsn_sac: "251710",
-    gst_rate: 5,
-    quantity: 6,
-    rate: 3000,
-    per: "Brass",
-  },
-  {
-    description: "Supply Material Dust",
-    hsn_sac: "251710",
-    gst_rate: 5,
-    quantity: 7,
-    rate: 3200,
-    per: "Brass",
-  },
-  {
-    description: "Supply Material Crush Sand",
-    hsn_sac: "251710",
-    gst_rate: 5,
-    quantity: 6,
-    rate: 4000,
+    quantity: 2,
+    rate: 5000,
     per: "Brass",
   },
 ];
@@ -83,6 +63,17 @@ function money(value) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+}
+
+function cleanStateCode(value) {
+  return String(value || "").trim();
+}
+
+function getSameState(form) {
+  const supplierCode = cleanStateCode(form.supplier_state_code);
+  const buyerCode = cleanStateCode(form.buyer_state_code || form.consignee_state_code);
+
+  return Boolean(supplierCode && buyerCode && supplierCode === buyerCode);
 }
 
 function downloadBlob(blob, fileName) {
@@ -98,6 +89,18 @@ function downloadBlob(blob, fileName) {
   window.URL.revokeObjectURL(url);
 }
 
+function openPdfBlob(blob) {
+  const url = window.URL.createObjectURL(blob);
+  const openedWindow = window.open(url, "_blank", "noopener,noreferrer");
+
+  if (!openedWindow) {
+    downloadBlob(blob, "invoice-preview.pdf");
+    return;
+  }
+
+  setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+}
+
 export default function InvoiceBill() {
   const [form, setForm] = useState(defaultForm);
   const [items, setItems] = useState(defaultItems);
@@ -105,6 +108,7 @@ export default function InvoiceBill() {
   const [itemErrors, setItemErrors] = useState([]);
   const [loadingNextNo, setLoadingNextNo] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [savedInvoice, setSavedInvoice] = useState(null);
   const [toast, setToast] = useState("");
@@ -114,18 +118,37 @@ export default function InvoiceBill() {
       return sum + Number(item.quantity || 0) * Number(item.rate || 0);
     }, 0);
 
-    const igstAmount = taxableAmount * (Number(form.igst_rate || 0) / 100);
-    const grandTotalBeforeRound = taxableAmount + igstAmount;
+    const gstRate = Number(form.igst_rate || 0);
+    const totalTaxAmount = taxableAmount * (gstRate / 100);
+    const sameState = getSameState(form);
+
+    const cgstRate = sameState ? gstRate / 2 : 0;
+    const sgstRate = sameState ? gstRate / 2 : 0;
+    const igstRate = sameState ? 0 : gstRate;
+
+    const cgstAmount = sameState ? totalTaxAmount / 2 : 0;
+    const sgstAmount = sameState ? totalTaxAmount / 2 : 0;
+    const igstAmount = sameState ? 0 : totalTaxAmount;
+
+    const grandTotalBeforeRound = taxableAmount + totalTaxAmount;
     const grandTotal = Math.round(grandTotalBeforeRound);
     const roundUp = grandTotal - grandTotalBeforeRound;
 
     return {
+      sameState,
       taxableAmount,
+      gstRate,
+      totalTaxAmount,
+      cgstRate,
+      sgstRate,
+      igstRate,
+      cgstAmount,
+      sgstAmount,
       igstAmount,
       roundUp,
       grandTotal,
     };
-  }, [items, form.igst_rate]);
+  }, [items, form]);
 
   useEffect(() => {
     fetchNextInvoiceNo();
@@ -165,7 +188,24 @@ export default function InvoiceBill() {
   }
 
   function updateField(name, value) {
-    setForm((prev) => ({ ...prev, [name]: value }));
+    setForm((prev) => {
+      const next = { ...prev, [name]: value };
+
+      if (name === "buyer_state_name") {
+        next.consignee_state_name = value;
+      }
+
+      if (name === "buyer_state_code") {
+        next.consignee_state_code = value;
+      }
+
+      if (name === "buyer_name") {
+        next.consignee_name = value;
+      }
+
+      return next;
+    });
+
     setSavedInvoice(null);
 
     setErrors((prev) => {
@@ -193,6 +233,17 @@ export default function InvoiceBill() {
 
       return next;
     });
+  }
+
+  function updateGstRate(name, value) {
+    updateField(name, value);
+
+    setItems((prev) =>
+      prev.map((item) => ({
+        ...item,
+        gst_rate: value,
+      }))
+    );
   }
 
   function addItem() {
@@ -242,6 +293,8 @@ export default function InvoiceBill() {
       "buyer_name",
       "buyer_gstin",
       "buyer_address",
+      "buyer_state_name",
+      "buyer_state_code",
       "bank_name",
       "bank_account_no",
       "bank_branch",
@@ -303,9 +356,29 @@ export default function InvoiceBill() {
   }
 
   function buildPayload() {
+    const gstRate = Number(form.igst_rate || 0);
+
     return {
       ...form,
-      igst_rate: Number(form.igst_rate || 0),
+
+      // Keep both names for backend compatibility.
+      gst_rate: gstRate,
+      igst_rate: gstRate,
+
+      tax_type: totals.sameState ? "CGST_SGST" : "IGST",
+      same_state: totals.sameState,
+
+      taxable_amount: totals.taxableAmount,
+      cgst_rate: totals.cgstRate,
+      sgst_rate: totals.sgstRate,
+      igst_rate_actual: totals.igstRate,
+      cgst_amount: totals.cgstAmount,
+      sgst_amount: totals.sgstAmount,
+      igst_amount: totals.igstAmount,
+      total_tax_amount: totals.totalTaxAmount,
+      round_up: totals.roundUp,
+      grand_total: totals.grandTotal,
+
       items: items.map((item, index) => ({
         sr_no: index + 1,
         description: String(item.description || "").trim(),
@@ -354,23 +427,63 @@ export default function InvoiceBill() {
     }
   }
 
+  async function previewPdf() {
+    if (!validate()) return;
+
+    try {
+      setPreviewLoading(true);
+
+      const response = await fetch(`${API_BASE_URL}/invoices/pdf-preview`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(buildPayload()),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to generate preview PDF");
+      }
+
+      const blob = await response.blob();
+      openPdfBlob(blob);
+      showToast("Preview PDF generated");
+    } catch (error) {
+      showToast(error.message || "PDF preview failed");
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  async function saveAndDownloadPdf() {
+    const invoice = await saveInvoice();
+
+    if (!invoice?.id) return;
+
+    await downloadPdfById(invoice);
+  }
+
   async function downloadSavedPdf() {
     if (!savedInvoice?.id) {
       showToast("Please save invoice first, then download PDF.");
       return;
     }
 
+    await downloadPdfById(savedInvoice);
+  }
+
+  async function downloadPdfById(invoice) {
     try {
       setPdfLoading(true);
 
-      const response = await fetch(`${API_BASE_URL}/invoices/${savedInvoice.id}/pdf`);
+      const response = await fetch(`${API_BASE_URL}/invoices/${invoice.id}/pdf`);
 
       if (!response.ok) {
         throw new Error("Failed to download invoice PDF");
       }
 
       const blob = await response.blob();
-      const fileName = `invoice-${savedInvoice.invoice_no || savedInvoice.id}.pdf`.replaceAll(
+      const fileName = `invoice-${invoice.invoice_no || invoice.id}.pdf`.replaceAll(
         "/",
         "-"
       );
@@ -385,15 +498,19 @@ export default function InvoiceBill() {
   }
 
   function resetForm() {
+    const today = new Date().toISOString().slice(0, 10);
+
     setForm({
       ...defaultForm,
-      invoice_date: new Date().toISOString().slice(0, 10),
+      invoice_date: today,
     });
+
     setItems(defaultItems);
     setErrors({});
     setItemErrors([]);
     setSavedInvoice(null);
-    setTimeout(() => fetchNextInvoiceNo(new Date().toISOString().slice(0, 10)), 0);
+
+    setTimeout(() => fetchNextInvoiceNo(today), 0);
   }
 
   return (
@@ -407,7 +524,7 @@ export default function InvoiceBill() {
           <p className="eyebrow">GST TAX INVOICE</p>
           <h1>Invoice Bill Dashboard</h1>
           <p className="subtitle">
-            Add details, save invoice one time, then download PDF bill.
+            Fill bill details. PDF format will be generated exactly from backend invoice format.
           </p>
         </div>
 
@@ -416,7 +533,7 @@ export default function InvoiceBill() {
             type="button"
             className="btn btn-light"
             onClick={() => fetchNextInvoiceNo()}
-            disabled={loadingNextNo || saving || pdfLoading}
+            disabled={loadingNextNo || saving || pdfLoading || previewLoading}
           >
             {loadingNextNo ? "Loading..." : "Auto Invoice No"}
           </button>
@@ -425,7 +542,7 @@ export default function InvoiceBill() {
             type="button"
             className="btn btn-outline"
             onClick={resetForm}
-            disabled={saving || pdfLoading}
+            disabled={saving || pdfLoading || previewLoading}
           >
             Reset
           </button>
@@ -437,7 +554,7 @@ export default function InvoiceBill() {
           <div className="section-title">
             <div>
               <h2>Invoice Details</h2>
-              <p>Manual invoice no and date are allowed.</p>
+              <p>Same state will print CGST + SGST. Other state will print IGST.</p>
             </div>
 
             {savedInvoice?.id && (
@@ -452,7 +569,7 @@ export default function InvoiceBill() {
               value={form.invoice_no}
               onChange={updateField}
               error={errors.invoice_no}
-              placeholder="7/2025-26"
+              placeholder="10/2026-27"
               required
             />
 
@@ -468,22 +585,21 @@ export default function InvoiceBill() {
             />
 
             <Input
-              label="IGST Rate %"
+              label="GST Rate %"
               name="igst_rate"
               type="number"
               value={form.igst_rate}
-              onChange={(name, value) => {
-                updateField(name, value);
-                setItems((prev) =>
-                  prev.map((item) => ({
-                    ...item,
-                    gst_rate: value,
-                  }))
-                );
-              }}
+              onChange={updateGstRate}
               error={errors.igst_rate}
               required
             />
+          </div>
+
+          <div className={`tax-status ${totals.sameState ? "same" : "other"}`}>
+            <b>Tax Type:</b>{" "}
+            {totals.sameState
+              ? `Same State — CGST ${money(totals.cgstRate).replace(".00", "")}% + SGST ${money(totals.sgstRate).replace(".00", "")}%`
+              : `Other State — IGST ${money(totals.igstRate).replace(".00", "")}%`}
           </div>
 
           <div className="divider" />
@@ -612,6 +728,8 @@ export default function InvoiceBill() {
                 name="buyer_state_name"
                 value={form.buyer_state_name}
                 onChange={updateField}
+                error={errors.buyer_state_name}
+                required
               />
 
               <Input
@@ -619,6 +737,8 @@ export default function InvoiceBill() {
                 name="buyer_state_code"
                 value={form.buyer_state_code}
                 onChange={updateField}
+                error={errors.buyer_state_code}
+                required
               />
             </div>
           </div>
@@ -676,9 +796,28 @@ export default function InvoiceBill() {
             <strong>₹ {money(totals.taxableAmount)}</strong>
           </div>
 
+          {totals.sameState ? (
+            <>
+              <div className="summary-card">
+                <span>CGST @ {money(totals.cgstRate).replace(".00", "")}%</span>
+                <strong>₹ {money(totals.cgstAmount)}</strong>
+              </div>
+
+              <div className="summary-card">
+                <span>SGST @ {money(totals.sgstRate).replace(".00", "")}%</span>
+                <strong>₹ {money(totals.sgstAmount)}</strong>
+              </div>
+            </>
+          ) : (
+            <div className="summary-card">
+              <span>IGST @ {money(totals.igstRate).replace(".00", "")}%</span>
+              <strong>₹ {money(totals.igstAmount)}</strong>
+            </div>
+          )}
+
           <div className="summary-card">
-            <span>IGST @ {form.igst_rate || 0}%</span>
-            <strong>₹ {money(totals.igstAmount)}</strong>
+            <span>Total GST</span>
+            <strong>₹ {money(totals.totalTaxAmount)}</strong>
           </div>
 
           <div className="summary-card">
@@ -699,16 +838,25 @@ export default function InvoiceBill() {
                 : "Invoice not saved yet."}
             </p>
             <p>
-              <b>PDF:</b> Save invoice first, then download the final PDF bill.
+              <b>PDF:</b> Preview without save, or save and download final bill.
             </p>
           </div>
 
           <div className="summary-actions">
             <button
               type="button"
+              className="btn btn-outline full"
+              onClick={previewPdf}
+              disabled={saving || pdfLoading || previewLoading}
+            >
+              {previewLoading ? "Generating..." : "Preview PDF"}
+            </button>
+
+            <button
+              type="button"
               className="btn btn-primary full"
               onClick={saveInvoice}
-              disabled={saving || pdfLoading || savedInvoice?.id}
+              disabled={saving || pdfLoading || previewLoading || savedInvoice?.id}
             >
               {saving ? "Saving..." : savedInvoice?.id ? "Invoice Saved" : "Save Invoice"}
             </button>
@@ -717,9 +865,18 @@ export default function InvoiceBill() {
               type="button"
               className="btn btn-dark full"
               onClick={downloadSavedPdf}
-              disabled={saving || pdfLoading || !savedInvoice?.id}
+              disabled={saving || pdfLoading || previewLoading || !savedInvoice?.id}
             >
-              {pdfLoading ? "Downloading..." : "Download PDF"}
+              {pdfLoading ? "Downloading..." : "Download Saved PDF"}
+            </button>
+
+            <button
+              type="button"
+              className="btn btn-success full"
+              onClick={saveAndDownloadPdf}
+              disabled={saving || pdfLoading || previewLoading}
+            >
+              {saving || pdfLoading ? "Please wait..." : "Save & Download PDF"}
             </button>
           </div>
         </aside>
@@ -766,7 +923,7 @@ export default function InvoiceBill() {
                         value={item.description}
                         onChange={(value) => updateItem(index, "description", value)}
                         error={itemErrors[index]?.description}
-                        placeholder="Supply Material 10mm"
+                        placeholder="Supply Material Wash Sand"
                       />
                     </td>
 
@@ -1013,6 +1170,27 @@ h1 {
   line-height: 1.45;
 }
 
+.tax-status {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  font-size: 13px;
+  font-weight: 800;
+  border: 1px solid;
+}
+
+.tax-status.same {
+  background: #ecfdf5;
+  border-color: #bbf7d0;
+  color: #166534;
+}
+
+.tax-status.other {
+  background: #fff7ed;
+  border-color: #fed7aa;
+  color: #9a3412;
+}
+
 .form-grid {
   display: grid;
   gap: 14px;
@@ -1131,6 +1309,12 @@ h1 {
   color: #ffffff;
   background: linear-gradient(135deg, #111827, #334155);
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.22);
+}
+
+.btn-success {
+  color: #ffffff;
+  background: linear-gradient(135deg, #16a34a, #15803d);
+  box-shadow: 0 10px 24px rgba(22, 163, 74, 0.22);
 }
 
 .btn-light {
