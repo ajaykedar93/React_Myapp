@@ -12,6 +12,8 @@ const API_URL = (
 
 const PUBLIC_USER_ID = 7;
 
+const DEVICE_ID_KEY = `notes_management_device_id_${PUBLIC_USER_ID}`;
+
 const themes = [
   ["#2563eb", "#06b6d4"],
   ["#7c3aed", "#c084fc"],
@@ -67,6 +69,15 @@ export default function ChannelList() {
     pin: "",
     error: "",
     trustDevice: false,
+  });
+
+  const [deletePinChecking, setDeletePinChecking] = useState(false);
+
+  const [deletePinBox, setDeletePinBox] = useState({
+    show: false,
+    channel: null,
+    pin: "",
+    error: "",
   });
 
   useEffect(() => {
@@ -180,6 +191,78 @@ export default function ChannelList() {
 
   const isTrue = (value) => {
     return value === true || value === "true" || value === 1 || value === "1";
+  };
+
+  const getCurrentDeviceId = () => {
+    if (typeof window === "undefined") return "";
+
+    const oldDeviceId = localStorage.getItem(DEVICE_ID_KEY);
+
+    if (oldDeviceId) return oldDeviceId;
+
+    const newDeviceId =
+      window.crypto?.randomUUID?.() ||
+      `device_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+    localStorage.setItem(DEVICE_ID_KEY, newDeviceId);
+
+    return newDeviceId;
+  };
+
+  const closeDeletePinBox = () => {
+    setDeletePinBox({
+      show: false,
+      channel: null,
+      pin: "",
+      error: "",
+    });
+
+    setDeletePinChecking(false);
+  };
+
+  const requestDeleteChannel = (channel) => {
+    setActiveMenuId(null);
+
+    if (isTrue(channel.is_private)) {
+      setDeletePinBox({
+        show: true,
+        channel,
+        pin: "",
+        error: "",
+      });
+      return;
+    }
+
+    openConfirm(
+      "Delete Channel?",
+      `Only the device that created this channel can delete it. Do you want to delete "${channel.channel_name}"?`,
+      () => deleteChannel(channel.channel_id)
+    );
+  };
+
+  const confirmPrivateDelete = async () => {
+    const selectedChannel = deletePinBox.channel;
+    const typedPin = String(deletePinBox.pin || "").replace(/\D/g, "").slice(0, 4);
+
+    if (!selectedChannel || deletePinChecking) return;
+
+    if (!/^[0-9]{4}$/.test(typedPin)) {
+      setDeletePinBox((prev) => ({
+        ...prev,
+        pin: typedPin,
+        error: "Enter valid 4 digit PIN",
+      }));
+      return;
+    }
+
+    try {
+      setDeletePinChecking(true);
+      setDeletePinBox((prev) => ({ ...prev, error: "" }));
+
+      await deleteChannel(selectedChannel.channel_id, typedPin);
+    } finally {
+      setDeletePinChecking(false);
+    }
   };
 
   const getTrustedPinKey = (channelId) => {
@@ -388,7 +471,11 @@ export default function ChannelList() {
       formData.append("channel_tagline", channelTagline.trim());
       formData.append("remove_logo", removeLogo ? "true" : "false");
 
+      const currentDeviceId = getCurrentDeviceId();
+      formData.append("device_id", currentDeviceId);
+
       if (!currentEditingId) {
+        formData.append("created_device_id", currentDeviceId);
         formData.append("is_private", isPrivate ? "true" : "false");
         formData.append("private_pin", isPrivate ? privatePin : "");
       }
@@ -462,10 +549,10 @@ export default function ChannelList() {
     // Header and create form stay fixed; only channel list scrolls.
   };
 
-  const deleteChannel = async (channelId) => {
+  const deleteChannel = async (channelId, pin = "") => {
     const oldChannels = channels;
-
-    removeTrustedPin(channelId);
+    const oldEditingId = editingId;
+    const oldShowCreateForm = showCreateForm;
 
     setChannels((prev) =>
       prev.filter((channel) => Number(channel.channel_id) !== Number(channelId))
@@ -482,21 +569,53 @@ export default function ChannelList() {
 
       const res = await fetch(`${API_URL}/api/telegram-channels/${channelId}`, {
         method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "x-device-id": getCurrentDeviceId(),
+        },
+        body: JSON.stringify({
+          device_id: getCurrentDeviceId(),
+          pin: String(pin || "").replace(/\D/g, "").slice(0, 4),
+        }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
         setChannels(oldChannels);
-        showToast(data.message || "Delete failed", "error");
+
+        if (oldEditingId) {
+          setEditingId(oldEditingId);
+          setShowCreateForm(oldShowCreateForm);
+        }
+
+        if (isTrue(deletePinBox.show)) {
+          setDeletePinBox((prev) => ({
+            ...prev,
+            error: data.message || "Delete failed",
+          }));
+        } else {
+          showToast(data.message || "Delete failed", "error");
+        }
+
         return;
       }
 
+      removeTrustedPin(channelId);
+      closeDeletePinBox();
       showToast("Channel deleted successfully", "success");
     } catch (error) {
       console.error("Delete channel error:", error);
       setChannels(oldChannels);
-      showToast("Server error while deleting", "error");
+
+      if (isTrue(deletePinBox.show)) {
+        setDeletePinBox((prev) => ({
+          ...prev,
+          error: "Server error while deleting",
+        }));
+      } else {
+        showToast("Server error while deleting", "error");
+      }
     } finally {
       setLoading(false);
     }
@@ -998,13 +1117,7 @@ export default function ChannelList() {
                       <button
                         type="button"
                         className="menu-action-btn delete-menu-btn"
-                        onClick={() =>
-                          openConfirm(
-                            "Delete Channel?",
-                            `Do you want to delete "${channel.channel_name}"?`,
-                            () => deleteChannel(channel.channel_id)
-                          )
-                        }
+                        onClick={() => requestDeleteChannel(channel)}
                       >
                         <span>🗑</span>
                         Delete
@@ -1161,6 +1274,88 @@ export default function ChannelList() {
                 disabled={pinChecking || String(pinBox.pin || "").length !== 4}
               >
                 {pinChecking ? "Checking..." : "Open"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deletePinBox.show && (
+        <div className="pin-overlay" onClick={closeDeletePinBox}>
+          <div
+            className="professional-pin-card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="pin-top-glow"></div>
+
+            <div className="pin-logo-circle">
+              {getChannelLogoSource(deletePinBox.channel) ? (
+                <img
+                  src={getChannelLogoSource(deletePinBox.channel)}
+                  alt="channel"
+                  onError={(e) => handleLogoError(e, deletePinBox.channel, 0)}
+                />
+              ) : (
+                <span>{getInitial(deletePinBox.channel?.channel_name)}</span>
+              )}
+            </div>
+
+            <div className="pin-lock-icon delete-lock-icon">🗑</div>
+
+            <h3>Delete Private Channel</h3>
+
+            <p>
+              Enter same PIN to delete <b>{deletePinBox.channel?.channel_name}</b>
+            </p>
+
+            <input
+              className="center-pin-input"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength="4"
+              placeholder="0000"
+              value={deletePinBox.pin}
+              autoFocus
+              autoComplete="off"
+              disabled={deletePinChecking}
+              onChange={(e) =>
+                setDeletePinBox((prev) => ({
+                  ...prev,
+                  pin: e.target.value.replace(/\D/g, "").slice(0, 4),
+                  error: "",
+                }))
+              }
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  confirmPrivateDelete();
+                }
+              }}
+            />
+
+            {deletePinBox.error && (
+              <div className="wrong-pin-text">{deletePinBox.error}</div>
+            )}
+
+            <div className="pin-buttons">
+              <button
+                type="button"
+                className="pin-cancel-btn"
+                onClick={closeDeletePinBox}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                className="pin-open-btn delete-pin-open-btn"
+                onClick={confirmPrivateDelete}
+                disabled={
+                  deletePinChecking || String(deletePinBox.pin || "").length !== 4
+                }
+              >
+                {deletePinChecking ? "Checking..." : "Delete"}
               </button>
             </div>
           </div>
@@ -2134,6 +2329,11 @@ export default function ChannelList() {
           box-shadow: 0 10px 20px rgba(37,99,235,0.12);
         }
 
+        .delete-lock-icon {
+          background: #fee2e2;
+          color: #dc2626;
+        }
+
         .professional-pin-card h3 {
           margin: 0;
           font-size: 17px;
@@ -2302,6 +2502,11 @@ export default function ChannelList() {
         .pin-open-btn:disabled {
           opacity: 0.65;
           cursor: not-allowed;
+        }
+
+        .delete-pin-open-btn {
+          background: linear-gradient(135deg, #dc2626, #fb7185) !important;
+          box-shadow: 0 14px 28px rgba(220, 38, 38, 0.24) !important;
         }
 
         .pin-cancel-btn {
