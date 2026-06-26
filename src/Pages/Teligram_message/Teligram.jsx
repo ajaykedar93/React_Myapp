@@ -206,6 +206,7 @@ export default function Teligram() {
     return name?.trim()?.charAt(0)?.toUpperCase() || "N";
   };
 
+
   const getFileNameFromUrl = (url) => {
     const rawUrl = String(url || "").trim();
     if (!rawUrl) return "";
@@ -215,81 +216,84 @@ export default function Teligram() {
       .split("?")[0]
       .split("#")[0];
 
-    const fileName = cleaned.split("/").pop() || "";
-    return fileName;
+    return cleaned.split("/").pop() || "";
   };
 
   const joinApiUrl = (pathValue) => {
     const cleanPath = String(pathValue || "").trim();
     if (!cleanPath) return "";
     if (/^https?:\/\//i.test(cleanPath)) return cleanPath;
+
     return `${API_URL}${cleanPath.startsWith("/") ? "" : "/"}${cleanPath}`;
   };
 
-  const getFileUrl = (url, folder = "telegram-notes") => {
+  const normalizeApiImageUrl = (url) => {
     const rawUrl = String(url || "").trim();
 
     if (!rawUrl) return "";
     if (rawUrl.startsWith("blob:") || rawUrl.startsWith("data:")) return rawUrl;
     if (/^https?:\/\//i.test(rawUrl)) return rawUrl;
 
-    const cleanedUrl = rawUrl.replace(/\\/g, "/").replace(/^\.\//, "");
+    const cleanUrl = rawUrl.replace(/\\/g, "/");
 
-    if (cleanedUrl.startsWith("/api/") || cleanedUrl.startsWith("api/")) {
-      return encodeURI(joinApiUrl(cleanedUrl));
+    if (cleanUrl.startsWith("/api/") || cleanUrl.startsWith("api/")) {
+      return encodeURI(joinApiUrl(cleanUrl));
     }
 
-    if (cleanedUrl.startsWith("/uploads/") || cleanedUrl.startsWith("uploads/")) {
-      return encodeURI(joinApiUrl(cleanedUrl));
-    }
-
-    const uploadIndex = cleanedUrl.indexOf("uploads/");
-    if (uploadIndex !== -1) {
-      return encodeURI(joinApiUrl(cleanedUrl.slice(uploadIndex)));
-    }
-
-    const fileName = getFileNameFromUrl(cleanedUrl);
-    if (!fileName) return "";
-
-    return encodeURI(
-      joinApiUrl(`/uploads/${folder}/${encodeURIComponent(fileName)}`)
-    );
+    // Old /uploads fallback removed intentionally.
+    // Backend must return /api/telegram-notes/image/:note_id
+    // and /api/telegram-channels/logo/:channel_id.
+    return "";
   };
 
-  const buildImageFallbacks = (source, folder = "telegram-notes") => {
-    const rawSource = String(source || "").trim();
-    const fileName = getFileNameFromUrl(rawSource);
-    const urls = [];
+  const getNoteImageUrl = (note) => {
+    const backendUrl = normalizeApiImageUrl(note?.image_url);
 
-    const add = (value) => {
-      if (!value) return;
-      const finalUrl = encodeURI(String(value));
-      if (!urls.includes(finalUrl)) urls.push(finalUrl);
-    };
+    if (backendUrl) return backendUrl;
 
-    // First try exact URL/path received from backend/database.
-    add(getFileUrl(rawSource, folder));
+    if (note?.has_image && note?.note_id) {
+      const version = note?.updated_at
+        ? new Date(note.updated_at).getTime()
+        : Date.now();
 
-    if (fileName) {
-      const safeFile = encodeURIComponent(fileName);
-
-      // Common note image paths.
-      add(joinApiUrl(`/uploads/telegram-notes/${safeFile}`));
-      add(joinApiUrl(`/api/telegram-notes/image/${safeFile}`));
-
-      // Common channel/logo paths.
-      add(joinApiUrl(`/uploads/telegram-channels/${safeFile}`));
-      add(joinApiUrl(`/uploads/telegram-channel/${safeFile}`));
-      add(joinApiUrl(`/uploads/channel-logos/${safeFile}`));
-      add(joinApiUrl(`/uploads/channels/${safeFile}`));
-      add(joinApiUrl(`/uploads/logos/${safeFile}`));
-
-      // Folder selected by caller and root upload fallback.
-      add(joinApiUrl(`/uploads/${folder}/${safeFile}`));
-      add(joinApiUrl(`/uploads/${safeFile}`));
+      return joinApiUrl(`/api/telegram-notes/image/${note.note_id}?v=${version}`);
     }
 
-    return urls;
+    return "";
+  };
+
+  const getChannelLogoUrl = (channelOrUrl) => {
+    if (!channelOrUrl) return "";
+
+    if (typeof channelOrUrl === "string") {
+      return normalizeApiImageUrl(channelOrUrl);
+    }
+
+    const backendUrl = normalizeApiImageUrl(channelOrUrl.logo_url);
+
+    if (backendUrl) return backendUrl;
+
+    if (channelOrUrl.has_logo && channelOrUrl.channel_id) {
+      const version = channelOrUrl.updated_at
+        ? new Date(channelOrUrl.updated_at).getTime()
+        : Date.now();
+
+      return joinApiUrl(`/api/telegram-channels/logo/${channelOrUrl.channel_id}?v=${version}`);
+    }
+
+    return "";
+  };
+
+  const getNoteDownloadUrl = (note) => {
+    const backendDownloadUrl = normalizeApiImageUrl(note?.download_url);
+
+    if (backendDownloadUrl) return backendDownloadUrl;
+
+    if (hasNoteImage(note) && note?.note_id) {
+      return joinApiUrl(`/api/telegram-notes/image/download/${note.note_id}`);
+    }
+
+    return "";
   };
 
   const getImagePlaceholder = (folder = "telegram-notes") => {
@@ -303,30 +307,8 @@ export default function Teligram() {
         <text x="320" y="382" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="#64748b">${label} not found</text>
       </svg>
     `;
+
     return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
-  };
-
-  const getNoteImageUrl = (note) => {
-    const source = note?.image_url || note?.image_path || "";
-    return buildImageFallbacks(source, "telegram-notes")[0] || "";
-  };
-
-  const getChannelLogoUrl = (logoUrl) => {
-    return buildImageFallbacks(logoUrl, "telegram-channels")[0] || "";
-  };
-
-  const getNoteDownloadUrl = (note) => {
-    if (note?.download_url) return getFileUrl(note.download_url, "telegram-notes");
-
-    const source = note?.image_path || note?.image_url || "";
-    if (!source) return "";
-
-    const fileName = getFileNameFromUrl(source);
-    if (!fileName) return getFileUrl(source, "telegram-notes");
-
-    return encodeURI(
-      joinApiUrl(`/api/telegram-notes/image/download/${encodeURIComponent(fileName)}`)
-    );
   };
 
   const downloadNoteImage = (event, note) => {
@@ -336,8 +318,11 @@ export default function Teligram() {
     const downloadUrl = getNoteDownloadUrl(note);
     if (!downloadUrl) return;
 
-    const source = note?.image_path || note?.image_url || note?.download_url || "";
-    const fileName = getFileNameFromUrl(source) || "image.jpg";
+    const fileName =
+      getFileNameFromUrl(note?.download_url) ||
+      getFileNameFromUrl(note?.image_url) ||
+      `note-image-${note?.note_id || Date.now()}.jpg`;
+
     const link = document.createElement("a");
     link.href = downloadUrl;
     link.download = fileName;
@@ -348,29 +333,22 @@ export default function Teligram() {
     link.remove();
   };
 
-  const handleImageError = (event, originalUrl, folder = "telegram-notes") => {
+  const handleImageError = (event, originalUrl = "", folder = "telegram-notes") => {
     const img = event.currentTarget;
-    const fallbacks = buildImageFallbacks(originalUrl || img.getAttribute("src"), folder);
-    const step = Number(img.dataset.fallbackStep || "0") + 1;
+    img.onerror = null;
 
-    if (step >= fallbacks.length) {
-      img.onerror = null;
+    const logoBox = img.closest(".header-logo, .unlock-logo");
 
-      const logoBox = img.closest(".header-logo, .unlock-logo");
-      if (logoBox) {
-        logoBox.classList.add("logo-load-failed");
-        img.style.display = "none";
-        return;
-      }
-
-      img.classList.add("image-load-failed");
-      img.src = getImagePlaceholder(folder);
+    if (logoBox) {
+      logoBox.classList.add("logo-load-failed");
+      img.style.display = "none";
       return;
     }
 
-    img.dataset.fallbackStep = String(step);
-    img.src = fallbacks[step];
+    img.classList.add("image-load-failed");
+    img.src = getImagePlaceholder(folder);
   };
+
 
   const stripHtml = (html) => {
     const div = document.createElement("div");
@@ -384,7 +362,7 @@ export default function Teligram() {
   };
 
   const hasNoteImage = (note) => {
-    return Boolean(note?.image_url || note?.image_path);
+    return Boolean(note?.image_url || note?.has_image);
   };
 
   const hasNoteText = (note) => {
@@ -618,7 +596,7 @@ export default function Teligram() {
 
     return notes.filter((note) => {
       const plainText = stripHtml(note.content_html || "").toLowerCase();
-      const imageText = note.image_url || note.image_path ? " image photo picture" : "";
+      const imageText = hasNoteImage(note) ? " image photo picture" : "";
       const searchable = `${plainText}${imageText}`;
       return words.every((word) => searchable.includes(word));
     });
@@ -911,16 +889,11 @@ export default function Teligram() {
         content_html: backendNote.content_html || contentHtml,
         image_url: currentRemoveImage
           ? null
-          : backendNote.image_url ||
-            backendNote.image_path ||
-            optimisticNote.image_url ||
-            null,
-        image_path: currentRemoveImage
-          ? null
-          : backendNote.image_path ||
-            backendNote.image_url ||
-            optimisticNote.image_path ||
-            null,
+          : backendNote.image_url || optimisticNote.image_url || null,
+        image_path: null,
+        has_image: currentRemoveImage
+          ? false
+          : Boolean(backendNote.has_image || backendNote.image_url || optimisticNote.image_url),
         created_at: backendNote.created_at || optimisticNote.created_at,
         updated_at: backendNote.updated_at || new Date().toISOString(),
         is_temp: false,
@@ -969,7 +942,7 @@ export default function Teligram() {
     setEditingNoteId(note.note_id);
     setComposerMode(isTitleNote(note) ? "title" : hasNoteImage(note) ? "image-caption" : "message");
     setTextColor(note.text_color || "#111111");
-    setPreviewImage(getFileUrl(note.image_url || note.image_path || ""));
+    setPreviewImage(getNoteImageUrl(note));
     setSelectedImage(null);
     setRemoveOldImage(false);
     setActiveMenuId(null);
@@ -990,7 +963,7 @@ export default function Teligram() {
     setEditingNoteId(note.note_id);
     setComposerMode("image-update");
     setTextColor(note.text_color || "#111111");
-    setPreviewImage(getFileUrl(note.image_url || note.image_path || ""));
+    setPreviewImage(getNoteImageUrl(note));
     setSelectedImage(null);
     setRemoveOldImage(false);
     setActiveMenuId(null);
@@ -1010,7 +983,7 @@ export default function Teligram() {
     setEditingNoteId(note.note_id);
     setComposerMode("image-caption");
     setTextColor(note.text_color || "#111111");
-    setPreviewImage(getFileUrl(note.image_url || note.image_path || ""));
+    setPreviewImage(getNoteImageUrl(note));
     setSelectedImage(null);
     setRemoveOldImage(false);
     setActiveMenuId(null);
@@ -1141,11 +1114,11 @@ export default function Teligram() {
           </button>
 
           <div className="header-logo">
-            {selectedChannel?.logo_url && (
+            {(selectedChannel?.logo_url || selectedChannel?.has_logo) && (
               <img
-                src={getChannelLogoUrl(selectedChannel.logo_url)}
+                src={getChannelLogoUrl(selectedChannel)}
                 alt="logo"
-                onError={(e) => handleImageError(e, selectedChannel.logo_url, "telegram-channels")}
+                onError={(e) => handleImageError(e, "", "telegram-channels")}
               />
             )}
             <span className="logo-fallback-letter">
@@ -1178,11 +1151,11 @@ export default function Teligram() {
           <main className="unlock-screen">
             <div className="unlock-card">
               <div className="unlock-logo">
-                {selectedChannel?.logo_url && (
+                {(selectedChannel?.logo_url || selectedChannel?.has_logo) && (
                   <img
-                    src={getChannelLogoUrl(selectedChannel.logo_url)}
+                    src={getChannelLogoUrl(selectedChannel)}
                     alt="logo"
-                    onError={(e) => handleImageError(e, selectedChannel.logo_url, "telegram-channels")}
+                    onError={(e) => handleImageError(e, "", "telegram-channels")}
                   />
                 )}
                 <span className="logo-fallback-letter">
@@ -1337,9 +1310,7 @@ export default function Teligram() {
                                   alt="note"
                                   className="message-image"
                                   loading="lazy"
-                                  onError={(e) =>
-                                    handleImageError(e, note.image_url || note.image_path)
-                                  }
+                                  onError={(e) => handleImageError(e, "", "telegram-notes")}
                                 />
                               </div>
 
@@ -1439,7 +1410,7 @@ export default function Teligram() {
 
             {previewImage && (
               <div className="preview-strip">
-                <img src={getFileUrl(previewImage)} alt="preview" />
+                <img src={normalizeApiImageUrl(previewImage) || previewImage} alt="preview" />
                 <span>{selectedImage ? selectedImage.name : composerMode === "image-update" ? "Current image - select new image" : "Current image"}</span>
                 <button onClick={removeImage}>×</button>
               </div>
