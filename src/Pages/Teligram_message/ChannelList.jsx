@@ -29,6 +29,8 @@ export default function ChannelList() {
   const fileRef = useRef(null);
   const pinRequestRef = useRef(0);
   const pinAbortRef = useRef(null);
+  const pinCheckingRef = useRef(false);
+  const pinSuccessRef = useRef(false);
 
   const [channels, setChannels] = useState([]);
   const [channelName, setChannelName] = useState("");
@@ -64,6 +66,7 @@ export default function ChannelList() {
     channel: null,
     pin: "",
     error: "",
+    trustDevice: false,
   });
 
   useEffect(() => {
@@ -156,7 +159,9 @@ export default function ChannelList() {
   };
 
   const closePinBox = () => {
+    pinSuccessRef.current = false;
     pinRequestRef.current += 1;
+    pinCheckingRef.current = false;
 
     if (pinAbortRef.current) {
       pinAbortRef.current.abort();
@@ -168,12 +173,33 @@ export default function ChannelList() {
       channel: null,
       pin: "",
       error: "",
+      trustDevice: false,
     });
     setPinChecking(false);
   };
 
   const isTrue = (value) => {
     return value === true || value === "true" || value === 1 || value === "1";
+  };
+
+  const getTrustedPinKey = (channelId) => {
+    return `trusted_private_channel_pin_${PUBLIC_USER_ID}_${channelId}`;
+  };
+
+  const getTrustedPin = (channelId) => {
+    if (!channelId) return "";
+    return localStorage.getItem(getTrustedPinKey(channelId)) || "";
+  };
+
+  const saveTrustedPin = (channelId, pin) => {
+    const cleanPin = String(pin || "").replace(/\D/g, "").slice(0, 4);
+    if (!channelId || !/^[0-9]{4}$/.test(cleanPin)) return;
+    localStorage.setItem(getTrustedPinKey(channelId), cleanPin);
+  };
+
+  const removeTrustedPin = (channelId) => {
+    if (!channelId) return;
+    localStorage.removeItem(getTrustedPinKey(channelId));
   };
 
   const getTheme = (index) => {
@@ -439,6 +465,8 @@ export default function ChannelList() {
   const deleteChannel = async (channelId) => {
     const oldChannels = channels;
 
+    removeTrustedPin(channelId);
+
     setChannels((prev) =>
       prev.filter((channel) => Number(channel.channel_id) !== Number(channelId))
     );
@@ -499,39 +527,64 @@ export default function ChannelList() {
   };
 
   const openChannel = (channel) => {
+    pinSuccessRef.current = false;
     setActiveMenuId(null);
 
     if (isTrue(channel.is_private)) {
-      const savedChannelId = localStorage.getItem("selected_channel_id");
-      const savedPin = localStorage.getItem("selected_channel_pin") || "";
-      const sameChannel =
-        String(savedChannelId || "") === String(channel.channel_id || "");
+      const trustedPin = getTrustedPin(channel.channel_id);
 
       /*
-        If the same private channel was already verified in this browser,
-        open it directly. Otherwise ask PIN once and save it only after the
-        backend confirms it.
+        Trusted device rule:
+        If this browser/device was trusted after a successful PIN, open
+        directly. Another device, cleared browser data, or no trust tick
+        will ask the PIN again.
       */
-      if (sameChannel && /^[0-9]{4}$/.test(savedPin)) {
-        goToChannel(channel, savedPin);
+      if (/^[0-9]{4}$/.test(trustedPin)) {
+        pinRequestRef.current += 1;
+        pinCheckingRef.current = false;
+
+        if (pinAbortRef.current) {
+          pinAbortRef.current.abort();
+          pinAbortRef.current = null;
+        }
+
+        setPinChecking(false);
+        setPinBox({
+          show: false,
+          channel: null,
+          pin: "",
+          error: "",
+          trustDevice: false,
+        });
+
+        goToChannel(channel, trustedPin);
         return;
       }
 
       pinRequestRef.current += 1;
+      pinCheckingRef.current = false;
 
       if (pinAbortRef.current) {
         pinAbortRef.current.abort();
         pinAbortRef.current = null;
       }
 
-      setPinChecking(false);
+      localStorage.setItem("selected_channel_id", channel.channel_id);
+      localStorage.setItem("selected_channel_name", channel.channel_name || "");
+      localStorage.setItem(
+        "selected_channel_tagline",
+        channel.channel_tagline || ""
+      );
+      localStorage.setItem("selected_channel_is_private", "true");
       localStorage.removeItem("selected_channel_pin");
 
+      setPinChecking(false);
       setPinBox({
         show: true,
         channel,
         pin: "",
         error: "",
+        trustDevice: false,
       });
       return;
     }
@@ -542,8 +595,11 @@ export default function ChannelList() {
   const verifyChannelPin = async () => {
     const selectedChannel = pinBox.channel;
     const typedPin = String(pinBox.pin || "").replace(/\D/g, "").slice(0, 4);
+    const trustThisDevice = Boolean(pinBox.trustDevice);
 
-    if (!selectedChannel || pinChecking) return;
+    if (!selectedChannel || pinCheckingRef.current) return;
+
+    pinSuccessRef.current = false;
 
     if (!/^[0-9]{4}$/.test(typedPin)) {
       setPinBox((prev) => ({
@@ -556,6 +612,7 @@ export default function ChannelList() {
 
     if (pinAbortRef.current) {
       pinAbortRef.current.abort();
+      pinAbortRef.current = null;
     }
 
     const controller = new AbortController();
@@ -563,6 +620,7 @@ export default function ChannelList() {
 
     pinRequestRef.current = requestId;
     pinAbortRef.current = controller;
+    pinCheckingRef.current = true;
 
     try {
       setPinChecking(true);
@@ -586,29 +644,38 @@ export default function ChannelList() {
         }
       );
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
       const isLatestRequest =
         pinRequestRef.current === requestId && !controller.signal.aborted;
 
       if (!isLatestRequest) return;
 
-      const unlocked =
-        isTrue(data?.unlocked) ||
-        isTrue(data?.success) ||
-        isTrue(data?.verified) ||
-        isTrue(data?.valid);
+      const messageText = String(data?.message || "").toLowerCase();
 
-      if (!res.ok || !unlocked) {
+      const unlocked =
+        res.ok &&
+        (isTrue(data?.unlocked) ||
+          isTrue(data?.success) ||
+          isTrue(data?.verified) ||
+          isTrue(data?.valid) ||
+          messageText.includes("verified") ||
+          messageText.includes("success"));
+
+      if (!unlocked) {
+        if (pinSuccessRef.current) return;
+
+        pinCheckingRef.current = false;
+        setPinChecking(false);
+
         setPinBox((prev) => {
           const sameChannel =
             Number(prev.channel?.channel_id) ===
             Number(selectedChannel.channel_id);
 
           /*
-            Important fix:
-            If an old/wrong PIN request finishes after the user has already typed
-            the correct PIN, do not show a stale "PIN mismatch" message.
+            If the user has already changed the PIN or closed the popup,
+            do not show old mismatch/error from an older request.
           */
           if (!prev.show || !sameChannel || prev.pin !== typedPin) {
             return prev;
@@ -624,16 +691,20 @@ export default function ChannelList() {
 
       /*
         Correct PIN:
-        invalidate all older responses before routing so a delayed mismatch
-        response cannot flash for 1-2 seconds while the chat opens.
+        Invalidate all older requests before navigation so no delayed
+        mismatch/error can appear after successful verification.
       */
+      pinSuccessRef.current = true;
       pinRequestRef.current += 1;
       pinAbortRef.current = null;
+      pinCheckingRef.current = false;
 
-      /*
-        Save the verified PIN before navigation so the chat page receives
-        the correct PIN immediately and does not show the PIN screen again.
-      */
+      if (trustThisDevice) {
+        saveTrustedPin(selectedChannel.channel_id, typedPin);
+      } else {
+        removeTrustedPin(selectedChannel.channel_id);
+      }
+
       saveSelectedChannel(selectedChannel, typedPin);
 
       setPinChecking(false);
@@ -642,6 +713,7 @@ export default function ChannelList() {
         channel: null,
         pin: "",
         error: "",
+        trustDevice: false,
       });
 
       window.location.hash = "/teligram-notes";
@@ -652,15 +724,19 @@ export default function ChannelList() {
 
       console.error("Verify PIN error:", error);
 
-      if (pinRequestRef.current !== requestId) return;
+      if (pinSuccessRef.current || pinRequestRef.current !== requestId) return;
+
+      pinCheckingRef.current = false;
+      setPinChecking(false);
 
       setPinBox((prev) => ({
         ...prev,
         error: "Server error",
       }));
     } finally {
-      if (pinRequestRef.current === requestId) {
+      if (!pinSuccessRef.current && pinRequestRef.current === requestId) {
         pinAbortRef.current = null;
+        pinCheckingRef.current = false;
         setPinChecking(false);
       }
     }
@@ -1030,6 +1106,7 @@ export default function ChannelList() {
               value={pinBox.pin}
               autoFocus
               autoComplete="off"
+              disabled={pinChecking}
               onChange={(e) =>
                 setPinBox((prev) => ({
                   ...prev,
@@ -1044,6 +1121,25 @@ export default function ChannelList() {
                 }
               }}
             />
+
+            <label className={`trust-device-row ${pinChecking ? "is-disabled" : ""}`}>
+              <input
+                type="checkbox"
+                disabled={pinChecking}
+                checked={Boolean(pinBox.trustDevice)}
+                onChange={(e) =>
+                  setPinBox((prev) => ({
+                    ...prev,
+                    trustDevice: e.target.checked,
+                  }))
+                }
+              />
+              <span className="trust-check-mark">✓</span>
+              <span className="trust-device-text">
+                <strong>Trust this device</strong>
+                <small>Open directly next time on this phone</small>
+              </span>
+            </label>
 
             {pinBox.error && (
               <div className="wrong-pin-text">{pinBox.error}</div>
@@ -1062,7 +1158,7 @@ export default function ChannelList() {
                 type="button"
                 className="pin-open-btn"
                 onClick={verifyChannelPin}
-                disabled={pinChecking}
+                disabled={pinChecking || String(pinBox.pin || "").length !== 4}
               >
                 {pinChecking ? "Checking..." : "Open"}
               </button>
@@ -1915,7 +2011,7 @@ export default function ChannelList() {
         .confirm-card h3 {
           margin: 0;
           color: #111827;
-          font-size: 20px;
+          font-size: 17px;
         }
 
         .confirm-card p {
@@ -1955,26 +2051,26 @@ export default function ChannelList() {
           inset: 0;
           z-index: 200;
           background:
-            radial-gradient(circle at center, rgba(37,99,235,0.20), transparent 38%),
+            radial-gradient(circle at center, rgba(37,99,235,0.18), transparent 38%),
             rgba(15, 23, 42, 0.58);
           backdrop-filter: blur(8px);
           display: flex;
           align-items: center;
           justify-content: center;
-          padding: 18px;
+          padding: 12px;
         }
 
         .professional-pin-card {
-          width: min(330px, calc(100vw - 36px));
+          width: min(292px, calc(100vw - 28px));
           position: relative;
           overflow: hidden;
           background: rgba(255,255,255,0.97);
-          border-radius: 28px;
-          padding: 24px 18px 18px;
+          border-radius: 22px;
+          padding: 18px 14px 14px;
           text-align: center;
           box-shadow:
-            0 35px 95px rgba(15,23,42,0.42),
-            inset 0 0 0 1px rgba(255,255,255,0.7);
+            0 26px 70px rgba(15,23,42,0.36),
+            inset 0 0 0 1px rgba(255,255,255,0.72);
           animation: pinPop 0.18s ease;
         }
 
@@ -2001,17 +2097,17 @@ export default function ChannelList() {
         }
 
         .pin-logo-circle {
-          width: 70px;
-          height: 70px;
-          margin: 0 auto 10px;
-          border-radius: 22px;
+          width: 58px;
+          height: 58px;
+          margin: 0 auto 8px;
+          border-radius: 18px;
           overflow: hidden;
           background: linear-gradient(135deg, #2563eb, #06b6d4);
           color: white;
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 28px;
+          font-size: 24px;
           font-weight: 900;
           box-shadow: 0 16px 34px rgba(37,99,235,0.26);
           position: relative;
@@ -2025,10 +2121,10 @@ export default function ChannelList() {
         }
 
         .pin-lock-icon {
-          width: 42px;
-          height: 42px;
+          width: 34px;
+          height: 34px;
           border-radius: 50%;
-          margin: 0 auto 10px;
+          margin: 0 auto 8px;
           background: #eef2ff;
           color: #2563eb;
           display: flex;
@@ -2040,15 +2136,15 @@ export default function ChannelList() {
 
         .professional-pin-card h3 {
           margin: 0;
-          font-size: 20px;
+          font-size: 17px;
           color: #0f172a;
           font-weight: 900;
         }
 
         .professional-pin-card p {
-          margin: 8px 0 10px;
+          margin: 6px 0 8px;
           color: #64748b;
-          font-size: 13px;
+          font-size: 12px;
           font-weight: 700;
           line-height: 1.4;
         }
@@ -2059,9 +2155,9 @@ export default function ChannelList() {
         }
 
         .pin-tagline {
-          max-width: 250px;
-          margin: 0 auto 12px;
-          padding: 8px 12px;
+          max-width: 230px;
+          margin: 0 auto 9px;
+          padding: 6px 10px;
           border-radius: 999px;
           background: #ecfeff;
           color: #0891b2;
@@ -2072,18 +2168,18 @@ export default function ChannelList() {
         }
 
         .center-pin-input {
-          width: min(190px, calc(100vw - 100px));
-          min-height: 58px;
-          margin: 3px auto 8px;
+          width: min(168px, calc(100vw - 92px));
+          min-height: 48px;
+          margin: 2px auto 8px;
           display: block;
           border: 1px solid #cbd5e1;
           border-radius: 18px;
           background: white;
           outline: none;
           text-align: center;
-          font-size: 28px;
+          font-size: 23px;
           font-weight: 950;
-          letter-spacing: 10px;
+          letter-spacing: 8px;
           color: #0f172a;
           box-shadow: inset 0 1px 0 rgba(255,255,255,0.9);
           padding: 0 10px 0 20px;
@@ -2099,6 +2195,79 @@ export default function ChannelList() {
           box-shadow: 0 0 0 4px rgba(37,99,235,0.14);
         }
 
+        .center-pin-input:disabled {
+          opacity: 0.76;
+          cursor: wait;
+        }
+
+        .trust-device-row {
+          width: min(232px, 100%);
+          margin: 2px auto 7px;
+          padding: 7px 9px;
+          border-radius: 14px;
+          background: linear-gradient(135deg, #f8fafc, #eef2ff);
+          border: 1px solid #dbeafe;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          text-align: left;
+          cursor: pointer;
+          user-select: none;
+        }
+
+        .trust-device-row input {
+          position: absolute;
+          opacity: 0;
+          pointer-events: none;
+        }
+
+        .trust-device-row.is-disabled {
+          opacity: 0.68;
+          pointer-events: none;
+        }
+
+        .trust-check-mark {
+          width: 19px;
+          height: 19px;
+          border-radius: 7px;
+          border: 1px solid #93c5fd;
+          background: white;
+          color: transparent;
+          flex-shrink: 0;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 12px;
+          font-weight: 950;
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.9);
+        }
+
+        .trust-device-row input:checked + .trust-check-mark {
+          color: white;
+          background: linear-gradient(135deg, #2563eb, #06b6d4);
+          border-color: transparent;
+        }
+
+        .trust-device-text {
+          display: grid;
+          gap: 1px;
+          min-width: 0;
+        }
+
+        .trust-device-text strong {
+          color: #0f172a;
+          font-size: 11.5px;
+          line-height: 1.1;
+          font-weight: 950;
+        }
+
+        .trust-device-text small {
+          color: #64748b;
+          font-size: 9.7px;
+          line-height: 1.15;
+          font-weight: 800;
+        }
+
         .wrong-pin-text {
           color: #dc2626;
           font-size: 12px;
@@ -2109,17 +2278,17 @@ export default function ChannelList() {
 
         .pin-buttons {
           display: flex;
-          gap: 9px;
-          margin-top: 10px;
+          gap: 8px;
+          margin-top: 8px;
         }
 
         .pin-open-btn,
         .pin-cancel-btn {
           flex: 1;
-          min-height: 40px;
+          min-height: 34px;
           border: none;
-          border-radius: 15px;
-          font-size: 13px;
+          border-radius: 13px;
+          font-size: 12px;
           font-weight: 900;
           cursor: pointer;
         }
@@ -2223,7 +2392,8 @@ export default function ChannelList() {
           }
 
           .professional-pin-card {
-            padding: 22px 16px 16px;
+            width: min(282px, calc(100vw - 24px));
+            padding: 16px 12px 12px;
           }
 
           .center-pin-input {
