@@ -43,6 +43,9 @@ export default function ChannelList() {
   const openingChannelRef = useRef(false);
   const ownerAlertTimerRef = useRef(null);
   const navigationTimerRef = useRef(null);
+  const channelRefreshTimerRef = useRef(null);
+  const channelRefreshAbortRef = useRef(null);
+  const isMountedRef = useRef(true);
 
   const [channels, setChannels] = useState([]);
   const [channelName, setChannelName] = useState("");
@@ -97,9 +100,12 @@ export default function ChannelList() {
   });
 
   useEffect(() => {
-    fetchChannels();
+    isMountedRef.current = true;
+    fetchChannels({ silent: false });
 
     return () => {
+      isMountedRef.current = false;
+
       if (ownerAlertTimerRef.current) {
         clearTimeout(ownerAlertTimerRef.current);
       }
@@ -108,10 +114,60 @@ export default function ChannelList() {
         clearTimeout(navigationTimerRef.current);
       }
 
+      if (channelRefreshTimerRef.current) {
+        clearInterval(channelRefreshTimerRef.current);
+        channelRefreshTimerRef.current = null;
+      }
+
+      if (channelRefreshAbortRef.current) {
+        channelRefreshAbortRef.current.abort();
+        channelRefreshAbortRef.current = null;
+      }
+
       if (pinAbortRef.current) {
         pinAbortRef.current.abort();
         pinAbortRef.current = null;
       }
+    };
+  }, []);
+
+  useEffect(() => {
+    const refreshChannelsSilently = () => {
+      if (typeof window === "undefined") return;
+
+      const currentHash = String(window.location.hash || "");
+
+      if (currentHash.includes("/teligram-notes")) return;
+      if (openingChannelRef.current || pinCheckingRef.current) return;
+
+      fetchChannels({ silent: true });
+    };
+
+    channelRefreshTimerRef.current = window.setInterval(() => {
+      refreshChannelsSilently();
+    }, 2500);
+
+    const handleFocusRefresh = () => {
+      refreshChannelsSilently();
+    };
+
+    const handleVisibilityRefresh = () => {
+      if (!document.hidden) {
+        refreshChannelsSilently();
+      }
+    };
+
+    window.addEventListener("focus", handleFocusRefresh);
+    document.addEventListener("visibilitychange", handleVisibilityRefresh);
+
+    return () => {
+      if (channelRefreshTimerRef.current) {
+        clearInterval(channelRefreshTimerRef.current);
+        channelRefreshTimerRef.current = null;
+      }
+
+      window.removeEventListener("focus", handleFocusRefresh);
+      document.removeEventListener("visibilitychange", handleVisibilityRefresh);
     };
   }, []);
 
@@ -132,6 +188,7 @@ export default function ChannelList() {
         pinCheckingRef.current = false;
         setIsOpeningChannel(false);
         setPinChecking(false);
+        fetchChannels({ silent: true });
       }
     };
 
@@ -508,27 +565,60 @@ export default function ChannelList() {
     return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
   };
 
-  const fetchChannels = async () => {
+  const fetchChannels = async ({ silent = false } = {}) => {
+    if (channelRefreshAbortRef.current) {
+      channelRefreshAbortRef.current.abort();
+      channelRefreshAbortRef.current = null;
+    }
+
+    const controller = new AbortController();
+    channelRefreshAbortRef.current = controller;
+
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
 
       const res = await fetch(
-        `${API_URL}/api/telegram-channels?user_id=${PUBLIC_USER_ID}`
+        `${API_URL}/api/telegram-channels?user_id=${PUBLIC_USER_ID}&_=${Date.now()}`,
+        {
+          signal: controller.signal,
+          cache: "no-store",
+          headers: {
+            "Cache-Control": "no-cache",
+            Pragma: "no-cache",
+          },
+        }
       );
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+
+      if (!isMountedRef.current || controller.signal.aborted) return;
 
       if (!res.ok) {
-        showToast(data.message || "Failed to load channels", "error");
+        if (!silent) {
+          showToast(data.message || "Failed to load channels", "error");
+        }
         return;
       }
 
       setChannels(data.channels || []);
     } catch (error) {
+      if (error?.name === "AbortError") return;
+
       console.error("Fetch channels error:", error);
-      showToast("Server error while loading channels", "error");
+
+      if (!silent) {
+        showToast("Server error while loading channels", "error");
+      }
     } finally {
-      setLoading(false);
+      if (channelRefreshAbortRef.current === controller) {
+        channelRefreshAbortRef.current = null;
+      }
+
+      if (!silent && isMountedRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -651,8 +741,8 @@ export default function ChannelList() {
       resetForm();
 
       setTimeout(() => {
-        fetchChannels();
-      }, 500);
+        fetchChannels({ silent: true });
+      }, 250);
     } catch (error) {
       console.error("Create/update channel error:", error);
       setChannels(oldChannels);
@@ -735,6 +825,10 @@ export default function ChannelList() {
       }
 
       showToast("Channel deleted successfully", "success");
+
+      setTimeout(() => {
+        fetchChannels({ silent: true });
+      }, 250);
     } catch (error) {
       console.error("Delete channel error:", error);
 

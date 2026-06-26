@@ -21,6 +21,18 @@ const SELECTED_CHANNEL_DEVICE_KEY = "selected_channel_device_id";
 const SELECTED_CHANNEL_VERIFIED_AT_KEY = "selected_channel_verified_at";
 const TRUSTED_PIN_PREFIX = `trusted_private_channel_pin_${PUBLIC_USER_ID}_`;
 const SESSION_VERIFIED_PREFIX = `verified_private_channel_session_${PUBLIC_USER_ID}_`;
+const REALTIME_REFRESH_MS = 2500;
+
+const deviceCardThemes = [
+  ["#ecfeff", "#dbeafe", "#2563eb"],
+  ["#f5f3ff", "#ede9fe", "#7c3aed"],
+  ["#f0fdf4", "#dcfce7", "#16a34a"],
+  ["#fff7ed", "#ffedd5", "#ea580c"],
+  ["#fdf2f8", "#fce7f3", "#be123c"],
+  ["#f0fdfa", "#ccfbf1", "#0f766e"],
+  ["#eef2ff", "#e0e7ff", "#4f46e5"],
+  ["#fefce8", "#fef3c7", "#b45309"],
+];
 
 const dateBadgeThemes = [
   ["#0f766e", "#14b8a6"],
@@ -53,6 +65,9 @@ export default function Teligram() {
   const notesRequestIdRef = useRef(0);
   const channelAccessGrantedRef = useRef(false);
   const currentDeviceIdRef = useRef("");
+  const realtimeTimerRef = useRef(null);
+  const isFetchingNotesRef = useRef(false);
+  const isSavingNoteRef = useRef(false);
 
   const [selectedChannel, setSelectedChannel] = useState(null);
   const [notes, setNotes] = useState([]);
@@ -108,6 +123,50 @@ export default function Teligram() {
       fetchNotes(selectedChannel.channel_id, verifiedPinRef.current || getSavedChannelPin());
     }
   }, [selectedChannel, channelUnlocked]);
+
+  useEffect(() => {
+    if (realtimeTimerRef.current) {
+      clearInterval(realtimeTimerRef.current);
+      realtimeTimerRef.current = null;
+    }
+
+    if (
+      !selectedChannel?.channel_id ||
+      (isTrue(selectedChannel.is_private) && !channelUnlocked)
+    ) {
+      return;
+    }
+
+    const refreshMessages = () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      if (isSavingNoteRef.current) return;
+
+      fetchNotes(
+        selectedChannel.channel_id,
+        verifiedPinRef.current || getSavedChannelPin(),
+        true
+      );
+    };
+
+    realtimeTimerRef.current = setInterval(refreshMessages, REALTIME_REFRESH_MS);
+    window.addEventListener("focus", refreshMessages);
+
+    const onVisibilityChange = () => {
+      if (!document.hidden) refreshMessages();
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      if (realtimeTimerRef.current) {
+        clearInterval(realtimeTimerRef.current);
+        realtimeTimerRef.current = null;
+      }
+
+      window.removeEventListener("focus", refreshMessages);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [selectedChannel?.channel_id, selectedChannel?.is_private, channelUnlocked]);
 
   useEffect(() => {
     if (!isTrue(selectedChannel?.is_private) || channelUnlocked) {
@@ -269,6 +328,40 @@ export default function Teligram() {
     const currentDeviceId = getCurrentDeviceId();
 
     return Boolean(noteDeviceId && currentDeviceId && noteDeviceId === currentDeviceId);
+  };
+
+  const getDeviceTheme = (note) => {
+    const currentDeviceId = getCurrentDeviceId();
+    const noteDeviceId = getNoteSenderDeviceId(note) || `unknown-${note?.note_id || ""}`;
+
+    if (noteDeviceId && currentDeviceId && noteDeviceId === currentDeviceId) {
+      return {
+        card1: "#dcfce7",
+        card2: "#bbf7d0",
+        accent: "#16a34a",
+        label: "This device",
+      };
+    }
+
+    let hash = 0;
+    for (let i = 0; i < noteDeviceId.length; i += 1) {
+      hash = (hash * 31 + noteDeviceId.charCodeAt(i)) >>> 0;
+    }
+
+    const [card1, card2, accent] = deviceCardThemes[hash % deviceCardThemes.length];
+
+    return {
+      card1,
+      card2,
+      accent,
+      label: "New device",
+    };
+  };
+
+  const getNotesSignature = (items = []) => {
+    return items
+      .map((note) => `${note.note_id || ""}:${note.updated_at || note.created_at || ""}:${getNoteSenderDeviceId(note)}`)
+      .join("|");
   };
 
   const parseDateValue = (dateValue) => {
@@ -939,7 +1032,11 @@ export default function Teligram() {
     }
   };
 
-  const fetchNotes = async (channelId, pinOverride = "") => {
+  const fetchNotes = async (channelId, pinOverride = "", silent = false) => {
+    if (isFetchingNotesRef.current && silent) return;
+
+    isFetchingNotesRef.current = true;
+
     const requestId = ++notesRequestIdRef.current;
     const pinForRequest = pinOverride || verifiedPinRef.current || getSavedChannelPin();
     const channelForHeaders = selectedChannel || {
@@ -999,11 +1096,21 @@ export default function Teligram() {
             "",
         }));
 
-      setNotes(channelNotes);
+      setNotes((prev) => {
+        if (silent && getNotesSignature(prev) === getNotesSignature(channelNotes)) {
+          return prev;
+        }
+
+        return channelNotes;
+      });
     } catch (error) {
       if (requestId !== notesRequestIdRef.current) return;
       console.error("Fetch notes error:", error);
-      showToast("Unable to load messages", "error");
+      if (!silent) {
+        showToast("Unable to load messages", "error");
+      }
+    } finally {
+      isFetchingNotesRef.current = false;
     }
   };
 
@@ -1357,6 +1464,7 @@ export default function Teligram() {
     resetForm();
 
     try {
+      isSavingNoteRef.current = true;
       setLoading(true);
 
       const formData = new FormData();
@@ -1501,6 +1609,7 @@ export default function Teligram() {
       showToast("Server error", "error");
       setNotes(oldNotes);
     } finally {
+      isSavingNoteRef.current = false;
       setLoading(false);
     }
   };
@@ -1934,6 +2043,7 @@ export default function Teligram() {
                   const hasAttachment = hasNoteAttachment(note);
                   const titleMessage = isTitleNote(note);
                   const messageFromThisDevice = isMyDeviceNote(note);
+                  const deviceTheme = getDeviceTheme(note);
 
                   return (
                     <div className="note-block" key={note.note_id}>
@@ -1970,7 +2080,16 @@ export default function Teligram() {
                           } ${hasAttachment && !hasText ? "file-only" : ""} ${
                             titleMessage ? "title-bubble" : ""
                           }`}
+                          style={{
+                            "--device-card-1": deviceTheme.card1,
+                            "--device-card-2": deviceTheme.card2,
+                            "--device-accent": deviceTheme.accent,
+                          }}
                         >
+                          {!messageFromThisDevice && (
+                            <div className="device-source-chip">New device</div>
+                          )}
+
                           <button
                             className="message-dot-btn"
                             onClick={(e) => {
@@ -6816,6 +6935,213 @@ export default function Teligram() {
 
           .file-info strong {
             font-size: 12px;
+          }
+        }
+
+
+        /* Device wise full message cards + real-time friendly layout */
+        .message-line {
+          margin: 0 0 11px !important;
+          display: flex !important;
+          align-items: flex-end !important;
+          padding: 0 10px !important;
+        }
+
+        .message-line.my-message-line {
+          justify-content: flex-end !important;
+        }
+
+        .message-line.other-message-line {
+          justify-content: flex-start !important;
+        }
+
+        .message-bubble {
+          position: relative !important;
+          width: fit-content !important;
+          max-width: min(88vw, 420px) !important;
+          min-width: 82px !important;
+          padding: 11px 38px 24px 12px !important;
+          border-radius: 20px !important;
+          overflow: hidden !important;
+          background: linear-gradient(135deg, var(--device-card-1), var(--device-card-2)) !important;
+          border: 1px solid color-mix(in srgb, var(--device-accent) 24%, transparent) !important;
+          box-shadow: 0 12px 28px rgba(15, 23, 42, 0.13) !important;
+          backdrop-filter: none !important;
+        }
+
+        .message-bubble.my-message-bubble {
+          border-bottom-right-radius: 7px !important;
+        }
+
+        .message-bubble.other-message-bubble {
+          border-bottom-left-radius: 7px !important;
+        }
+
+        .message-bubble::before {
+          display: none !important;
+        }
+
+        .message-bubble.image-only,
+        .message-bubble.file-only,
+        .message-bubble:has(.image-message-wrap),
+        .message-bubble:has(.file-message-wrap) {
+          padding: 8px 8px 25px 8px !important;
+          background: linear-gradient(135deg, var(--device-card-1), var(--device-card-2)) !important;
+          border-radius: 20px !important;
+        }
+
+        .message-bubble:has(.image-message-wrap).my-message-bubble,
+        .message-bubble:has(.file-message-wrap).my-message-bubble {
+          border-bottom-right-radius: 7px !important;
+        }
+
+        .message-bubble:has(.image-message-wrap).other-message-bubble,
+        .message-bubble:has(.file-message-wrap).other-message-bubble {
+          border-bottom-left-radius: 7px !important;
+        }
+
+        .device-source-chip {
+          display: inline-flex;
+          align-items: center;
+          width: fit-content;
+          max-width: 100%;
+          margin: 0 22px 6px 0;
+          padding: 3px 8px;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--device-accent) 13%, #ffffff);
+          color: var(--device-accent);
+          font-size: 9.5px;
+          line-height: 1;
+          font-weight: 950;
+          letter-spacing: 0.35px;
+          text-transform: uppercase;
+        }
+
+        .message-text,
+        .image-description-text,
+        .file-description-text {
+          padding-bottom: 2px !important;
+          margin-bottom: 0 !important;
+          color: var(--noteColor, #111827) !important;
+          overflow-wrap: anywhere !important;
+          word-break: break-word !important;
+        }
+
+        .message-text {
+          padding-right: 2px !important;
+          font-size: 15.5px !important;
+          line-height: 1.45 !important;
+          font-weight: 650 !important;
+        }
+
+        .image-message-wrap,
+        .file-message-wrap {
+          width: min(360px, 82vw) !important;
+          max-width: 100% !important;
+          background: transparent !important;
+          border-radius: 16px !important;
+          overflow: hidden !important;
+        }
+
+        .whatsapp-image-frame {
+          width: 100% !important;
+          border-radius: 16px !important;
+          overflow: hidden !important;
+          background: rgba(255, 255, 255, 0.42) !important;
+        }
+
+        .message-image {
+          display: block !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          max-height: 58dvh !important;
+          object-fit: contain !important;
+          border-radius: 16px !important;
+          border: none !important;
+          background: rgba(255,255,255,0.35) !important;
+          box-shadow: none !important;
+        }
+
+        .image-description-text {
+          width: 100% !important;
+          max-width: 100% !important;
+          padding: 8px 10px 2px !important;
+          border-radius: 0 0 16px 16px !important;
+          background: rgba(255,255,255,0.42) !important;
+          font-size: 14.2px !important;
+          line-height: 1.42 !important;
+          transform: none !important;
+        }
+
+        .image-description-text::before {
+          display: none !important;
+        }
+
+        .file-card {
+          width: 100% !important;
+          background: rgba(255,255,255,0.56) !important;
+          border: 1px solid rgba(255,255,255,0.62) !important;
+        }
+
+        .message-time {
+          position: absolute !important;
+          right: 9px !important;
+          bottom: 6px !important;
+          z-index: 4 !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          gap: 3px !important;
+          max-width: calc(100% - 18px) !important;
+          padding: 2px 7px !important;
+          border-radius: 999px !important;
+          background: rgba(255, 255, 255, 0.72) !important;
+          color: #475569 !important;
+          box-shadow: 0 5px 14px rgba(15, 23, 42, 0.08) !important;
+          font-size: 9.8px !important;
+          line-height: 1 !important;
+          font-weight: 900 !important;
+          white-space: nowrap !important;
+        }
+
+        .message-bubble:has(.message-image) .message-time,
+        .message-bubble:has(.image-message-wrap) .message-time,
+        .message-bubble:has(.file-message-wrap) .message-time {
+          right: 10px !important;
+          bottom: 7px !important;
+          background: rgba(15, 23, 42, 0.68) !important;
+          color: #ffffff !important;
+          box-shadow: none !important;
+        }
+
+        .message-dot-btn {
+          top: 6px !important;
+          right: 7px !important;
+          z-index: 7 !important;
+          background: rgba(255, 255, 255, 0.82) !important;
+          color: #334155 !important;
+          border: 1px solid rgba(255,255,255,0.7) !important;
+        }
+
+        .message-bubble:has(.message-image) .message-dot-btn,
+        .message-bubble:has(.image-message-wrap) .message-dot-btn,
+        .message-bubble:has(.file-message-wrap) .message-dot-btn {
+          background: rgba(15,23,42,0.48) !important;
+          color: #ffffff !important;
+          border-color: rgba(255,255,255,0.26) !important;
+        }
+
+        .message-action-row {
+          margin-top: 5px !important;
+        }
+
+        @media (max-width: 420px) {
+          .message-bubble {
+            max-width: min(91vw, 390px) !important;
+          }
+
+          .image-message-wrap,
+          .file-message-wrap {
+            width: min(342px, 84vw) !important;
           }
         }
 
