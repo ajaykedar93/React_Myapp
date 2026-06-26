@@ -35,6 +35,7 @@ export default function ChannelList() {
   const pinSuccessRef = useRef(false);
   const openingChannelRef = useRef(false);
   const ownerAlertTimerRef = useRef(null);
+  const navigationTimerRef = useRef(null);
 
   const [channels, setChannels] = useState([]);
   const [channelName, setChannelName] = useState("");
@@ -51,6 +52,7 @@ export default function ChannelList() {
   const [activeMenuId, setActiveMenuId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [pinChecking, setPinChecking] = useState(false);
+  const [isOpeningChannel, setIsOpeningChannel] = useState(false);
 
   const [toast, setToast] = useState({
     show: false,
@@ -94,6 +96,43 @@ export default function ChannelList() {
       if (ownerAlertTimerRef.current) {
         clearTimeout(ownerAlertTimerRef.current);
       }
+
+      if (navigationTimerRef.current) {
+        clearTimeout(navigationTimerRef.current);
+      }
+
+      if (pinAbortRef.current) {
+        pinAbortRef.current.abort();
+        pinAbortRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const resetOpeningLockWhenBack = () => {
+      if (typeof window === "undefined") return;
+
+      const currentHash = String(window.location.hash || "");
+
+      /*
+        When user comes back from notes page to channel list, allow opening
+        channels again. Do not reset while navigating to notes, otherwise the
+        PIN popup can briefly re-render during hash route transition.
+      */
+      if (!currentHash.includes("/teligram-notes")) {
+        openingChannelRef.current = false;
+        pinSuccessRef.current = false;
+        pinCheckingRef.current = false;
+        setIsOpeningChannel(false);
+        setPinChecking(false);
+      }
+    };
+
+    window.addEventListener("hashchange", resetOpeningLockWhenBack);
+    resetOpeningLockWhenBack();
+
+    return () => {
+      window.removeEventListener("hashchange", resetOpeningLockWhenBack);
     };
   }, []);
 
@@ -672,6 +711,41 @@ export default function ChannelList() {
     }
   };
 
+  const clearActivePinRequest = () => {
+    pinRequestRef.current += 1;
+    pinCheckingRef.current = false;
+
+    if (pinAbortRef.current) {
+      pinAbortRef.current.abort();
+      pinAbortRef.current = null;
+    }
+
+    setPinChecking(false);
+  };
+
+  const hidePinPopupNow = () => {
+    setPinBox({
+      show: false,
+      channel: null,
+      pin: "",
+      error: "",
+      trustDevice: false,
+    });
+  };
+
+  const beginChannelOpening = () => {
+    /*
+      This state + ref combination prevents a stale API response or React
+      re-render from showing the PIN popup again after the correct PIN.
+    */
+    openingChannelRef.current = true;
+    pinSuccessRef.current = true;
+    pinCheckingRef.current = false;
+    setIsOpeningChannel(true);
+    clearActivePinRequest();
+    hidePinPopupNow();
+  };
+
   const saveSelectedChannel = (channel, pin = "") => {
     localStorage.setItem("selected_channel_id", channel.channel_id);
     localStorage.setItem("selected_channel_name", channel.channel_name);
@@ -692,36 +766,25 @@ export default function ChannelList() {
   };
 
   const goToChannel = (channel, pin = "") => {
-    openingChannelRef.current = true;
-    pinSuccessRef.current = true;
-    pinRequestRef.current += 1;
-    pinCheckingRef.current = false;
-
-    if (pinAbortRef.current) {
-      pinAbortRef.current.abort();
-      pinAbortRef.current = null;
-    }
-
+    beginChannelOpening();
     saveSelectedChannel(channel, pin);
 
-    setPinChecking(false);
-    setPinBox({
-      show: false,
-      channel: null,
-      pin: "",
-      error: "",
-      trustDevice: false,
-    });
-
-    requestAnimationFrame(() => {
+    /*
+      A tiny timeout after hiding the PIN UI gives React one paint to remove
+      the popup before the hash route changes. This removes the visible
+      mismatch/popup flash on slower phones.
+    */
+    window.setTimeout(() => {
       window.location.hash = "/teligram-notes";
-    });
+    }, 0);
   };
 
   const openChannel = (channel) => {
-    if (openingChannelRef.current) return;
+    if (openingChannelRef.current || isOpeningChannel) return;
 
     pinSuccessRef.current = false;
+    openingChannelRef.current = false;
+    setIsOpeningChannel(false);
     setActiveMenuId(null);
     clearOwnerDeleteAlert();
 
@@ -735,34 +798,14 @@ export default function ChannelList() {
         will ask the PIN again.
       */
       if (/^[0-9]{4}$/.test(trustedPin)) {
-        pinRequestRef.current += 1;
-        pinCheckingRef.current = false;
-
-        if (pinAbortRef.current) {
-          pinAbortRef.current.abort();
-          pinAbortRef.current = null;
-        }
-
-        setPinChecking(false);
-        setPinBox({
-          show: false,
-          channel: null,
-          pin: "",
-          error: "",
-          trustDevice: false,
-        });
-
         goToChannel(channel, trustedPin);
         return;
       }
 
-      pinRequestRef.current += 1;
-      pinCheckingRef.current = false;
-
-      if (pinAbortRef.current) {
-        pinAbortRef.current.abort();
-        pinAbortRef.current = null;
-      }
+      clearActivePinRequest();
+      pinSuccessRef.current = false;
+      openingChannelRef.current = false;
+      setIsOpeningChannel(false);
 
       localStorage.setItem("selected_channel_id", channel.channel_id);
       localStorage.setItem("selected_channel_name", channel.channel_name || "");
@@ -792,7 +835,9 @@ export default function ChannelList() {
     const typedPin = String(pinBox.pin || "").replace(/\D/g, "").slice(0, 4);
     const trustThisDevice = Boolean(pinBox.trustDevice);
 
-    if (!selectedChannel || pinCheckingRef.current) return;
+    if (!selectedChannel || pinCheckingRef.current || openingChannelRef.current) {
+      return;
+    }
 
     pinSuccessRef.current = false;
 
@@ -844,21 +889,50 @@ export default function ChannelList() {
       const isLatestRequest =
         pinRequestRef.current === requestId && !controller.signal.aborted;
 
-      if (!isLatestRequest) return;
+      if (!isLatestRequest || openingChannelRef.current) return;
 
       const messageText = String(data?.message || "").toLowerCase();
 
-      const unlocked =
-        res.ok &&
-        (isTrue(data?.unlocked) ||
-          isTrue(data?.success) ||
-          isTrue(data?.verified) ||
-          isTrue(data?.valid) ||
-          messageText.includes("verified") ||
-          messageText.includes("success"));
+      /*
+        Important:
+        Some backends return 200 OK with a message like "PIN matched" instead
+        of { success: true }. Treat any OK response as success unless the
+        response clearly says invalid/mismatch. This removes the 1-3 second
+        "PIN mismatch" flash after a correct PIN.
+      */
+      const explicitSuccess =
+        isTrue(data?.unlocked) ||
+        isTrue(data?.success) ||
+        isTrue(data?.verified) ||
+        isTrue(data?.valid) ||
+        isTrue(data?.matched) ||
+        messageText.includes("verified") ||
+        messageText.includes("success") ||
+        messageText.includes("matched") ||
+        messageText.includes("correct");
+
+      const explicitFailure =
+        data?.success === false ||
+        data?.verified === false ||
+        data?.valid === false ||
+        data?.unlocked === false ||
+        isTrue(data?.mismatch) ||
+        isTrue(data?.invalid) ||
+        messageText.includes("mismatch") ||
+        messageText.includes("wrong") ||
+        messageText.includes("invalid") ||
+        messageText.includes("incorrect");
+
+      const unlocked = res.ok && (explicitSuccess || !explicitFailure);
 
       if (!unlocked) {
-        if (pinSuccessRef.current) return;
+        if (
+          pinSuccessRef.current ||
+          openingChannelRef.current ||
+          pinRequestRef.current !== requestId
+        ) {
+          return;
+        }
 
         pinCheckingRef.current = false;
         setPinChecking(false);
@@ -869,10 +943,17 @@ export default function ChannelList() {
             Number(selectedChannel.channel_id);
 
           /*
-            If the user has already changed the PIN or closed the popup,
-            do not show old mismatch/error from an older request.
+            Do not show a mismatch from an old/stale request after the user has
+            already changed the PIN, closed the popup, or started navigation.
           */
-          if (!prev.show || !sameChannel || prev.pin !== typedPin) {
+          if (
+            !prev.show ||
+            !sameChannel ||
+            prev.pin !== typedPin ||
+            pinSuccessRef.current ||
+            openingChannelRef.current ||
+            pinRequestRef.current !== requestId
+          ) {
             return prev;
           }
 
@@ -886,8 +967,9 @@ export default function ChannelList() {
 
       /*
         Correct PIN:
-        Close popup first, lock re-open, then navigate.
-        This prevents the old PIN popup from flashing again for 1-2 seconds.
+        Save trusted PIN preference first, then call the single navigation
+        function. That function immediately hides the popup and locks old
+        requests, so stale mismatch responses cannot re-open it.
       */
       if (trustThisDevice) {
         saveTrustedPin(selectedChannel.channel_id, typedPin);
@@ -896,6 +978,7 @@ export default function ChannelList() {
       }
 
       goToChannel(selectedChannel, typedPin);
+
     } catch (error) {
       if (error?.name === "AbortError") {
         return;
@@ -903,17 +986,33 @@ export default function ChannelList() {
 
       console.error("Verify PIN error:", error);
 
-      if (pinSuccessRef.current || pinRequestRef.current !== requestId) return;
+      if (
+        pinSuccessRef.current ||
+        openingChannelRef.current ||
+        pinRequestRef.current !== requestId
+      ) {
+        return;
+      }
 
       pinCheckingRef.current = false;
       setPinChecking(false);
 
-      setPinBox((prev) => ({
-        ...prev,
-        error: "Server error",
-      }));
+      setPinBox((prev) => {
+        if (!prev.show || pinSuccessRef.current || openingChannelRef.current) {
+          return prev;
+        }
+
+        return {
+          ...prev,
+          error: "Server error",
+        };
+      });
     } finally {
-      if (!pinSuccessRef.current && pinRequestRef.current === requestId) {
+      if (
+        !pinSuccessRef.current &&
+        !openingChannelRef.current &&
+        pinRequestRef.current === requestId
+      ) {
         pinAbortRef.current = null;
         pinCheckingRef.current = false;
         setPinChecking(false);
@@ -1241,7 +1340,7 @@ export default function ChannelList() {
         </div>
       )}
 
-      {pinBox.show && !openingChannelRef.current && (
+      {pinBox.show && !openingChannelRef.current && !isOpeningChannel && (
         <div className="pin-overlay" onClick={closePinBox}>
           <div
             className="professional-pin-card"

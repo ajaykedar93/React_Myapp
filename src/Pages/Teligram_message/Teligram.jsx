@@ -27,10 +27,12 @@ const dateBadgeThemes = [
 const ATTACH_ICON = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABYAAAAZCAYAAAA14t7uAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAFBSURBVEhL7ZXRjcMgDIb/3jsreAFYIQuwQhcoI3QBughdJOki9iL/PVyDUkKb9HT31k+KItnwScHYOZAkdpJSgpkBAEQE5/MZItIuAwB8tYEeZoYQAq7XaxVN04QQAqZpapf/wB3EGOm95ziO3biqPsRJclOsqnTOsZTSpl7mNo9i/tRhGNoURAQigtvt1qb6Z2xmtUg9XuVmVuK5UM+KcrlckFJqwytW4i3MDKrahle8Ld7LR1xZidveX7bw8j1jZqs96Ilxl82XfhgGiAhSSgghwMxwPB6BxX3uibstnXOmc67OAFVlzpmn0+lhXrTrlnTFJOm9fzpgSLKUQuccc85tinwlzjnTe1+HzDiOVFWWUhhjpHOOMcZ2W+WpmPcjmCXt05toSw7c8QeZ29jMajG32CX+Dd3r9hd8xJV/E38DUIkWAOcCAi0AAAAASUVORK5CYII=";
 const COLOR_ICON = "data:image/png;base64,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";
 
+const FILE_ICON = "data:image/png;base64,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";
 
 export default function Teligram() {
   const editorRef = useRef(null);
   const imageRef = useRef(null);
+  const fileRef = useRef(null);
   const colorRef = useRef(null);
   const selectedTextColorRef = useRef("#111111");
   const bottomRef = useRef(null);
@@ -40,6 +42,7 @@ export default function Teligram() {
   const unlockRequestIdRef = useRef(0);
   const channelLoadIdRef = useRef(0);
   const notesRequestIdRef = useRef(0);
+  const channelAccessGrantedRef = useRef(false);
 
   const [selectedChannel, setSelectedChannel] = useState(null);
   const [notes, setNotes] = useState([]);
@@ -53,6 +56,10 @@ export default function Teligram() {
   const [selectedImage, setSelectedImage] = useState(null);
   const [previewImage, setPreviewImage] = useState("");
   const [removeOldImage, setRemoveOldImage] = useState(false);
+
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [previewFile, setPreviewFile] = useState(null);
+  const [removeOldFile, setRemoveOldFile] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState(null);
   const [composerMode, setComposerMode] = useState("message");
   const [activeFormats, setActiveFormats] = useState({
@@ -357,6 +364,36 @@ export default function Teligram() {
     link.remove();
   };
 
+  const downloadNoteFile = (event, note) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const downloadUrl = getNoteFileDownloadUrl(note);
+    if (!downloadUrl) return;
+
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = getNoteFileName(note);
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
+  const openNoteFile = (event, note) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const openUrl = isNoteFilePreviewable(note)
+      ? getNoteFileUrl(note)
+      : getNoteFileDownloadUrl(note);
+
+    if (!openUrl) return;
+
+    window.open(openUrl, "_blank", "noopener,noreferrer");
+  };
+
   const handleImageError = (event, originalUrl = "", folder = "telegram-notes") => {
     const img = event.currentTarget;
     img.onerror = null;
@@ -387,6 +424,137 @@ export default function Teligram() {
 
   const hasNoteImage = (note) => {
     return Boolean(note?.image_url || note?.has_image);
+  };
+
+  const hasNoteAttachment = (note) => {
+    return Boolean(
+      note?.has_attachment ||
+        note?.attachment_url ||
+        (note?.has_file && !hasNoteImage(note) && note?.file_name)
+    );
+  };
+
+  const hasAnyNoteFile = (note) => {
+    return hasNoteImage(note) || hasNoteAttachment(note);
+  };
+
+  const getNoteFileName = (note) => {
+    return (
+      note?.file_name ||
+      note?.attachment_name ||
+      getFileNameFromUrl(note?.file_download_url) ||
+      getFileNameFromUrl(note?.attachment_url) ||
+      `attachment-${note?.note_id || Date.now()}`
+    );
+  };
+
+  const getNoteFileMime = (note) => {
+    return String(note?.file_mime || note?.attachment_mime || "").toLowerCase();
+  };
+
+  const getNoteFileUrl = (note) => {
+    const backendUrl = normalizeApiImageUrl(note?.file_url || note?.attachment_url);
+
+    if (backendUrl) return backendUrl;
+
+    if (hasNoteAttachment(note) && note?.note_id) {
+      const version = note?.updated_at
+        ? new Date(note.updated_at).getTime()
+        : Date.now();
+
+      return joinApiUrl(`/api/telegram-notes/file/${note.note_id}?v=${version}`);
+    }
+
+    return "";
+  };
+
+  const getNoteFileDownloadUrl = (note) => {
+    const backendUrl = normalizeApiImageUrl(
+      note?.file_download_url || note?.attachment_download_url
+    );
+
+    if (backendUrl) return backendUrl;
+
+    if (hasNoteAttachment(note) && note?.note_id) {
+      return joinApiUrl(`/api/telegram-notes/file/download/${note.note_id}`);
+    }
+
+    return "";
+  };
+
+  const isNoteFilePreviewable = (note) => {
+    if (note?.file_previewable === true || note?.file_previewable === "true") {
+      return true;
+    }
+
+    const mime = getNoteFileMime(note);
+    const name = getNoteFileName(note).toLowerCase();
+
+    return (
+      mime.startsWith("image/") ||
+      mime.startsWith("text/") ||
+      mime === "application/pdf" ||
+      mime === "application/json" ||
+      mime === "application/xml" ||
+      name.endsWith(".txt") ||
+      name.endsWith(".csv") ||
+      name.endsWith(".json") ||
+      name.endsWith(".pdf")
+    );
+  };
+
+  const formatFileSize = (bytes) => {
+    const size = Number(bytes || 0);
+
+    if (!size || Number.isNaN(size)) return "";
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const getFileTypeLabel = (fileOrNote) => {
+    const name = String(
+      fileOrNote?.name ||
+        fileOrNote?.file_name ||
+        fileOrNote?.attachment_name ||
+        "file"
+    ).toLowerCase();
+    const mime = String(
+      fileOrNote?.type ||
+        fileOrNote?.file_mime ||
+        fileOrNote?.attachment_mime ||
+        ""
+    ).toLowerCase();
+
+    if (mime.includes("pdf") || name.endsWith(".pdf")) return "PDF";
+    if (
+      mime.includes("spreadsheet") ||
+      mime.includes("excel") ||
+      name.endsWith(".xls") ||
+      name.endsWith(".xlsx") ||
+      name.endsWith(".csv")
+    ) {
+      return "XLS";
+    }
+    if (
+      mime.includes("word") ||
+      name.endsWith(".doc") ||
+      name.endsWith(".docx")
+    ) {
+      return "DOC";
+    }
+    if (mime.startsWith("text/") || name.endsWith(".txt")) return "TXT";
+    if (mime.startsWith("image/")) return "IMG";
+    if (name.endsWith(".zip") || name.endsWith(".rar") || name.endsWith(".7z")) {
+      return "ZIP";
+    }
+
+    return "FILE";
+  };
+
+  const getFilePreviewName = () => {
+    return previewFile?.name || selectedFile?.name || "Selected file";
   };
 
   const hasNoteText = (note) => {
@@ -437,6 +605,7 @@ export default function Teligram() {
 
       const channel = data.channel;
       setSelectedChannel(channel);
+      channelAccessGrantedRef.current = false;
 
       if (isTrue(channel.is_private)) {
         const savedPin = getSavedChannelPin();
@@ -448,6 +617,7 @@ export default function Teligram() {
 
           if (verified) {
             verifiedPinRef.current = savedPin;
+            channelAccessGrantedRef.current = true;
             setChannelUnlocked(true);
             setUnlockPin("");
             setUnlockError("");
@@ -456,6 +626,7 @@ export default function Teligram() {
         }
 
         verifiedPinRef.current = "";
+        channelAccessGrantedRef.current = false;
         localStorage.removeItem("selected_channel_pin");
         setChannelUnlocked(false);
         setUnlockPin("");
@@ -465,6 +636,7 @@ export default function Teligram() {
       }
 
       verifiedPinRef.current = "";
+      channelAccessGrantedRef.current = true;
       localStorage.removeItem("selected_channel_pin");
       setChannelUnlocked(true);
       setUnlockPin("");
@@ -478,17 +650,53 @@ export default function Teligram() {
 
   const verifyPinFromApi = async (channelId, pin) => {
     try {
+      const cleanPinValue = String(pin || "").replace(/\D/g, "").slice(0, 4);
+
+      if (!channelId || !/^[0-9]{4}$/.test(cleanPinValue)) {
+        return false;
+      }
+
       const res = await fetch(
         `${API_URL}/api/telegram-channels/${channelId}/verify-pin`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pin }),
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-cache",
+            Pragma: "no-cache",
+          },
+          cache: "no-store",
+          body: JSON.stringify({ pin: cleanPinValue }),
         }
       );
 
-      const data = await res.json();
-      return res.ok && data.unlocked;
+      const data = await res.json().catch(() => ({}));
+      const messageText = String(data?.message || "").toLowerCase();
+
+      const explicitlyWrong =
+        data?.unlocked === false ||
+        data?.verified === false ||
+        data?.valid === false ||
+        data?.pin_match === false ||
+        /wrong|mismatch|incorrect|invalid|required|failed|denied/.test(
+          messageText
+        );
+
+      if (explicitlyWrong) {
+        return false;
+      }
+
+      return Boolean(
+        res.ok &&
+          (isTrue(data?.unlocked) ||
+            isTrue(data?.success) ||
+            isTrue(data?.verified) ||
+            isTrue(data?.valid) ||
+            isTrue(data?.pin_match) ||
+            messageText.includes("verified") ||
+            messageText.includes("success") ||
+            messageText.includes("public"))
+      );
     } catch (error) {
       console.error("Verify PIN API error:", error);
       return false;
@@ -518,12 +726,14 @@ export default function Teligram() {
 
       if (!verified) {
         verifiedPinRef.current = "";
+        channelAccessGrantedRef.current = false;
         localStorage.removeItem("selected_channel_pin");
         setUnlockError("Wrong PIN");
         return;
       }
 
       verifiedPinRef.current = pin;
+      channelAccessGrantedRef.current = true;
       localStorage.setItem("selected_channel_pin", pin);
       localStorage.setItem("selected_channel_is_private", "true");
 
@@ -531,7 +741,8 @@ export default function Teligram() {
       setUnlockPin("");
       setChannelUnlocked(true);
 
-      fetchNotes(selectedChannel.channel_id, pin);
+      // Notes load once through the channelUnlocked effect. This prevents double requests
+      // and avoids any old response showing the PIN screen again after a correct PIN.
     } catch (error) {
       if (requestId !== unlockRequestIdRef.current) return;
       console.error("Unlock error:", error);
@@ -569,15 +780,16 @@ export default function Teligram() {
 
           if (requestId !== notesRequestIdRef.current) return;
 
-          if (stillValid) {
+          if (stillValid || channelAccessGrantedRef.current) {
             verifiedPinRef.current = pinForRequest;
+            channelAccessGrantedRef.current = true;
             localStorage.setItem("selected_channel_pin", pinForRequest);
             setChannelUnlocked(true);
-            showToast(data.message || "Unable to load messages", "error");
             return;
           }
 
           verifiedPinRef.current = "";
+          channelAccessGrantedRef.current = false;
           localStorage.removeItem("selected_channel_pin");
           setChannelUnlocked(false);
           setNotes([]);
@@ -621,7 +833,10 @@ export default function Teligram() {
     return notes.filter((note) => {
       const plainText = stripHtml(note.content_html || "").toLowerCase();
       const imageText = hasNoteImage(note) ? " image photo picture" : "";
-      const searchable = `${plainText}${imageText}`;
+      const fileText = hasNoteAttachment(note)
+        ? ` file attachment document ${getNoteFileName(note)} ${getFileTypeLabel(note)}`.toLowerCase()
+        : "";
+      const searchable = `${plainText}${imageText}${fileText}`;
       return words.every((word) => searchable.includes(word));
     });
   }, [notes, searchText]);
@@ -769,12 +984,40 @@ export default function Teligram() {
       return;
     }
 
+    // One upload per note: choosing image removes generic attachment preview.
+    if (previewImage && previewImage.startsWith("blob:")) {
+      URL.revokeObjectURL(previewImage);
+    }
+
     setSelectedImage(file);
     setPreviewImage(URL.createObjectURL(file));
     setRemoveOldImage(false);
+    setSelectedFile(null);
+    setPreviewFile(null);
+    setRemoveOldFile(true);
+
+    if (fileRef.current) {
+      fileRef.current.value = "";
+    }
   };
 
-  const removeImage = () => {
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // One upload per note: choosing attachment removes image preview.
+    if (previewImage && previewImage.startsWith("blob:")) {
+      URL.revokeObjectURL(previewImage);
+    }
+
+    setSelectedFile(file);
+    setPreviewFile({
+      name: file.name || "Selected file",
+      size: file.size || 0,
+      type: file.type || "application/octet-stream",
+      isNew: true,
+    });
+    setRemoveOldFile(false);
     setSelectedImage(null);
     setPreviewImage("");
     setRemoveOldImage(true);
@@ -784,11 +1027,42 @@ export default function Teligram() {
     }
   };
 
+  const removeImage = () => {
+    if (previewImage && previewImage.startsWith("blob:")) {
+      URL.revokeObjectURL(previewImage);
+    }
+
+    setSelectedImage(null);
+    setPreviewImage("");
+    setRemoveOldImage(true);
+
+    if (imageRef.current) {
+      imageRef.current.value = "";
+    }
+  };
+
+  const removeFile = () => {
+    setSelectedFile(null);
+    setPreviewFile(null);
+    setRemoveOldFile(true);
+
+    if (fileRef.current) {
+      fileRef.current.value = "";
+    }
+  };
+
   const resetForm = () => {
     setComposerTextColor("#111111");
+    if (previewImage && previewImage.startsWith("blob:")) {
+      URL.revokeObjectURL(previewImage);
+    }
+
     setSelectedImage(null);
     setPreviewImage("");
     setRemoveOldImage(false);
+    setSelectedFile(null);
+    setPreviewFile(null);
+    setRemoveOldFile(false);
     setEditingNoteId(null);
     setComposerMode("message");
     setActiveFormats({ bold: false, underline: false });
@@ -816,6 +1090,10 @@ export default function Teligram() {
     if (imageRef.current) {
       imageRef.current.value = "";
     }
+
+    if (fileRef.current) {
+      fileRef.current.value = "";
+    }
   };
 
   const saveNote = async () => {
@@ -827,14 +1105,17 @@ export default function Teligram() {
     const contentHtml = getEditorHtml();
     const plainText = stripHtml(contentHtml).trim();
 
-    if (!plainText && !selectedImage && !previewImage) {
-      showToast("Please add text or image", "error");
+    if (!plainText && !selectedImage && !previewImage && !selectedFile && !previewFile) {
+      showToast("Please add text, image, or file", "error");
       return;
     }
 
     const currentImageFile = selectedImage;
     const currentPreviewImage = previewImage;
     const currentRemoveImage = removeOldImage;
+    const currentFile = selectedFile;
+    const currentPreviewFile = previewFile;
+    const currentRemoveFile = removeOldFile;
     const currentTextColor = selectedTextColorRef.current || textColor || "#111111";
     const oldEditingId = editingNoteId;
     const oldNotes = notes;
@@ -856,6 +1137,18 @@ export default function Teligram() {
       text_color: currentTextColor,
       image_url: currentRemoveImage ? null : currentPreviewImage || null,
       image_path: null,
+      has_image: currentRemoveImage ? false : Boolean(currentPreviewImage),
+      has_attachment: currentRemoveFile ? false : Boolean(currentPreviewFile),
+      has_file: currentRemoveImage && currentRemoveFile
+        ? false
+        : Boolean(currentPreviewImage || currentPreviewFile),
+      file_name: currentRemoveFile ? null : currentPreviewFile?.name || null,
+      file_mime: currentRemoveFile ? null : currentPreviewFile?.type || null,
+      file_size: currentRemoveFile ? null : currentPreviewFile?.size || null,
+      file_url: null,
+      file_download_url: null,
+      attachment_url: null,
+      attachment_path: null,
       created_at: oldEditingId ? oldNote?.created_at || now : now,
       updated_at: now,
       is_temp: true,
@@ -885,9 +1178,14 @@ export default function Teligram() {
       formData.append("content_html", contentHtml);
       formData.append("text_color", currentTextColor);
       formData.append("remove_image", currentRemoveImage ? "true" : "false");
+      formData.append("remove_attachment", currentRemoveFile ? "true" : "false");
 
       if (currentImageFile) {
         formData.append("image", currentImageFile);
+      }
+
+      if (currentFile) {
+        formData.append("file", currentFile);
       }
 
       const url = oldEditingId
@@ -908,7 +1206,7 @@ export default function Teligram() {
         showToast(data.message || "Action failed", "error");
         setNotes(oldNotes);
 
-        if (res.status === 403) {
+        if (res.status === 403 && !channelAccessGrantedRef.current) {
           setChannelUnlocked(false);
           localStorage.removeItem("selected_channel_pin");
         }
@@ -932,6 +1230,30 @@ export default function Teligram() {
         has_image: currentRemoveImage
           ? false
           : Boolean(backendNote.has_image || backendNote.image_url || optimisticNote.image_url),
+        has_attachment: currentRemoveFile
+          ? false
+          : Boolean(
+              backendNote.has_attachment ||
+                backendNote.attachment_url ||
+                backendNote.file_name ||
+                optimisticNote.file_name
+            ),
+        has_file: Boolean(
+          backendNote.has_file ||
+            backendNote.has_image ||
+            backendNote.has_attachment ||
+            backendNote.file_url ||
+            backendNote.image_url ||
+            optimisticNote.has_file
+        ),
+        file_name: backendNote.file_name || backendNote.attachment_name || optimisticNote.file_name || null,
+        file_mime: backendNote.file_mime || backendNote.attachment_mime || optimisticNote.file_mime || null,
+        file_size: backendNote.file_size || backendNote.attachment_size || optimisticNote.file_size || null,
+        file_url: backendNote.file_url || backendNote.attachment_url || optimisticNote.file_url || null,
+        file_download_url: backendNote.file_download_url || optimisticNote.file_download_url || null,
+        attachment_url: backendNote.attachment_url || optimisticNote.attachment_url || null,
+        attachment_path: null,
+        file_previewable: backendNote.file_previewable,
         created_at: backendNote.created_at || optimisticNote.created_at,
         updated_at: backendNote.updated_at || new Date().toISOString(),
         is_temp: false,
@@ -959,7 +1281,10 @@ export default function Teligram() {
           body: JSON.stringify({
             last_message: noteTitle === "title"
               ? `Title: ${plainText.slice(0, 70)}`
-              : plainText.slice(0, 80) || "Image message",
+              : plainText.slice(0, 80) ||
+                (currentPreviewFile?.name
+                  ? `File: ${currentPreviewFile.name}`
+                  : "Image message"),
           }),
         }
       );
@@ -977,12 +1302,35 @@ export default function Teligram() {
   const startEdit = (note) => {
     if (note.is_temp) return;
 
+    const noteHasImage = hasNoteImage(note);
+    const noteHasAttachment = hasNoteAttachment(note);
+
     setEditingNoteId(note.note_id);
-    setComposerMode(isTitleNote(note) ? "title" : hasNoteImage(note) ? "image-caption" : "message");
+    setComposerMode(
+      isTitleNote(note)
+        ? "title"
+        : noteHasImage
+          ? "image-caption"
+          : noteHasAttachment
+            ? "file-caption"
+            : "message"
+    );
     setComposerTextColor(getNoteTextColor(note));
-    setPreviewImage(getNoteImageUrl(note));
+    setPreviewImage(noteHasImage ? getNoteImageUrl(note) : "");
     setSelectedImage(null);
     setRemoveOldImage(false);
+    setSelectedFile(null);
+    setPreviewFile(
+      noteHasAttachment
+        ? {
+            name: getNoteFileName(note),
+            size: note.file_size || note.attachment_size || 0,
+            type: getNoteFileMime(note) || "application/octet-stream",
+            isNew: false,
+          }
+        : null
+    );
+    setRemoveOldFile(false);
     setActiveMenuId(null);
 
     if (editorRef.current) {
@@ -1004,6 +1352,9 @@ export default function Teligram() {
     setPreviewImage(getNoteImageUrl(note));
     setSelectedImage(null);
     setRemoveOldImage(false);
+    setSelectedFile(null);
+    setPreviewFile(null);
+    setRemoveOldFile(true);
     setActiveMenuId(null);
 
     if (editorRef.current) {
@@ -1024,6 +1375,66 @@ export default function Teligram() {
     setPreviewImage(getNoteImageUrl(note));
     setSelectedImage(null);
     setRemoveOldImage(false);
+    setSelectedFile(null);
+    setPreviewFile(null);
+    setRemoveOldFile(true);
+    setActiveMenuId(null);
+
+    if (editorRef.current) {
+      editorRef.current.innerHTML = note.content_html || "";
+    }
+
+    setTimeout(() => {
+      editorRef.current?.focus();
+      saveSelection();
+    }, 100);
+  };
+
+  const startFileUpdate = (note) => {
+    if (note.is_temp) return;
+
+    setEditingNoteId(note.note_id);
+    setComposerMode("file-update");
+    setComposerTextColor(getNoteTextColor(note));
+    setPreviewImage("");
+    setSelectedImage(null);
+    setRemoveOldImage(true);
+    setSelectedFile(null);
+    setPreviewFile({
+      name: getNoteFileName(note),
+      size: note.file_size || note.attachment_size || 0,
+      type: getNoteFileMime(note) || "application/octet-stream",
+      isNew: false,
+    });
+    setRemoveOldFile(false);
+    setActiveMenuId(null);
+
+    if (editorRef.current) {
+      editorRef.current.innerHTML = note.content_html || "";
+    }
+
+    setTimeout(() => {
+      fileRef.current?.click();
+    }, 80);
+  };
+
+  const startFileCaption = (note) => {
+    if (note.is_temp) return;
+
+    setEditingNoteId(note.note_id);
+    setComposerMode("file-caption");
+    setComposerTextColor(getNoteTextColor(note));
+    setPreviewImage("");
+    setSelectedImage(null);
+    setRemoveOldImage(true);
+    setSelectedFile(null);
+    setPreviewFile({
+      name: getNoteFileName(note),
+      size: note.file_size || note.attachment_size || 0,
+      type: getNoteFileMime(note) || "application/octet-stream",
+      isNew: false,
+    });
+    setRemoveOldFile(false);
     setActiveMenuId(null);
 
     if (editorRef.current) {
@@ -1037,7 +1448,7 @@ export default function Teligram() {
   };
 
   const markNoteAsTitle = async (note) => {
-    if (note.is_temp || hasNoteImage(note)) return;
+    if (note.is_temp || hasAnyNoteFile(note)) return;
 
     const oldNotes = notes;
     setActiveMenuId(null);
@@ -1059,6 +1470,7 @@ export default function Teligram() {
       formData.append("content_html", note.content_html || "");
       formData.append("text_color", note.text_color || "#111111");
       formData.append("remove_image", "false");
+      formData.append("remove_attachment", "false");
 
       const res = await fetch(`${API_URL}/api/telegram-notes/${note.note_id}`, {
         method: "PUT",
@@ -1117,7 +1529,7 @@ export default function Teligram() {
         showToast(data.message || "Delete failed", "error");
         setNotes(oldNotes);
 
-        if (res.status === 403) {
+        if (res.status === 403 && !channelAccessGrantedRef.current) {
           setChannelUnlocked(false);
           localStorage.removeItem("selected_channel_pin");
         }
@@ -1141,7 +1553,10 @@ export default function Teligram() {
   };
 
   const privateChannelLocked =
-    selectedChannel && isTrue(selectedChannel.is_private) && !channelUnlocked;
+    selectedChannel &&
+    isTrue(selectedChannel.is_private) &&
+    !channelUnlocked &&
+    !channelAccessGrantedRef.current;
 
   return (
     <div className="nm-screen" onClick={() => setActiveMenuId(null)}>
@@ -1305,6 +1720,7 @@ export default function Teligram() {
                 }) => {
                   const hasText = hasNoteText(note);
                   const hasImage = hasNoteImage(note);
+                  const hasAttachment = hasNoteAttachment(note);
                   const titleMessage = isTitleNote(note);
 
                   return (
@@ -1331,7 +1747,9 @@ export default function Teligram() {
                         <div
                           className={`message-bubble ${
                             hasImage && !hasText ? "image-only" : ""
-                          } ${titleMessage ? "title-bubble" : ""}`}
+                          } ${hasAttachment && !hasText ? "file-only" : ""} ${
+                            titleMessage ? "title-bubble" : ""
+                          }`}
                         >
                           <button
                             className="message-dot-btn"
@@ -1372,7 +1790,41 @@ export default function Teligram() {
                             </div>
                           )}
 
-                          {hasText && !hasImage && (
+                          {hasAttachment && (
+                            <div className={`file-message-wrap ${hasText ? "with-description" : ""}`}>
+                              <button
+                                type="button"
+                                className="file-card"
+                                onClick={(e) => openNoteFile(e, note)}
+                                title={isNoteFilePreviewable(note) ? "Open file" : "Download file"}
+                              >
+                                <span className="file-type-badge">
+                                  {getFileTypeLabel(note)}
+                                </span>
+                                <span className="file-info">
+                                  <strong>{getNoteFileName(note)}</strong>
+                                  <small>
+                                    {formatFileSize(note.file_size || note.attachment_size)}
+                                    {formatFileSize(note.file_size || note.attachment_size) ? " • " : ""}
+                                    {isNoteFilePreviewable(note) ? "Open / View" : "Download"}
+                                  </small>
+                                </span>
+                                <span className="file-download-mini">↧</span>
+                              </button>
+
+                              {hasText && (
+                                <div
+                                  className="image-description-text file-description-text"
+                                  style={{ "--noteColor": getNoteTextColor(note), color: getNoteTextColor(note) }}
+                                  dangerouslySetInnerHTML={{
+                                    __html: DOMPurify.sanitize(note.content_html),
+                                  }}
+                                />
+                              )}
+                            </div>
+                          )}
+
+                          {hasText && !hasImage && !hasAttachment && (
                             <div
                               className={`message-text ${
                                 titleMessage ? "message-title-text" : ""
@@ -1411,6 +1863,29 @@ export default function Teligram() {
                                 <button
                                   className="square-action download-square"
                                   onClick={(e) => downloadNoteImage(e, note)}
+                                >
+                                  Download
+                                </button>
+                              </>
+                            ) : hasAttachment ? (
+                              <>
+                                <button
+                                  className="square-action update-square"
+                                  onClick={() => startFileUpdate(note)}
+                                >
+                                  File
+                                </button>
+
+                                <button
+                                  className="square-action text-square"
+                                  onClick={() => startFileCaption(note)}
+                                >
+                                  {hasText ? "Text" : "Add Text"}
+                                </button>
+
+                                <button
+                                  className="square-action download-square"
+                                  onClick={(e) => downloadNoteFile(e, note)}
                                 >
                                   Download
                                 </button>
@@ -1462,9 +1937,26 @@ export default function Teligram() {
               </div>
             )}
 
+            {previewFile && (
+              <div className="preview-strip file-preview-strip">
+                <div className="preview-file-icon">
+                  {getFileTypeLabel(previewFile)}
+                </div>
+                <span>
+                  {selectedFile
+                    ? getFilePreviewName()
+                    : composerMode === "file-update"
+                      ? "Current file - select new file"
+                      : getFilePreviewName()}
+                  {previewFile?.size ? ` • ${formatFileSize(previewFile.size)}` : ""}
+                </span>
+                <button onClick={removeFile}>×</button>
+              </div>
+            )}
+
             {editingNoteId && (
               <div className="edit-strip">
-                <span>{composerMode === "title" ? "Adding title style" : composerMode === "image-update" ? "Updating image" : composerMode === "image-caption" ? "Adding image text" : "Updating message"}</span>
+                <span>{composerMode === "title" ? "Adding title style" : composerMode === "image-update" ? "Updating image" : composerMode === "image-caption" ? "Adding image text" : composerMode === "file-update" ? "Updating file" : composerMode === "file-caption" ? "Adding file text" : "Updating message"}</span>
                 <button onClick={resetForm}>Cancel</button>
               </div>
             )}
@@ -1522,6 +2014,22 @@ export default function Teligram() {
                     >
                       <img src={ATTACH_ICON} alt="image" className="tool-icon attach-icon" />
                     </button>
+
+                    <input
+                      ref={fileRef}
+                      type="file"
+                      hidden
+                      onChange={handleFileSelect}
+                    />
+
+                    <button
+                      className={`tool-btn file-tool ${previewFile ? "active" : ""}`}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => fileRef.current.click()}
+                      title="Add file"
+                    >
+                      <img src={FILE_ICON} alt="file" className="tool-icon file-icon-img" />
+                    </button>
                   </div>
 
                   <button
@@ -1538,7 +2046,7 @@ export default function Teligram() {
                   ref={editorRef}
                   className="text-input"
                   contentEditable
-                  data-placeholder={composerMode === "title" ? "Type title..." : composerMode === "image-update" ? "Select new image, then tap send" : composerMode === "image-caption" ? "Add image description..." : "Type message..."}
+                  data-placeholder={composerMode === "title" ? "Type title..." : composerMode === "image-update" ? "Select new image, then tap send" : composerMode === "image-caption" ? "Add image description..." : composerMode === "file-update" ? "Select new file, then tap send" : composerMode === "file-caption" ? "Add file description..." : "Type message..."}
                   style={{ "--composerColor": textColor, color: textColor, caretColor: textColor }}
                   onFocus={saveSelection}
                   onMouseUp={saveSelection}
@@ -5836,6 +6344,218 @@ export default function Teligram() {
 
           .header-brand-row .header-title p {
             font-size: 9.5px !important;
+          }
+        }
+
+
+        /* =========================================================
+           ANY FILE ATTACHMENT + FULL LOGO PROFESSIONAL FIX
+        ========================================================= */
+        .header-brand-row .header-logo,
+        .header-logo,
+        .unlock-logo {
+          border-radius: 50% !important;
+          overflow: hidden !important;
+          background: rgba(255, 255, 255, 0.98) !important;
+          border: 2px solid rgba(255, 255, 255, 0.92) !important;
+          padding: 3px !important;
+          box-shadow:
+            0 12px 26px rgba(15, 23, 42, 0.22),
+            inset 0 0 0 1px rgba(14, 165, 233, 0.08) !important;
+        }
+
+        .header-brand-row .header-logo img,
+        .header-logo img,
+        .unlock-logo img {
+          width: 100% !important;
+          height: 100% !important;
+          object-fit: contain !important;
+          border-radius: 50% !important;
+          background: #ffffff !important;
+          display: block !important;
+        }
+
+        .header-brand-row .logo-fallback-letter,
+        .header-logo .logo-fallback-letter,
+        .unlock-logo .logo-fallback-letter {
+          border-radius: 50% !important;
+        }
+
+        .file-tool {
+          background: linear-gradient(135deg, #fff7ed, #ffedd5) !important;
+          color: #c2410c !important;
+        }
+
+        .file-tool.active {
+          background: linear-gradient(135deg, #fb923c, #f97316) !important;
+          color: #ffffff !important;
+          box-shadow: 0 8px 18px rgba(249, 115, 22, 0.24) !important;
+        }
+
+        .file-icon-img {
+          width: 21px !important;
+          height: 21px !important;
+          object-fit: contain !important;
+          border-radius: 7px;
+          display: block;
+          box-shadow: 0 4px 10px rgba(15, 23, 42, 0.16);
+        }
+
+        .message-bubble.file-only {
+          padding: 6px 29px 18px 6px;
+          min-width: 210px;
+          max-width: min(86%, 340px);
+        }
+
+        .file-message-wrap {
+          width: min(276px, 72vw);
+          max-width: 100%;
+          display: grid;
+          gap: 7px;
+        }
+
+        .file-card {
+          width: 100%;
+          min-height: 66px;
+          border: 1px solid rgba(203, 213, 225, 0.9);
+          border-radius: 16px;
+          background:
+            linear-gradient(135deg, rgba(248, 250, 252, 0.98), rgba(239, 246, 255, 0.96));
+          display: grid;
+          grid-template-columns: 46px minmax(0, 1fr) 28px;
+          align-items: center;
+          gap: 10px;
+          padding: 9px;
+          cursor: pointer;
+          text-align: left;
+          box-shadow: 0 7px 18px rgba(15, 23, 42, 0.09);
+          transition:
+            transform 0.18s ease,
+            box-shadow 0.18s ease,
+            border-color 0.18s ease,
+            background 0.18s ease;
+        }
+
+        .file-card:hover,
+        .file-card:focus-visible {
+          transform: translateY(-1px);
+          border-color: rgba(14, 165, 233, 0.55);
+          box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+          outline: none;
+        }
+
+        .file-card:active {
+          transform: scale(0.985);
+        }
+
+        .file-type-badge {
+          width: 46px;
+          height: 46px;
+          border-radius: 14px;
+          background: linear-gradient(135deg, #0f766e, #0ea5e9);
+          color: #ffffff;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 11px;
+          font-weight: 950;
+          letter-spacing: 0.4px;
+          box-shadow: 0 9px 18px rgba(14, 165, 233, 0.22);
+        }
+
+        .file-info {
+          min-width: 0;
+          display: grid;
+          gap: 4px;
+        }
+
+        .file-info strong {
+          color: #0f172a;
+          font-size: 13px;
+          line-height: 1.22;
+          font-weight: 950;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .file-info small {
+          color: #64748b;
+          font-size: 11px;
+          line-height: 1.2;
+          font-weight: 800;
+        }
+
+        .file-download-mini {
+          width: 27px;
+          height: 27px;
+          border-radius: 10px;
+          background: rgba(14, 165, 233, 0.12);
+          color: #0369a1;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 16px;
+          font-weight: 950;
+        }
+
+        .file-description-text {
+          padding: 2px 2px 0;
+        }
+
+        .file-preview-strip {
+          gap: 9px !important;
+        }
+
+        .preview-file-icon {
+          width: 42px;
+          height: 42px;
+          border-radius: 14px;
+          background: linear-gradient(135deg, #f97316, #f59e0b);
+          color: white;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 11px;
+          font-weight: 950;
+          letter-spacing: 0.3px;
+          flex-shrink: 0;
+          box-shadow: 0 10px 22px rgba(249, 115, 22, 0.22);
+        }
+
+        .square-action {
+          transition:
+            transform 0.16s ease,
+            box-shadow 0.16s ease,
+            opacity 0.16s ease !important;
+        }
+
+        .square-action:active,
+        .tool-btn:active,
+        .send-btn:active {
+          transform: scale(0.96) !important;
+        }
+
+        @media (max-width: 360px) {
+          .file-message-wrap {
+            width: min(250px, 72vw);
+          }
+
+          .file-card {
+            grid-template-columns: 40px minmax(0, 1fr) 24px;
+            gap: 8px;
+            padding: 8px;
+          }
+
+          .file-type-badge {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            font-size: 10px;
+          }
+
+          .file-info strong {
+            font-size: 12px;
           }
         }
 
