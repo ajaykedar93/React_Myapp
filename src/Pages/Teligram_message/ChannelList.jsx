@@ -184,49 +184,6 @@ export default function ChannelList() {
     return name?.trim()?.charAt(0)?.toUpperCase() || "N";
   };
 
-  const getChannelLogoSource = (channel) => {
-    return (
-      channel?.logo_url ||
-      channel?.logo_path ||
-      channel?.logo ||
-      channel?.channel_logo ||
-      channel?.channel_logo_url ||
-      channel?.image_url ||
-      channel?.image_path ||
-      ""
-    );
-  };
-
-  const isLocalhostUrl = (url) => {
-    try {
-      const parsed = new URL(url);
-      return ["localhost", "127.0.0.1", "0.0.0.0"].includes(parsed.hostname);
-    } catch {
-      return false;
-    }
-  };
-
-  const normalizeAbsoluteUrl = (url) => {
-    const rawUrl = String(url || "").trim();
-    if (!rawUrl) return "";
-
-    if (!/^https?:\/\//i.test(rawUrl)) return rawUrl;
-
-    try {
-      const parsed = new URL(rawUrl);
-
-      // If backend saved localhost URL in DB, deployed frontend cannot load it.
-      // Keep the path and move it to the active API_URL.
-      if (["localhost", "127.0.0.1", "0.0.0.0"].includes(parsed.hostname)) {
-        return joinApiUrl(`${parsed.pathname}${parsed.search || ""}`);
-      }
-
-      return rawUrl;
-    } catch {
-      return rawUrl;
-    }
-  };
-
   const joinApiUrl = (pathValue) => {
     const cleanPath = String(pathValue || "").trim();
 
@@ -236,106 +193,60 @@ export default function ChannelList() {
     return `${API_URL}${cleanPath.startsWith("/") ? "" : "/"}${cleanPath}`;
   };
 
-  const getFileNameFromUrl = (url) => {
-    const rawUrl = String(url || "").trim();
-
-    if (!rawUrl) return "";
-
-    const cleanUrl = rawUrl
-      .replace(/\\/g, "/")
-      .split("?")[0]
-      .split("#")[0];
-
-    const fileName = cleanUrl.split("/").pop() || "";
-
-    try {
-      return decodeURIComponent(fileName);
-    } catch {
-      return fileName;
-    }
-  };
-
-  const getLogoUrl = (url) => {
+  const normalizeApiUrl = (url) => {
     const rawUrl = String(url || "").trim();
 
     if (!rawUrl) return "";
     if (rawUrl.startsWith("blob:") || rawUrl.startsWith("data:")) return rawUrl;
-    if (/^https?:\/\//i.test(rawUrl)) return normalizeAbsoluteUrl(rawUrl);
 
-    const cleanUrl = rawUrl.replace(/\\/g, "/").replace(/^\.\//, "");
+    if (/^https?:\/\//i.test(rawUrl)) {
+      try {
+        const parsed = new URL(rawUrl);
 
-    if (cleanUrl.startsWith("/api/") || cleanUrl.startsWith("api/")) {
-      return encodeURI(joinApiUrl(cleanUrl));
+        if (["localhost", "127.0.0.1", "0.0.0.0"].includes(parsed.hostname)) {
+          return joinApiUrl(`${parsed.pathname}${parsed.search || ""}`);
+        }
+
+        return rawUrl;
+      } catch {
+        return rawUrl;
+      }
     }
 
-    if (cleanUrl.startsWith("/uploads/") || cleanUrl.startsWith("uploads/")) {
-      return encodeURI(joinApiUrl(cleanUrl));
+    if (rawUrl.startsWith("/api/") || rawUrl.startsWith("api/")) {
+      return joinApiUrl(rawUrl);
     }
 
-    const uploadIndex = cleanUrl.indexOf("uploads/");
-    if (uploadIndex !== -1) {
-      return encodeURI(joinApiUrl(cleanUrl.slice(uploadIndex)));
-    }
-
-    const fileName = getFileNameFromUrl(cleanUrl);
-    if (!fileName) return "";
-
-    return encodeURI(
-      joinApiUrl(`/uploads/telegram-channels/${encodeURIComponent(fileName)}`)
-    );
+    return rawUrl;
   };
 
-  const buildLogoFallbacks = (source) => {
-    const rawSource = String(source || "").trim();
-    const fileName = getFileNameFromUrl(rawSource);
-    const urls = [];
+  const getChannelLogoSource = (channel) => {
+    if (!channel) return "";
 
-    const add = (value) => {
-      if (!value) return;
-      const finalUrl = encodeURI(value);
-      if (!urls.includes(finalUrl)) urls.push(finalUrl);
-    };
-
-    add(getLogoUrl(rawSource));
-    add(normalizeAbsoluteUrl(rawSource));
-
-    if (fileName) {
-      add(joinApiUrl(`/uploads/telegram-channels/${encodeURIComponent(fileName)}`));
-      add(joinApiUrl(`/uploads/telegram-channel/${encodeURIComponent(fileName)}`));
-      add(joinApiUrl(`/uploads/channels/${encodeURIComponent(fileName)}`));
-      add(joinApiUrl(`/uploads/channel-logos/${encodeURIComponent(fileName)}`));
-      add(joinApiUrl(`/uploads/logos/${encodeURIComponent(fileName)}`));
-      add(joinApiUrl(`/api/telegram-channels/logo/${encodeURIComponent(fileName)}`));
-      add(joinApiUrl(`/api/telegram-channels/image/${encodeURIComponent(fileName)}`));
-      add(joinApiUrl(`/api/telegram-channels/file/${encodeURIComponent(fileName)}`));
-      add(joinApiUrl(`/uploads/${encodeURIComponent(fileName)}`));
-      add(joinApiUrl(`/uploads/telegram-notes/${encodeURIComponent(fileName)}`));
+    if (channel.logo_url) {
+      return normalizeApiUrl(channel.logo_url);
     }
 
-    return urls;
+    if (isTrue(channel.has_logo) && channel.channel_id) {
+      const version = channel.updated_at
+        ? new Date(channel.updated_at).getTime()
+        : Date.now();
+
+      return `${API_URL}/api/telegram-channels/logo/${channel.channel_id}?v=${version}`;
+    }
+
+    return "";
   };
 
   const handleLogoError = (event, channelOrName, index = 0) => {
     const img = event.currentTarget;
-    const source =
-      typeof channelOrName === "object"
-        ? channelOrName?.logo_url || channelOrName?.logo_path || img.getAttribute("src")
-        : channelOrName || img.getAttribute("src");
-
-    const fallbacks = buildLogoFallbacks(source);
-    const nextStep = Number(img.dataset.fallbackStep || "0") + 1;
-
-    if (nextStep < fallbacks.length) {
-      img.dataset.fallbackStep = String(nextStep);
-      img.src = fallbacks[nextStep];
-      return;
-    }
 
     const name =
       typeof channelOrName === "object"
         ? channelOrName?.channel_name || "N"
         : String(channelOrName || "N");
 
+    img.onerror = null;
     img.dataset.fallbackStep = "done";
     img.src = getDefaultLogo(name, index);
   };
@@ -517,7 +428,7 @@ export default function ChannelList() {
     setEditingId(channel.channel_id);
     setChannelName(channel.channel_name || "");
     setChannelTagline(channel.channel_tagline || "");
-    setLogoPreview(getLogoUrl(getChannelLogoSource(channel)));
+    setLogoPreview(getChannelLogoSource(channel));
     setChannelLogo(null);
     setRemoveLogo(false);
     setActiveMenuId(null);
@@ -946,7 +857,7 @@ export default function ChannelList() {
                     <img
                       src={
                         channelLogoSource
-                          ? getLogoUrl(channelLogoSource)
+                          ? channelLogoSource
                           : getDefaultLogo(channel.channel_name, index)
                       }
                       alt={channel.channel_name}
@@ -1086,7 +997,7 @@ export default function ChannelList() {
             <div className="pin-logo-circle">
               {getChannelLogoSource(pinBox.channel) ? (
                 <img
-                  src={getLogoUrl(getChannelLogoSource(pinBox.channel))}
+                  src={getChannelLogoSource(pinBox.channel)}
                   alt="channel"
                   onError={(e) => handleLogoError(e, pinBox.channel, 0)}
                 />
