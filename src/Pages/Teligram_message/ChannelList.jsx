@@ -48,6 +48,8 @@ export default function ChannelList() {
   const actionRefreshTimerRef = useRef(null);
   const actionBusyRef = useRef(false);
   const isMountedRef = useRef(true);
+  const initialListLoadedRef = useRef(false);
+  const initialProgressTimerRef = useRef(null);
 
   const [channels, setChannels] = useState([]);
   const [channelName, setChannelName] = useState("");
@@ -63,6 +65,8 @@ export default function ChannelList() {
   const [removeLogo, setRemoveLogo] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [initialListLoading, setInitialListLoading] = useState(true);
+  const [initialLoadProgress, setInitialLoadProgress] = useState(7);
   const [pinChecking, setPinChecking] = useState(false);
   const [isOpeningChannel, setIsOpeningChannel] = useState(false);
 
@@ -101,29 +105,17 @@ export default function ChannelList() {
     error: "",
   });
 
-  const [apiProgress, setApiProgress] = useState(0);
-  const [showApiLoader, setShowApiLoader] = useState(false);
-
-  const apiLoadingActive = Boolean(
-    loading || pinChecking || deletePinChecking || isOpeningChannel
-  );
-
-  const apiLoaderText = pinChecking
-    ? "Checking PIN"
-    : deletePinChecking
-      ? "Deleting channel"
-      : isOpeningChannel
-        ? "Opening channel"
-        : loading
-          ? "Loading API"
-          : "Please wait";
-
   useEffect(() => {
     isMountedRef.current = true;
     fetchChannels({ silent: false });
 
     return () => {
       isMountedRef.current = false;
+
+      if (initialProgressTimerRef.current) {
+        clearInterval(initialProgressTimerRef.current);
+        initialProgressTimerRef.current = null;
+      }
 
       if (ownerAlertTimerRef.current) {
         clearTimeout(ownerAlertTimerRef.current);
@@ -155,44 +147,29 @@ export default function ChannelList() {
     };
   }, []);
 
-
   useEffect(() => {
-    let progressTimer = null;
-    let finishTimer = null;
+    if (!initialListLoading) return undefined;
 
-    if (apiLoadingActive) {
-      setShowApiLoader(true);
-      setApiProgress((prev) =>
-        prev > 0 && prev < 100 ? Math.min(prev, 94) : 6
-      );
-
-      progressTimer = window.setInterval(() => {
-        setApiProgress((prev) => {
-          if (prev >= 94) return prev;
-
-          const step = prev < 35 ? 6 : prev < 70 ? 3 : 1;
-          return Math.min(94, prev + step);
-        });
-      }, 170);
-    } else if (showApiLoader) {
-      setApiProgress(100);
-
-      finishTimer = window.setTimeout(() => {
-        setShowApiLoader(false);
-        setApiProgress(0);
-      }, 420);
+    if (initialProgressTimerRef.current) {
+      clearInterval(initialProgressTimerRef.current);
+      initialProgressTimerRef.current = null;
     }
 
-    return () => {
-      if (progressTimer) {
-        window.clearInterval(progressTimer);
-      }
+    initialProgressTimerRef.current = window.setInterval(() => {
+      setInitialLoadProgress((prev) => {
+        if (prev >= 92) return prev;
+        const step = prev < 45 ? 7 : prev < 74 ? 5 : 3;
+        return Math.min(92, prev + step);
+      });
+    }, 170);
 
-      if (finishTimer) {
-        window.clearTimeout(finishTimer);
+    return () => {
+      if (initialProgressTimerRef.current) {
+        clearInterval(initialProgressTimerRef.current);
+        initialProgressTimerRef.current = null;
       }
     };
-  }, [apiLoadingActive, showApiLoader]);
+  }, [initialListLoading]);
 
   useEffect(() => {
     const refreshChannelsSilently = () => {
@@ -653,10 +630,16 @@ export default function ChannelList() {
 
     const controller = new AbortController();
     channelRefreshAbortRef.current = controller;
+    const firstListApiLoad = !silent && !initialListLoadedRef.current;
 
     try {
       if (!silent) {
         setLoading(true);
+      }
+
+      if (firstListApiLoad) {
+        setInitialListLoading(true);
+        setInitialLoadProgress(7);
       }
 
       const res = await fetch(
@@ -694,6 +677,17 @@ export default function ChannelList() {
     } finally {
       if (channelRefreshAbortRef.current === controller) {
         channelRefreshAbortRef.current = null;
+      }
+
+      if (firstListApiLoad && isMountedRef.current) {
+        initialListLoadedRef.current = true;
+        setInitialLoadProgress(100);
+
+        window.setTimeout(() => {
+          if (isMountedRef.current) {
+            setInitialListLoading(false);
+          }
+        }, 260);
       }
 
       if (!silent && isMountedRef.current) {
@@ -1501,13 +1495,13 @@ export default function ChannelList() {
         )}
 
         <main className="channel-list">
-          {loading && channels.length === 0 && (
+          {initialListLoading && channels.length === 0 && (
             <div className="empty-box">
               <div className="loader"></div>
             </div>
           )}
 
-          {!loading && channels.length === 0 && (
+          {!initialListLoading && channels.length === 0 && (
             <div className="empty-box empty-minimal">
               <img src={getDefaultLogo("N", 2)} alt="empty" />
             </div>
@@ -1621,6 +1615,25 @@ export default function ChannelList() {
           <span className="developer-name">Ajay Kedar</span>
         </footer>
       </div>
+
+      {initialListLoading && (
+        <div className="initial-list-loader-layer" role="status" aria-live="polite">
+          <div className="initial-list-loader-card">
+            <div
+              className="initial-progress-circle"
+              style={{ "--progress": initialLoadProgress }}
+            >
+              <div className="initial-progress-inner">
+                <strong>{initialLoadProgress}%</strong>
+                <span>Loading</span>
+              </div>
+            </div>
+
+            <h3>Loading Channels</h3>
+            <p>Please wait while your channel list is loading.</p>
+          </div>
+        </div>
+      )}
 
       {toast.show && (
         <div className="popup-layer">
@@ -1845,24 +1858,6 @@ export default function ChannelList() {
                 {deletePinChecking ? "Checking..." : "Delete"}
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {showApiLoader && (
-        <div className="api-loader-overlay" role="status" aria-live="polite">
-          <div className="api-loader-card">
-            <div
-              className="api-progress-ring"
-              style={{ "--progress": `${apiProgress * 3.6}deg` }}
-            >
-              <div className="api-progress-inner">
-                <strong>{apiProgress}%</strong>
-              </div>
-            </div>
-
-            <h3>{apiLoaderText}</h3>
-            <p>Please wait while data is loading</p>
           </div>
         </div>
       )}
@@ -3175,31 +3170,116 @@ export default function ChannelList() {
           }
         }
 
-
-        /* =========================================================
-           FINAL API LOADING + PROFESSIONAL CHANNEL LIST VIEW
-           - Round progress loader with percentage before API load
-           - Professional list cards remain clean and responsive
-        ========================================================= */
-
-        .api-loader-overlay {
+        /* Initial list API loading spinner only.
+           It appears only before the first channel-list API response,
+           then never shows again during silent refresh/create/update/delete. */
+        .initial-list-loader-layer {
           position: fixed;
           inset: 0;
-          z-index: 9999;
+          z-index: 220;
           display: flex;
           align-items: center;
           justify-content: center;
-          padding: 24px;
+          padding: 22px;
           background:
-            radial-gradient(circle at 20% 10%, rgba(37, 99, 235, 0.24), transparent 32%),
-            radial-gradient(circle at 85% 85%, rgba(20, 184, 166, 0.26), transparent 34%),
+            radial-gradient(circle at 20% 10%, rgba(59, 130, 246, 0.28), transparent 34%),
+            radial-gradient(circle at 82% 88%, rgba(20, 184, 166, 0.26), transparent 34%),
             rgba(2, 6, 23, 0.58);
-          backdrop-filter: blur(12px);
-          -webkit-backdrop-filter: blur(12px);
-          animation: apiOverlayIn 0.18s ease both;
+          backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(10px);
+          animation: initialLoaderFade 0.18s ease both;
         }
 
-        @keyframes apiOverlayIn {
+        .initial-list-loader-card {
+          width: min(270px, calc(100vw - 46px));
+          padding: 24px 18px 20px;
+          border-radius: 30px;
+          background: rgba(255, 255, 255, 0.98);
+          border: 1px solid rgba(226, 232, 240, 0.92);
+          box-shadow:
+            0 30px 90px rgba(15, 23, 42, 0.36),
+            inset 0 1px 0 rgba(255, 255, 255, 0.88);
+          text-align: center;
+          font-family: "Poppins", "Montserrat", "Trebuchet MS", "Segoe UI", Arial, sans-serif;
+          animation: initialLoaderPop 0.22s cubic-bezier(.2,.9,.3,1) both;
+        }
+
+        .initial-progress-circle {
+          width: 124px;
+          height: 124px;
+          margin: 0 auto 15px;
+          border-radius: 50%;
+          padding: 9px;
+          background:
+            conic-gradient(
+              from -90deg,
+              #2563eb 0 calc(var(--progress) * 1%),
+              rgba(226, 232, 240, 0.95) calc(var(--progress) * 1%) 100%
+            );
+          box-shadow:
+            0 18px 36px rgba(37, 99, 235, 0.22),
+            0 0 0 8px rgba(37, 99, 235, 0.06);
+          position: relative;
+        }
+
+        .initial-progress-circle::after {
+          content: "";
+          position: absolute;
+          inset: 4px;
+          border-radius: 50%;
+          border: 1px solid rgba(255, 255, 255, 0.6);
+          pointer-events: none;
+        }
+
+        .initial-progress-inner {
+          width: 100%;
+          height: 100%;
+          border-radius: 50%;
+          background:
+            radial-gradient(circle at 35% 20%, rgba(255,255,255,1), rgba(248,250,252,0.96));
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          box-shadow: inset 0 1px 8px rgba(15, 23, 42, 0.08);
+        }
+
+        .initial-progress-inner strong {
+          color: #0f172a;
+          font-size: 27px;
+          line-height: 1;
+          font-weight: 950;
+          letter-spacing: -0.4px;
+        }
+
+        .initial-progress-inner span {
+          margin-top: 5px;
+          color: #2563eb;
+          font-size: 10.5px;
+          line-height: 1;
+          font-weight: 950;
+          text-transform: uppercase;
+          letter-spacing: 0.7px;
+        }
+
+        .initial-list-loader-card h3 {
+          margin: 0;
+          color: #0f172a;
+          font-size: 17px;
+          line-height: 1.18;
+          font-weight: 950;
+        }
+
+        .initial-list-loader-card p {
+          margin: 7px auto 0;
+          max-width: 210px;
+          color: #64748b;
+          font-size: 12px;
+          line-height: 1.36;
+          font-weight: 700;
+        }
+
+        @keyframes initialLoaderFade {
           from {
             opacity: 0;
           }
@@ -3209,29 +3289,10 @@ export default function ChannelList() {
           }
         }
 
-        .api-loader-card {
-          width: min(245px, calc(100vw - 56px));
-          min-height: 238px;
-          padding: 24px 18px 20px;
-          border-radius: 30px;
-          background:
-            linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96));
-          border: 1px solid rgba(226, 232, 240, 0.95);
-          box-shadow:
-            0 30px 90px rgba(2, 6, 23, 0.38),
-            inset 0 1px 0 rgba(255,255,255,0.9);
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          text-align: center;
-          animation: apiCardPop 0.22s cubic-bezier(.2,.9,.3,1) both;
-        }
-
-        @keyframes apiCardPop {
+        @keyframes initialLoaderPop {
           from {
             opacity: 0;
-            transform: translateY(10px) scale(0.95);
+            transform: translateY(12px) scale(0.94);
           }
 
           to {
@@ -3240,225 +3301,6 @@ export default function ChannelList() {
           }
         }
 
-        .api-progress-ring {
-          --progress: 0deg;
-          width: 124px;
-          height: 124px;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background:
-            conic-gradient(from -90deg, #2563eb var(--progress), rgba(226, 232, 240, 0.95) 0deg),
-            linear-gradient(135deg, #eff6ff, #ecfeff);
-          box-shadow:
-            0 16px 36px rgba(37, 99, 235, 0.22),
-            inset 0 0 0 1px rgba(255,255,255,0.65);
-          position: relative;
-        }
-
-        .api-progress-ring::before {
-          content: "";
-          position: absolute;
-          inset: -7px;
-          border-radius: inherit;
-          border: 1px solid rgba(14, 165, 233, 0.18);
-          animation: apiRingPulse 1.25s ease-in-out infinite;
-        }
-
-        @keyframes apiRingPulse {
-          0%,
-          100% {
-            transform: scale(0.98);
-            opacity: 0.65;
-          }
-
-          50% {
-            transform: scale(1.04);
-            opacity: 1;
-          }
-        }
-
-        .api-progress-inner {
-          width: 92px;
-          height: 92px;
-          border-radius: 50%;
-          background:
-            radial-gradient(circle at 30% 22%, rgba(255,255,255,1), rgba(248,250,252,0.96));
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          box-shadow:
-            inset 0 1px 0 rgba(255,255,255,0.9),
-            0 8px 22px rgba(15,23,42,0.10);
-        }
-
-        .api-progress-inner strong {
-          color: #0f172a;
-          font-size: 24px;
-          line-height: 1;
-          font-weight: 950;
-          letter-spacing: -0.4px;
-          font-family: "Poppins", "Montserrat", "Segoe UI", Arial, sans-serif;
-        }
-
-        .api-loader-card h3 {
-          margin: 18px 0 5px;
-          color: #0f172a;
-          font-size: 16px;
-          line-height: 1.2;
-          font-weight: 950;
-          font-family: "Poppins", "Montserrat", "Segoe UI", Arial, sans-serif;
-        }
-
-        .api-loader-card p {
-          margin: 0;
-          color: #64748b;
-          font-size: 12px;
-          line-height: 1.35;
-          font-weight: 800;
-        }
-
-        .channel-list {
-          padding: 4px 0 20px !important;
-        }
-
-        .channel-row {
-          min-height: 92px !important;
-          margin: 0 12px 12px !important;
-          border-radius: 24px !important;
-          background:
-            linear-gradient(135deg, rgba(255,255,255,0.98), rgba(248,250,252,0.95)) padding-box,
-            linear-gradient(135deg, var(--c1), var(--c2)) border-box !important;
-          border: 1.5px solid transparent !important;
-          box-shadow:
-            0 14px 34px rgba(15, 23, 42, 0.10),
-            inset 0 1px 0 rgba(255,255,255,0.72) !important;
-          transition:
-            transform 0.18s ease,
-            box-shadow 0.18s ease,
-            border-color 0.18s ease !important;
-        }
-
-        .channel-row:active {
-          transform: scale(0.985);
-          box-shadow:
-            0 9px 22px rgba(15, 23, 42, 0.10),
-            inset 0 1px 0 rgba(255,255,255,0.72) !important;
-        }
-
-        .channel-click {
-          padding: 13px 6px 13px 15px !important;
-          gap: 13px !important;
-        }
-
-        .channel-logo {
-          width: 60px !important;
-          height: 60px !important;
-          border-radius: 20px !important;
-          box-shadow:
-            0 10px 22px rgba(15,23,42,0.16),
-            inset 0 0 0 2px rgba(255,255,255,0.45) !important;
-        }
-
-        .channel-name h3 {
-          font-family: "Poppins", "Montserrat", "Segoe UI", Arial, sans-serif !important;
-          font-size: 16px !important;
-          line-height: 1.25 !important;
-          font-weight: 900 !important;
-          color: #0f172a !important;
-          letter-spacing: 0.05px !important;
-        }
-
-        .channel-tagline {
-          margin-top: 4px !important;
-          color: #64748b !important;
-          font-size: 12px !important;
-          line-height: 1.35 !important;
-          font-weight: 700 !important;
-        }
-
-        .channel-created-time {
-          margin-top: 7px !important;
-          padding: 4px 8px !important;
-          width: fit-content !important;
-          max-width: 100% !important;
-          border-radius: 999px !important;
-          background: rgba(239, 246, 255, 0.85) !important;
-          color: #475569 !important;
-          font-size: 10.5px !important;
-          line-height: 1.25 !important;
-        }
-
-        .menu-wrap {
-          width: 46px !important;
-        }
-
-        .dot-btn {
-          width: 34px !important;
-          height: 34px !important;
-          background: #f8fafc !important;
-          border: 1px solid rgba(226, 232, 240, 0.95) !important;
-          color: #334155 !important;
-          box-shadow: 0 6px 14px rgba(15,23,42,0.06) !important;
-        }
-
-        .dot-btn:hover {
-          background: #eff6ff !important;
-          color: #2563eb !important;
-        }
-
-        .empty-box .loader {
-          width: 46px !important;
-          height: 46px !important;
-          border-radius: 50% !important;
-          border: 5px solid #dbeafe !important;
-          border-top-color: #2563eb !important;
-          animation: spin 0.85s linear infinite !important;
-        }
-
-        @media (max-width: 420px) {
-          .api-loader-card {
-            width: min(230px, calc(100vw - 52px));
-            min-height: 226px;
-            border-radius: 28px;
-          }
-
-          .api-progress-ring {
-            width: 112px;
-            height: 112px;
-          }
-
-          .api-progress-inner {
-            width: 84px;
-            height: 84px;
-          }
-
-          .api-progress-inner strong {
-            font-size: 22px;
-          }
-
-          .channel-row {
-            margin-left: 10px !important;
-            margin-right: 10px !important;
-            min-height: 88px !important;
-          }
-
-          .channel-click {
-            gap: 11px !important;
-            padding-left: 13px !important;
-          }
-
-          .channel-logo {
-            width: 56px !important;
-            height: 56px !important;
-            border-radius: 18px !important;
-          }
-
-          .channel-name h3 {
-            font-size: 15px !important;
-          }
-        }
 
       `}</style>
     </div>
