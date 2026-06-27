@@ -8830,6 +8830,277 @@ export default function Teligram() {
           }
         }
 
+
+
+        /* =========================================================
+           FINAL REQUEST UPDATE 2
+           - Global Poppins professional font
+           - Text card smaller, stylish, and compact
+           - More breathing space between message cards
+           - Slight new-message effect
+           - Composer input slightly taller with blue border
+           - Header logo/title box orange-red professional border
+        ========================================================= */
+
+        .nm-screen,
+        .nm-phone,
+        .nm-header,
+        .header-brand-row,
+        .chat-body,
+        .composer,
+        .composer-card,
+        .text-input,
+        .message-bubble,
+        .message-text,
+        .image-description-text,
+        .file-description-text,
+        .message-time,
+        .date-separator,
+        .search-box,
+        .toast,
+        .confirm-card,
+        button,
+        input {
+          font-family: "Poppins", "Inter", "Segoe UI", Arial, sans-serif !important;
+        }
+
+        .chat-body {
+          gap: 0 !important;
+          padding-top: 13px !important;
+          padding-bottom: 18px !important;
+        }
+
+        .note-block {
+          margin: 0 0 4px !important;
+        }
+
+        .message-line,
+        .message-line.my-message-line,
+        .message-line.other-message-line {
+          margin: 0 0 15px !important;
+          padding: 0 9px !important;
+          animation: softMessageEntry 0.18s ease both !important;
+        }
+
+        @keyframes softMessageEntry {
+          from {
+            opacity: 0.72;
+            transform: translateY(5px) scale(0.992);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)),
+        .message-bubble.my-message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)),
+        .message-bubble.other-message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) {
+          width: fit-content !important;
+          max-width: min(82vw, 500px) !important;
+          min-width: min(225px, calc(100vw - 72px)) !important;
+          padding: 11px 39px 21px 14px !important;
+          border-radius: 18px !important;
+          background:
+            linear-gradient(145deg, rgba(255,255,255,0.98), rgba(248,250,252,0.96)) !important;
+          border: 1px solid rgba(226, 232, 240, 0.98) !important;
+          box-shadow:
+            0 7px 20px rgba(15, 23, 42, 0.085),
+            inset 0 1px 0 rgba(255,255,255,0.95) !important;
+          overflow: visible !important;
+          text-align: left !important;
+        }
+
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-text,
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-text *,
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-text div,
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-text p,
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-text span {
+          font-family: "Poppins", "Inter", "Segoe UI", Arial, sans-serif !important;
+          font-size: clamp(13.6px, 3.65vw, 15.4px) !important;
+          line-height: 1.52 !important;
+          font-weight: 500 !important;
+          letter-spacing: 0.12px !important;
+          text-align: left !important;
+          white-space: pre-wrap !important;
+          word-break: break-word !important;
+          overflow-wrap: anywhere !important;
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-text b,
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-text strong {
+          font-weight: 850 !important;
+        }
+
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-time {
+          right: 9px !important;
+          bottom: 5px !important;
+          padding: 1px 5px !important;
+          border-radius: 999px !important;
+          background: rgba(248,250,252,0.84) !important;
+          color: #94a3b8 !important;
+          font-family: "Poppins", "Inter", "Segoe UI", Arial, sans-serif !important;
+          font-size: 8.8px !important;
+          line-height: 1 !important;
+          font-weight: 700 !important;
+          opacity: 0.95 !important;
+          box-shadow: none !important;
+        }
+
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-dot-btn {
+          top: 5px !important;
+          right: 6px !important;
+          width: 21px !important;
+          height: 21px !important;
+          min-width: 21px !important;
+          min-height: 21px !important;
+          border-radius: 999px !important;
+          background: rgba(241, 245, 249, 0.90) !important;
+          color: #64748b !important;
+          font-size: 13px !important;
+        }
+
+        .message-bubble.image-only,
+        .message-bubble.file-only,
+        .message-bubble:has(.image-message-wrap),
+        .message-bubble:has(.file-message-wrap) {
+          margin-bottom: 2px !important;
+        }
+
+        .header-brand-row {
+          border: 1.8px solid rgba(249, 115, 22, 0.82) !important;
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.22),
+            0 0 0 1px rgba(220, 38, 38, 0.16),
+            0 9px 24px rgba(194, 65, 12, 0.18) !important;
+        }
+
+        .header-brand-row .header-logo,
+        .header-logo {
+          border: 2px solid rgba(234, 88, 12, 0.95) !important;
+          box-shadow:
+            0 9px 22px rgba(194, 65, 12, 0.23),
+            inset 0 0 0 2px rgba(255, 255, 255, 0.76) !important;
+        }
+
+        .header-brand-row .header-title h2 {
+          font-family: "Poppins", "Inter", "Segoe UI", Arial, sans-serif !important;
+          font-weight: 900 !important;
+          letter-spacing: 0.18px !important;
+        }
+
+        .header-brand-row .header-title p {
+          font-family: "Poppins", "Inter", "Segoe UI", Arial, sans-serif !important;
+          font-weight: 700 !important;
+        }
+
+        .composer {
+          padding: 7px 8px max(8px, env(safe-area-inset-bottom)) !important;
+        }
+
+        .composer-input-row {
+          gap: 8px !important;
+          align-items: flex-end !important;
+        }
+
+        .composer-input-row .text-input {
+          min-height: 45px !important;
+          max-height: 124px !important;
+          padding: 11px 14px !important;
+          border: 1.6px solid rgba(37, 99, 235, 0.56) !important;
+          border-radius: 21px !important;
+          background: #ffffff !important;
+          font-family: "Poppins", "Inter", "Segoe UI", Arial, sans-serif !important;
+          font-size: 14.2px !important;
+          line-height: 1.46 !important;
+          font-weight: 500 !important;
+          box-shadow:
+            0 0 0 3px rgba(37, 99, 235, 0.07),
+            0 5px 14px rgba(15, 23, 42, 0.06) !important;
+        }
+
+        .composer-input-row .text-input:focus,
+        .composer-input-row .text-input:focus-visible {
+          border-color: rgba(37, 99, 235, 0.90) !important;
+          box-shadow:
+            0 0 0 3px rgba(37, 99, 235, 0.13),
+            0 7px 18px rgba(37, 99, 235, 0.10) !important;
+        }
+
+        .composer-input-row .text-input *,
+        .composer-input-row .text-input div,
+        .composer-input-row .text-input p,
+        .composer-input-row .text-input span,
+        .composer-input-row .text-input font {
+          font-family: "Poppins", "Inter", "Segoe UI", Arial, sans-serif !important;
+          font-size: inherit !important;
+          line-height: inherit !important;
+          text-align: left !important;
+        }
+
+        .composer-input-row .send-btn {
+          width: 43px !important;
+          height: 43px !important;
+          min-width: 43px !important;
+          min-height: 43px !important;
+          box-shadow: 0 8px 20px rgba(37, 99, 235, 0.24) !important;
+        }
+
+        .tools-ball-btn {
+          border: 1px solid rgba(255,255,255,0.68) !important;
+          box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22) !important;
+        }
+
+        @media (max-width: 480px) {
+          .message-line,
+          .message-line.my-message-line,
+          .message-line.other-message-line {
+            margin-bottom: 14px !important;
+            padding-left: 8px !important;
+            padding-right: 8px !important;
+          }
+
+          .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)),
+          .message-bubble.my-message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)),
+          .message-bubble.other-message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) {
+            max-width: calc(100vw - 46px) !important;
+            min-width: min(232px, calc(100vw - 70px)) !important;
+            padding: 11px 37px 21px 14px !important;
+          }
+
+          .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-text,
+          .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-text * {
+            font-size: clamp(13.8px, 3.95vw, 15.2px) !important;
+            line-height: 1.53 !important;
+          }
+
+          .composer-input-row .text-input {
+            min-height: 44px !important;
+            padding: 10px 13px !important;
+            font-size: 14px !important;
+          }
+
+          .composer-input-row .send-btn {
+            width: 42px !important;
+            height: 42px !important;
+            min-width: 42px !important;
+            min-height: 42px !important;
+          }
+        }
+
+        @media (max-width: 360px) {
+          .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)),
+          .message-bubble.my-message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)),
+          .message-bubble.other-message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) {
+            max-width: calc(100vw - 36px) !important;
+            min-width: min(215px, calc(100vw - 58px)) !important;
+            padding: 10px 35px 20px 13px !important;
+          }
+        }
+
+
       `}</style>
     </div>
   );
