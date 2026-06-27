@@ -810,15 +810,23 @@ export default function ChannelList() {
   const deleteChannel = async (channelId, pin = "") => {
     const oldEditingId = editingId;
     const cleanDeletePin = String(pin || "").replace(/\D/g, "").slice(0, 4);
+
     const activeDeleteChannel =
       Number(deletePinBox.channel?.channel_id) === Number(channelId)
         ? deletePinBox.channel
         : null;
+
     const channelForDelete =
       activeDeleteChannel ||
       channels.find((channel) => Number(channel.channel_id) === Number(channelId)) ||
       null;
-    const privateDelete = isTrue(channelForDelete?.is_private) || /^[0-9]{4}$/.test(cleanDeletePin);
+
+    /*
+      Final delete logic:
+      - Public channel: send only current device id.
+      - Private channel: send only PIN. No device id verification needed.
+    */
+    const privateDelete = isTrue(channelForDelete?.is_private);
     const currentDeviceId = getCurrentDeviceId();
 
     setActiveMenuId(null);
@@ -839,23 +847,18 @@ export default function ChannelList() {
         "Content-Type": "application/json",
       };
 
-      const deleteBody = privateDelete
-        ? { pin: cleanDeletePin }
-        : {
-            device_id: currentDeviceId,
-          };
+      let deleteBody = {};
 
-      /*
-        Delete rule:
-        - Public channel: send device id so backend can allow only the device
-          that created the public channel to delete it.
-        - Private channel: do NOT send device id. Any device may delete it,
-          but the correct 4-digit PIN is required.
-      */
       if (privateDelete) {
         deleteHeaders["x-channel-pin"] = cleanDeletePin;
+        deleteBody = {
+          pin: cleanDeletePin,
+        };
       } else {
         deleteHeaders["x-device-id"] = currentDeviceId;
+        deleteBody = {
+          device_id: currentDeviceId,
+        };
       }
 
       const res = await fetch(`${API_URL}/api/telegram-channels/${channelId}`, {
@@ -866,6 +869,7 @@ export default function ChannelList() {
 
       const data = await res.json().catch(() => ({}));
       const apiMessage = String(data?.message || "");
+
       const ownerBlocked =
         !privateDelete &&
         (res.status === 403 ||
@@ -877,14 +881,17 @@ export default function ChannelList() {
         if (ownerBlocked) {
           closeConfirm();
           closeDeletePinBox();
-          showOwnerDeleteAlert("Only the device that created this public channel can delete it.");
+          showOwnerDeleteAlert(
+            "Only the device that created this public channel can delete it."
+          );
           return;
         }
 
         if (privateDelete || deletePinBox.show) {
-          const wrongPinMessage = /pin|wrong|mismatch|incorrect|invalid|required/i.test(apiMessage)
-            ? apiMessage
-            : "Wrong PIN";
+          const wrongPinMessage =
+            /pin|wrong|mismatch|incorrect|invalid|required/i.test(apiMessage)
+              ? apiMessage
+              : "Wrong PIN";
 
           setDeletePinBox((prev) => ({
             ...prev,

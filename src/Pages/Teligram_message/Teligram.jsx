@@ -69,9 +69,14 @@ export default function Teligram() {
   const realtimeTimerRef = useRef(null);
   const isFetchingNotesRef = useRef(false);
   const isSavingNoteRef = useRef(false);
+  const skipNextAutoScrollRef = useRef(false);
+  const scrollSnapshotRef = useRef(null);
+  const noteRefs = useRef({});
+  const pinnedScrollTimerRef = useRef(null);
 
   const [selectedChannel, setSelectedChannel] = useState(null);
   const [notes, setNotes] = useState([]);
+  const [pinnedNoteId, setPinnedNoteId] = useState("");
 
   const [channelUnlocked, setChannelUnlocked] = useState(false);
   const [unlockPin, setUnlockPin] = useState("");
@@ -97,6 +102,7 @@ export default function Teligram() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [loading, setLoading] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
 
   const [toast, setToast] = useState({
     show: false,
@@ -117,6 +123,15 @@ export default function Teligram() {
   }, []);
 
   useEffect(() => {
+    return () => {
+      if (pinnedScrollTimerRef.current) {
+        clearTimeout(pinnedScrollTimerRef.current);
+        pinnedScrollTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (
       selectedChannel?.channel_id &&
       (!isTrue(selectedChannel.is_private) || channelUnlocked)
@@ -124,6 +139,15 @@ export default function Teligram() {
       fetchNotes(selectedChannel.channel_id, verifiedPinRef.current || getSavedChannelPin());
     }
   }, [selectedChannel, channelUnlocked]);
+
+  useEffect(() => {
+    if (!selectedChannel?.channel_id || typeof window === "undefined") {
+      setPinnedNoteId("");
+      return;
+    }
+
+    setPinnedNoteId(localStorage.getItem(getPinnedNoteKey(selectedChannel.channel_id)) || "");
+  }, [selectedChannel?.channel_id]);
 
   useEffect(() => {
     if (realtimeTimerRef.current) {
@@ -171,9 +195,14 @@ export default function Teligram() {
 
   useEffect(() => {
     if (!isTrue(selectedChannel?.is_private) || channelUnlocked) {
+      if (skipNextAutoScrollRef.current) {
+        restoreChatView();
+        return;
+      }
+
       setTimeout(() => {
         const chatBody = chatBodyRef.current;
-        if (chatBody) {
+        if (chatBody && !skipNextAutoScrollRef.current) {
           chatBody.scrollTo({ top: chatBody.scrollHeight, behavior: "smooth" });
         }
       }, 60);
@@ -240,6 +269,20 @@ export default function Teligram() {
 
   const getSessionVerifiedKey = (channelId) => {
     return `${SESSION_VERIFIED_PREFIX}${channelId}`;
+  };
+
+  const getPinnedNoteKey = (channelId) => {
+    return `pinned_note_${PUBLIC_USER_ID}_${channelId}`;
+  };
+
+  const savePinnedNoteId = (channelId, noteId) => {
+    if (!channelId || typeof window === "undefined") return;
+
+    if (noteId) {
+      localStorage.setItem(getPinnedNoteKey(channelId), String(noteId));
+    } else {
+      localStorage.removeItem(getPinnedNoteKey(channelId));
+    }
   };
 
   const hasFrontendVerifiedAccess = (channelId, pin = "") => {
@@ -942,6 +985,57 @@ export default function Teligram() {
     return html.trim();
   };
 
+  const preserveChatView = (noteId = "") => {
+    const chatBody = chatBodyRef.current;
+
+    if (!chatBody) return;
+
+    const targetNoteId = noteId ? String(noteId) : "";
+    const noteElement = targetNoteId ? noteRefs.current[targetNoteId] : null;
+    const chatRect = chatBody.getBoundingClientRect();
+    const noteRect = noteElement?.getBoundingClientRect?.();
+
+    scrollSnapshotRef.current = {
+      top: chatBody.scrollTop,
+      height: chatBody.scrollHeight,
+      noteId: targetNoteId,
+      noteOffset: noteRect ? noteRect.top - chatRect.top : null,
+    };
+
+    skipNextAutoScrollRef.current = true;
+  };
+
+  const restoreChatView = () => {
+    const snapshot = scrollSnapshotRef.current;
+
+    window.requestAnimationFrame(() => {
+      const chatBody = chatBodyRef.current;
+
+      if (!chatBody || !snapshot) {
+        skipNextAutoScrollRef.current = false;
+        scrollSnapshotRef.current = null;
+        return;
+      }
+
+      const noteElement = snapshot.noteId
+        ? noteRefs.current[String(snapshot.noteId)]
+        : null;
+
+      if (noteElement && snapshot.noteOffset !== null) {
+        const chatRect = chatBody.getBoundingClientRect();
+        const noteRect = noteElement.getBoundingClientRect();
+        chatBody.scrollTop += noteRect.top - chatRect.top - snapshot.noteOffset;
+      } else {
+        chatBody.scrollTop = snapshot.top;
+      }
+
+      window.requestAnimationFrame(() => {
+        skipNextAutoScrollRef.current = false;
+        scrollSnapshotRef.current = null;
+      });
+    });
+  };
+
   const loadSelectedChannel = async () => {
     const loadId = ++channelLoadIdRef.current;
     const channelId = localStorage.getItem("selected_channel_id");
@@ -1208,6 +1302,10 @@ export default function Teligram() {
           return prev;
         }
 
+        if (silent) {
+          preserveChatView();
+        }
+
         return channelNotes;
       });
     } catch (error) {
@@ -1284,6 +1382,11 @@ export default function Teligram() {
       };
     });
   }, [filteredNotes]);
+
+  const pinnedNote = useMemo(() => {
+    if (!pinnedNoteId) return null;
+    return notes.find((note) => String(note.note_id) === String(pinnedNoteId)) || null;
+  }, [notes, pinnedNoteId]);
 
   const saveSelection = () => {
     const selection = window.getSelection();
@@ -1477,6 +1580,7 @@ export default function Teligram() {
     setComposerMode("message");
     setActiveFormats({ bold: false, underline: false });
     setActiveMenuId(null);
+    setToolsOpen(false);
     savedRangeRef.current = null;
 
     if (editorRef.current) {
@@ -1570,6 +1674,7 @@ export default function Teligram() {
     };
 
     if (oldEditingId) {
+      preserveChatView(oldEditingId);
       setNotes((prev) =>
         prev.map((note) =>
           String(note.note_id) === String(oldEditingId)
@@ -1694,6 +1799,7 @@ export default function Teligram() {
       };
 
       if (oldEditingId) {
+        preserveChatView(oldEditingId);
         setNotes((prev) =>
           prev.map((note) =>
             String(note.note_id) === String(oldEditingId) ? savedNote : note
@@ -1886,11 +1992,17 @@ export default function Teligram() {
     if (note.is_temp || hasAnyNoteFile(note)) return;
 
     const oldNotes = notes;
+    const noteWasTitle = isTitleNote(note);
+    const nextTitle = noteWasTitle ? "" : "title";
+    const successMessage = noteWasTitle ? "Title style removed" : "Title style added";
+
     setActiveMenuId(null);
+    preserveChatView(note.note_id);
+
     setNotes((prev) =>
       prev.map((item) =>
         String(item.note_id) === String(note.note_id)
-          ? { ...item, title: "title", updated_at: new Date().toISOString() }
+          ? { ...item, title: nextTitle, updated_at: new Date().toISOString() }
           : item
       )
     );
@@ -1906,7 +2018,7 @@ export default function Teligram() {
       formData.append("device_id", noteDeviceId);
       formData.append("sender_device_id", noteDeviceId);
       formData.append("created_device_id", noteDeviceId);
-      formData.append("title", "title");
+      formData.append("title", nextTitle);
       formData.append("content_html", note.content_html || "");
       formData.append("text_color", note.text_color || "#111111");
       formData.append("remove_image", "false");
@@ -1921,6 +2033,7 @@ export default function Teligram() {
       const data = await res.json();
 
       if (!res.ok) {
+        preserveChatView(note.note_id);
         setNotes(oldNotes);
         showToast(data.message || "Title update failed", "error");
         return;
@@ -1928,17 +2041,20 @@ export default function Teligram() {
 
       const backendNote = data.note || {};
 
+      preserveChatView(note.note_id);
+
       setNotes((prev) =>
         prev.map((item) =>
           String(item.note_id) === String(note.note_id)
-            ? { ...item, ...backendNote, title: "title" }
+            ? { ...item, ...backendNote, title: nextTitle }
             : item
         )
       );
 
-      showToast("Title style added", "success");
+      showToast(successMessage, "success");
     } catch (error) {
       console.error("Title update error:", error);
+      preserveChatView(note.note_id);
       setNotes(oldNotes);
       showToast("Server error", "error");
     } finally {
@@ -1946,14 +2062,74 @@ export default function Teligram() {
     }
   };
 
+  const togglePinnedNote = (note) => {
+    if (!selectedChannel?.channel_id || !note?.note_id) return;
+
+    const noteId = String(note.note_id);
+    const alreadyPinned = String(pinnedNoteId || "") === noteId;
+    const nextPinnedId = alreadyPinned ? "" : noteId;
+
+    setActiveMenuId(null);
+    setPinnedNoteId(nextPinnedId);
+    savePinnedNoteId(selectedChannel.channel_id, nextPinnedId);
+    showToast(alreadyPinned ? "Pin removed" : "Message pinned", "success");
+  };
+
+  const getPinnedNotePreview = (note) => {
+    if (!note) return "Pinned message";
+
+    const text = stripHtml(note.content_html || "").trim();
+
+    if (text) {
+      return text.length > 58 ? `${text.slice(0, 58)}...` : text;
+    }
+
+    if (hasNoteImage(note)) return "Pinned image";
+    if (hasNoteAttachment(note)) return `Pinned file: ${getNoteFileName(note)}`;
+
+    return "Pinned message";
+  };
+
+  const goToPinnedNote = () => {
+    if (!pinnedNoteId) return;
+
+    const target = noteRefs.current[String(pinnedNoteId)];
+
+    if (!target) {
+      showToast("Pinned message not found", "error");
+      return;
+    }
+
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+
+    if (pinnedScrollTimerRef.current) {
+      clearTimeout(pinnedScrollTimerRef.current);
+    }
+
+    setActiveMenuId(pinnedNoteId);
+
+    pinnedScrollTimerRef.current = setTimeout(() => {
+      setActiveMenuId((current) =>
+        String(current) === String(pinnedNoteId) ? null : current
+      );
+    }, 1400);
+  };
+
   const deleteNote = async (noteId) => {
     const oldNotes = notes;
+
+    preserveChatView(noteId);
 
     setNotes((prev) =>
       prev.filter((note) => String(note.note_id) !== String(noteId))
     );
 
     setActiveMenuId(null);
+
+    if (String(pinnedNoteId || "") === String(noteId)) {
+      setPinnedNoteId("");
+      savePinnedNoteId(selectedChannel?.channel_id, "");
+    }
 
     try {
       setLoading(true);
@@ -1967,6 +2143,7 @@ export default function Teligram() {
 
       if (!res.ok) {
         showToast(data.message || "Delete failed", "error");
+        preserveChatView();
         setNotes(oldNotes);
 
         if (res.status === 403 && !channelAccessGrantedRef.current) {
@@ -1981,6 +2158,7 @@ export default function Teligram() {
     } catch (error) {
       console.error("Delete note error:", error);
       showToast("Server error while deleting", "error");
+      preserveChatView();
       setNotes(oldNotes);
     } finally {
       setLoading(false);
@@ -2136,6 +2314,22 @@ export default function Teligram() {
               </div>
             )}
 
+            {pinnedNote && (
+              <button
+                type="button"
+                className="pinned-note-jump"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  goToPinnedNote();
+                }}
+                title="Go to pinned message"
+              >
+                <span className="pinned-note-icon">📌</span>
+                <span className="pinned-note-label">Pinned</span>
+                <strong>{getPinnedNotePreview(pinnedNote)}</strong>
+              </button>
+            )}
+
             <main ref={chatBodyRef} className="chat-body" onClick={closeChatKeyboard}>
               {groupedNotes.length === 0 && (
                 <div className="empty-card">
@@ -2164,9 +2358,23 @@ export default function Teligram() {
                   const titleMessage = isTitleNote(note);
                   const messageFromThisDevice = isMyDeviceNote(note);
                   const deviceTheme = getDeviceTheme(note);
+                  const showDeviceChip =
+                    !messageFromThisDevice && !isTrue(selectedChannel?.is_private);
+
+                  const pinnedMessage = String(pinnedNoteId || "") === String(note.note_id);
 
                   return (
-                    <div className="note-block" key={note.note_id}>
+                    <div
+                      className={`note-block ${pinnedMessage ? "pinned-note-block" : ""}`}
+                      key={note.note_id}
+                      ref={(element) => {
+                        if (element) {
+                          noteRefs.current[String(note.note_id)] = element;
+                        } else {
+                          delete noteRefs.current[String(note.note_id)];
+                        }
+                      }}
+                    >
                       {showDateBadge && (
                         <div className="date-separator">
                           <span
@@ -2186,7 +2394,7 @@ export default function Teligram() {
                             ? "my-message-line"
                             : "other-message-line"
                         } ${
-                          activeMenuId === note.note_id ? "message-active" : ""
+                          String(activeMenuId) === String(note.note_id) ? "message-active" : ""
                         }`}
                         onClick={() => setActiveMenuId(null)}
                       >
@@ -2199,15 +2407,27 @@ export default function Teligram() {
                             hasImage && !hasText ? "image-only" : ""
                           } ${hasAttachment && !hasText ? "file-only" : ""} ${
                             titleMessage ? "title-bubble" : ""
-                          }`}
+                          } ${pinnedMessage ? "pinned-message-bubble" : ""}`}
                           style={{
                             "--device-card-1": deviceTheme.card1,
                             "--device-card-2": deviceTheme.card2,
                             "--device-accent": deviceTheme.accent,
                           }}
+                          onDoubleClick={(e) => {
+                            if (!note.is_temp && hasText && !hasImage && !hasAttachment) {
+                              e.stopPropagation();
+                              markNoteAsTitle(note);
+                            }
+                          }}
                         >
-                          {!messageFromThisDevice && (
-                            <div className="device-source-chip">New device</div>
+                          {showDeviceChip && (
+                            <div className="device-source-chip">ND</div>
+                          )}
+
+                          {pinnedMessage && (
+                            <span className="pinned-message-chip" title="Pinned message">
+                              📌
+                            </span>
                           )}
 
                           <button
@@ -2215,7 +2435,7 @@ export default function Teligram() {
                             onClick={(e) => {
                               e.stopPropagation();
                               setActiveMenuId(
-                                activeMenuId === note.note_id
+                                String(activeMenuId) === String(note.note_id)
                                   ? null
                                   : note.note_id
                               );
@@ -2300,7 +2520,7 @@ export default function Teligram() {
                           </div>
                         </div>
 
-                        {activeMenuId === note.note_id && !note.is_temp && (
+                        {String(activeMenuId) === String(note.note_id) && !note.is_temp && (
                           <div className="message-action-row" onClick={(e) => e.stopPropagation()}>
                             {hasImage ? (
                               <>
@@ -2361,17 +2581,32 @@ export default function Teligram() {
                                   className="square-action title-square"
                                   onClick={() => markNoteAsTitle(note)}
                                 >
-                                  Title
+                                  {titleMessage ? "Normal" : "Title"}
                                 </button>
                               </>
                             )}
+
+                            <button
+                              className={`square-action pin-square ${pinnedMessage ? "active-pin" : ""}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                togglePinnedNote(note);
+                              }}
+                            >
+                              {pinnedMessage ? "Unpin" : "Pin"}
+                            </button>
 
                             <button
                               className="square-action delete-square"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setActiveMenuId(null);
-                                deleteNote(note.note_id);
+                                preserveChatView(note.note_id);
+                                openConfirm(
+                                  "Delete?",
+                                  "Delete this message?",
+                                  () => deleteNote(note.note_id)
+                                );
                               }}
                             >
                               Delete
@@ -2419,76 +2654,127 @@ export default function Teligram() {
               </div>
             )}
 
-            <footer className="composer">
+            <footer className="composer" onClick={(e) => e.stopPropagation()}>
               <div className="composer-card">
-                <div className="composer-tools">
-                  <div className="tool-left">
-                    <button
-                      className={`tool-btn format-btn ${activeFormats.bold ? "active" : ""}`}
-                      onMouseDown={applyBold}
-                      title="Bold"
-                    >
-                      <b>B</b>
-                    </button>
+                <div className="composer-tools-top">
+                  <button
+                    type="button"
+                    className={`tools-ball-btn ${toolsOpen ? "active" : ""}`}
+                    title="Formatting and attachments"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      saveSelection();
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setToolsOpen((prev) => !prev);
+                    }}
+                  >
+                    <span></span>
+                  </button>
 
-                    <button
-                      className={`tool-btn format-btn ${activeFormats.underline ? "active" : ""}`}
-                      onMouseDown={applyUnderline}
-                      title="Underline"
-                    >
-                      <u>U</u>
-                    </button>
-
-                    <input
-                      ref={colorRef}
-                      type="color"
-                      value={textColor}
-                      hidden
-                      onChange={(e) => changeColor(e.target.value)}
-                    />
-
-                    <button
-                      className={`tool-btn color-tool ${textColor !== "#111111" ? "active" : ""}`}
-                      onMouseDown={openColorPicker}
-                      title="Text color"
-                      style={{ "--pickedColor": textColor }}
-                    >
-                      <img src={COLOR_ICON} alt="color" className="tool-icon color-icon" />
-                    </button>
-
-                    <input
-                      ref={imageRef}
-                      type="file"
-                      accept="image/*"
-                      hidden
-                      onChange={handleImageSelect}
-                    />
-
-                    <button
-                      className={`tool-btn image-tool ${previewImage ? "active" : ""}`}
+                  {toolsOpen && (
+                    <div
+                      className="composer-tools-popover"
                       onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => imageRef.current.click()}
-                      title="Add image"
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      <img src={ATTACH_ICON} alt="image" className="tool-icon attach-icon" />
-                    </button>
+                      <button
+                        type="button"
+                        className={`tool-btn format-btn ${activeFormats.bold ? "active" : ""}`}
+                        onMouseDown={applyBold}
+                        title="Bold"
+                      >
+                        <b>B</b>
+                      </button>
 
-                    <input
-                      ref={fileRef}
-                      type="file"
-                      hidden
-                      onChange={handleFileSelect}
-                    />
+                      <button
+                        type="button"
+                        className={`tool-btn format-btn ${activeFormats.underline ? "active" : ""}`}
+                        onMouseDown={applyUnderline}
+                        title="Underline"
+                      >
+                        <u>U</u>
+                      </button>
 
-                    <button
-                      className={`tool-btn file-tool ${previewFile ? "active" : ""}`}
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => fileRef.current.click()}
-                      title="Add file"
-                    >
-                      <img src={FILE_ICON} alt="file" className="tool-icon file-icon-img" />
-                    </button>
-                  </div>
+                      <input
+                        ref={colorRef}
+                        type="color"
+                        value={textColor}
+                        hidden
+                        onChange={(e) => changeColor(e.target.value)}
+                      />
+
+                      <button
+                        type="button"
+                        className={`tool-btn color-tool ${textColor !== "#111111" ? "active" : ""}`}
+                        onMouseDown={openColorPicker}
+                        title="Text color"
+                        style={{ "--pickedColor": textColor }}
+                      >
+                        <img src={COLOR_ICON} alt="color" className="tool-icon color-icon" />
+                      </button>
+
+                      <input
+                        ref={imageRef}
+                        type="file"
+                        accept="image/*"
+                        hidden
+                        onChange={handleImageSelect}
+                      />
+
+                      <button
+                        type="button"
+                        className={`tool-btn image-tool ${previewImage ? "active" : ""}`}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => imageRef.current?.click()}
+                        title="Add image"
+                      >
+                        <img src={ATTACH_ICON} alt="image" className="tool-icon attach-icon" />
+                      </button>
+
+                      <input
+                        ref={fileRef}
+                        type="file"
+                        hidden
+                        onChange={handleFileSelect}
+                      />
+
+                      <button
+                        type="button"
+                        className={`tool-btn file-tool ${previewFile ? "active" : ""}`}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => fileRef.current?.click()}
+                        title="Add file"
+                      >
+                        <img src={FILE_ICON} alt="file" className="tool-icon file-icon-img" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="composer-input-row">
+                  <div
+                    ref={editorRef}
+                    className="text-input"
+                    contentEditable
+                    data-placeholder={composerMode === "title" ? "Type title..." : composerMode === "image-update" ? "Select new image, then tap send" : composerMode === "image-caption" ? "Add image description..." : composerMode === "file-update" ? "Select new file, then tap send" : composerMode === "file-caption" ? "Add file description..." : "Type message..."}
+                    style={{ "--composerColor": textColor, color: textColor, caretColor: textColor }}
+                    onFocus={saveSelection}
+                    onMouseUp={saveSelection}
+                    onKeyUp={saveSelection}
+                    onKeyDown={() => {
+                      setTimeout(updateActiveFormats, 0);
+                    }}
+                    onInput={saveSelection}
+                    onBlur={saveSelection}
+                    onPaste={(e) => {
+                      e.preventDefault();
+                      const text = e.clipboardData.getData("text/plain");
+                      document.execCommand("insertText", false, text);
+                      saveSelection();
+                    }}
+                  ></div>
 
                   <button
                     className="send-btn"
@@ -2499,28 +2785,6 @@ export default function Teligram() {
                     {loading ? "…" : editingNoteId ? "✓" : "➤"}
                   </button>
                 </div>
-
-                <div
-                  ref={editorRef}
-                  className="text-input"
-                  contentEditable
-                  data-placeholder={composerMode === "title" ? "Type title..." : composerMode === "image-update" ? "Select new image, then tap send" : composerMode === "image-caption" ? "Add image description..." : composerMode === "file-update" ? "Select new file, then tap send" : composerMode === "file-caption" ? "Add file description..." : "Type message..."}
-                  style={{ "--composerColor": textColor, color: textColor, caretColor: textColor }}
-                  onFocus={saveSelection}
-                  onMouseUp={saveSelection}
-                  onKeyUp={saveSelection}
-                  onKeyDown={() => {
-                    setTimeout(updateActiveFormats, 0);
-                  }}
-                  onInput={saveSelection}
-                  onBlur={saveSelection}
-                  onPaste={(e) => {
-                    e.preventDefault();
-                    const text = e.clipboardData.getData("text/plain");
-                    document.execCommand("insertText", false, text);
-                    saveSelection();
-                  }}
-                ></div>
               </div>
             </footer>
           </>
@@ -2557,7 +2821,7 @@ export default function Teligram() {
                   confirmBox.action && confirmBox.action();
                 }}
               >
-                Delete
+                Yes
               </button>
             </div>
           </div>
@@ -7838,6 +8102,731 @@ export default function Teligram() {
           .message-image,
           .file-card {
             max-width: min(232px, 68vw) !important;
+          }
+        }
+
+
+        /* =========================================================
+           FINAL REFERENCE TEXT CARD FIX
+           Matches the uploaded WhatsApp reference style:
+           - Text card is large and readable, not tiny
+           - White professional card
+           - Time stays small in the bottom-right corner
+           - Image/file cards stay unchanged
+        ========================================================= */
+
+        .message-line:has(.message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap))) {
+          width: 100% !important;
+          display: flex !important;
+          justify-content: flex-start !important;
+          align-items: flex-start !important;
+          padding: 0 10px !important;
+          margin: 0 0 10px !important;
+        }
+
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)),
+        .message-bubble.my-message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)),
+        .message-bubble.other-message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) {
+          width: fit-content !important;
+          max-width: min(88vw, 420px) !important;
+          min-width: min(250px, calc(100vw - 34px)) !important;
+          padding: 14px 42px 30px 17px !important;
+          border-radius: 0 22px 22px 22px !important;
+          background: #ffffff !important;
+          border: 1px solid rgba(226, 232, 240, 0.92) !important;
+          box-shadow:
+            0 1px 1px rgba(15, 23, 42, 0.08),
+            0 10px 28px rgba(15, 23, 42, 0.08) !important;
+          overflow: visible !important;
+          position: relative !important;
+          text-align: left !important;
+        }
+
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap))::before {
+          display: none !important;
+        }
+
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-text,
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-text *,
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-text div,
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-text p,
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-text span,
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-text font {
+          font-family: "Times New Roman", Times, serif !important;
+          font-size: clamp(16px, 4.35vw, 20px) !important;
+          line-height: 1.58 !important;
+          font-weight: 500 !important;
+          letter-spacing: 0.12px !important;
+          color: var(--noteColor, #111827) !important;
+          -webkit-text-fill-color: var(--noteColor, #111827) !important;
+          text-align: left !important;
+          text-indent: 0 !important;
+          white-space: pre-wrap !important;
+          word-break: break-word !important;
+          overflow-wrap: anywhere !important;
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-text b,
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-text strong {
+          font-weight: 900 !important;
+        }
+
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-text u {
+          text-decoration: underline !important;
+          text-underline-offset: 4px !important;
+        }
+
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-time {
+          position: absolute !important;
+          right: 12px !important;
+          bottom: 8px !important;
+          top: auto !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          padding: 0 !important;
+          margin: 0 !important;
+          border-radius: 0 !important;
+          background: transparent !important;
+          color: #94a3b8 !important;
+          font-family: "Times New Roman", Times, serif !important;
+          font-size: 11px !important;
+          line-height: 1 !important;
+          font-weight: 700 !important;
+          letter-spacing: 0.1px !important;
+          opacity: 1 !important;
+          white-space: nowrap !important;
+          box-shadow: none !important;
+          z-index: 5 !important;
+        }
+
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-dot-btn {
+          position: absolute !important;
+          top: 7px !important;
+          right: 8px !important;
+          width: 22px !important;
+          height: 22px !important;
+          min-width: 22px !important;
+          min-height: 22px !important;
+          padding: 0 !important;
+          border: none !important;
+          border-radius: 50% !important;
+          background: rgba(248, 250, 252, 0.9) !important;
+          color: #64748b !important;
+          box-shadow: none !important;
+          font-size: 14px !important;
+          font-weight: 900 !important;
+          line-height: 1 !important;
+          z-index: 8 !important;
+        }
+
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .device-source-chip {
+          margin: 0 24px 8px 0 !important;
+          padding: 3px 8px !important;
+          border-radius: 999px !important;
+          font-family: Inter, Arial, sans-serif !important;
+          font-size: 9px !important;
+          line-height: 1 !important;
+          font-weight: 950 !important;
+        }
+
+        .message-bubble:has(.message-title-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) {
+          border-left: 4px solid #f97316 !important;
+          background: #ffffff !important;
+        }
+
+        .message-bubble:has(.message-title-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-title-text,
+        .message-bubble:has(.message-title-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-title-text * {
+          font-size: clamp(17px, 4.7vw, 21px) !important;
+          line-height: 1.35 !important;
+          font-weight: 900 !important;
+          text-align: left !important;
+        }
+
+        @media (max-width: 480px) {
+          .message-line:has(.message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap))) {
+            padding: 0 9px !important;
+          }
+
+          .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)),
+          .message-bubble.my-message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)),
+          .message-bubble.other-message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) {
+            max-width: calc(100vw - 24px) !important;
+            min-width: min(285px, calc(100vw - 30px)) !important;
+            padding: 14px 40px 30px 17px !important;
+            border-radius: 0 22px 22px 22px !important;
+          }
+
+          .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-text,
+          .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-text * {
+            font-size: clamp(17px, 5vw, 20px) !important;
+            line-height: 1.58 !important;
+          }
+
+          .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-time {
+            right: 12px !important;
+            bottom: 8px !important;
+            font-size: 11px !important;
+          }
+        }
+
+        @media (max-width: 360px) {
+          .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)),
+          .message-bubble.my-message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)),
+          .message-bubble.other-message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) {
+            max-width: calc(100vw - 18px) !important;
+            min-width: min(270px, calc(100vw - 24px)) !important;
+            padding: 13px 38px 29px 15px !important;
+          }
+
+          .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-text,
+          .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-text * {
+            font-size: 16.5px !important;
+          }
+
+          .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-time {
+            font-size: 10.5px !important;
+          }
+        }
+
+
+
+
+        /* =========================================================
+           FINAL ACTION UPDATE
+           - Update/delete/title keep same scroll position
+           - Small delete Yes/Cancel alert
+           - Title button toggles Title/Normal
+           - Pin note jump button goes directly to pinned text/image/file
+        ========================================================= */
+        .pinned-note-jump {
+          flex: 0 0 auto !important;
+          width: calc(100% - 18px) !important;
+          max-width: 430px !important;
+          min-height: 38px !important;
+          margin: 7px auto 0 !important;
+          padding: 7px 12px !important;
+          border: 1px solid rgba(20, 184, 166, 0.24) !important;
+          border-radius: 16px !important;
+          background: rgba(255, 255, 255, 0.96) !important;
+          color: #0f172a !important;
+          display: grid !important;
+          grid-template-columns: 24px auto minmax(0, 1fr) !important;
+          align-items: center !important;
+          gap: 7px !important;
+          cursor: pointer !important;
+          box-shadow: 0 10px 26px rgba(15, 23, 42, 0.10) !important;
+          z-index: 44 !important;
+        }
+
+        .pinned-note-jump:active {
+          transform: scale(0.985) !important;
+        }
+
+        .pinned-note-icon {
+          width: 24px !important;
+          height: 24px !important;
+          border-radius: 50% !important;
+          background: #ccfbf1 !important;
+          color: #0f766e !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          font-size: 13px !important;
+        }
+
+        .pinned-note-label {
+          color: #0f766e !important;
+          font-size: 11px !important;
+          line-height: 1 !important;
+          font-weight: 950 !important;
+          text-transform: uppercase !important;
+          letter-spacing: 0.35px !important;
+          white-space: nowrap !important;
+        }
+
+        .pinned-note-jump strong {
+          min-width: 0 !important;
+          color: #334155 !important;
+          font-size: 12px !important;
+          line-height: 1.15 !important;
+          font-weight: 850 !important;
+          white-space: nowrap !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+          text-align: left !important;
+        }
+
+        .pinned-message-bubble {
+          outline: 2px solid rgba(20, 184, 166, 0.34) !important;
+          outline-offset: 2px !important;
+        }
+
+        .pinned-message-chip {
+          position: absolute !important;
+          top: 6px !important;
+          left: 7px !important;
+          width: 22px !important;
+          height: 22px !important;
+          border-radius: 999px !important;
+          background: rgba(255, 255, 255, 0.86) !important;
+          color: #0f766e !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          font-size: 12px !important;
+          z-index: 9 !important;
+          box-shadow: 0 5px 14px rgba(15, 23, 42, 0.10) !important;
+        }
+
+        .pinned-message-bubble .device-source-chip {
+          margin-left: 25px !important;
+        }
+
+        .pin-square {
+          color: #0f766e !important;
+          background: #ccfbf1 !important;
+          border-color: #99f6e4 !important;
+        }
+
+        .pin-square.active-pin {
+          color: #ffffff !important;
+          background: linear-gradient(135deg, #0f766e, #14b8a6) !important;
+          border-color: transparent !important;
+        }
+
+        .confirm-layer {
+          z-index: 220 !important;
+          align-items: center !important;
+          justify-content: center !important;
+          background: rgba(15, 23, 42, 0.12) !important;
+          backdrop-filter: none !important;
+          pointer-events: auto !important;
+        }
+
+        .confirm-card {
+          width: auto !important;
+          min-width: 188px !important;
+          max-width: 230px !important;
+          padding: 10px 11px !important;
+          border-radius: 16px !important;
+          background: rgba(255, 255, 255, 0.98) !important;
+          border: 1px solid rgba(226, 232, 240, 0.95) !important;
+          box-shadow: 0 16px 42px rgba(15, 23, 42, 0.18) !important;
+          pointer-events: auto !important;
+        }
+
+        .confirm-card h3 {
+          margin: 0 0 4px !important;
+          font-size: 13px !important;
+          line-height: 1.15 !important;
+          font-weight: 950 !important;
+          color: #111827 !important;
+        }
+
+        .confirm-card p {
+          margin: 0 0 9px !important;
+          color: #64748b !important;
+          font-size: 11px !important;
+          line-height: 1.25 !important;
+          font-weight: 750 !important;
+        }
+
+        .confirm-actions {
+          gap: 7px !important;
+        }
+
+        .confirm-actions button {
+          height: 28px !important;
+          border-radius: 999px !important;
+          font-size: 11px !important;
+          font-weight: 950 !important;
+        }
+
+        .cancel-confirm {
+          background: #f1f5f9 !important;
+          color: #475569 !important;
+        }
+
+        .delete-confirm {
+          background: #dc2626 !important;
+          color: #ffffff !important;
+        }
+
+        .message-action-row {
+          z-index: 125 !important;
+        }
+
+        @media (max-width: 480px) {
+          .pinned-note-jump {
+            width: calc(100% - 16px) !important;
+            min-height: 36px !important;
+            margin-top: 6px !important;
+            padding: 6px 10px !important;
+            border-radius: 15px !important;
+          }
+
+          .pinned-note-jump strong {
+            font-size: 11.5px !important;
+          }
+
+          .confirm-card {
+            min-width: 176px !important;
+            max-width: 214px !important;
+            padding: 9px 10px !important;
+          }
+        }
+
+
+        /* =========================================================
+           FINAL USER REQUEST UPDATE
+           - Hide New device text everywhere
+           - Public channels show small ND chip only for other devices
+           - Private channels show no device label
+           - Text cards like reference image with less bottom empty space
+           - WhatsApp-like composer: tool ball + left aligned input + round send
+        ========================================================= */
+
+        .device-source-chip {
+          position: absolute !important;
+          top: 8px !important;
+          left: 9px !important;
+          width: 22px !important;
+          height: 22px !important;
+          min-width: 22px !important;
+          min-height: 22px !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          border-radius: 999px !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          background: rgba(15, 118, 110, 0.10) !important;
+          color: #0f766e !important;
+          border: 1px solid rgba(15, 118, 110, 0.20) !important;
+          font-family: Inter, Arial, sans-serif !important;
+          font-size: 8.5px !important;
+          line-height: 1 !important;
+          font-weight: 950 !important;
+          letter-spacing: 0 !important;
+          text-transform: uppercase !important;
+          z-index: 8 !important;
+          box-shadow: none !important;
+        }
+
+        .message-bubble:has(.device-source-chip):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) {
+          padding-top: 14px !important;
+        }
+
+        .message-bubble:has(.device-source-chip) .message-text {
+          margin-top: 12px !important;
+        }
+
+        .pinned-message-bubble .device-source-chip {
+          margin-left: 0 !important;
+          left: 35px !important;
+        }
+
+        .chat-body {
+          padding-bottom: 16px !important;
+        }
+
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)),
+        .message-bubble.my-message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)),
+        .message-bubble.other-message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) {
+          max-width: min(88vw, 560px) !important;
+          min-width: min(255px, calc(100vw - 42px)) !important;
+          padding: 13px 44px 23px 17px !important;
+          border-radius: 0 20px 20px 20px !important;
+          background: #ffffff !important;
+          border: 1px solid rgba(226, 232, 240, 0.96) !important;
+          box-shadow: 0 8px 24px rgba(15, 23, 42, 0.10) !important;
+          overflow: visible !important;
+          text-align: left !important;
+        }
+
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-text,
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-text *,
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-text div,
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-text p,
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-text span {
+          font-family: "Times New Roman", Times, serif !important;
+          font-size: clamp(16.5px, 4.55vw, 21px) !important;
+          line-height: 1.46 !important;
+          font-weight: 500 !important;
+          letter-spacing: 0.08px !important;
+          text-align: left !important;
+          white-space: pre-wrap !important;
+          word-break: break-word !important;
+          overflow-wrap: anywhere !important;
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-time {
+          right: 10px !important;
+          bottom: 6px !important;
+          padding: 1px 5px !important;
+          border-radius: 999px !important;
+          background: transparent !important;
+          color: #94a3b8 !important;
+          font-family: "Times New Roman", Times, serif !important;
+          font-size: 10.5px !important;
+          line-height: 1 !important;
+          font-weight: 700 !important;
+          opacity: 0.95 !important;
+          box-shadow: none !important;
+        }
+
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-dot-btn {
+          top: 6px !important;
+          right: 7px !important;
+          width: 22px !important;
+          height: 22px !important;
+          min-width: 22px !important;
+          min-height: 22px !important;
+          border-radius: 50% !important;
+          background: rgba(241, 245, 249, 0.86) !important;
+          color: #475569 !important;
+          font-size: 14px !important;
+        }
+
+        .composer {
+          padding: 5px 8px max(6px, env(safe-area-inset-bottom)) !important;
+          background: rgba(240, 242, 245, 0.98) !important;
+          border-top: 1px solid rgba(203, 213, 225, 0.76) !important;
+          backdrop-filter: blur(12px) !important;
+          -webkit-backdrop-filter: blur(12px) !important;
+        }
+
+        .composer-card {
+          width: 100% !important;
+          border: none !important;
+          border-radius: 0 !important;
+          background: transparent !important;
+          box-shadow: none !important;
+          padding: 0 !important;
+          overflow: visible !important;
+          max-height: none !important;
+          display: flex !important;
+          flex-direction: column !important;
+          gap: 5px !important;
+        }
+
+        .composer-tools-top {
+          width: 100% !important;
+          min-height: 28px !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: flex-start !important;
+          gap: 7px !important;
+          padding: 0 2px !important;
+        }
+
+        .tools-ball-btn {
+          width: 25px !important;
+          height: 25px !important;
+          min-width: 25px !important;
+          min-height: 25px !important;
+          border: none !important;
+          border-radius: 999px !important;
+          background: linear-gradient(135deg, #0f766e, #0ea5e9) !important;
+          color: #ffffff !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          padding: 0 !important;
+          cursor: pointer !important;
+          box-shadow: 0 7px 16px rgba(14, 165, 233, 0.24) !important;
+          flex: 0 0 auto !important;
+        }
+
+        .tools-ball-btn span,
+        .tools-ball-btn span::before,
+        .tools-ball-btn span::after {
+          width: 4px !important;
+          height: 4px !important;
+          border-radius: 999px !important;
+          background: #ffffff !important;
+          display: block !important;
+          content: "" !important;
+          position: relative !important;
+        }
+
+        .tools-ball-btn span::before {
+          position: absolute !important;
+          left: -7px !important;
+          top: 0 !important;
+        }
+
+        .tools-ball-btn span::after {
+          position: absolute !important;
+          left: 7px !important;
+          top: 0 !important;
+        }
+
+        .tools-ball-btn.active {
+          background: linear-gradient(135deg, #ea580c, #f97316) !important;
+        }
+
+        .composer-tools-popover {
+          min-height: 30px !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          gap: 6px !important;
+          padding: 3px 6px !important;
+          border-radius: 999px !important;
+          background: rgba(255, 255, 255, 0.96) !important;
+          border: 1px solid rgba(226, 232, 240, 0.9) !important;
+          box-shadow: 0 9px 24px rgba(15, 23, 42, 0.12) !important;
+          animation: composerToolsIn 0.16s ease both !important;
+          overflow-x: auto !important;
+          max-width: calc(100vw - 52px) !important;
+          scrollbar-width: none !important;
+        }
+
+        .composer-tools-popover::-webkit-scrollbar {
+          display: none !important;
+        }
+
+        @keyframes composerToolsIn {
+          from {
+            opacity: 0;
+            transform: translateX(-5px) scale(0.96);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(0) scale(1);
+          }
+        }
+
+        .composer-tools-popover .tool-btn {
+          width: 27px !important;
+          height: 27px !important;
+          min-width: 27px !important;
+          border-radius: 999px !important;
+          font-size: 11px !important;
+          box-shadow: none !important;
+        }
+
+        .composer-tools-popover .tool-icon {
+          max-width: 18px !important;
+          max-height: 18px !important;
+        }
+
+        .composer-input-row {
+          width: 100% !important;
+          display: flex !important;
+          align-items: flex-end !important;
+          gap: 7px !important;
+        }
+
+        .composer-input-row .text-input {
+          flex: 1 1 auto !important;
+          min-width: 0 !important;
+          min-height: 40px !important;
+          max-height: 112px !important;
+          margin: 0 !important;
+          padding: 10px 13px !important;
+          border: 1px solid rgba(203, 213, 225, 0.90) !important;
+          border-radius: 20px !important;
+          background: #ffffff !important;
+          color: var(--composerColor, #111111) !important;
+          -webkit-text-fill-color: var(--composerColor, #111111) !important;
+          caret-color: var(--composerColor, #111111) !important;
+          font-family: Inter, Arial, sans-serif !important;
+          font-size: 14px !important;
+          line-height: 1.38 !important;
+          font-weight: 550 !important;
+          text-align: left !important;
+          white-space: pre-wrap !important;
+          word-break: break-word !important;
+          overflow-wrap: anywhere !important;
+          overflow-y: auto !important;
+          outline: none !important;
+          box-shadow: none !important;
+          display: block !important;
+          direction: ltr !important;
+        }
+
+        .composer-input-row .text-input *,
+        .composer-input-row .text-input div,
+        .composer-input-row .text-input p,
+        .composer-input-row .text-input span,
+        .composer-input-row .text-input font {
+          text-align: left !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          white-space: inherit !important;
+          color: inherit !important;
+          -webkit-text-fill-color: var(--composerColor, #111111) !important;
+          font-size: inherit !important;
+          line-height: inherit !important;
+        }
+
+        .composer-input-row .text-input:empty::before {
+          color: #94a3b8 !important;
+          -webkit-text-fill-color: #94a3b8 !important;
+          font-weight: 600 !important;
+          text-align: left !important;
+        }
+
+        .composer-input-row .send-btn {
+          width: 42px !important;
+          height: 42px !important;
+          min-width: 42px !important;
+          min-height: 42px !important;
+          border-radius: 999px !important;
+          padding: 0 !important;
+          margin: 0 !important;
+          background: linear-gradient(135deg, #0f766e, #0ea5e9) !important;
+          color: #ffffff !important;
+          font-size: 17px !important;
+          line-height: 1 !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          box-shadow: 0 8px 20px rgba(14, 165, 233, 0.25) !important;
+          flex: 0 0 auto !important;
+        }
+
+        @media (max-width: 480px) {
+          .chat-body {
+            padding-bottom: 12px !important;
+          }
+
+          .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)),
+          .message-bubble.my-message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)),
+          .message-bubble.other-message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) {
+            max-width: calc(100vw - 22px) !important;
+            min-width: min(285px, calc(100vw - 30px)) !important;
+            padding: 13px 42px 23px 17px !important;
+          }
+
+          .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-text,
+          .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-text * {
+            font-size: clamp(16.8px, 4.9vw, 20px) !important;
+            line-height: 1.46 !important;
+          }
+
+          .composer {
+            padding-left: 7px !important;
+            padding-right: 7px !important;
+          }
+
+          .composer-input-row .text-input {
+            min-height: 39px !important;
+            padding: 9px 12px !important;
+            font-size: 13.5px !important;
+          }
+
+          .composer-input-row .send-btn {
+            width: 40px !important;
+            height: 40px !important;
+            min-width: 40px !important;
+            min-height: 40px !important;
           }
         }
 
