@@ -45,6 +45,8 @@ export default function ChannelList() {
   const navigationTimerRef = useRef(null);
   const channelRefreshTimerRef = useRef(null);
   const channelRefreshAbortRef = useRef(null);
+  const actionRefreshTimerRef = useRef(null);
+  const actionBusyRef = useRef(false);
   const isMountedRef = useRef(true);
 
   const [channels, setChannels] = useState([]);
@@ -124,6 +126,11 @@ export default function ChannelList() {
         channelRefreshAbortRef.current = null;
       }
 
+      if (actionRefreshTimerRef.current) {
+        clearTimeout(actionRefreshTimerRef.current);
+        actionRefreshTimerRef.current = null;
+      }
+
       if (pinAbortRef.current) {
         pinAbortRef.current.abort();
         pinAbortRef.current = null;
@@ -138,7 +145,7 @@ export default function ChannelList() {
       const currentHash = String(window.location.hash || "");
 
       if (currentHash.includes("/teligram-notes")) return;
-      if (openingChannelRef.current || pinCheckingRef.current) return;
+      if (openingChannelRef.current || pinCheckingRef.current || actionBusyRef.current) return;
 
       fetchChannels({ silent: true });
     };
@@ -264,6 +271,21 @@ export default function ChannelList() {
     );
   };
 
+  const refreshPageAfterChannelAction = (delay = 450) => {
+    actionBusyRef.current = true;
+
+    if (actionRefreshTimerRef.current) {
+      clearTimeout(actionRefreshTimerRef.current);
+      actionRefreshTimerRef.current = null;
+    }
+
+    actionRefreshTimerRef.current = window.setTimeout(() => {
+      if (typeof window !== "undefined") {
+        window.location.reload();
+      }
+    }, delay);
+  };
+
   const showToast = (message, type = "success") => {
     setToast({ show: true, type, message });
 
@@ -273,7 +295,7 @@ export default function ChannelList() {
   };
 
   const showOwnerDeleteAlert = (
-    message = "Only owner can delete this channel."
+    message = "Only the device that created this public channel can delete it."
   ) => {
     if (ownerAlertTimerRef.current) {
       clearTimeout(ownerAlertTimerRef.current);
@@ -385,8 +407,8 @@ export default function ChannelList() {
     }
 
     openConfirm(
-      "Delete Channel?",
-      `Do you want to delete "${channel.channel_name}"?`,
+      "Delete Public Channel?",
+      `Only the device that created "${channel.channel_name}" can delete it. Do you want to delete this channel?`,
       () => deleteChannel(channel.channel_id)
     );
   };
@@ -566,6 +588,8 @@ export default function ChannelList() {
   };
 
   const fetchChannels = async ({ silent = false } = {}) => {
+    if (silent && actionBusyRef.current) return;
+
     if (channelRefreshAbortRef.current) {
       channelRefreshAbortRef.current.abort();
       channelRefreshAbortRef.current = null;
@@ -676,7 +700,12 @@ export default function ChannelList() {
     }
 
     const currentEditingId = editingId;
+    const updatingChannel = Boolean(currentEditingId);
     const oldChannels = channels;
+
+    if (updatingChannel) {
+      actionBusyRef.current = true;
+    }
 
     try {
       setLoading(true);
@@ -714,6 +743,7 @@ export default function ChannelList() {
       const data = await res.json();
 
       if (!res.ok) {
+        actionBusyRef.current = false;
         showToast(data.message || "Action failed", "error");
         return;
       }
@@ -733,22 +763,34 @@ export default function ChannelList() {
         );
 
         showToast("Channel updated successfully", "success");
-      } else {
-        setChannels((prev) => [savedChannel, ...prev]);
-        showToast("Channel created successfully", "success");
+        resetForm();
+        refreshPageAfterChannelAction();
+        return;
       }
 
+      if (savedChannel?.channel_id) {
+        setChannels((prev) => [savedChannel, ...prev]);
+      }
+
+      showToast("Channel created successfully", "success");
       resetForm();
 
+      // Create should appear instantly in the list. This silent sync only
+      // fills any backend-generated logo/time fields without reloading page.
       setTimeout(() => {
         fetchChannels({ silent: true });
       }, 250);
     } catch (error) {
       console.error("Create/update channel error:", error);
       setChannels(oldChannels);
+      actionBusyRef.current = false;
       showToast("Server error", "error");
     } finally {
       setLoading(false);
+
+      if (!updatingChannel) {
+        actionBusyRef.current = false;
+      }
     }
   };
 
@@ -768,42 +810,85 @@ export default function ChannelList() {
   const deleteChannel = async (channelId, pin = "") => {
     const oldEditingId = editingId;
     const cleanDeletePin = String(pin || "").replace(/\D/g, "").slice(0, 4);
+    const activeDeleteChannel =
+      Number(deletePinBox.channel?.channel_id) === Number(channelId)
+        ? deletePinBox.channel
+        : null;
+    const channelForDelete =
+      activeDeleteChannel ||
+      channels.find((channel) => Number(channel.channel_id) === Number(channelId)) ||
+      null;
+    const privateDelete = isTrue(channelForDelete?.is_private) || /^[0-9]{4}$/.test(cleanDeletePin);
+    const currentDeviceId = getCurrentDeviceId();
 
     setActiveMenuId(null);
 
+    if (privateDelete && !/^[0-9]{4}$/.test(cleanDeletePin)) {
+      setDeletePinBox((prev) => ({
+        ...prev,
+        error: "Enter valid 4 digit PIN",
+      }));
+      return;
+    }
+
     try {
+      actionBusyRef.current = true;
       setLoading(true);
+
+      const deleteHeaders = {
+        "Content-Type": "application/json",
+      };
+
+      const deleteBody = privateDelete
+        ? { pin: cleanDeletePin }
+        : {
+            device_id: currentDeviceId,
+          };
+
+      /*
+        Delete rule:
+        - Public channel: send device id so backend can allow only the device
+          that created the public channel to delete it.
+        - Private channel: do NOT send device id. Any device may delete it,
+          but the correct 4-digit PIN is required.
+      */
+      if (privateDelete) {
+        deleteHeaders["x-channel-pin"] = cleanDeletePin;
+      } else {
+        deleteHeaders["x-device-id"] = currentDeviceId;
+      }
 
       const res = await fetch(`${API_URL}/api/telegram-channels/${channelId}`, {
         method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          "x-device-id": getCurrentDeviceId(),
-        },
-        body: JSON.stringify({
-          device_id: getCurrentDeviceId(),
-          pin: cleanDeletePin,
-        }),
+        headers: deleteHeaders,
+        body: JSON.stringify(deleteBody),
       });
 
       const data = await res.json().catch(() => ({}));
       const apiMessage = String(data?.message || "");
       const ownerBlocked =
-        res.status === 403 ||
-        /only.*device|created.*device|owner|blocked/i.test(apiMessage);
+        !privateDelete &&
+        (res.status === 403 ||
+          /only.*device|created.*device|owner|blocked/i.test(apiMessage));
 
       if (!res.ok) {
+        actionBusyRef.current = false;
+
         if (ownerBlocked) {
           closeConfirm();
           closeDeletePinBox();
-          showOwnerDeleteAlert("Only owner can delete this channel.");
+          showOwnerDeleteAlert("Only the device that created this public channel can delete it.");
           return;
         }
 
-        if (deletePinBox.show) {
+        if (privateDelete || deletePinBox.show) {
+          const wrongPinMessage = /pin|wrong|mismatch|incorrect|invalid|required/i.test(apiMessage)
+            ? apiMessage
+            : "Wrong PIN";
+
           setDeletePinBox((prev) => ({
             ...prev,
-            error: data.message || "Wrong PIN",
+            error: wrongPinMessage,
           }));
         } else {
           showToast(data.message || "Delete failed", "error");
@@ -825,14 +910,12 @@ export default function ChannelList() {
       }
 
       showToast("Channel deleted successfully", "success");
-
-      setTimeout(() => {
-        fetchChannels({ silent: true });
-      }, 250);
+      refreshPageAfterChannelAction();
     } catch (error) {
       console.error("Delete channel error:", error);
+      actionBusyRef.current = false;
 
-      if (deletePinBox.show) {
+      if (privateDelete || deletePinBox.show) {
         setDeletePinBox((prev) => ({
           ...prev,
           error: "Server error while deleting",
@@ -1645,7 +1728,8 @@ export default function ChannelList() {
             <h3>Delete Private Channel</h3>
 
             <p>
-              Enter same PIN to delete <b>{deletePinBox.channel?.channel_name}</b>
+              Enter correct PIN to delete <b>{deletePinBox.channel?.channel_name}</b>.
+              Any device can delete a private channel with the correct PIN.
             </p>
 
             <input

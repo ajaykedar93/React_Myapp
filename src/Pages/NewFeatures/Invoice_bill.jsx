@@ -16,8 +16,7 @@ import React, { useEffect, useMemo, useState } from "react";
 */
 
 const API_BASE_URL =
-  import.meta?.env?.VITE_API_BASE_URL ||
-  "http://localhost:5000/api";
+  import.meta?.env?.VITE_API_BASE_URL ||  "https://express-backend-myapp.onrender.com/api";
 
 const defaultForm = {
   invoice_no: "",
@@ -472,6 +471,44 @@ export default function InvoiceBill() {
     await downloadPdfById(savedInvoice);
   }
 
+
+  async function viewSavedPdf() {
+    if (!savedInvoice?.id) {
+      showToast("Please save invoice first, then view PDF.");
+      return;
+    }
+
+    await viewPdfById(savedInvoice);
+  }
+
+  async function saveAndViewPdf() {
+    const invoice = await saveInvoice();
+
+    if (!invoice?.id) return;
+
+    await viewPdfById(invoice);
+  }
+
+  async function viewPdfById(invoice) {
+    try {
+      setPdfLoading(true);
+
+      const response = await fetch(`${API_BASE_URL}/invoices/${invoice.id}/pdf-view`);
+
+      if (!response.ok) {
+        throw new Error("Failed to view invoice PDF");
+      }
+
+      const blob = await response.blob();
+      openPdfBlob(blob);
+      showToast("PDF opened successfully");
+    } catch (error) {
+      showToast(error.message || "PDF view failed");
+    } finally {
+      setPdfLoading(false);
+    }
+  }
+
   async function downloadPdfById(invoice) {
     try {
       setPdfLoading(true);
@@ -863,11 +900,29 @@ export default function InvoiceBill() {
 
             <button
               type="button"
+              className="btn btn-light full"
+              onClick={viewSavedPdf}
+              disabled={saving || pdfLoading || previewLoading || !savedInvoice?.id}
+            >
+              {pdfLoading ? "Opening..." : "View Saved PDF"}
+            </button>
+
+            <button
+              type="button"
               className="btn btn-dark full"
               onClick={downloadSavedPdf}
               disabled={saving || pdfLoading || previewLoading || !savedInvoice?.id}
             >
               {pdfLoading ? "Downloading..." : "Download Saved PDF"}
+            </button>
+
+            <button
+              type="button"
+              className="btn btn-primary full"
+              onClick={saveAndViewPdf}
+              disabled={saving || pdfLoading || previewLoading}
+            >
+              {saving || pdfLoading ? "Please wait..." : "Save & View PDF"}
             </button>
 
             <button

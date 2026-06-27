@@ -57,6 +57,7 @@ export default function Teligram() {
   const colorRef = useRef(null);
   const selectedTextColorRef = useRef("#111111");
   const bottomRef = useRef(null);
+  const chatBodyRef = useRef(null);
   const savedRangeRef = useRef(null);
   const verifiedPinRef = useRef("");
   const unlockCheckingRef = useRef(false);
@@ -171,8 +172,11 @@ export default function Teligram() {
   useEffect(() => {
     if (!isTrue(selectedChannel?.is_private) || channelUnlocked) {
       setTimeout(() => {
-        bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-      }, 100);
+        const chatBody = chatBodyRef.current;
+        if (chatBody) {
+          chatBody.scrollTo({ top: chatBody.scrollHeight, behavior: "smooth" });
+        }
+      }, 60);
     }
   }, [notes, selectedChannel, channelUnlocked]);
 
@@ -424,6 +428,109 @@ export default function Teligram() {
       .format(date)
       .replace("am", "AM")
       .replace("pm", "PM");
+  };
+
+  const normalizeSearchValue = (value) => {
+    return String(value || "")
+      .toLowerCase()
+      .replace(/[.,/\\|_-]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  };
+
+  const getSearchDateKey = (value) => {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+
+    const monthMap = {
+      jan: "01", january: "01",
+      feb: "02", february: "02",
+      mar: "03", march: "03",
+      apr: "04", april: "04",
+      may: "05",
+      jun: "06", june: "06",
+      jul: "07", july: "07",
+      aug: "08", august: "08",
+      sep: "09", sept: "09", september: "09",
+      oct: "10", october: "10",
+      nov: "11", november: "11",
+      dec: "12", december: "12",
+    };
+
+    const normalizeYear = (yearValue) => {
+      const year = String(yearValue || "").trim();
+      if (/^\d{2}$/.test(year)) return `20${year}`;
+      return year;
+    };
+
+    const makeKey = (year, month, day) => {
+      const yy = normalizeYear(year);
+      const mm = String(month || "").padStart(2, "0");
+      const dd = String(day || "").padStart(2, "0");
+
+      if (!/^\d{4}$/.test(yy) || !/^\d{2}$/.test(mm) || !/^\d{2}$/.test(dd)) {
+        return "";
+      }
+
+      const date = new Date(Number(yy), Number(mm) - 1, Number(dd));
+
+      if (
+        Number.isNaN(date.getTime()) ||
+        date.getFullYear() !== Number(yy) ||
+        date.getMonth() + 1 !== Number(mm) ||
+        date.getDate() !== Number(dd)
+      ) {
+        return "";
+      }
+
+      return `${yy}-${mm}-${dd}`;
+    };
+
+    let match = raw.match(/^\s*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\s*$/);
+    if (match) return makeKey(match[3], match[2], match[1]);
+
+    match = raw.match(/^\s*(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})\s*$/);
+    if (match) return makeKey(match[1], match[2], match[3]);
+
+    match = raw.toLowerCase().match(/^\s*(\d{1,2})\s+([a-z]+)\s+(\d{2,4})\s*$/);
+    if (match && monthMap[match[2]]) return makeKey(match[3], monthMap[match[2]], match[1]);
+
+    match = raw.toLowerCase().match(/^\s*([a-z]+)\s+(\d{1,2}),?\s+(\d{2,4})\s*$/);
+    if (match && monthMap[match[1]]) return makeKey(match[3], monthMap[match[1]], match[2]);
+
+    return "";
+  };
+
+  const getNoteDateSearchText = (note) => {
+    const messageDate = note?.created_at || note?.updated_at;
+    const dateKey = getIndiaDateKey(messageDate);
+
+    if (!messageDate || dateKey === "unknown") return "";
+
+    const reverseParts = dateKey.split("-").reverse();
+    const reverseDate = reverseParts.join(" ");
+    const slashDate = dateKey.replace(/-/g, "/");
+    const indianSlashDate = reverseParts.join("/");
+    const indianDashDate = reverseParts.join("-");
+
+    return [
+      dateKey,
+      slashDate,
+      reverseDate,
+      indianSlashDate,
+      indianDashDate,
+      formatIndiaDateOnly(messageDate),
+      formatIndiaTimeOnly(messageDate),
+    ].join(" ");
+  };
+
+  const closeChatKeyboard = () => {
+    setActiveMenuId(null);
+
+    if (typeof document !== "undefined" && document.activeElement === editorRef.current) {
+      editorRef.current?.blur();
+      savedRangeRef.current = null;
+    }
   };
 
   const getSavedChannelPin = () => {
@@ -1115,18 +1222,31 @@ export default function Teligram() {
   };
 
   const filteredNotes = useMemo(() => {
-    const q = searchText.trim().toLowerCase();
-    if (!q) return notes;
+    const normalizedQuery = normalizeSearchValue(searchText);
+    if (!normalizedQuery) return notes;
 
-    const words = q.split(/\s+/).filter(Boolean);
+    const exactDateKey = getSearchDateKey(searchText);
+
+    if (exactDateKey) {
+      return notes.filter((note) =>
+        getIndiaDateKey(note.created_at || note.updated_at) === exactDateKey
+      );
+    }
+
+    const words = normalizedQuery.split(/\s+/).filter(Boolean);
 
     return notes.filter((note) => {
-      const plainText = stripHtml(note.content_html || "").toLowerCase();
-      const imageText = hasNoteImage(note) ? " image photo picture" : "";
+      const plainText = stripHtml(note.content_html || "");
+      const imageText = hasNoteImage(note) ? "image photo picture" : "";
       const fileText = hasNoteAttachment(note)
-        ? ` file attachment document ${getNoteFileName(note)} ${getFileTypeLabel(note)}`.toLowerCase()
+        ? `file attachment document ${getNoteFileName(note)} ${getFileTypeLabel(note)}`
         : "";
-      const searchable = `${plainText}${imageText}${fileText}`;
+      const dateText = getNoteDateSearchText(note);
+
+      const searchable = normalizeSearchValue(
+        `${plainText} ${imageText} ${fileText} ${dateText}`
+      );
+
       return words.every((word) => searchable.includes(word));
     });
   }, [notes, searchText]);
@@ -1994,7 +2114,7 @@ export default function Teligram() {
                 <span>🔍</span>
                 <input
                   type="text"
-                  placeholder="Search every word..."
+                  placeholder="Search text, file, or date..."
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
                   autoFocus
@@ -2016,7 +2136,7 @@ export default function Teligram() {
               </div>
             )}
 
-            <main className="chat-body" onClick={() => setActiveMenuId(null)}>
+            <main ref={chatBodyRef} className="chat-body" onClick={closeChatKeyboard}>
               {groupedNotes.length === 0 && (
                 <div className="empty-card">
                   <div className="empty-icon">✦</div>
@@ -2175,9 +2295,8 @@ export default function Teligram() {
                             />
                           )}
 
-                          <div className="message-time">
-                            <span>{formatIndiaTimeOnly(messageDate)}</span>
-                            {note.is_temp && <span> sending</span>}
+                          <div className={`message-time ${note.is_temp ? "message-time-temp" : ""}`}>
+                            {formatIndiaTimeOnly(messageDate)}
                           </div>
                         </div>
 
@@ -7142,6 +7261,583 @@ export default function Teligram() {
           .image-message-wrap,
           .file-message-wrap {
             width: min(342px, 84vw) !important;
+          }
+        }
+
+        /* Clean professional centered chat UI - old to new date sequence */
+        .nm-screen {
+          overscroll-behavior: none !important;
+        }
+
+        .nm-phone {
+          max-width: 460px !important;
+          background: #eef7f4 !important;
+        }
+
+        .chat-body {
+          padding: 14px 10px 108px !important;
+          display: flex !important;
+          flex-direction: column !important;
+          align-items: center !important;
+          gap: 0 !important;
+          scroll-padding-top: 14px !important;
+          overscroll-behavior: contain !important;
+          -webkit-overflow-scrolling: touch !important;
+        }
+
+        .note-block {
+          width: 100% !important;
+          display: flex !important;
+          flex-direction: column !important;
+          align-items: center !important;
+        }
+
+        .date-separator {
+          margin: 6px 0 10px !important;
+        }
+
+        .date-separator span {
+          min-height: 24px !important;
+          padding: 5px 12px !important;
+          font-size: 10.5px !important;
+          box-shadow: 0 7px 18px rgba(15, 23, 42, 0.12) !important;
+        }
+
+        .message-line,
+        .message-line.my-message-line,
+        .message-line.other-message-line {
+          width: 100% !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          padding: 0 !important;
+          margin: 0 0 9px !important;
+        }
+
+        .message-bubble,
+        .message-bubble.my-message-bubble,
+        .message-bubble.other-message-bubble {
+          width: auto !important;
+          max-width: min(82vw, 318px) !important;
+          min-width: 70px !important;
+          padding: 8px 32px 21px 11px !important;
+          border-radius: 18px !important;
+          background: linear-gradient(145deg, rgba(255,255,255,0.96), color-mix(in srgb, var(--device-card-1) 72%, #ffffff)) !important;
+          border: 1px solid rgba(226, 232, 240, 0.9) !important;
+          box-shadow: 0 10px 26px rgba(15, 23, 42, 0.11) !important;
+          text-align: left !important;
+          overflow: visible !important;
+        }
+
+        .message-bubble::before {
+          display: none !important;
+        }
+
+        .message-bubble.image-only,
+        .message-bubble.file-only,
+        .message-bubble:has(.image-message-wrap),
+        .message-bubble:has(.file-message-wrap) {
+          max-width: min(82vw, 300px) !important;
+          padding: 7px 7px 24px !important;
+          border-radius: 18px !important;
+        }
+
+        .message-text,
+        .image-description-text,
+        .file-description-text {
+          font-size: 13px !important;
+          line-height: 1.42 !important;
+          font-weight: 520 !important;
+          letter-spacing: 0 !important;
+          color: var(--noteColor, #111827) !important;
+          overflow-wrap: anywhere !important;
+          word-break: break-word !important;
+        }
+
+        .message-text div,
+        .message-text p,
+        .image-description-text div,
+        .image-description-text p {
+          margin: 0 !important;
+          font-size: inherit !important;
+          line-height: inherit !important;
+        }
+
+        .message-title-text {
+          font-size: 14px !important;
+          line-height: 1.35 !important;
+          font-weight: 800 !important;
+          text-align: center !important;
+        }
+
+        .device-source-chip {
+          margin: 0 22px 5px 0 !important;
+          padding: 3px 7px !important;
+          font-size: 8.5px !important;
+        }
+
+        .image-message-wrap,
+        .file-message-wrap {
+          width: min(278px, 76vw) !important;
+          max-width: 100% !important;
+          border-radius: 15px !important;
+        }
+
+        .whatsapp-image-frame {
+          border-radius: 15px !important;
+          background: rgba(255,255,255,0.5) !important;
+        }
+
+        .message-image {
+          width: 100% !important;
+          max-height: 44dvh !important;
+          object-fit: contain !important;
+          border-radius: 15px !important;
+        }
+
+        .image-description-text {
+          padding: 7px 9px 0 !important;
+          background: rgba(255,255,255,0.5) !important;
+        }
+
+        .file-card {
+          min-height: 56px !important;
+          padding: 8px !important;
+          grid-template-columns: 40px minmax(0, 1fr) 24px !important;
+          gap: 8px !important;
+          border-radius: 14px !important;
+        }
+
+        .file-type-badge {
+          width: 40px !important;
+          height: 40px !important;
+          border-radius: 12px !important;
+          font-size: 10px !important;
+        }
+
+        .file-info strong {
+          font-size: 12px !important;
+        }
+
+        .file-info small {
+          font-size: 10px !important;
+        }
+
+        .message-time {
+          right: 8px !important;
+          bottom: 5px !important;
+          padding: 2px 6px !important;
+          font-size: 9px !important;
+          font-weight: 800 !important;
+          opacity: 0.88 !important;
+        }
+
+        .message-dot-btn {
+          top: 5px !important;
+          right: 5px !important;
+          width: 23px !important;
+          height: 23px !important;
+          font-size: 14px !important;
+          border-radius: 9px !important;
+        }
+
+        .message-action-row {
+          align-self: center !important;
+          justify-content: center !important;
+          margin: 4px auto 8px !important;
+          max-width: min(88vw, 330px) !important;
+        }
+
+        .search-box {
+          padding: 8px 11px !important;
+        }
+
+        .search-box input {
+          height: 36px !important;
+          font-size: 13px !important;
+          font-weight: 650 !important;
+        }
+
+        .composer {
+          padding: 8px 10px calc(8px + env(safe-area-inset-bottom)) !important;
+          background: rgba(238, 247, 244, 0.9) !important;
+          backdrop-filter: blur(14px) !important;
+        }
+
+        .composer-card {
+          border-radius: 20px !important;
+          box-shadow: 0 -4px 22px rgba(15,23,42,0.08), 0 12px 28px rgba(15,23,42,0.12) !important;
+        }
+
+        .text-input {
+          min-height: 38px !important;
+          max-height: 112px !important;
+          padding: 9px 12px 11px !important;
+          font-size: 13.5px !important;
+          line-height: 1.4 !important;
+          font-weight: 550 !important;
+          outline: none !important;
+          overflow-y: auto !important;
+          caret-color: var(--composerColor, #111111) !important;
+          -webkit-user-select: text !important;
+          user-select: text !important;
+          touch-action: manipulation !important;
+        }
+
+        .text-input:empty::before {
+          font-size: 13px !important;
+          color: #94a3b8 !important;
+          font-weight: 600 !important;
+        }
+
+        .tool-btn,
+        .send-btn {
+          touch-action: manipulation !important;
+        }
+
+        @media (max-width: 380px) {
+          .message-bubble,
+          .message-bubble.my-message-bubble,
+          .message-bubble.other-message-bubble {
+            max-width: min(84vw, 292px) !important;
+          }
+
+          .image-message-wrap,
+          .file-message-wrap {
+            width: min(258px, 76vw) !important;
+          }
+        }
+
+
+        /* =========================================================
+           FINAL REQUEST UPDATE
+           - Date sequence old to new
+           - Card text very small
+           - Times New Roman inside message cards
+           - Exact date search like 26/06/2026 shows only that day
+        ========================================================= */
+        .chat-body {
+          font-family: "Times New Roman", Times, serif !important;
+        }
+
+        .message-bubble,
+        .message-bubble.my-message-bubble,
+        .message-bubble.other-message-bubble {
+          max-width: min(80vw, 300px) !important;
+          padding: 7px 31px 20px 10px !important;
+          border-radius: 17px !important;
+          font-family: "Times New Roman", Times, serif !important;
+        }
+
+        .message-text,
+        .image-description-text,
+        .file-description-text,
+        .message-text *,
+        .image-description-text *,
+        .file-description-text * {
+          font-family: "Times New Roman", Times, serif !important;
+          font-size: 12px !important;
+          line-height: 1.34 !important;
+          font-weight: 400 !important;
+          letter-spacing: 0 !important;
+        }
+
+        .message-text b,
+        .message-text strong,
+        .image-description-text b,
+        .image-description-text strong,
+        .file-description-text b,
+        .file-description-text strong {
+          font-weight: 700 !important;
+        }
+
+        .message-title-text,
+        .message-title-text * {
+          font-family: "Times New Roman", Times, serif !important;
+          font-size: 13px !important;
+          line-height: 1.28 !important;
+          font-weight: 700 !important;
+        }
+
+        .image-description-text {
+          padding: 6px 8px 0 !important;
+        }
+
+        .message-bubble.image-only,
+        .message-bubble.file-only,
+        .message-bubble:has(.image-message-wrap),
+        .message-bubble:has(.file-message-wrap) {
+          max-width: min(80vw, 286px) !important;
+          padding: 6px 6px 23px !important;
+        }
+
+        .image-message-wrap,
+        .file-message-wrap {
+          width: min(266px, 74vw) !important;
+        }
+
+        .message-time {
+          font-family: "Times New Roman", Times, serif !important;
+          font-size: 8.6px !important;
+          font-weight: 700 !important;
+        }
+
+        .search-box input {
+          font-family: "Times New Roman", Times, serif !important;
+          font-size: 13px !important;
+        }
+
+        @media (max-width: 380px) {
+          .message-bubble,
+          .message-bubble.my-message-bubble,
+          .message-bubble.other-message-bubble {
+            max-width: min(82vw, 280px) !important;
+          }
+
+          .image-message-wrap,
+          .file-message-wrap {
+            width: min(248px, 73vw) !important;
+          }
+        }
+
+
+        /* =========================================================
+           FINAL COMPACT PROFESSIONAL NOTES UPDATE
+           - Wrapped text starts exactly under first line
+           - Compact card adjusts to text/image/file content
+           - Times New Roman professional chat font
+           - Right corner shows created time only
+        ========================================================= */
+        .chat-body {
+          font-family: "Times New Roman", Times, serif !important;
+        }
+
+        .note-block {
+          align-items: center !important;
+        }
+
+        .message-line,
+        .message-line.my-message-line,
+        .message-line.other-message-line {
+          justify-content: center !important;
+          align-items: center !important;
+          margin: 0 0 7px !important;
+        }
+
+        .message-bubble,
+        .message-bubble.my-message-bubble,
+        .message-bubble.other-message-bubble {
+          width: fit-content !important;
+          max-width: min(74vw, 268px) !important;
+          min-width: 0 !important;
+          display: inline-block !important;
+          box-sizing: border-box !important;
+          padding: 7px 34px 17px 10px !important;
+          border-radius: 16px !important;
+          font-family: "Times New Roman", Times, serif !important;
+          text-align: left !important;
+          vertical-align: top !important;
+        }
+
+        .message-bubble.image-only,
+        .message-bubble.file-only,
+        .message-bubble:has(.image-message-wrap),
+        .message-bubble:has(.file-message-wrap) {
+          width: fit-content !important;
+          max-width: min(74vw, 258px) !important;
+          padding: 6px 6px 19px !important;
+        }
+
+        .message-text,
+        .image-description-text,
+        .file-description-text {
+          display: block !important;
+          width: auto !important;
+          max-width: 100% !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          text-align: left !important;
+          text-indent: 0 !important;
+          white-space: pre-wrap !important;
+          overflow-wrap: anywhere !important;
+          word-break: break-word !important;
+          color: var(--noteColor, #111827) !important;
+          font-family: "Times New Roman", Times, serif !important;
+          font-size: 12.2px !important;
+          line-height: 1.28 !important;
+          font-weight: 400 !important;
+          letter-spacing: 0 !important;
+        }
+
+        .message-text *,
+        .image-description-text *,
+        .file-description-text * {
+          margin: 0 !important;
+          padding: 0 !important;
+          text-align: left !important;
+          text-indent: 0 !important;
+          white-space: inherit !important;
+          font-family: "Times New Roman", Times, serif !important;
+          font-size: inherit !important;
+          line-height: inherit !important;
+          letter-spacing: 0 !important;
+        }
+
+        .message-text p,
+        .message-text div,
+        .image-description-text p,
+        .image-description-text div,
+        .file-description-text p,
+        .file-description-text div {
+          display: block !important;
+          margin-block: 0 !important;
+          margin-inline: 0 !important;
+          padding-block: 0 !important;
+          padding-inline: 0 !important;
+        }
+
+        .message-text p + p,
+        .message-text div + div,
+        .image-description-text p + p,
+        .image-description-text div + div,
+        .file-description-text p + p,
+        .file-description-text div + div {
+          margin-top: 0 !important;
+        }
+
+        .message-text ul,
+        .message-text ol,
+        .image-description-text ul,
+        .image-description-text ol,
+        .file-description-text ul,
+        .file-description-text ol {
+          margin: 0 !important;
+          padding-left: 15px !important;
+        }
+
+        .message-text b,
+        .message-text strong,
+        .image-description-text b,
+        .image-description-text strong,
+        .file-description-text b,
+        .file-description-text strong {
+          font-weight: 700 !important;
+        }
+
+        .message-title-text,
+        .message-title-text * {
+          text-align: center !important;
+          font-family: "Times New Roman", Times, serif !important;
+          font-size: 13px !important;
+          line-height: 1.24 !important;
+          font-weight: 700 !important;
+        }
+
+        .image-message-wrap,
+        .file-message-wrap {
+          width: auto !important;
+          max-width: min(246px, 70vw) !important;
+          display: block !important;
+          border-radius: 14px !important;
+        }
+
+        .whatsapp-image-frame {
+          width: fit-content !important;
+          max-width: 100% !important;
+          border-radius: 14px !important;
+          overflow: hidden !important;
+        }
+
+        .message-image {
+          display: block !important;
+          width: auto !important;
+          max-width: min(246px, 70vw) !important;
+          height: auto !important;
+          max-height: 36dvh !important;
+          object-fit: contain !important;
+          border-radius: 14px !important;
+        }
+
+        .image-description-text,
+        .file-description-text {
+          padding: 5px 2px 0 !important;
+          background: transparent !important;
+        }
+
+        .file-card {
+          width: min(246px, 70vw) !important;
+          min-height: 52px !important;
+          padding: 7px !important;
+          grid-template-columns: 36px minmax(0, 1fr) 22px !important;
+          gap: 7px !important;
+          border-radius: 13px !important;
+          font-family: "Times New Roman", Times, serif !important;
+        }
+
+        .file-type-badge {
+          width: 36px !important;
+          height: 36px !important;
+          border-radius: 11px !important;
+          font-size: 9.5px !important;
+        }
+
+        .file-info strong {
+          font-family: "Times New Roman", Times, serif !important;
+          font-size: 11.5px !important;
+          line-height: 1.15 !important;
+        }
+
+        .file-info small {
+          font-family: "Times New Roman", Times, serif !important;
+          font-size: 9.2px !important;
+          line-height: 1.15 !important;
+        }
+
+        .message-time {
+          right: 7px !important;
+          bottom: 5px !important;
+          top: auto !important;
+          min-width: auto !important;
+          padding: 1px 5px !important;
+          border-radius: 999px !important;
+          font-family: "Times New Roman", Times, serif !important;
+          font-size: 9.2px !important;
+          line-height: 1.05 !important;
+          font-weight: 700 !important;
+          opacity: 0.9 !important;
+          white-space: nowrap !important;
+        }
+
+        .message-time-temp {
+          opacity: 0.62 !important;
+        }
+
+        .device-source-chip {
+          margin: 0 24px 4px 0 !important;
+          padding: 2px 7px !important;
+          font-size: 8px !important;
+          line-height: 1.2 !important;
+        }
+
+        @media (max-width: 380px) {
+          .message-bubble,
+          .message-bubble.my-message-bubble,
+          .message-bubble.other-message-bubble {
+            max-width: min(78vw, 248px) !important;
+          }
+
+          .message-bubble.image-only,
+          .message-bubble.file-only,
+          .message-bubble:has(.image-message-wrap),
+          .message-bubble:has(.file-message-wrap) {
+            max-width: min(76vw, 236px) !important;
+          }
+
+          .image-message-wrap,
+          .file-message-wrap,
+          .message-image,
+          .file-card {
+            max-width: min(232px, 68vw) !important;
           }
         }
 
