@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { flushSync } from "react-dom";
 
 const DEFAULT_BACKEND_URL = "https://express-backend-myapp.onrender.com";
@@ -35,6 +36,7 @@ const themes = [
 ];
 
 export default function ChannelList() {
+  const navigate = useNavigate();
   const fileRef = useRef(null);
   const pinRequestRef = useRef(0);
   const pinAbortRef = useRef(null);
@@ -103,6 +105,12 @@ export default function ChannelList() {
     channel: null,
     pin: "",
     error: "",
+  });
+
+  const [fullLogoViewer, setFullLogoViewer] = useState({
+    show: false,
+    src: "",
+    title: "",
   });
 
   useEffect(() => {
@@ -738,6 +746,41 @@ export default function ChannelList() {
     }
   };
 
+  const goToTelegramLogin = (e) => {
+    e?.stopPropagation?.();
+
+    setActiveMenuId(null);
+
+    // Public Telegram login page route.
+    // App.jsx route must be:
+    // <Route path="/telegram-login" element={<Telegram_Login />} />
+    navigate("/telegram-login");
+  };
+
+  const openFullLogoViewer = (e, channel, index = 0) => {
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
+
+    const logoSource =
+      getChannelLogoSource(channel) ||
+      getDefaultLogo(channel?.channel_name || "N", index);
+
+    setActiveMenuId(null);
+    setFullLogoViewer({
+      show: true,
+      src: logoSource,
+      title: channel?.channel_name || "Channel Logo",
+    });
+  };
+
+  const closeFullLogoViewer = () => {
+    setFullLogoViewer({
+      show: false,
+      src: "",
+      title: "",
+    });
+  };
+
   const createOrUpdateChannel = async () => {
     if (!channelName.trim()) {
       showToast("Please enter channel name", "error");
@@ -1353,6 +1396,27 @@ export default function ChannelList() {
               <span className="plus-icon">+</span>
               <span>Create Channel</span>
             </button>
+
+            <button
+              type="button"
+              className="telegram-login-icon-btn"
+              onClick={goToTelegramLogin}
+              aria-label="Open Telegram login page"
+              title="Login"
+            >
+              <svg
+                className="telegram-login-svg"
+                viewBox="0 0 100 100"
+                aria-hidden="true"
+              >
+                <circle className="telegram-login-line" cx="50" cy="50" r="43" />
+                <circle className="telegram-login-fill" cx="50" cy="36" r="16" />
+                <path
+                  className="telegram-login-fill"
+                  d="M22 78c4.8-15.7 18.3-24.1 28-24.1S73.2 62.3 78 78c-6.9 7.4-49.1 7.4-56 0Z"
+                />
+              </svg>
+            </button>
           </div>
         )}
 
@@ -1527,7 +1591,18 @@ export default function ChannelList() {
                   className="channel-click"
                   onClick={() => openChannel(channel)}
                 >
-                  <div className="channel-logo">
+                  <div
+                    className="channel-logo channel-logo-clickable"
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Open ${channel.channel_name} logo`}
+                    onClick={(e) => openFullLogoViewer(e, channel, index)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        openFullLogoViewer(e, channel, index);
+                      }
+                    }}
+                  >
                     <img
                       src={
                         channelLogoSource
@@ -1631,6 +1706,38 @@ export default function ChannelList() {
 
             <h3>Loading Channels</h3>
             <p>Please wait while your channel list is loading.</p>
+          </div>
+        </div>
+      )}
+
+      {fullLogoViewer.show && (
+        <div className="logo-viewer-overlay" onClick={closeFullLogoViewer}>
+          <div
+            className="logo-viewer-card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="logo-viewer-image-wrap">
+              <button
+                type="button"
+                className="logo-viewer-close"
+                onClick={closeFullLogoViewer}
+                aria-label="Close logo image"
+              >
+                ×
+              </button>
+
+              <img
+                className="logo-viewer-image"
+                src={fullLogoViewer.src}
+                alt={fullLogoViewer.title}
+                onError={(e) => {
+                  e.currentTarget.onerror = null;
+                  e.currentTarget.src = getDefaultLogo(fullLogoViewer.title || "N", 0);
+                }}
+              />
+            </div>
+
+            <p>{fullLogoViewer.title}</p>
           </div>
         </div>
       )}
@@ -1982,10 +2089,11 @@ export default function ChannelList() {
           display: flex;
           justify-content: center;
           align-items: center;
+          gap: 7px;
         }
 
         .open-create-btn {
-          width: min(265px, calc(100vw - 40px));
+          width: min(255px, calc(100vw - 78px));
           border: none;
           border-radius: 999px;
           min-height: 45px;
@@ -2005,6 +2113,47 @@ export default function ChannelList() {
           justify-content: center;
           gap: 8px;
           letter-spacing: 0.2px;
+          flex-shrink: 0;
+        }
+
+        .telegram-login-icon-btn {
+          position: static;
+          width: 44px;
+          height: 44px;
+          border: none;
+          border-radius: 50%;
+          background: rgba(255, 255, 255, 0.98);
+          color: #2563eb;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          padding: 6px;
+          flex-shrink: 0;
+          box-shadow:
+            0 12px 28px rgba(37, 99, 235, 0.18),
+            inset 0 0 0 1px rgba(37, 99, 235, 0.14);
+          transition: all 0.2s ease;
+        }
+
+        .telegram-login-icon-btn:active {
+          transform: scale(0.96);
+        }
+
+        .telegram-login-svg {
+          width: 100%;
+          height: 100%;
+          display: block;
+        }
+
+        .telegram-login-line {
+          fill: none;
+          stroke: #2563eb;
+          stroke-width: 6.5;
+        }
+
+        .telegram-login-fill {
+          fill: #2563eb;
         }
 
         .plus-icon {
@@ -2027,6 +2176,10 @@ export default function ChannelList() {
         .pin-cancel-btn:active,
         .dot-btn:active,
         .menu-action-btn:active {
+          transform: scale(0.98);
+        }
+
+        .open-create-btn:active {
           transform: scale(0.98);
         }
 
@@ -2415,6 +2568,20 @@ export default function ChannelList() {
           object-fit: cover;
         }
 
+        .channel-logo-clickable {
+          cursor: zoom-in;
+          transition: transform 0.18s ease, box-shadow 0.18s ease;
+        }
+
+        .channel-logo-clickable:active {
+          transform: scale(0.96);
+        }
+
+        .channel-logo-clickable:focus-visible {
+          outline: 3px solid rgba(37, 99, 235, 0.34);
+          outline-offset: 3px;
+        }
+
         .channel-name {
           flex: 1;
           min-width: 0;
@@ -2626,6 +2793,89 @@ export default function ChannelList() {
           to {
             transform: rotate(360deg);
           }
+        }
+
+        .logo-viewer-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 260;
+          background:
+            radial-gradient(circle at center, rgba(37, 99, 235, 0.16), transparent 40%),
+            rgba(15, 23, 42, 0.62);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 18px;
+        }
+
+        .logo-viewer-card {
+          width: min(292px, calc(100vw - 44px));
+          background: rgba(255, 255, 255, 0.98);
+          border-radius: 28px;
+          padding: 18px 16px 14px;
+          text-align: center;
+          border: 1px solid rgba(226, 232, 240, 0.9);
+          box-shadow: 0 30px 85px rgba(15, 23, 42, 0.36);
+          animation: popupScale 0.18s ease;
+        }
+
+        .logo-viewer-image-wrap {
+          width: min(232px, calc(100vw - 86px));
+          height: min(232px, calc(100vw - 86px));
+          max-height: 34dvh;
+          margin: 0 auto;
+          position: relative;
+          border-radius: 26px;
+          overflow: hidden;
+          background: #ffffff;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border: 1px solid rgba(203, 213, 225, 0.9);
+          box-shadow:
+            0 18px 42px rgba(15, 23, 42, 0.14),
+            inset 0 0 0 6px rgba(248, 250, 252, 0.78);
+        }
+
+        .logo-viewer-image {
+          width: 100%;
+          height: 100%;
+          object-fit: contain;
+          display: block;
+          padding: 8px;
+        }
+
+        .logo-viewer-close {
+          position: absolute;
+          top: 8px;
+          right: 8px;
+          z-index: 2;
+          width: 30px;
+          height: 30px;
+          border: 2px solid #ffffff;
+          border-radius: 50%;
+          background: #ef4444;
+          color: #ffffff;
+          font-size: 22px;
+          line-height: 1;
+          font-weight: 950;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0 0 2px;
+          cursor: pointer;
+          box-shadow: 0 10px 22px rgba(239, 68, 68, 0.36);
+        }
+
+        .logo-viewer-card p {
+          margin: 12px 0 0;
+          color: #0f172a;
+          font-size: 13px;
+          font-weight: 950;
+          line-height: 1.3;
+          overflow-wrap: anywhere;
         }
 
         .popup-layer {
@@ -3130,6 +3380,24 @@ export default function ChannelList() {
             padding: 16px 12px 12px;
           }
 
+          .create-button-wrap {
+            gap: 6px;
+            padding: 9px 8px 7px;
+          }
+
+          .open-create-btn {
+            width: min(238px, calc(100vw - 72px));
+          }
+
+          .open-create-btn:active {
+            transform: scale(0.98);
+          }
+
+          .telegram-login-icon-btn {
+            width: 42px;
+            height: 42px;
+          }
+
           .center-pin-input {
             width: min(175px, calc(100vw - 88px));
             font-size: 26px;
@@ -3161,6 +3429,25 @@ export default function ChannelList() {
 
           .pin-buttons {
             flex-direction: column-reverse;
+          }
+
+          .create-button-wrap {
+            gap: 5px;
+            padding: 8px 7px 7px;
+          }
+
+          .open-create-btn {
+            width: min(210px, calc(100vw - 64px));
+            font-size: 13px;
+          }
+
+          .open-create-btn:active {
+            transform: scale(0.98);
+          }
+
+          .telegram-login-icon-btn {
+            width: 40px;
+            height: 40px;
           }
 
           .center-pin-input {

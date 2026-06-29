@@ -54,6 +54,8 @@ import TryNewPageTabs from "./Pages/NewFeatures/TryNewPageTabs.jsx";
 import Wakeup from "./Pages/Public/Wakeup.jsx";
 import PublicTradeReport from "./Pages/Public/PublicTradeReport.jsx";
 
+
+import Telegram_Login from "./Pages/Teligram_message/Telegram_Login.jsx";
 import TelegramLoading from "./Pages/Teligram_message/TelegramLoading.jsx";
 import ChannelList from "./Pages/Teligram_message/ChannelList.jsx";
 import Teligram from "./Pages/Teligram_message/Teligram.jsx";
@@ -82,9 +84,15 @@ function AppRoutes() {
       <Route path="/inward-view" element={<InwardViewOnly />} />
       <Route path="/Check-inward-view" element={<CheckInwardView />} />
 
+
+
        {/* First show loading page */}
         <Route path="/teligram-loading" element={<TelegramLoading />} />
 
+          {/* ✅ Telegram public login - not protected */}
+<Route path="/telegram-login" element={<Telegram_Login />} />
+
+  
         {/* After loading, open this page */}
         <Route path="/teligram-channels" element={<ChannelList />} />
 
