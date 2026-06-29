@@ -1061,7 +1061,7 @@ export default function Teligram() {
   };
 
   const sanitizeNoteHtml = (html) => {
-    return DOMPurify.sanitize(html || "", {
+    return DOMPurify.sanitize(normalizeEditorHtml(html || ""), {
       ADD_TAGS: ["font"],
       ADD_ATTR: ["style", "color"],
     });
@@ -1638,6 +1638,40 @@ export default function Teligram() {
     return true;
   };
 
+  const applyInlineColorToRange = (range, color) => {
+    if (!editorRef.current || !range || range.collapsed) return false;
+
+    const finalColor = normalizeTextColor(color);
+    const selectedText = range.toString();
+
+    if (!selectedText) return false;
+
+    const span = document.createElement("span");
+    span.style.setProperty("color", finalColor, "important");
+    span.style.setProperty("-webkit-text-fill-color", finalColor, "important");
+
+    try {
+      const selectedContent = range.extractContents();
+      span.appendChild(selectedContent);
+      range.insertNode(span);
+
+      const selection = window.getSelection();
+      const afterRange = document.createRange();
+      afterRange.setStartAfter(span);
+      afterRange.collapse(true);
+
+      selection.removeAllRanges();
+      selection.addRange(afterRange);
+      savedRangeRef.current = afterRange.cloneRange();
+      editorRef.current.normalize();
+
+      return true;
+    } catch (error) {
+      console.error("Inline color apply error:", error);
+      return false;
+    }
+  };
+
 
   const updateActiveFormats = () => {
     try {
@@ -1670,9 +1704,18 @@ export default function Teligram() {
       }
 
       if (type === "color") {
-        setTextColor(value);
-        document.execCommand("styleWithCSS", false, true);
-        document.execCommand("foreColor", false, value);
+        const finalColor = normalizeTextColor(value);
+        const selection = window.getSelection();
+        const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : savedRangeRef.current;
+
+        if (range && !range.collapsed) {
+          applyInlineColorToRange(range.cloneRange(), finalColor);
+          setComposerTextColor("#111111");
+        } else {
+          setComposerTextColor(finalColor);
+          document.execCommand("styleWithCSS", false, true);
+          document.execCommand("foreColor", false, finalColor);
+        }
       }
 
       editorRef.current.normalize();
@@ -1705,30 +1748,39 @@ export default function Teligram() {
 
   const changeColor = (color) => {
     const finalColor = normalizeTextColor(color);
-    const selectedRange = savedRangeRef.current;
-    const hasSelectedText = Boolean(selectedRange && !selectedRange.collapsed);
 
-    if (editorRef.current) {
-      editorRef.current.focus();
-    }
+    if (!editorRef.current) return;
+
+    editorRef.current.focus();
 
     try {
       restoreSelection();
-      document.execCommand("styleWithCSS", false, true);
-      document.execCommand("foreColor", false, finalColor);
+
+      const selection = window.getSelection();
+      const selectedRange =
+        selection && selection.rangeCount > 0
+          ? selection.getRangeAt(0)
+          : savedRangeRef.current;
+
+      const hasSelectedText = Boolean(selectedRange && !selectedRange.collapsed);
 
       if (hasSelectedText) {
-        // Keep the composer default black; only the selected word/line keeps the chosen color.
+        applyInlineColorToRange(selectedRange.cloneRange(), finalColor);
+
+        // Keep the next typed text black. Only the selected word/line keeps the chosen color.
         setComposerTextColor("#111111");
-      } else {
-        // No text selected: selected color becomes the typing color for new text.
-        setComposerTextColor(finalColor);
+        return;
       }
+
+      // No selection: selected color becomes the typing color for new text.
+      setComposerTextColor(finalColor);
+      document.execCommand("styleWithCSS", false, true);
+      document.execCommand("foreColor", false, finalColor);
     } catch (error) {
       console.error("Color apply error:", error);
+    } finally {
+      saveSelection();
     }
-
-    saveSelection();
   };
 
   const handleImageSelect = (e) => {
@@ -10268,6 +10320,223 @@ export default function Teligram() {
         .file-description-text::before {
           display: none !important;
           content: none !important;
+        }
+
+
+        /* =========================================================
+           FINAL LAPTOP CENTER + PATRICK HAND + SELECTED COLOR FIX
+           - Desktop/laptop page is centered, not stuck on the left.
+           - Normal message text, image description, and file description
+             use the exact same font family, size, weight, spacing.
+           - Selected word/line colors are preserved in input and notes.
+           - Composer tools are square with active effects and better spacing.
+        ========================================================= */
+
+        :root {
+          --handNoteFont: "Patrick Hand", "Comic Sans MS", "Comic Sans", "Comic Neue", "Segoe Print", cursive;
+          --handNoteSize: clamp(17px, 4.55vw, 22px);
+          --handNoteLine: 1.54;
+          --handNoteWeight: 500;
+          --handNoteSpacing: 1.35px;
+        }
+
+        @media (min-width: 768px) {
+          .nm-screen {
+            display: flex !important;
+            justify-content: center !important;
+            align-items: stretch !important;
+            padding: 0 !important;
+          }
+
+          .nm-phone {
+            width: min(460px, 100vw) !important;
+            max-width: 460px !important;
+            min-width: 0 !important;
+            flex: 0 0 min(460px, 100vw) !important;
+            margin-left: auto !important;
+            margin-right: auto !important;
+          }
+        }
+
+        .message-bubble .message-text,
+        .message-bubble .image-description-text,
+        .message-bubble .file-description-text,
+        .message-bubble .message-text *,
+        .message-bubble .image-description-text *,
+        .message-bubble .file-description-text *,
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-text,
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-text *,
+        .message-bubble:has(.image-message-wrap) .image-description-text,
+        .message-bubble:has(.image-message-wrap) .image-description-text *,
+        .message-bubble:has(.file-message-wrap) .file-description-text,
+        .message-bubble:has(.file-message-wrap) .file-description-text * {
+          font-family: var(--handNoteFont) !important;
+          font-size: var(--handNoteSize) !important;
+          line-height: var(--handNoteLine) !important;
+          font-weight: var(--handNoteWeight) !important;
+          letter-spacing: var(--handNoteSpacing) !important;
+          white-space: pre-wrap !important;
+          word-break: break-word !important;
+          overflow-wrap: anywhere !important;
+          text-align: left !important;
+          text-indent: 0 !important;
+        }
+
+        .message-text,
+        .image-description-text,
+        .file-description-text {
+          color: var(--noteColor, #111111) !important;
+          -webkit-text-fill-color: var(--noteColor, #111111) !important;
+        }
+
+        .message-text span[style*="color"],
+        .message-text font[color],
+        .image-description-text span[style*="color"],
+        .image-description-text font[color],
+        .file-description-text span[style*="color"],
+        .file-description-text font[color],
+        .text-input span[style*="color"],
+        .text-input font[color] {
+          -webkit-text-fill-color: currentColor !important;
+        }
+
+        .message-text span[style*="color"] *,
+        .image-description-text span[style*="color"] *,
+        .file-description-text span[style*="color"] *,
+        .text-input span[style*="color"] * {
+          color: inherit !important;
+          -webkit-text-fill-color: currentColor !important;
+        }
+
+        .composer-input-row {
+          align-items: center !important;
+          gap: 9px !important;
+        }
+
+        .composer-input-row .text-input,
+        .composer-input-row .text-input *,
+        .composer-input-row .text-input div,
+        .composer-input-row .text-input p,
+        .composer-input-row .text-input span {
+          font-family: var(--handNoteFont) !important;
+          font-size: var(--handNoteSize) !important;
+          line-height: var(--handNoteLine) !important;
+          font-weight: var(--handNoteWeight) !important;
+          letter-spacing: var(--handNoteSpacing) !important;
+        }
+
+        .composer-input-row .send-btn {
+          align-self: center !important;
+          transform: translateY(-2px) !important;
+        }
+
+        .composer-input-row .send-btn:active:not(:disabled) {
+          transform: translateY(-1px) scale(0.94) !important;
+        }
+
+        .composer-tools-top {
+          padding: 0 4px 3px !important;
+          gap: 10px !important;
+        }
+
+        .tools-ball-btn {
+          transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease !important;
+        }
+
+        .tools-ball-btn.active,
+        .tools-ball-btn:active {
+          transform: scale(1.08) !important;
+          filter: brightness(1.04) !important;
+          box-shadow: 0 10px 24px rgba(249, 115, 22, 0.28) !important;
+        }
+
+        .composer-tools-popover {
+          gap: 8px !important;
+          padding: 5px 7px !important;
+          border-radius: 15px !important;
+          background: rgba(255, 255, 255, 0.98) !important;
+          border: 1px solid rgba(203, 213, 225, 0.95) !important;
+          box-shadow: 0 11px 28px rgba(15, 23, 42, 0.15) !important;
+        }
+
+        .composer-tools-popover .tool-btn {
+          width: 32px !important;
+          height: 32px !important;
+          min-width: 32px !important;
+          min-height: 32px !important;
+          border-radius: 10px !important;
+          border: 1px solid #dbe4f0 !important;
+          background: linear-gradient(145deg, #ffffff, #f8fafc) !important;
+          color: #334155 !important;
+          box-shadow: 0 5px 13px rgba(15, 23, 42, 0.07) !important;
+          transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease, border-color 0.15s ease !important;
+        }
+
+        .composer-tools-popover .tool-btn:hover,
+        .composer-tools-popover .tool-btn:focus-visible,
+        .composer-tools-popover .tool-btn.active {
+          transform: translateY(-1px) !important;
+          border-color: #38bdf8 !important;
+          background: linear-gradient(145deg, #ecfeff, #eff6ff) !important;
+          box-shadow: 0 8px 18px rgba(14, 165, 233, 0.17) !important;
+          outline: 2px solid rgba(14, 165, 233, 0.12) !important;
+          outline-offset: 1px !important;
+        }
+
+        .composer-tools-popover .tool-btn:active {
+          transform: scale(0.94) !important;
+        }
+
+        .composer-tools-popover .tool-btn.active::before {
+          content: "" !important;
+          position: absolute !important;
+          top: 4px !important;
+          right: 4px !important;
+          width: 6px !important;
+          height: 6px !important;
+          border-radius: 999px !important;
+          background: #0ea5e9 !important;
+          box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.14) !important;
+        }
+
+        .header-brand-row {
+          transform-origin: center center !important;
+          transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease !important;
+        }
+
+        .header-brand-row:active {
+          transform: scale(0.985) !important;
+          filter: brightness(1.02) !important;
+        }
+
+        .header-brand-row.brand-pop {
+          animation: fullHeaderBoxPop 0.46s cubic-bezier(.2,.9,.2,1) both !important;
+        }
+
+        @keyframes fullHeaderBoxPop {
+          0% { transform: scale(1); box-shadow: 0 10px 24px rgba(185, 28, 28, 0.12), 0 2px 0 rgba(255,255,255,0.95) inset; }
+          32% { transform: scale(1.035) translateY(-1px); box-shadow: 0 15px 34px rgba(220, 38, 38, 0.22), 0 0 0 5px rgba(248, 113, 113, 0.13); }
+          70% { transform: scale(0.992); }
+          100% { transform: scale(1); }
+        }
+
+        @media (min-width: 768px) {
+          :root {
+            --handNoteSize: 22px;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .composer-tools-popover {
+            gap: 7px !important;
+          }
+
+          .composer-tools-popover .tool-btn {
+            width: 31px !important;
+            height: 31px !important;
+            min-width: 31px !important;
+            min-height: 31px !important;
+          }
         }
 
 
