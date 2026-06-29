@@ -73,6 +73,15 @@ export default function Teligram() {
   const scrollSnapshotRef = useRef(null);
   const noteRefs = useRef({});
   const pinnedScrollTimerRef = useRef(null);
+  const imageViewerTouchRef = useRef({
+    mode: "",
+    startDistance: 0,
+    startScale: 1,
+    startX: 0,
+    startY: 0,
+    baseX: 0,
+    baseY: 0,
+  });
 
   const [selectedChannel, setSelectedChannel] = useState(null);
   const [notes, setNotes] = useState([]);
@@ -87,6 +96,11 @@ export default function Teligram() {
   const [selectedImage, setSelectedImage] = useState(null);
   const [previewImage, setPreviewImage] = useState("");
   const [fullImagePreview, setFullImagePreview] = useState("");
+  const [imageViewerTransform, setImageViewerTransform] = useState({
+    scale: 1,
+    x: 0,
+    y: 0,
+  });
   const [brandPop, setBrandPop] = useState(false);
   const [removeOldImage, setRemoveOldImage] = useState(false);
 
@@ -988,6 +1002,33 @@ export default function Teligram() {
     return "";
   };
 
+  const normalizeEditorHtml = (html) => {
+    if (typeof document === "undefined") return html || "";
+
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = html || "";
+
+    wrapper.querySelectorAll("font[color]").forEach((fontNode) => {
+      const color = normalizeTextColor(fontNode.getAttribute("color"));
+      const span = document.createElement("span");
+      span.innerHTML = fontNode.innerHTML;
+      span.style.setProperty("color", color, "important");
+      span.style.setProperty("-webkit-text-fill-color", color, "important");
+      fontNode.replaceWith(span);
+    });
+
+    wrapper.querySelectorAll("[style]").forEach((element) => {
+      const colorValue = element.style.color;
+
+      if (colorValue) {
+        element.style.setProperty("color", colorValue, "important");
+        element.style.setProperty("-webkit-text-fill-color", colorValue, "important");
+      }
+    });
+
+    return wrapper.innerHTML;
+  };
+
   const getEditorHtml = () => {
     const html = editorRef.current?.innerHTML || "";
     const text = editorRef.current?.textContent?.trim() || "";
@@ -996,7 +1037,34 @@ export default function Teligram() {
       return "";
     }
 
-    return html.trim();
+    return normalizeEditorHtml(html.trim());
+  };
+
+  const placeCaretAtEnd = (element = editorRef.current) => {
+    if (!element || typeof window === "undefined") return;
+
+    element.focus();
+
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    range.collapse(false);
+
+    const selection = window.getSelection();
+
+    if (!selection) return;
+
+    selection.removeAllRanges();
+    selection.addRange(range);
+    savedRangeRef.current = range.cloneRange();
+
+    setTimeout(updateActiveFormats, 0);
+  };
+
+  const sanitizeNoteHtml = (html) => {
+    return DOMPurify.sanitize(html || "", {
+      ADD_TAGS: ["font"],
+      ADD_ATTR: ["style", "color"],
+    });
   };
 
   const preserveChatView = (noteId = "") => {
@@ -1048,6 +1116,128 @@ export default function Teligram() {
         scrollSnapshotRef.current = null;
       });
     });
+  };
+
+  const clampImageViewerValue = (value, min, max) => {
+    return Math.min(Math.max(value, min), max);
+  };
+
+  const getTouchDistance = (touches) => {
+    if (!touches || touches.length < 2) return 0;
+
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+
+    return Math.hypot(dx, dy);
+  };
+
+  const openFullImagePreview = (url) => {
+    if (!url) return;
+
+    setImageViewerTransform({ scale: 1, x: 0, y: 0 });
+    imageViewerTouchRef.current = {
+      mode: "",
+      startDistance: 0,
+      startScale: 1,
+      startX: 0,
+      startY: 0,
+      baseX: 0,
+      baseY: 0,
+    };
+    setFullImagePreview(url);
+  };
+
+  const closeFullImagePreview = () => {
+    setFullImagePreview("");
+    setImageViewerTransform({ scale: 1, x: 0, y: 0 });
+  };
+
+  const handleImageViewerTouchStart = (event) => {
+    const touches = event.touches;
+
+    if (touches.length === 2) {
+      event.preventDefault();
+      imageViewerTouchRef.current = {
+        mode: "pinch",
+        startDistance: getTouchDistance(touches),
+        startScale: imageViewerTransform.scale,
+        startX: 0,
+        startY: 0,
+        baseX: imageViewerTransform.x,
+        baseY: imageViewerTransform.y,
+      };
+      return;
+    }
+
+    if (touches.length === 1 && imageViewerTransform.scale > 1) {
+      event.preventDefault();
+      imageViewerTouchRef.current = {
+        ...imageViewerTouchRef.current,
+        mode: "drag",
+        startX: touches[0].clientX,
+        startY: touches[0].clientY,
+        baseX: imageViewerTransform.x,
+        baseY: imageViewerTransform.y,
+      };
+    }
+  };
+
+  const handleImageViewerTouchMove = (event) => {
+    const touches = event.touches;
+    const touchData = imageViewerTouchRef.current;
+
+    if (touchData.mode === "pinch" && touches.length === 2) {
+      event.preventDefault();
+
+      const nextScale = clampImageViewerValue(
+        touchData.startScale * (getTouchDistance(touches) / Math.max(touchData.startDistance, 1)),
+        1,
+        5
+      );
+
+      setImageViewerTransform((prev) => ({
+        ...prev,
+        scale: nextScale,
+        x: nextScale === 1 ? 0 : prev.x,
+        y: nextScale === 1 ? 0 : prev.y,
+      }));
+      return;
+    }
+
+    if (touchData.mode === "drag" && touches.length === 1 && imageViewerTransform.scale > 1) {
+      event.preventDefault();
+
+      const limit = 160 * imageViewerTransform.scale;
+
+      setImageViewerTransform((prev) => ({
+        ...prev,
+        x: clampImageViewerValue(touchData.baseX + touches[0].clientX - touchData.startX, -limit, limit),
+        y: clampImageViewerValue(touchData.baseY + touches[0].clientY - touchData.startY, -limit, limit),
+      }));
+    }
+  };
+
+  const handleImageViewerTouchEnd = () => {
+    imageViewerTouchRef.current.mode = "";
+
+    setImageViewerTransform((prev) => {
+      if (prev.scale <= 1.03) {
+        return { scale: 1, x: 0, y: 0 };
+      }
+
+      return prev;
+    });
+  };
+
+  const toggleImageViewerZoom = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    setImageViewerTransform((prev) =>
+      prev.scale > 1
+        ? { scale: 1, x: 0, y: 0 }
+        : { scale: 2.2, x: 0, y: 0 }
+    );
   };
 
   const loadSelectedChannel = async () => {
@@ -1514,7 +1704,9 @@ export default function Teligram() {
   };
 
   const changeColor = (color) => {
-    const finalColor = setComposerTextColor(color);
+    const finalColor = normalizeTextColor(color);
+    const selectedRange = savedRangeRef.current;
+    const hasSelectedText = Boolean(selectedRange && !selectedRange.collapsed);
 
     if (editorRef.current) {
       editorRef.current.focus();
@@ -1524,6 +1716,14 @@ export default function Teligram() {
       restoreSelection();
       document.execCommand("styleWithCSS", false, true);
       document.execCommand("foreColor", false, finalColor);
+
+      if (hasSelectedText) {
+        // Keep the composer default black; only the selected word/line keeps the chosen color.
+        setComposerTextColor("#111111");
+      } else {
+        // No text selected: selected color becomes the typing color for new text.
+        setComposerTextColor(finalColor);
+      }
     } catch (error) {
       console.error("Color apply error:", error);
     }
@@ -1918,12 +2118,11 @@ export default function Teligram() {
     setActiveMenuId(null);
 
     if (editorRef.current) {
-      editorRef.current.innerHTML = note.content_html || "";
+      editorRef.current.innerHTML = normalizeEditorHtml(note.content_html || "");
     }
 
     setTimeout(() => {
-      editorRef.current?.focus();
-      saveSelection();
+      placeCaretAtEnd();
     }, 100);
   };
 
@@ -1942,7 +2141,8 @@ export default function Teligram() {
     setActiveMenuId(null);
 
     if (editorRef.current) {
-      editorRef.current.innerHTML = note.content_html || "";
+      editorRef.current.innerHTML = normalizeEditorHtml(note.content_html || "");
+      placeCaretAtEnd();
     }
 
     setTimeout(() => {
@@ -1965,12 +2165,11 @@ export default function Teligram() {
     setActiveMenuId(null);
 
     if (editorRef.current) {
-      editorRef.current.innerHTML = note.content_html || "";
+      editorRef.current.innerHTML = normalizeEditorHtml(note.content_html || "");
     }
 
     setTimeout(() => {
-      editorRef.current?.focus();
-      saveSelection();
+      placeCaretAtEnd();
     }, 100);
   };
 
@@ -1994,7 +2193,8 @@ export default function Teligram() {
     setActiveMenuId(null);
 
     if (editorRef.current) {
-      editorRef.current.innerHTML = note.content_html || "";
+      editorRef.current.innerHTML = normalizeEditorHtml(note.content_html || "");
+      placeCaretAtEnd();
     }
 
     setTimeout(() => {
@@ -2022,12 +2222,11 @@ export default function Teligram() {
     setActiveMenuId(null);
 
     if (editorRef.current) {
-      editorRef.current.innerHTML = note.content_html || "";
+      editorRef.current.innerHTML = normalizeEditorHtml(note.content_html || "");
     }
 
     setTimeout(() => {
-      editorRef.current?.focus();
-      saveSelection();
+      placeCaretAtEnd();
     }, 100);
   };
 
@@ -2522,13 +2721,13 @@ export default function Teligram() {
                                   tabIndex={0}
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setFullImagePreview(getNoteImageUrl(note));
+                                    openFullImagePreview(getNoteImageUrl(note));
                                   }}
                                   onKeyDown={(e) => {
                                     if (e.key === "Enter" || e.key === " ") {
                                       e.preventDefault();
                                       e.stopPropagation();
-                                      setFullImagePreview(getNoteImageUrl(note));
+                                      openFullImagePreview(getNoteImageUrl(note));
                                     }
                                   }}
                                   onError={(e) => handleImageError(e, "", "telegram-notes")}
@@ -2540,7 +2739,7 @@ export default function Teligram() {
                                   className="image-description-text"
                                   style={{ "--noteColor": getNoteTextColor(note), color: getNoteTextColor(note) }}
                                   dangerouslySetInnerHTML={{
-                                    __html: DOMPurify.sanitize(note.content_html),
+                                    __html: sanitizeNoteHtml(note.content_html),
                                   }}
                                 />
                               )}
@@ -2574,7 +2773,7 @@ export default function Teligram() {
                                   className="image-description-text file-description-text"
                                   style={{ "--noteColor": getNoteTextColor(note), color: getNoteTextColor(note) }}
                                   dangerouslySetInnerHTML={{
-                                    __html: DOMPurify.sanitize(note.content_html),
+                                    __html: sanitizeNoteHtml(note.content_html),
                                   }}
                                 />
                               )}
@@ -2588,7 +2787,7 @@ export default function Teligram() {
                               }`}
                               style={{ "--noteColor": getNoteTextColor(note), color: getNoteTextColor(note) }}
                               dangerouslySetInnerHTML={{
-                                __html: DOMPurify.sanitize(note.content_html),
+                                __html: sanitizeNoteHtml(note.content_html),
                               }}
                             />
                           )}
@@ -2703,15 +2902,21 @@ export default function Teligram() {
             {fullImagePreview && (
               <div
                 className="image-viewer-overlay"
-                onClick={() => setFullImagePreview("")}
+                onClick={closeFullImagePreview}
                 role="dialog"
                 aria-modal="true"
               >
-                <div className="image-viewer-box" onClick={(e) => e.stopPropagation()}>
+                <div
+                  className="image-viewer-box"
+                  onClick={(e) => e.stopPropagation()}
+                  onTouchStart={handleImageViewerTouchStart}
+                  onTouchMove={handleImageViewerTouchMove}
+                  onTouchEnd={handleImageViewerTouchEnd}
+                >
                   <button
                     type="button"
                     className="image-viewer-close"
-                    onClick={() => setFullImagePreview("")}
+                    onClick={closeFullImagePreview}
                     aria-label="Close image"
                   >
                     ×
@@ -2720,6 +2925,10 @@ export default function Teligram() {
                     src={fullImagePreview}
                     alt="Full preview"
                     className="image-viewer-img"
+                    onDoubleClick={toggleImageViewerZoom}
+                    style={{
+                      transform: `translate3d(${imageViewerTransform.x}px, ${imageViewerTransform.y}px, 0) scale(${imageViewerTransform.scale})`,
+                    }}
                   />
                 </div>
               </div>
@@ -2932,6 +3141,8 @@ export default function Teligram() {
       )}
 
       <style>{`
+        @import url("https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap");
+
         * {
           box-sizing: border-box;
           -webkit-tap-highlight-color: transparent;
@@ -6823,13 +7034,11 @@ export default function Teligram() {
 
         .message-text,
         .image-description-text {
-          color: var(--noteColor, #111111) !important;
           font-size: 15px !important;
           line-height: 1.36 !important;
           font-weight: 500 !important;
           padding-right: 0 !important;
           margin: 0 !important;
-          -webkit-text-fill-color: var(--noteColor, #111111) !important;
         }
 
         .message-text *,
@@ -6845,7 +7054,6 @@ export default function Teligram() {
           color: inherit !important;
           font-size: inherit !important;
           line-height: inherit !important;
-          -webkit-text-fill-color: var(--noteColor, #111111) !important;
         }
 
         .message-text b,
@@ -7508,7 +7716,6 @@ export default function Teligram() {
         .file-description-text {
           padding-bottom: 2px !important;
           margin-bottom: 0 !important;
-          color: var(--noteColor, #111827) !important;
           overflow-wrap: anywhere !important;
           word-break: break-word !important;
         }
@@ -7716,7 +7923,6 @@ export default function Teligram() {
           line-height: 1.42 !important;
           font-weight: 520 !important;
           letter-spacing: 0 !important;
-          color: var(--noteColor, #111827) !important;
           overflow-wrap: anywhere !important;
           word-break: break-word !important;
         }
@@ -8028,7 +8234,6 @@ export default function Teligram() {
           white-space: pre-wrap !important;
           overflow-wrap: anywhere !important;
           word-break: break-word !important;
-          color: var(--noteColor, #111827) !important;
           font-family: "Times New Roman", Times, serif !important;
           font-size: 12.2px !important;
           line-height: 1.28 !important;
@@ -8260,8 +8465,6 @@ export default function Teligram() {
           line-height: 1.58 !important;
           font-weight: 500 !important;
           letter-spacing: 0.12px !important;
-          color: var(--noteColor, #111827) !important;
-          -webkit-text-fill-color: var(--noteColor, #111827) !important;
           text-align: left !important;
           text-indent: 0 !important;
           white-space: pre-wrap !important;
@@ -9306,7 +9509,6 @@ export default function Teligram() {
           line-height: 1.65 !important;
           font-weight: 500 !important;
           letter-spacing: 1.6px !important;
-          color: var(--noteColor, #111111) !important;
           white-space: pre-wrap !important;
           word-break: break-word !important;
           overflow-wrap: anywhere !important;
@@ -9404,6 +9606,44 @@ export default function Teligram() {
           font-size: 16px !important;
           box-shadow: none !important;
           z-index: 10 !important;
+        }
+
+        .message-text,
+        .image-description-text,
+        .file-description-text {
+          font-family: "Patrick Hand", "Comic Sans MS", "Comic Sans", "Comic Neue", "Segoe Print", cursive !important;
+          font-size: clamp(17px, 4.55vw, 22px) !important;
+        }
+
+        .message-text [style*="color"],
+        .message-text [style*="-webkit-text-fill-color"],
+        .image-description-text [style*="color"],
+        .image-description-text [style*="-webkit-text-fill-color"],
+        .file-description-text [style*="color"],
+        .file-description-text [style*="-webkit-text-fill-color"] {
+          -webkit-text-fill-color: inherit;
+        }
+
+        .text-input,
+        .text-input *,
+        .text-input div,
+        .text-input p,
+        .text-input span {
+          font-family: "Patrick Hand", "Comic Sans MS", "Comic Sans", "Comic Neue", "Segoe Print", cursive !important;
+          font-size: clamp(17px, 4.55vw, 22px) !important;
+          line-height: 1.54 !important;
+          letter-spacing: 1.35px !important;
+        }
+
+        .message-title-text,
+        .message-title-text * {
+          font-family: "Patrick Hand", "Comic Sans MS", "Comic Sans", "Comic Neue", "Segoe Print", cursive !important;
+        }
+
+        .image-description-text::before,
+        .file-description-text::before {
+          display: none !important;
+          content: none !important;
         }
 
         .image-viewer-overlay {
@@ -9576,7 +9816,6 @@ export default function Teligram() {
         .image-description-text *,
         .file-description-text,
         .file-description-text * {
-          color: var(--noteColor, #111111) !important;
         }
 
         .message-text b,
@@ -9790,12 +10029,11 @@ export default function Teligram() {
         .image-description-text *,
         .file-description-text,
         .file-description-text * {
-          font-family: "Comic Sans MS", "Comic Sans", "Comic Neue", "Segoe Print", cursive !important;
+          font-family: "Patrick Hand", "Comic Sans MS", "Comic Sans", "Comic Neue", "Segoe Print", cursive !important;
           font-size: clamp(17px, 4.55vw, 22px) !important;
           line-height: 1.54 !important;
           font-weight: 500 !important;
           letter-spacing: 1.35px !important;
-          color: var(--noteColor, #111111) !important;
           white-space: pre-wrap !important;
           word-break: break-word !important;
           overflow-wrap: anywhere !important;
@@ -9920,6 +10158,9 @@ export default function Teligram() {
         .image-viewer-overlay {
           padding: 52px 18px 26px !important;
           background: rgba(0, 0, 0, 0.88) !important;
+          overflow: hidden !important;
+          touch-action: none !important;
+          overscroll-behavior: contain !important;
         }
 
         .image-viewer-box {
@@ -9930,12 +10171,20 @@ export default function Teligram() {
           max-width: min(96vw, 900px) !important;
           max-height: 86dvh !important;
           animation: imageOpenPop 0.22s ease-out both !important;
+          overflow: visible !important;
+          touch-action: none !important;
         }
 
         .image-viewer-img {
           max-width: min(96vw, 900px) !important;
           max-height: 82dvh !important;
           border-radius: 16px !important;
+          transform-origin: center center !important;
+          transition: transform 0.08s ease-out !important;
+          touch-action: none !important;
+          user-select: none !important;
+          -webkit-user-drag: none !important;
+          cursor: zoom-in !important;
         }
 
         .image-viewer-close {
@@ -9982,6 +10231,43 @@ export default function Teligram() {
             font-size: clamp(17px, 5.05vw, 21px) !important;
             line-height: 1.52 !important;
           }
+        }
+
+
+        /* Final note text rules: normal text, image description, and file description look identical. */
+        .message-text,
+        .image-description-text,
+        .file-description-text {
+          font-family: "Patrick Hand", "Comic Sans MS", "Comic Sans", "Comic Neue", "Segoe Print", cursive !important;
+          font-size: clamp(17px, 4.55vw, 22px) !important;
+          line-height: 1.54 !important;
+          font-weight: 500 !important;
+          letter-spacing: 1.35px !important;
+          color: var(--noteColor, #111111) !important;
+          -webkit-text-fill-color: var(--noteColor, #111111) !important;
+        }
+
+        .message-text *,
+        .image-description-text *,
+        .file-description-text *,
+        .text-input,
+        .text-input * {
+          font-family: "Patrick Hand", "Comic Sans MS", "Comic Sans", "Comic Neue", "Segoe Print", cursive !important;
+          font-size: inherit !important;
+          line-height: inherit !important;
+          letter-spacing: inherit !important;
+        }
+
+        .text-input {
+          font-size: clamp(17px, 4.55vw, 22px) !important;
+          line-height: 1.54 !important;
+          letter-spacing: 1.35px !important;
+        }
+
+        .image-description-text::before,
+        .file-description-text::before {
+          display: none !important;
+          content: none !important;
         }
 
 
