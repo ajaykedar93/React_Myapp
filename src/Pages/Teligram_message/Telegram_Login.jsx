@@ -2,10 +2,14 @@ import React, { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 /*
-  Full API base URL and endpoints
-  Backend route must be:
-  app.use("/api/telegram-users", telegramUserRoutes);
+  Public Telegram Login Route:
+  <Route path="/telegram-login" element={<Telegram_Login />} />
+
+  This page is PUBLIC and separate from your main protected /login page.
+  After successful Telegram login, it redirects to:
+  /telegram_loginnotes
 */
+
 const API_BASE_URL = (
   import.meta.env.VITE_TELEGRAM_USERS_API_URL ||
   "http://localhost:5000/api/telegram-users"
@@ -20,32 +24,20 @@ const API_ENDPOINTS = {
   forgotReset: `${API_BASE_URL}/forgot-password/reset`,
 };
 
-/*
-  Public Telegram Login Route:
-  <Route path="/telegram-login" element={<Telegram_Login />} />
-
-  This page is PUBLIC and separate from your main protected /login page.
-  After successful Telegram login, redirect to channel list:
-  /teligram-channels
-*/
-const LOGIN_SUCCESS_REDIRECT_ROUTE = "/teligram-channels";
+const LOGIN_SUCCESS_REDIRECT_ROUTE = "/telegram_loginnotes";
 
 export default function Telegram_Login() {
   const navigate = useNavigate();
-
   const fileRef = useRef(null);
   const popupTimerRef = useRef(null);
 
   const [mode, setMode] = useState("login"); // login | register | forgot
-  const [registerStep, setRegisterStep] = useState(1);
-  const [forgotStep, setForgotStep] = useState(1);
-
   const [loading, setLoading] = useState(false);
   const [codeSending, setCodeSending] = useState(false);
   const [codeVerifying, setCodeVerifying] = useState(false);
   const [emailCodeSent, setEmailCodeSent] = useState(false);
   const [emailVerified, setEmailVerified] = useState(false);
-
+  const [forgotStep, setForgotStep] = useState(1);
   const [forgotCodeSending, setForgotCodeSending] = useState(false);
   const [forgotResetting, setForgotResetting] = useState(false);
 
@@ -106,7 +98,7 @@ export default function Telegram_Login() {
         type: "success",
         message: "",
       });
-    }, 1800);
+    }, 1850);
   };
 
   const isValidEmail = (email) => {
@@ -117,8 +109,15 @@ export default function Telegram_Login() {
     return /^[6-9]\d{9}$/.test(String(mobile || "").trim());
   };
 
+  const parseApiMessage = async (res, fallback) => {
+    const data = await res.json().catch(() => ({}));
+    return {
+      data,
+      message: data?.message || fallback,
+    };
+  };
+
   const resetRegisterState = () => {
-    setRegisterStep(1);
     setEmailCodeSent(false);
     setEmailVerified(false);
     setCodeSending(false);
@@ -142,13 +141,11 @@ export default function Telegram_Login() {
   const switchToLogin = () => {
     setMode("login");
     setForgotStep(1);
-    setRegisterStep(1);
   };
 
   const switchToRegister = () => {
     setMode("register");
     setForgotStep(1);
-    setRegisterStep(1);
   };
 
   const switchToForgot = () => {
@@ -194,14 +191,6 @@ export default function Telegram_Login() {
     if (fileRef.current) {
       fileRef.current.value = "";
     }
-  };
-
-  const parseApiMessage = async (res, fallback) => {
-    const data = await res.json().catch(() => ({}));
-    return {
-      data,
-      message: data?.message || fallback,
-    };
   };
 
   const sendEmailCode = async () => {
@@ -291,28 +280,6 @@ export default function Telegram_Login() {
     }
   };
 
-  const goRegisterNext = () => {
-    const fullName = String(registerForm.fullName || "").trim();
-    const mobileNo = String(registerForm.mobileNo || "").trim();
-
-    if (fullName.length < 3) {
-      showPopup("Enter full name", "error");
-      return;
-    }
-
-    if (!isValidMobile(mobileNo)) {
-      showPopup("Enter valid mobile no", "error");
-      return;
-    }
-
-    if (!emailVerified) {
-      showPopup("Verify email first", "error");
-      return;
-    }
-
-    setRegisterStep(2);
-  };
-
   const registerUser = async () => {
     const fullName = String(registerForm.fullName || "").trim();
     const mobileNo = String(registerForm.mobileNo || "").trim();
@@ -320,19 +287,21 @@ export default function Telegram_Login() {
 
     if (fullName.length < 3) {
       showPopup("Enter full name", "error");
-      setRegisterStep(1);
       return;
     }
 
-    if (!isValidMobile(mobileNo)) {
-      showPopup("Enter valid mobile no", "error");
-      setRegisterStep(1);
+    if (!isValidEmail(cleanRegisterEmail)) {
+      showPopup("Enter valid email", "error");
       return;
     }
 
     if (!emailVerified) {
       showPopup("Verify email first", "error");
-      setRegisterStep(1);
+      return;
+    }
+
+    if (!isValidMobile(mobileNo)) {
+      showPopup("Enter valid mobile no", "error");
       return;
     }
 
@@ -366,7 +335,12 @@ export default function Telegram_Login() {
         return;
       }
 
-      showPopup("Register successful", "success");
+      if (data?.user?.telegram_user_id) {
+        localStorage.setItem(
+          "telegram_user_id",
+          String(data.user.telegram_user_id)
+        );
+      }
 
       setLoginForm((prev) => ({
         ...prev,
@@ -374,14 +348,12 @@ export default function Telegram_Login() {
         password: "",
       }));
 
-      if (data?.user?.telegram_user_id) {
-        localStorage.setItem("telegram_user_id", String(data.user.telegram_user_id));
-      }
+      showPopup("Register successful", "success");
 
       window.setTimeout(() => {
         resetRegisterState();
         switchToLogin();
-      }, 700);
+      }, 750);
     } catch (error) {
       console.error("Register error:", error);
       showPopup("Server error", "error");
@@ -448,7 +420,7 @@ export default function Telegram_Login() {
 
       window.setTimeout(() => {
         navigate(LOGIN_SUCCESS_REDIRECT_ROUTE, { replace: true });
-      }, 700);
+      }, 650);
     } catch (error) {
       console.error("Login error:", error);
       showPopup("Server error", "error");
@@ -569,11 +541,9 @@ export default function Telegram_Login() {
 
   const cardSubTitle =
     mode === "login"
-      ? "Login to continue your telegram channels"
-      : mode === "register" && registerStep === 1
-      ? "Verify your email before creating account"
+      ? "Login to continue your notes channel"
       : mode === "register"
-      ? "Set secure password and optional profile image"
+      ? "Create verified account with optional profile image"
       : forgotStep === 1
       ? "Enter your email to receive reset OTP"
       : "Enter OTP and create your new password";
@@ -582,9 +552,7 @@ export default function Telegram_Login() {
     mode === "login"
       ? "LOGIN"
       : mode === "register"
-      ? registerStep === 1
-        ? "REGISTER 1/2"
-        : "REGISTER 2/2"
+      ? "REGISTER"
       : forgotStep === 1
       ? "FORGOT 1/2"
       : "FORGOT 2/2";
@@ -595,7 +563,6 @@ export default function Telegram_Login() {
       <div className="tl-bg-orb orb-one"></div>
       <div className="tl-bg-orb orb-two"></div>
       <div className="tl-bg-orb orb-three"></div>
-
 
       {popup.show && (
         <div className="tl-popup-layer" role="alert">
@@ -626,8 +593,8 @@ export default function Telegram_Login() {
 
           <h1>Telegram Login</h1>
           <p>
-            Secure login for notes management channels with verified email,
-            protected profile setup and responsive mobile design.
+            Professional secure access for notes management with verified email,
+            optional profile image and mobile-safe layout.
           </p>
 
           <div className="tl-feature-list">
@@ -636,9 +603,7 @@ export default function Telegram_Login() {
             <span>Mobile Ready</span>
           </div>
 
-          <div className="tl-api-chip">
-            API Connected
-          </div>
+          <div className="tl-api-chip">API Connected</div>
         </section>
 
         <section className="tl-auth-wrap">
@@ -728,218 +693,193 @@ export default function Telegram_Login() {
             {mode === "register" && (
               <div className="tl-auth-card tl-register-card">
                 <div className="tl-form">
-                  {registerStep === 1 && (
-                    <>
-                      <label>Full Name</label>
-                      <div className="tl-input-box">
-                        <span>👤</span>
-                        <input
-                          type="text"
-                          placeholder="Enter full name"
-                          value={registerForm.fullName}
-                          onChange={(e) =>
-                            setRegisterForm((prev) => ({
-                              ...prev,
-                              fullName: e.target.value,
-                            }))
-                          }
-                        />
-                      </div>
+                  <div className="tl-register-photo-wrap">
+                    <button
+                      type="button"
+                      className="tl-round-photo"
+                      onClick={() => fileRef.current?.click()}
+                      aria-label="Select profile image"
+                    >
+                      {registerForm.preview ? (
+                        <img src={registerForm.preview} alt="profile preview" />
+                      ) : (
+                        <span>+</span>
+                      )}
+                    </button>
 
-                      <label>Mobile No</label>
-                      <div className="tl-input-box">
-                        <span>☎</span>
-                        <input
-                          type="tel"
-                          inputMode="numeric"
-                          maxLength="10"
-                          placeholder="Enter mobile no"
-                          value={registerForm.mobileNo}
-                          onChange={(e) =>
-                            setRegisterForm((prev) => ({
-                              ...prev,
-                              mobileNo: e.target.value.replace(/\D/g, "").slice(0, 10),
-                            }))
-                          }
-                        />
-                      </div>
-
-                      <label>Email Verification</label>
-                      <div className="tl-input-box has-action">
-                        <span>@</span>
-                        <input
-                          type="email"
-                          placeholder="Enter email"
-                          value={registerForm.email}
-                          disabled={emailVerified}
-                          onChange={(e) => {
-                            setEmailCodeSent(false);
-                            setEmailVerified(false);
-                            setRegisterForm((prev) => ({
-                              ...prev,
-                              email: e.target.value,
-                              code: "",
-                            }));
-                          }}
-                        />
-
+                    <div>
+                      <strong>Profile Image</strong>
+                      <small>Optional • tap circle to select</small>
+                      {registerForm.preview && (
                         <button
                           type="button"
-                          className="tl-small-btn"
-                          onClick={sendEmailCode}
-                          disabled={
-                            codeSending ||
-                            emailVerified ||
-                            !isValidEmail(cleanRegisterEmail)
-                          }
+                          className="tl-remove-photo"
+                          onClick={removeProfileImage}
                         >
-                          {emailVerified
-                            ? "Verified"
-                            : codeSending
-                            ? "Sending"
-                            : "Send Code"}
+                          Remove
                         </button>
+                      )}
+                    </div>
+
+                    <input
+                      ref={fileRef}
+                      type="file"
+                      hidden
+                      accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                      onChange={handleRegisterImage}
+                    />
+                  </div>
+
+                  <label>Full Name</label>
+                  <div className="tl-input-box">
+                    <span>👤</span>
+                    <input
+                      type="text"
+                      placeholder="Enter full name"
+                      value={registerForm.fullName}
+                      onChange={(e) =>
+                        setRegisterForm((prev) => ({
+                          ...prev,
+                          fullName: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <label>Email Verification</label>
+                  <div className="tl-input-box has-action">
+                    <span>@</span>
+                    <input
+                      type="email"
+                      placeholder="Enter email"
+                      value={registerForm.email}
+                      disabled={emailVerified}
+                      onChange={(e) => {
+                        setEmailCodeSent(false);
+                        setEmailVerified(false);
+                        setRegisterForm((prev) => ({
+                          ...prev,
+                          email: e.target.value,
+                          code: "",
+                        }));
+                      }}
+                    />
+
+                    <button
+                      type="button"
+                      className="tl-small-btn"
+                      onClick={sendEmailCode}
+                      disabled={
+                        codeSending ||
+                        emailVerified ||
+                        !isValidEmail(cleanRegisterEmail)
+                      }
+                    >
+                      {emailVerified
+                        ? "Verified"
+                        : codeSending
+                        ? "Sending"
+                        : "Send Code"}
+                    </button>
+                  </div>
+
+                  {emailCodeSent && !emailVerified && (
+                    <div className="tl-code-row">
+                      <div className="tl-input-box">
+                        <span>#</span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          maxLength="6"
+                          placeholder="6 digit code"
+                          value={registerForm.code}
+                          onChange={(e) =>
+                            setRegisterForm((prev) => ({
+                              ...prev,
+                              code: e.target.value.replace(/\D/g, "").slice(0, 6),
+                            }))
+                          }
+                        />
                       </div>
-
-                      {emailCodeSent && !emailVerified && (
-                        <div className="tl-code-row">
-                          <div className="tl-input-box">
-                            <span>#</span>
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              maxLength="6"
-                              placeholder="6 digit code"
-                              value={registerForm.code}
-                              onChange={(e) =>
-                                setRegisterForm((prev) => ({
-                                  ...prev,
-                                  code: e.target.value.replace(/\D/g, "").slice(0, 6),
-                                }))
-                              }
-                            />
-                          </div>
-
-                          <button
-                            type="button"
-                            className="tl-verify-btn"
-                            onClick={verifyEmailCode}
-                            disabled={
-                              codeVerifying || String(registerForm.code || "").length !== 6
-                            }
-                          >
-                            {codeVerifying ? "..." : "Verify"}
-                          </button>
-                        </div>
-                      )}
-
-                      {emailVerified && (
-                        <div className="tl-verified-line">
-                          ✓ Email verified successfully
-                        </div>
-                      )}
 
                       <button
                         type="button"
-                        className="tl-main-btn"
-                        onClick={goRegisterNext}
+                        className="tl-verify-btn"
+                        onClick={verifyEmailCode}
+                        disabled={
+                          codeVerifying || String(registerForm.code || "").length !== 6
+                        }
                       >
-                        Next
+                        {codeVerifying ? "..." : "Verify"}
                       </button>
-                    </>
+                    </div>
                   )}
 
-                  {registerStep === 2 && (
-                    <>
-                      <label>Password</label>
-                      <div className="tl-input-box">
-                        <span>🔒</span>
-                        <input
-                          type={registerForm.showPassword ? "text" : "password"}
-                          placeholder="Create password"
-                          value={registerForm.password}
-                          onChange={(e) =>
-                            setRegisterForm((prev) => ({
-                              ...prev,
-                              password: e.target.value,
-                            }))
-                          }
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              registerUser();
-                            }
-                          }}
-                        />
-
-                        <button
-                          type="button"
-                          className="tl-eye-btn"
-                          onClick={() =>
-                            setRegisterForm((prev) => ({
-                              ...prev,
-                              showPassword: !prev.showPassword,
-                            }))
-                          }
-                        >
-                          {registerForm.showPassword ? "Hide" : "Show"}
-                        </button>
-                      </div>
-
-                      <label>Profile Image Optional</label>
-                      <div className="tl-profile-row">
-                        <button
-                          type="button"
-                          className="tl-profile-picker"
-                          onClick={() => fileRef.current?.click()}
-                        >
-                          {registerForm.preview ? (
-                            <img src={registerForm.preview} alt="profile preview" />
-                          ) : (
-                            <span>+</span>
-                          )}
-                        </button>
-
-                        <div className="tl-profile-text">
-                          <strong>Upload profile</strong>
-                          <small>JPG, PNG, GIF, WEBP below 5 MB</small>
-
-                          {registerForm.preview && (
-                            <button type="button" onClick={removeProfileImage}>
-                              Remove
-                            </button>
-                          )}
-                        </div>
-
-                        <input
-                          ref={fileRef}
-                          type="file"
-                          hidden
-                          accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
-                          onChange={handleRegisterImage}
-                        />
-                      </div>
-
-                      <div className="tl-two-btns">
-                        <button
-                          type="button"
-                          className="tl-back-btn"
-                          onClick={() => setRegisterStep(1)}
-                        >
-                          Back
-                        </button>
-
-                        <button
-                          type="button"
-                          className="tl-main-btn"
-                          onClick={registerUser}
-                          disabled={loading}
-                        >
-                          {loading ? "Saving..." : "Register"}
-                        </button>
-                      </div>
-                    </>
+                  {emailVerified && (
+                    <div className="tl-verified-line">✓ Email verified successfully</div>
                   )}
+
+                  <label>Mobile No</label>
+                  <div className="tl-input-box">
+                    <span>☎</span>
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      maxLength="10"
+                      placeholder="Enter mobile no"
+                      value={registerForm.mobileNo}
+                      onChange={(e) =>
+                        setRegisterForm((prev) => ({
+                          ...prev,
+                          mobileNo: e.target.value.replace(/\D/g, "").slice(0, 10),
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <label>Password</label>
+                  <div className="tl-input-box">
+                    <span>🔒</span>
+                    <input
+                      type={registerForm.showPassword ? "text" : "password"}
+                      placeholder="Create password"
+                      value={registerForm.password}
+                      onChange={(e) =>
+                        setRegisterForm((prev) => ({
+                          ...prev,
+                          password: e.target.value,
+                        }))
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          registerUser();
+                        }
+                      }}
+                    />
+
+                    <button
+                      type="button"
+                      className="tl-eye-btn"
+                      onClick={() =>
+                        setRegisterForm((prev) => ({
+                          ...prev,
+                          showPassword: !prev.showPassword,
+                        }))
+                      }
+                    >
+                      {registerForm.showPassword ? "Hide" : "Show"}
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="tl-main-btn"
+                    onClick={registerUser}
+                    disabled={loading}
+                  >
+                    {loading ? "Saving..." : "Register"}
+                  </button>
 
                   <div className="tl-card-links single">
                     <button type="button" onClick={switchToLogin}>
@@ -1113,13 +1053,17 @@ export default function Telegram_Login() {
           display: flex;
           align-items: center;
           justify-content: center;
-          padding: 18px;
+          padding:
+            calc(env(safe-area-inset-top, 0px) + 18px)
+            18px
+            calc(env(safe-area-inset-bottom, 0px) + 24px);
           background:
             radial-gradient(circle at 12% 12%, rgba(59, 130, 246, 0.3), transparent 31%),
             radial-gradient(circle at 84% 80%, rgba(20, 184, 166, 0.25), transparent 34%),
             linear-gradient(135deg, #020617 0%, #0f172a 52%, #111827 100%);
           font-family: Inter, "Segoe UI", Arial, sans-serif;
           color: #0f172a;
+          overscroll-behavior: contain;
         }
 
         .tl-bg-grid {
@@ -1193,7 +1137,7 @@ export default function Telegram_Login() {
             0 30px 90px rgba(0, 0, 0, 0.38),
             inset 0 1px 0 rgba(255,255,255,0.12);
           backdrop-filter: blur(20px);
-          overflow: hidden;
+          overflow: visible;
         }
 
         .tl-brand-card {
@@ -1363,7 +1307,7 @@ export default function Telegram_Login() {
         }
 
         .tl-card-stage.mode-register {
-          min-height: 448px;
+          min-height: 0;
         }
 
         .tl-card-stage.mode-forgot {
@@ -1382,7 +1326,7 @@ export default function Telegram_Login() {
         }
 
         .tl-register-card {
-          min-height: 448px;
+          min-height: 0;
         }
 
         .tl-forgot-card {
@@ -1572,8 +1516,8 @@ export default function Telegram_Login() {
         .tl-small-btn:active,
         .tl-verify-btn:active,
         .tl-card-links button:active,
-        .tl-profile-picker:active,
-        .tl-profile-text button:active {
+        .tl-round-photo:active,
+        .tl-remove-photo:active {
           transform: scale(0.97);
         }
 
@@ -1601,61 +1545,57 @@ export default function Telegram_Login() {
           transition: 0.16s ease;
         }
 
-        .tl-profile-row {
-          border-radius: 17px;
-          background: linear-gradient(135deg, #f8fafc, #eef2ff);
-          border: 1px solid #dbeafe;
-          padding: 10px;
+        .tl-register-photo-wrap {
           display: flex;
           align-items: center;
           gap: 12px;
+          padding: 10px;
+          border-radius: 18px;
+          background: linear-gradient(135deg, #f8fafc, #eef2ff);
+          border: 1px solid #dbeafe;
         }
 
-        .tl-profile-picker {
-          width: 58px;
-          height: 58px;
+        .tl-round-photo {
+          width: 64px;
+          height: 64px;
+          flex-shrink: 0;
           border: none;
-          border-radius: 18px;
+          border-radius: 50%;
           background: linear-gradient(135deg, #2563eb, #06b6d4);
           color: white;
-          font-size: 25px;
+          font-size: 26px;
           font-weight: 950;
           display: flex;
           align-items: center;
           justify-content: center;
           overflow: hidden;
-          flex-shrink: 0;
           box-shadow: 0 12px 22px rgba(37, 99, 235, 0.18);
           transition: 0.16s ease;
         }
 
-        .tl-profile-picker img {
+        .tl-round-photo img {
           width: 100%;
           height: 100%;
           object-fit: cover;
         }
 
-        .tl-profile-text {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-          min-width: 0;
-        }
-
-        .tl-profile-text strong {
+        .tl-register-photo-wrap strong {
+          display: block;
           color: #0f172a;
           font-size: 13px;
           font-weight: 950;
         }
 
-        .tl-profile-text small {
+        .tl-register-photo-wrap small {
+          display: block;
+          margin-top: 2px;
           color: #64748b;
           font-size: 11px;
           font-weight: 750;
         }
 
-        .tl-profile-text button {
-          margin-top: 4px;
+        .tl-remove-photo {
+          margin-top: 5px;
           width: fit-content;
           border: none;
           border-radius: 10px;
@@ -1676,7 +1616,10 @@ export default function Telegram_Login() {
           align-items: center;
           justify-content: center;
           pointer-events: none;
-          padding: 18px;
+          padding:
+            calc(env(safe-area-inset-top, 0px) + 18px)
+            18px
+            calc(env(safe-area-inset-bottom, 0px) + 18px);
         }
 
         .tl-popup {
@@ -1739,7 +1682,11 @@ export default function Telegram_Login() {
         @media (max-width: 740px) {
           .tl-page {
             align-items: flex-start;
-            padding: 10px;
+            justify-content: flex-start;
+            padding:
+              calc(env(safe-area-inset-top, 0px) + 12px)
+              10px
+              calc(env(safe-area-inset-bottom, 0px) + 28px);
           }
 
           .tl-shell {
@@ -1748,40 +1695,41 @@ export default function Telegram_Login() {
             gap: 10px;
             padding: 9px;
             border-radius: 24px;
+            margin: 0 auto;
           }
 
           .tl-brand-card {
             min-height: auto;
             border-radius: 20px;
-            padding: 20px 18px;
+            padding: 18px 16px;
             align-items: center;
             text-align: center;
           }
 
           .tl-logo-mark {
-            width: 55px;
-            height: 55px;
-            border-radius: 18px;
-            margin-bottom: 12px;
+            width: 52px;
+            height: 52px;
+            border-radius: 17px;
+            margin-bottom: 10px;
           }
 
           .tl-logo-mark svg {
-            width: 36px;
-            height: 36px;
+            width: 34px;
+            height: 34px;
           }
 
           .tl-brand-card h1 {
-            font-size: 25px;
+            font-size: 24px;
           }
 
           .tl-brand-card p {
             margin-top: 8px;
-            font-size: 12.5px;
-            line-height: 1.42;
+            font-size: 12.3px;
+            line-height: 1.4;
           }
 
           .tl-feature-list {
-            margin-top: 13px;
+            margin-top: 12px;
             justify-content: center;
           }
 
@@ -1792,15 +1740,15 @@ export default function Telegram_Login() {
           }
 
           .tl-api-chip {
-            margin: 10px auto 0;
+            margin: 9px auto 0;
           }
 
           .tl-auth-wrap {
-            padding: 8px 4px 6px;
+            padding: 6px 4px 8px;
           }
 
           .tl-card-head {
-            margin-bottom: 10px;
+            margin-bottom: 9px;
           }
 
           .tl-card-head h2 {
@@ -1839,29 +1787,34 @@ export default function Telegram_Login() {
           .tl-verify-btn {
             height: 40px;
           }
-
-          .tl-card-stage.mode-register,
-          .tl-register-card {
-            min-height: 430px;
-          }
         }
 
-        @media (max-width: 380px) {
+        @media (max-width: 430px) {
           .tl-page {
-            padding: 7px;
+            padding:
+              calc(env(safe-area-inset-top, 0px) + 10px)
+              8px
+              calc(env(safe-area-inset-bottom, 0px) + 32px);
           }
 
           .tl-brand-card {
-            padding: 17px 13px;
+            padding: 15px 12px;
           }
 
-          .tl-brand-card p,
-          .tl-feature-list,
-          .tl-api-chip {
+          .tl-brand-card p {
+            font-size: 11.8px;
+          }
+
+          .tl-feature-list {
             display: none;
           }
+
           .tl-auth-card {
             padding: 12px;
+          }
+
+          .tl-form {
+            gap: 7px;
           }
 
           .tl-card-links {
@@ -1879,6 +1832,60 @@ export default function Telegram_Login() {
 
           .tl-two-btns {
             grid-template-columns: 82px 1fr;
+          }
+
+          .tl-register-photo-wrap {
+            padding: 8px;
+          }
+
+          .tl-round-photo {
+            width: 56px;
+            height: 56px;
+          }
+        }
+
+        @media (max-width: 360px) {
+          .tl-page {
+            padding:
+              calc(env(safe-area-inset-top, 0px) + 8px)
+              6px
+              calc(env(safe-area-inset-bottom, 0px) + 34px);
+          }
+
+          .tl-brand-card {
+            padding: 13px 10px;
+          }
+
+          .tl-logo-mark {
+            width: 46px;
+            height: 46px;
+            margin-bottom: 8px;
+          }
+
+          .tl-logo-mark svg {
+            width: 31px;
+            height: 31px;
+          }
+
+          .tl-brand-card h1 {
+            font-size: 21px;
+          }
+
+          .tl-brand-card p,
+          .tl-api-chip {
+            display: none;
+          }
+
+          .tl-auth-wrap {
+            padding: 4px 2px 8px;
+          }
+
+          .tl-card-head h2 {
+            font-size: 20px;
+          }
+
+          .tl-auth-card {
+            padding: 11px;
           }
         }
       `}</style>
