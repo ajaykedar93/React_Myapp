@@ -86,6 +86,8 @@ export default function Teligram() {
   const [textColor, setTextColor] = useState("#111111");
   const [selectedImage, setSelectedImage] = useState(null);
   const [previewImage, setPreviewImage] = useState("");
+  const [fullImagePreview, setFullImagePreview] = useState("");
+  const [brandPop, setBrandPop] = useState(false);
   const [removeOldImage, setRemoveOldImage] = useState(false);
 
   const [selectedFile, setSelectedFile] = useState(null);
@@ -826,7 +828,19 @@ export default function Teligram() {
 
 
   const isTitleNote = (note) => {
-    return String(note?.title || "").trim().toLowerCase() === "title";
+    if (
+      note?.is_title === false ||
+      note?.is_title === "false" ||
+      note?.is_title === 0 ||
+      note?.is_title === "0"
+    ) {
+      return false;
+    }
+
+    return (
+      String(note?.title || "").trim().toLowerCase() === "title" ||
+      isTrue(note?.is_title)
+    );
   };
 
   const hasNoteImage = (note) => {
@@ -1383,6 +1397,28 @@ export default function Teligram() {
     });
   }, [filteredNotes]);
 
+  const publicDeviceChipNoteIds = useMemo(() => {
+    const firstNoteIds = new Set();
+    const seenDeviceIds = new Set();
+
+    if (isTrue(selectedChannel?.is_private)) {
+      return firstNoteIds;
+    }
+
+    groupedNotes.forEach(({ note }) => {
+      const deviceId = getNoteSenderDeviceId(note);
+
+      if (!deviceId || isMyDeviceNote(note) || seenDeviceIds.has(deviceId)) {
+        return;
+      }
+
+      seenDeviceIds.add(deviceId);
+      firstNoteIds.add(String(note.note_id));
+    });
+
+    return firstNoteIds;
+  }, [groupedNotes, selectedChannel?.is_private]);
+
   const pinnedNote = useMemo(() => {
     if (!pinnedNoteId) return null;
     return notes.find((note) => String(note.note_id) === String(pinnedNoteId)) || null;
@@ -1431,6 +1467,10 @@ export default function Teligram() {
     restoreSelection();
 
     try {
+      if (type === "bold" || type === "underline") {
+        document.execCommand("styleWithCSS", false, false);
+      }
+
       if (type === "bold") {
         document.execCommand("bold", false, null);
       }
@@ -1441,8 +1481,11 @@ export default function Teligram() {
 
       if (type === "color") {
         setTextColor(value);
+        document.execCommand("styleWithCSS", false, true);
         document.execCommand("foreColor", false, value);
       }
+
+      editorRef.current.normalize();
     } catch (error) {
       console.error("Format apply error:", error);
     }
@@ -2019,6 +2062,9 @@ export default function Teligram() {
       formData.append("sender_device_id", noteDeviceId);
       formData.append("created_device_id", noteDeviceId);
       formData.append("title", nextTitle);
+      formData.append("is_title", nextTitle === "title" ? "true" : "false");
+      formData.append("title_mode", nextTitle === "title" ? "title" : "normal");
+      formData.append("note_type", nextTitle === "title" ? "title" : "normal");
       formData.append("content_html", note.content_html || "");
       formData.append("text_color", note.text_color || "#111111");
       formData.append("remove_image", "false");
@@ -2184,7 +2230,24 @@ export default function Teligram() {
             ‹
           </button>
 
-          <div className="header-brand-row">
+          <div
+            className={`header-brand-row ${brandPop ? "brand-pop" : ""}`}
+            role="button"
+            tabIndex={0}
+            onClick={(e) => {
+              e.stopPropagation();
+              setBrandPop(true);
+              window.setTimeout(() => setBrandPop(false), 420);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setBrandPop(true);
+                window.setTimeout(() => setBrandPop(false), 420);
+              }
+            }}
+            aria-label="Channel info"
+          >
             <div className="header-logo">
               {(selectedChannel?.logo_url || selectedChannel?.has_logo) && (
                 <img
@@ -2359,7 +2422,9 @@ export default function Teligram() {
                   const messageFromThisDevice = isMyDeviceNote(note);
                   const deviceTheme = getDeviceTheme(note);
                   const showDeviceChip =
-                    !messageFromThisDevice && !isTrue(selectedChannel?.is_private);
+                    !messageFromThisDevice &&
+                    !isTrue(selectedChannel?.is_private) &&
+                    publicDeviceChipNoteIds.has(String(note.note_id));
 
                   const pinnedMessage = String(pinnedNoteId || "") === String(note.note_id);
 
@@ -2407,7 +2472,7 @@ export default function Teligram() {
                             hasImage && !hasText ? "image-only" : ""
                           } ${hasAttachment && !hasText ? "file-only" : ""} ${
                             titleMessage ? "title-bubble" : ""
-                          } ${pinnedMessage ? "pinned-message-bubble" : ""}`}
+                          } ${showDeviceChip ? "new-device-message" : ""} ${pinnedMessage ? "pinned-message-bubble" : ""}`}
                           style={{
                             "--device-card-1": deviceTheme.card1,
                             "--device-card-2": deviceTheme.card2,
@@ -2453,6 +2518,19 @@ export default function Teligram() {
                                   alt="note"
                                   className="message-image"
                                   loading="lazy"
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setFullImagePreview(getNoteImageUrl(note));
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" || e.key === " ") {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      setFullImagePreview(getNoteImageUrl(note));
+                                    }
+                                  }}
                                   onError={(e) => handleImageError(e, "", "telegram-notes")}
                                 />
                               </div>
@@ -2621,6 +2699,31 @@ export default function Teligram() {
 
               <div ref={bottomRef}></div>
             </main>
+
+            {fullImagePreview && (
+              <div
+                className="image-viewer-overlay"
+                onClick={() => setFullImagePreview("")}
+                role="dialog"
+                aria-modal="true"
+              >
+                <div className="image-viewer-box" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    className="image-viewer-close"
+                    onClick={() => setFullImagePreview("")}
+                    aria-label="Close image"
+                  >
+                    ×
+                  </button>
+                  <img
+                    src={fullImagePreview}
+                    alt="Full preview"
+                    className="image-viewer-img"
+                  />
+                </div>
+              </div>
+            )}
 
             {previewImage && (
               <div className="preview-strip">
@@ -9097,6 +9200,787 @@ export default function Teligram() {
             max-width: calc(100vw - 36px) !important;
             min-width: min(215px, calc(100vw - 58px)) !important;
             padding: 10px 35px 20px 13px !important;
+          }
+        }
+
+
+        /* =========================================================
+           FINAL EXACT CHAT CARD UPDATE
+           - Same soft grey card for text and image
+           - Compact spacing like reference image
+           - Small time at right corner
+           - ND chip only in corner, never above/over text
+           - Tap image to open centered full preview with X close
+        ========================================================= */
+
+        .chat-body {
+          padding: 12px 8px 12px !important;
+          background: #ffffff !important;
+          align-items: center !important;
+        }
+
+        .message-line,
+        .message-line.my-message-line,
+        .message-line.other-message-line {
+          width: 100% !important;
+          justify-content: center !important;
+          align-items: center !important;
+          padding: 0 6px !important;
+          margin: 0 0 12px !important;
+        }
+
+        .message-bubble,
+        .message-bubble.my-message-bubble,
+        .message-bubble.other-message-bubble,
+        .message-bubble.image-only,
+        .message-bubble.file-only,
+        .message-bubble:has(.image-message-wrap),
+        .message-bubble:has(.file-message-wrap),
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)),
+        .message-bubble.my-message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)),
+        .message-bubble.other-message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) {
+          width: fit-content !important;
+          max-width: min(82vw, 330px) !important;
+          min-width: 0 !important;
+          padding: 12px 38px 22px 16px !important;
+          border-radius: 22px !important;
+          background: #f4f4f4 !important;
+          border: none !important;
+          box-shadow: none !important;
+          overflow: visible !important;
+          text-align: left !important;
+        }
+
+        .message-bubble:has(.image-message-wrap),
+        .message-bubble.image-only {
+          padding: 8px 8px 23px 8px !important;
+          max-width: min(86vw, 355px) !important;
+        }
+
+        .message-bubble:has(.device-source-chip):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) {
+          padding-left: 44px !important;
+          padding-top: 12px !important;
+        }
+
+        .message-bubble:has(.device-source-chip) .message-text {
+          margin-top: 0 !important;
+        }
+
+        .device-source-chip {
+          position: absolute !important;
+          top: 8px !important;
+          left: 9px !important;
+          width: 24px !important;
+          height: 24px !important;
+          min-width: 24px !important;
+          min-height: 24px !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          border-radius: 999px !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          background: #ffffff !important;
+          color: #6b7280 !important;
+          border: 1px solid #d6d6d6 !important;
+          font-family: "Poppins", "Inter", "Segoe UI", Arial, sans-serif !important;
+          font-size: 8px !important;
+          line-height: 1 !important;
+          font-weight: 900 !important;
+          letter-spacing: 0 !important;
+          z-index: 8 !important;
+          box-shadow: none !important;
+        }
+
+        .message-text,
+        .message-text *,
+        .message-text div,
+        .message-text p,
+        .message-text span,
+        .image-description-text,
+        .image-description-text *,
+        .file-description-text,
+        .file-description-text * {
+          font-family: "Comic Sans MS", "Patrick Hand", "Segoe Print", cursive !important;
+          font-size: clamp(18px, 4.7vw, 24px) !important;
+          line-height: 1.65 !important;
+          font-weight: 500 !important;
+          letter-spacing: 1.6px !important;
+          color: var(--noteColor, #111111) !important;
+          white-space: pre-wrap !important;
+          word-break: break-word !important;
+          overflow-wrap: anywhere !important;
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+
+        .image-message-wrap,
+        .file-message-wrap {
+          width: min(335px, 82vw) !important;
+          max-width: 100% !important;
+          border-radius: 18px !important;
+          background: transparent !important;
+          overflow: visible !important;
+        }
+
+        .whatsapp-image-frame {
+          width: 100% !important;
+          max-height: 58dvh !important;
+          border-radius: 18px !important;
+          overflow: hidden !important;
+          background: transparent !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+        }
+
+        .whatsapp-image-frame .message-image,
+        .message-image {
+          width: 100% !important;
+          max-width: 100% !important;
+          max-height: 58dvh !important;
+          height: auto !important;
+          object-fit: contain !important;
+          object-position: center center !important;
+          border-radius: 18px !important;
+          background: transparent !important;
+          border: none !important;
+          box-shadow: none !important;
+          cursor: zoom-in !important;
+          display: block !important;
+        }
+
+        .image-description-text {
+          width: 100% !important;
+          max-width: 100% !important;
+          margin-top: 8px !important;
+          padding: 0 2px 0 2px !important;
+          border-radius: 0 !important;
+          background: transparent !important;
+          border: none !important;
+          transform: none !important;
+        }
+
+        .image-description-text::before,
+        .file-description-text::before {
+          display: none !important;
+        }
+
+        .message-time,
+        .message-bubble:has(.message-image) .message-time,
+        .message-bubble:has(.image-message-wrap) .message-time,
+        .message-bubble:has(.file-message-wrap) .message-time,
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-time {
+          position: absolute !important;
+          right: 12px !important;
+          bottom: 7px !important;
+          padding: 0 !important;
+          border-radius: 0 !important;
+          background: transparent !important;
+          color: #8a8a8a !important;
+          font-family: "Poppins", "Inter", "Segoe UI", Arial, sans-serif !important;
+          font-size: 9px !important;
+          line-height: 1 !important;
+          font-weight: 700 !important;
+          opacity: 0.9 !important;
+          box-shadow: none !important;
+          z-index: 9 !important;
+        }
+
+        .message-dot-btn,
+        .message-bubble:has(.image-message-wrap) .message-dot-btn,
+        .message-bubble:has(.file-message-wrap) .message-dot-btn,
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-dot-btn {
+          top: 7px !important;
+          right: 8px !important;
+          width: 22px !important;
+          height: 22px !important;
+          min-width: 22px !important;
+          min-height: 22px !important;
+          border-radius: 999px !important;
+          background: transparent !important;
+          color: #6b7280 !important;
+          border: none !important;
+          font-size: 16px !important;
+          box-shadow: none !important;
+          z-index: 10 !important;
+        }
+
+        .image-viewer-overlay {
+          position: fixed !important;
+          inset: 0 !important;
+          z-index: 9999 !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          padding: 22px !important;
+          background: rgba(0, 0, 0, 0.86) !important;
+        }
+
+        .image-viewer-img {
+          max-width: 100% !important;
+          max-height: 88dvh !important;
+          width: auto !important;
+          height: auto !important;
+          object-fit: contain !important;
+          object-position: center center !important;
+          border-radius: 14px !important;
+          display: block !important;
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35) !important;
+        }
+
+        .image-viewer-close {
+          position: fixed !important;
+          top: max(14px, env(safe-area-inset-top)) !important;
+          right: 16px !important;
+          width: 36px !important;
+          height: 36px !important;
+          border: none !important;
+          border-radius: 999px !important;
+          background: rgba(255, 255, 255, 0.95) !important;
+          color: #111111 !important;
+          font-size: 26px !important;
+          line-height: 1 !important;
+          font-weight: 700 !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          cursor: pointer !important;
+          z-index: 10000 !important;
+        }
+
+        @media (max-width: 480px) {
+          .message-bubble,
+          .message-bubble.my-message-bubble,
+          .message-bubble.other-message-bubble,
+          .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)),
+          .message-bubble.my-message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)),
+          .message-bubble.other-message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) {
+            max-width: calc(100vw - 34px) !important;
+            padding: 11px 36px 20px 15px !important;
+          }
+
+          .message-bubble:has(.image-message-wrap),
+          .message-bubble.image-only {
+            max-width: calc(100vw - 34px) !important;
+            padding: 7px 7px 22px !important;
+          }
+
+          .message-text,
+          .message-text *,
+          .image-description-text,
+          .image-description-text * {
+            font-size: clamp(17px, 5.25vw, 22px) !important;
+            line-height: 1.58 !important;
+          }
+        }
+
+
+        /* FINAL FIX 2026-06-29: requested exact chat look, header tap pop, ND placement, title persistence, and bold/underline visibility */
+        .nm-header {
+          background: linear-gradient(135deg, #eef4ff 0%, #f8fbff 42%, #f4f0ff 100%) !important;
+          border-bottom: 1px solid rgba(99, 102, 241, 0.13) !important;
+          box-shadow: 0 10px 30px rgba(30, 41, 59, 0.08) !important;
+        }
+
+        .header-brand-row {
+          border: 1px solid rgba(99, 102, 241, 0.13) !important;
+          background: linear-gradient(135deg, rgba(255,255,255,0.92), rgba(238,242,255,0.92)) !important;
+          box-shadow: 0 10px 22px rgba(79, 70, 229, 0.10) !important;
+          cursor: pointer !important;
+          transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease !important;
+          -webkit-tap-highlight-color: transparent !important;
+        }
+
+        .header-brand-row:hover {
+          transform: translateY(-1px) !important;
+          box-shadow: 0 14px 26px rgba(79, 70, 229, 0.14) !important;
+        }
+
+        .header-brand-row.brand-pop {
+          animation: tinyHeaderPop 0.42s cubic-bezier(.2,.8,.2,1) !important;
+        }
+
+        @keyframes tinyHeaderPop {
+          0% { transform: scale(1); }
+          35% { transform: scale(1.035) translateY(-1px); }
+          70% { transform: scale(0.992); }
+          100% { transform: scale(1); }
+        }
+
+        .header-brand-row .header-logo {
+          background: linear-gradient(135deg, #4f46e5, #06b6d4) !important;
+          border: 2px solid rgba(255, 255, 255, 0.95) !important;
+          box-shadow: 0 10px 22px rgba(79, 70, 229, 0.24) !important;
+        }
+
+        .header-brand-row .logo-fallback-letter {
+          color: #ffffff !important;
+          font-weight: 900 !important;
+        }
+
+        .header-brand-row .header-title h2 {
+          color: #172554 !important;
+          font-weight: 900 !important;
+        }
+
+        .header-brand-row .header-title p {
+          color: #475569 !important;
+          font-weight: 700 !important;
+        }
+
+        .message-bubble.new-device-message,
+        .message-bubble:has(.device-source-chip) {
+          margin-top: 15px !important;
+          padding-top: 18px !important;
+        }
+
+        .message-bubble.new-device-message:not(:has(.image-message-wrap)):not(:has(.file-message-wrap)),
+        .message-bubble:has(.device-source-chip):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) {
+          padding-left: 16px !important;
+          padding-top: 24px !important;
+        }
+
+        .device-source-chip {
+          top: -13px !important;
+          left: 14px !important;
+          width: 30px !important;
+          height: 22px !important;
+          min-width: 30px !important;
+          min-height: 22px !important;
+          border-radius: 999px !important;
+          background: linear-gradient(135deg, #ffffff, #f1f5f9) !important;
+          color: #2563eb !important;
+          border: 1px solid rgba(37, 99, 235, 0.22) !important;
+          box-shadow: 0 5px 14px rgba(30, 64, 175, 0.13) !important;
+          font-size: 9px !important;
+          z-index: 20 !important;
+          pointer-events: none !important;
+        }
+
+        .message-text,
+        .message-text *,
+        .image-description-text,
+        .image-description-text *,
+        .file-description-text,
+        .file-description-text *,
+        .text-input,
+        .text-input * {
+          font-family: "Comic Sans MS", "Comic Sans", "Comic Neue", "Segoe Print", cursive !important;
+          letter-spacing: 1.4px !important;
+        }
+
+        .message-text,
+        .message-text *,
+        .image-description-text,
+        .image-description-text *,
+        .file-description-text,
+        .file-description-text * {
+          color: var(--noteColor, #111111) !important;
+        }
+
+        .message-text b,
+        .message-text strong,
+        .message-text span[style*="font-weight: bold"],
+        .message-text span[style*="font-weight: 700"],
+        .message-text span[style*="font-weight: 800"],
+        .image-description-text b,
+        .image-description-text strong,
+        .image-description-text span[style*="font-weight: bold"],
+        .image-description-text span[style*="font-weight: 700"],
+        .image-description-text span[style*="font-weight: 800"],
+        .file-description-text b,
+        .file-description-text strong,
+        .file-description-text span[style*="font-weight: bold"],
+        .file-description-text span[style*="font-weight: 700"],
+        .file-description-text span[style*="font-weight: 800"],
+        .text-input b,
+        .text-input strong,
+        .text-input span[style*="font-weight: bold"],
+        .text-input span[style*="font-weight: 700"],
+        .text-input span[style*="font-weight: 800"] {
+          font-weight: 900 !important;
+        }
+
+        .message-text u,
+        .message-text span[style*="text-decoration-line: underline"],
+        .message-text span[style*="text-decoration: underline"],
+        .image-description-text u,
+        .image-description-text span[style*="text-decoration-line: underline"],
+        .image-description-text span[style*="text-decoration: underline"],
+        .file-description-text u,
+        .file-description-text span[style*="text-decoration-line: underline"],
+        .file-description-text span[style*="text-decoration: underline"],
+        .text-input u,
+        .text-input span[style*="text-decoration-line: underline"],
+        .text-input span[style*="text-decoration: underline"] {
+          text-decoration: underline !important;
+          text-decoration-thickness: 1.6px !important;
+          text-underline-offset: 4px !important;
+        }
+
+        .image-viewer-overlay {
+          padding: 52px 18px 26px !important;
+          background: rgba(0, 0, 0, 0.88) !important;
+        }
+
+        .image-viewer-box {
+          position: relative !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          max-width: min(96vw, 900px) !important;
+          max-height: 86dvh !important;
+          animation: imageOpenPop 0.22s ease-out both !important;
+        }
+
+        @keyframes imageOpenPop {
+          from { opacity: 0; transform: scale(0.96); }
+          to { opacity: 1; transform: scale(1); }
+        }
+
+        .image-viewer-img {
+          max-width: min(96vw, 900px) !important;
+          max-height: 82dvh !important;
+          border-radius: 16px !important;
+        }
+
+        .image-viewer-close {
+          position: absolute !important;
+          top: -44px !important;
+          right: 2px !important;
+          width: 34px !important;
+          height: 34px !important;
+          min-width: 34px !important;
+          min-height: 34px !important;
+          background: rgba(255, 255, 255, 0.97) !important;
+          color: #0f172a !important;
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.22) !important;
+        }
+
+        .title-bubble .message-time {
+          right: 12px !important;
+          bottom: 7px !important;
+        }
+
+        /* FINAL SAME SIZE + ONE ND + HEADER BACK FIX */
+        .nm-header {
+          background: linear-gradient(135deg, #eef4ff 0%, #ffffff 50%, #f8fafc 100%) !important;
+        }
+
+        .header-icon-btn.back-btn {
+          color: #050505 !important;
+          background: rgba(255, 255, 255, 0.92) !important;
+          border: 1px solid rgba(15, 23, 42, 0.15) !important;
+          box-shadow: 0 7px 18px rgba(15, 23, 42, 0.13) !important;
+          font-size: 30px !important;
+          font-weight: 900 !important;
+          line-height: 1 !important;
+        }
+
+        .header-icon-btn.back-btn:hover,
+        .header-icon-btn.back-btn:active {
+          color: #000000 !important;
+          background: #ffffff !important;
+          transform: scale(0.96) !important;
+        }
+
+        .header-brand-row {
+          border: 1.8px solid rgba(220, 38, 38, 0.82) !important;
+          outline: 1px solid rgba(248, 113, 113, 0.22) !important;
+          outline-offset: 2px !important;
+          background: linear-gradient(135deg, #ffffff 0%, #fff7ed 48%, #eef2ff 100%) !important;
+          box-shadow:
+            0 10px 24px rgba(185, 28, 28, 0.12),
+            0 2px 0 rgba(255, 255, 255, 0.95) inset !important;
+        }
+
+        .header-brand-row .header-logo,
+        .header-logo {
+          border: 1px solid rgba(255, 255, 255, 0.95) !important;
+          box-shadow: 0 8px 18px rgba(15, 23, 42, 0.14) !important;
+        }
+
+        .chat-body {
+          padding: 12px 8px 14px !important;
+          background: #ffffff !important;
+          align-items: center !important;
+        }
+
+        .message-line,
+        .message-line.my-message-line,
+        .message-line.other-message-line {
+          width: 100% !important;
+          justify-content: center !important;
+          align-items: center !important;
+          padding: 0 8px !important;
+          margin: 0 0 12px !important;
+        }
+
+        .message-bubble,
+        .message-bubble.my-message-bubble,
+        .message-bubble.other-message-bubble,
+        .message-bubble.image-only,
+        .message-bubble.file-only,
+        .message-bubble:has(.image-message-wrap),
+        .message-bubble:has(.file-message-wrap),
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)),
+        .message-bubble.my-message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)),
+        .message-bubble.other-message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) {
+          width: fit-content !important;
+          max-width: min(86vw, 350px) !important;
+          min-width: 0 !important;
+          padding: 11px 38px 21px 16px !important;
+          border-radius: 22px !important;
+          background: #f4f4f4 !important;
+          border: none !important;
+          box-shadow: none !important;
+          overflow: visible !important;
+          text-align: left !important;
+        }
+
+        .message-bubble:has(.image-message-wrap),
+        .message-bubble.image-only {
+          max-width: min(86vw, 350px) !important;
+          padding: 8px 8px 22px 8px !important;
+        }
+
+        .image-message-wrap,
+        .file-message-wrap {
+          width: fit-content !important;
+          max-width: min(82vw, 334px) !important;
+          border-radius: 18px !important;
+          background: transparent !important;
+        }
+
+        .whatsapp-image-frame {
+          width: fit-content !important;
+          max-width: min(82vw, 334px) !important;
+          max-height: 48dvh !important;
+          border-radius: 18px !important;
+          overflow: hidden !important;
+          background: transparent !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+        }
+
+        .whatsapp-image-frame .message-image,
+        .message-image {
+          width: auto !important;
+          max-width: min(82vw, 334px) !important;
+          max-height: 48dvh !important;
+          height: auto !important;
+          object-fit: contain !important;
+          object-position: center center !important;
+          border-radius: 18px !important;
+          background: transparent !important;
+          border: none !important;
+          box-shadow: none !important;
+          cursor: zoom-in !important;
+          display: block !important;
+        }
+
+        .message-text,
+        .message-text *,
+        .message-text div,
+        .message-text p,
+        .message-text span,
+        .image-description-text,
+        .image-description-text *,
+        .file-description-text,
+        .file-description-text * {
+          font-family: "Comic Sans MS", "Comic Sans", "Comic Neue", "Segoe Print", cursive !important;
+          font-size: clamp(17px, 4.55vw, 22px) !important;
+          line-height: 1.54 !important;
+          font-weight: 500 !important;
+          letter-spacing: 1.35px !important;
+          color: var(--noteColor, #111111) !important;
+          white-space: pre-wrap !important;
+          word-break: break-word !important;
+          overflow-wrap: anywhere !important;
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+
+        .image-description-text,
+        .file-description-text {
+          width: auto !important;
+          max-width: min(82vw, 334px) !important;
+          margin-top: 7px !important;
+          padding: 0 2px !important;
+          background: transparent !important;
+          border: none !important;
+          border-radius: 0 !important;
+          transform: none !important;
+        }
+
+        .message-text b,
+        .message-text strong,
+        .message-text b *,
+        .message-text strong *,
+        .message-text span[style*="font-weight"],
+        .image-description-text b,
+        .image-description-text strong,
+        .image-description-text span[style*="font-weight"],
+        .file-description-text b,
+        .file-description-text strong,
+        .file-description-text span[style*="font-weight"],
+        .text-input b,
+        .text-input strong,
+        .text-input span[style*="font-weight"] {
+          font-size: inherit !important;
+          line-height: inherit !important;
+          letter-spacing: inherit !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          font-weight: 850 !important;
+        }
+
+        .message-text u,
+        .message-text u *,
+        .message-text span[style*="underline"],
+        .image-description-text u,
+        .image-description-text span[style*="underline"],
+        .file-description-text u,
+        .file-description-text span[style*="underline"],
+        .text-input u,
+        .text-input span[style*="underline"] {
+          font-size: inherit !important;
+          line-height: inherit !important;
+          letter-spacing: inherit !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          text-decoration: underline !important;
+          text-decoration-thickness: 1.5px !important;
+          text-underline-offset: 4px !important;
+        }
+
+        .message-bubble.new-device-message,
+        .message-bubble:has(.device-source-chip) {
+          margin-top: 15px !important;
+        }
+
+        .message-bubble.new-device-message:not(:has(.image-message-wrap)):not(:has(.file-message-wrap)),
+        .message-bubble:has(.device-source-chip):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) {
+          padding-left: 16px !important;
+          padding-top: 24px !important;
+        }
+
+        .message-bubble.new-device-message:has(.image-message-wrap),
+        .message-bubble:has(.device-source-chip):has(.image-message-wrap) {
+          padding-top: 20px !important;
+        }
+
+        .device-source-chip {
+          position: absolute !important;
+          top: -12px !important;
+          left: 14px !important;
+          width: 31px !important;
+          height: 22px !important;
+          min-width: 31px !important;
+          min-height: 22px !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          border-radius: 999px !important;
+          background: #ffffff !important;
+          color: #2563eb !important;
+          border: 1px solid rgba(37, 99, 235, 0.24) !important;
+          box-shadow: 0 5px 14px rgba(30, 64, 175, 0.14) !important;
+          font-family: "Poppins", "Inter", "Segoe UI", Arial, sans-serif !important;
+          font-size: 9px !important;
+          line-height: 1 !important;
+          font-weight: 950 !important;
+          letter-spacing: 0 !important;
+          z-index: 20 !important;
+          pointer-events: none !important;
+        }
+
+        .message-time,
+        .message-bubble:has(.message-image) .message-time,
+        .message-bubble:has(.image-message-wrap) .message-time,
+        .message-bubble:has(.file-message-wrap) .message-time,
+        .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-time {
+          position: absolute !important;
+          right: 12px !important;
+          bottom: 7px !important;
+          padding: 0 !important;
+          border-radius: 0 !important;
+          background: transparent !important;
+          color: #8a8a8a !important;
+          font-family: "Poppins", "Inter", "Segoe UI", Arial, sans-serif !important;
+          font-size: 9px !important;
+          line-height: 1 !important;
+          font-weight: 700 !important;
+          opacity: 0.9 !important;
+          box-shadow: none !important;
+          z-index: 9 !important;
+        }
+
+        .image-viewer-overlay {
+          padding: 52px 18px 26px !important;
+          background: rgba(0, 0, 0, 0.88) !important;
+        }
+
+        .image-viewer-box {
+          position: relative !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          max-width: min(96vw, 900px) !important;
+          max-height: 86dvh !important;
+          animation: imageOpenPop 0.22s ease-out both !important;
+        }
+
+        .image-viewer-img {
+          max-width: min(96vw, 900px) !important;
+          max-height: 82dvh !important;
+          border-radius: 16px !important;
+        }
+
+        .image-viewer-close {
+          position: absolute !important;
+          top: -42px !important;
+          right: 0 !important;
+          width: 34px !important;
+          height: 34px !important;
+          min-width: 34px !important;
+          min-height: 34px !important;
+          background: rgba(255, 255, 255, 0.97) !important;
+          color: #0f172a !important;
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.22) !important;
+        }
+
+        @media (max-width: 480px) {
+          .message-bubble,
+          .message-bubble.my-message-bubble,
+          .message-bubble.other-message-bubble,
+          .message-bubble.image-only,
+          .message-bubble.file-only,
+          .message-bubble:has(.image-message-wrap),
+          .message-bubble:has(.file-message-wrap),
+          .message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)),
+          .message-bubble.my-message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)),
+          .message-bubble.other-message-bubble:has(.message-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) {
+            max-width: calc(100vw - 34px) !important;
+          }
+
+          .whatsapp-image-frame,
+          .whatsapp-image-frame .message-image,
+          .message-image,
+          .image-message-wrap,
+          .file-message-wrap {
+            max-width: calc(100vw - 52px) !important;
+          }
+
+          .message-text,
+          .message-text *,
+          .image-description-text,
+          .image-description-text *,
+          .file-description-text,
+          .file-description-text * {
+            font-size: clamp(17px, 5.05vw, 21px) !important;
+            line-height: 1.52 !important;
           }
         }
 

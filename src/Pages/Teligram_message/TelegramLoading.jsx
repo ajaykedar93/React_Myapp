@@ -1,35 +1,110 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import telegramImage from "../../assets/telegram-icon.png.png";
 
+const DEFAULT_BACKEND_URL = "https://express-backend-myapp.onrender.com";
+
+const API_URL = (
+  import.meta.env.VITE_API_URL ||
+  (typeof window !== "undefined" &&
+  ["localhost", "127.0.0.1"].includes(window.location.hostname)
+    ? "http://localhost:5000"
+    : DEFAULT_BACKEND_URL)
+).replace(/\/$/, "");
+
+const PUBLIC_USER_ID = 7;
+
 const TelegramLoading = () => {
   const navigate = useNavigate();
+  const [progress, setProgress] = useState(0);
+  const [loadingText, setLoadingText] = useState("Loading Telegram Channels");
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      navigate("/teligram-channels", { replace: true });
-    }, 3000);
+    let active = true;
+    let fakeProgressTimer;
 
-    return () => clearTimeout(timer);
+    const startFakeProgress = () => {
+      fakeProgressTimer = setInterval(() => {
+        setProgress((prev) => {
+          if (prev >= 88) return prev;
+          return prev + Math.floor(Math.random() * 5) + 2;
+        });
+      }, 180);
+    };
+
+    const loadChannelsAndRedirect = async () => {
+      try {
+        setError("");
+        setProgress(5);
+        startFakeProgress();
+
+        const res = await fetch(
+          `${API_URL}/api/telegram-channels?user_id=${PUBLIC_USER_ID}`,
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        const data = await res.json();
+
+        if (!active) return;
+
+        if (!res.ok) {
+          throw new Error(data?.message || "Unable to load channels");
+        }
+
+        sessionStorage.setItem(
+          "telegram_preloaded_channels",
+          JSON.stringify(data?.channels || [])
+        );
+
+        clearInterval(fakeProgressTimer);
+        setLoadingText("Channels Loaded Successfully");
+        setProgress(100);
+
+        setTimeout(() => {
+          if (active) {
+            navigate("/teligram-channels", { replace: true });
+          }
+        }, 500);
+      } catch (err) {
+        if (!active) return;
+
+        clearInterval(fakeProgressTimer);
+        setProgress(0);
+        setError("Channel loading failed. Please try again.");
+        setLoadingText("Unable to load channels");
+      }
+    };
+
+    loadChannelsAndRedirect();
+
+    return () => {
+      active = false;
+      clearInterval(fakeProgressTimer);
+    };
   }, [navigate]);
+
+  const retryLoading = () => {
+    window.location.reload();
+  };
 
   return (
     <div className="tg-loading-page">
-      {/* Background Image */}
       <div
         className="tg-bg-image"
         style={{ backgroundImage: `url(${telegramImage})` }}
       ></div>
 
-      {/* Dark Gradient */}
       <div className="tg-overlay"></div>
 
-      {/* Floating Glow Circles */}
       <div className="tg-circle tg-circle-1"></div>
       <div className="tg-circle tg-circle-2"></div>
       <div className="tg-circle tg-circle-3"></div>
 
-      {/* Main Card */}
       <div className="tg-card">
         <div className="tg-image-box">
           <img src={telegramImage} alt="Teligram Premium" />
@@ -47,23 +122,41 @@ const TelegramLoading = () => {
         </div>
 
         <p className="tg-loading-text">
-          Loading Telegram Channels
-          <span className="tg-dots">
-            <span>.</span>
-            <span>.</span>
-            <span>.</span>
-          </span>
+          {loadingText}
+          {!error && (
+            <span className="tg-dots">
+              <span>.</span>
+              <span>.</span>
+              <span>.</span>
+            </span>
+          )}
         </p>
 
+        <div className="tg-progress-percent">{progress}%</div>
+
         <div className="tg-progress">
-          <div className="tg-progress-fill"></div>
+          <div
+            className="tg-progress-fill"
+            style={{ width: `${progress}%` }}
+          ></div>
         </div>
 
-        <div className="tg-bottom-text">Please wait, preparing your access</div>
+        {error ? (
+          <>
+            <div className="tg-error-text">{error}</div>
+            <button className="tg-retry-btn" onClick={retryLoading}>
+              Retry
+            </button>
+          </>
+        ) : (
+          <div className="tg-bottom-text">
+            Please wait, preparing your access
+          </div>
+        )}
 
         <div className="tg-credit">
           <span className="tg-code-icon">&lt;/&gt;</span>
-          <span className="tg-credit-name">Ajay kedar</span>
+          <span className="tg-credit-name">Ajay Kedar</span>
         </div>
       </div>
 
@@ -234,7 +327,7 @@ const TelegramLoading = () => {
           position: relative;
           width: 68px;
           height: 68px;
-          margin: 0 auto 20px;
+          margin: 0 auto 18px;
         }
 
         .tg-ring {
@@ -261,7 +354,7 @@ const TelegramLoading = () => {
         }
 
         .tg-loading-text {
-          margin: 0 0 22px;
+          margin: 0 0 10px;
           color: #ffffff;
           font-size: 15px;
           font-weight: 600;
@@ -280,6 +373,14 @@ const TelegramLoading = () => {
           animation-delay: 0.4s;
         }
 
+        .tg-progress-percent {
+          margin-bottom: 8px;
+          color: #4cff6b;
+          font-size: 20px;
+          font-weight: 900;
+          text-shadow: 0 0 12px rgba(76, 255, 107, 0.7);
+        }
+
         .tg-progress {
           width: 100%;
           height: 9px;
@@ -290,7 +391,6 @@ const TelegramLoading = () => {
         }
 
         .tg-progress-fill {
-          width: 0%;
           height: 100%;
           border-radius: 50px;
           background: linear-gradient(
@@ -299,7 +399,7 @@ const TelegramLoading = () => {
             #00c6ff,
             #4cff6b
           );
-          animation: progressFill 2.8s linear forwards;
+          transition: width 0.25s ease;
           box-shadow: 0 0 18px rgba(0, 198, 255, 0.7);
         }
 
@@ -308,6 +408,27 @@ const TelegramLoading = () => {
           color: rgba(255, 255, 255, 0.58);
           font-size: 12px;
           letter-spacing: 0.3px;
+        }
+
+        .tg-error-text {
+          margin-top: 14px;
+          color: #ffb4b4;
+          font-size: 13px;
+          font-weight: 700;
+        }
+
+        .tg-retry-btn {
+          margin-top: 12px;
+          border: none;
+          outline: none;
+          padding: 9px 20px;
+          border-radius: 999px;
+          cursor: pointer;
+          font-size: 13px;
+          font-weight: 800;
+          color: #02111f;
+          background: linear-gradient(90deg, #00c6ff, #4cff6b);
+          box-shadow: 0 0 18px rgba(0, 198, 255, 0.45);
         }
 
         .tg-credit {
@@ -334,16 +455,6 @@ const TelegramLoading = () => {
         @keyframes spin {
           to {
             transform: rotate(360deg);
-          }
-        }
-
-        @keyframes progressFill {
-          from {
-            width: 0%;
-          }
-
-          to {
-            width: 100%;
           }
         }
 
