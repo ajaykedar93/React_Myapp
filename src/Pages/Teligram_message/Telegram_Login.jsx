@@ -12,7 +12,7 @@ import { useNavigate } from "react-router-dom";
 
 const API_BASE_URL = (
   import.meta.env.VITE_TELEGRAM_USERS_API_URL ||
-  "http://localhost:5000/api/telegram-users"
+  "https://express-backend-myapp.onrender.com/api/telegram-users"
 ).replace(/\/$/, "");
 
 const API_ENDPOINTS = {
