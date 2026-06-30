@@ -56,9 +56,13 @@ import PublicTradeReport from "./Pages/Public/PublicTradeReport.jsx";
 
 
 import Telegram_Login from "./Pages/Teligram_message/Telegram_Login.jsx";
+import Telegram_Dashboard from "./Pages/Teligram_message/Telegram_Dashboard.jsx";
 import TelegramLoading from "./Pages/Teligram_message/TelegramLoading.jsx";
 import ChannelList from "./Pages/Teligram_message/ChannelList.jsx";
 import Teligram from "./Pages/Teligram_message/Teligram.jsx";
+
+
+
 
 // ✅ Private Route Wrapper
 function PrivateRoute({ children }) {
@@ -80,30 +84,33 @@ function AppRoutes() {
 
   return (
     <Routes>
-      {/* ✅ PUBLIC: Inward View Only (share link page) */}
-      <Route path="/inward-view" element={<InwardViewOnly />} />
-      <Route path="/Check-inward-view" element={<CheckInwardView />} />
+       {/* Public Inward View Pages */}
+        <Route path="/inward-view" element={<InwardViewOnly />} />
+        <Route path="/Check-inward-view" element={<CheckInwardView />} />
 
+        {/* Telegram Login Page */}
+        <Route path="/telegram-login" element={<Telegram_Login />} />
 
-
-       {/* First show loading page */}
+        {/* First show loading page */}
         <Route path="/teligram-loading" element={<TelegramLoading />} />
 
-          {/* ✅ Telegram public login - not protected */}
-<Route path="/telegram-login" element={<Telegram_Login />} />
-
-  
-        {/* After loading, open this page */}
+        {/* After loading, open channels page */}
         <Route path="/teligram-channels" element={<ChannelList />} />
+
+        {/* Telegram Dashboard after login */}
+        <Route path="/telegram_loginnotes" element={<Telegram_Dashboard />} />
+
+        {/* Public share link route, but dashboard will allow only logged-in users */}
+        <Route path="/channel/join/:shareCode" element={<Telegram_Dashboard />} />
 
         {/* Notes page */}
         <Route path="/teligram-notes" element={<Teligram />} />
 
-      {/* ✅ PUBLIC: Wakeup Page */}
-      <Route path="/wakeup-api" element={<Wakeup />} />
-      
-      {/* ✅ PUBLIC: Trade Report Page */}
-      <Route path="/public-trade-report" element={<PublicTradeReport />} />
+        {/* Wakeup Page */}
+        <Route path="/wakeup-api" element={<Wakeup />} />
+
+        {/* Public Trade Report Page */}
+        <Route path="/public-trade-report" element={<PublicTradeReport />} />
 
       {/* ✅ PROTECTED: Inward Update (full page) */}
       <Route

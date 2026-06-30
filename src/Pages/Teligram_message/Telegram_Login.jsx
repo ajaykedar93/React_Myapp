@@ -398,7 +398,15 @@ export default function Telegram_Login() {
       }
 
       if (data.token) {
+        // Store token in all common keys so Telegram_Dashboard.jsx can read it.
+        localStorage.setItem("telegram_token", data.token);
         localStorage.setItem("telegram_auth_token", data.token);
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("authToken", data.token);
+      }
+
+      if (data.user) {
+        localStorage.setItem("telegram_user_details", JSON.stringify(data.user));
       }
 
       if (data.user?.telegram_user_id || data.user?.user_id) {
@@ -416,10 +424,27 @@ export default function Telegram_Login() {
         localStorage.setItem("telegram_user_email", data.user.email);
       }
 
+      if (data.user?.mobile_no) {
+        localStorage.setItem("telegram_user_mobile", data.user.mobile_no);
+      }
+
+      if (data.user?.profile_image_url) {
+        localStorage.setItem(
+          "telegram_user_profile_image",
+          data.user.profile_image_url
+        );
+      }
+
       showPopup("Login successful", "success");
 
       window.setTimeout(() => {
-        navigate(LOGIN_SUCCESS_REDIRECT_ROUTE, { replace: true });
+        navigate(LOGIN_SUCCESS_REDIRECT_ROUTE, {
+          replace: true,
+          state: {
+            user: data.user,
+            token: data.token,
+          },
+        });
       }, 650);
     } catch (error) {
       console.error("Login error:", error);
