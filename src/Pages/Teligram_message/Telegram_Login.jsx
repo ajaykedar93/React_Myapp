@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 /*
@@ -6,25 +6,203 @@ import { useNavigate } from "react-router-dom";
   <Route path="/telegram-login" element={<Telegram_Login />} />
 
   This page is PUBLIC and separate from your main protected /login page.
-  After successful Telegram login, it redirects to:
-  /telegram_loginnotes
+
+  Correct flow:
+  1) First time: always show login page. User enters email/username/mobile + password.
+  2) If Trust Login is checked and login is successful, this device is marked trusted.
+  3) Next time on the same trusted device, email and password stay blank.
+     User only clicks Login and the page calls /trusted-login.
+  4) After successful login, redirect directly to /telegram_loginnotes.
+
+  IMPORTANT: Password is never stored in browser.
 */
 
-const API_BASE_URL = (
-  import.meta.env.VITE_TELEGRAM_USERS_API_URL ||
-  "https://express-backend-myapp.onrender.com/api/telegram-users"
-).replace(/\/$/, "");
+const API_ROUTE_PREFIX = "/api/telegramlogin-users";
+
+/*
+  Correct backend mount:
+  app.use("/api/telegramlogin-users", telegramloginUsersRoutes);
+
+  Set VITE_TELEGRAM_USERS_API_URL in .env only if needed:
+  VITE_TELEGRAM_USERS_API_URL=http://localhost:5000/api/telegramlogin-users
+
+  If you give only http://localhost:5000, this page automatically adds
+  /api/telegramlogin-users.
+*/
+const buildApiBaseUrl = () => {
+  const rawBase =
+    import.meta.env.VITE_TELEGRAM_USERS_API_URL || "https://express-backend-myapp.onrender.com" || "http://localhost:5000";
+
+  const cleanBase = String(rawBase || "").replace(/\/$/, "");
+
+  if (cleanBase.endsWith(API_ROUTE_PREFIX)) {
+    return cleanBase;
+  }
+
+  // If old env value contains another API route, replace it with the correct one.
+  // Example: http://localhost:5000/api/telegram-users
+  if (/\/api\/[^/]+$/i.test(cleanBase)) {
+    return cleanBase.replace(/\/api\/[^/]+$/i, API_ROUTE_PREFIX);
+  }
+
+  // If env has only server URL, add the route prefix.
+  // Example: http://localhost:5000
+  return `${cleanBase}${API_ROUTE_PREFIX}`;
+};
+
+const API_BASE_URL = buildApiBaseUrl();
 
 const API_ENDPOINTS = {
+  // Login/Register APIs
   sendCode: `${API_BASE_URL}/send-code`,
   verifyCode: `${API_BASE_URL}/verify-code`,
   register: `${API_BASE_URL}/register`,
   login: `${API_BASE_URL}/login`,
+  trustedLogin: `${API_BASE_URL}/trusted-login`,
+  logoutTrustedDevice: `${API_BASE_URL}/logout-trusted-device`,
+
+  // Forgot password APIs
   forgotSendCode: `${API_BASE_URL}/forgot-password/send-code`,
   forgotReset: `${API_BASE_URL}/forgot-password/reset`,
+
+  // Profile/User APIs available from the same users route
+  me: `${API_BASE_URL}/me`,
+  list: `${API_BASE_URL}/list`,
+  allRegisterUsers: `${API_BASE_URL}/all-register-users`,
+  getUser: (id) => `${API_BASE_URL}/${id}`,
+  updateUser: (id) => `${API_BASE_URL}/${id}`,
+  deleteUser: (id) => `${API_BASE_URL}/${id}`,
+  profileImage: (id) => `${API_BASE_URL}/profile-image/${id}`,
+  updateProfileImage: (id) => `${API_BASE_URL}/profile-image/${id}`,
+  deleteProfileImage: (id) => `${API_BASE_URL}/profile-image/${id}`,
+  health: `${API_BASE_URL}/health`,
 };
 
 const LOGIN_SUCCESS_REDIRECT_ROUTE = "/telegram_loginnotes";
+
+const TRUST_LOGIN_KEYS = {
+  enabled: "telegram_trust_login_enabled",
+  deviceId: "telegram_trusted_device_id",
+  deviceToken: "telegram_trusted_device_token",
+  trustedAt: "telegram_trusted_at",
+};
+
+const getOrCreateTrustedDeviceId = () => {
+  let deviceId = localStorage.getItem(TRUST_LOGIN_KEYS.deviceId);
+
+  if (!deviceId) {
+    if (window.crypto?.randomUUID) {
+      deviceId = window.crypto.randomUUID();
+    } else {
+      deviceId = `trusted-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
+    localStorage.setItem(TRUST_LOGIN_KEYS.deviceId, deviceId);
+  }
+
+  return deviceId;
+};
+
+const getSavedTelegramToken = () => {
+  return (
+    localStorage.getItem("telegram_token") ||
+    localStorage.getItem("telegram_auth_token") ||
+    localStorage.getItem("token") ||
+    localStorage.getItem("authToken") ||
+    ""
+  );
+};
+
+const getSavedTrustedDeviceToken = () => {
+  return localStorage.getItem(TRUST_LOGIN_KEYS.deviceToken) || "";
+};
+
+const getDeviceName = () => {
+  const platform = navigator.userAgentData?.platform || navigator.platform || "Device";
+  const agent = navigator.userAgent || "";
+
+  if (/Edg/i.test(agent)) return `Edge ${platform}`;
+  if (/Chrome/i.test(agent)) return `Chrome ${platform}`;
+  if (/Firefox/i.test(agent)) return `Firefox ${platform}`;
+  if (/Safari/i.test(agent)) return `Safari ${platform}`;
+
+  return String(platform || "Trusted Device");
+};
+
+const hasTrustedLoginSession = () => {
+  return (
+    localStorage.getItem(TRUST_LOGIN_KEYS.enabled) === "true" &&
+    Boolean(localStorage.getItem(TRUST_LOGIN_KEYS.deviceId)) &&
+    Boolean(getSavedTrustedDeviceToken())
+  );
+};
+
+const saveCommonLoginStorage = (data) => {
+  if (data.token) {
+    // Store token in all common keys so Telegram_Dashboard.jsx can read it.
+    localStorage.setItem("telegram_token", data.token);
+    localStorage.setItem("telegram_auth_token", data.token);
+    localStorage.setItem("token", data.token);
+    localStorage.setItem("authToken", data.token);
+  }
+
+  if (data.user) {
+    localStorage.setItem("telegram_user_details", JSON.stringify(data.user));
+  }
+
+  if (data.user?.telegram_user_id || data.user?.user_id) {
+    localStorage.setItem(
+      "telegram_user_id",
+      String(data.user.telegram_user_id || data.user.user_id)
+    );
+  }
+
+  if (data.user?.full_name) {
+    localStorage.setItem("telegram_user_name", data.user.full_name);
+  }
+
+  if (data.user?.email) {
+    localStorage.setItem("telegram_user_email", data.user.email);
+  }
+
+  if (data.user?.mobile_no) {
+    localStorage.setItem("telegram_user_mobile", data.user.mobile_no);
+  }
+
+  if (data.user?.profile_image_url) {
+    localStorage.setItem(
+      "telegram_user_profile_image",
+      data.user.profile_image_url
+    );
+  }
+};
+
+const saveTrustedLoginSession = (data = {}) => {
+  const deviceId = getOrCreateTrustedDeviceId();
+  const trustedDeviceToken =
+    data.trusted_device_token ||
+    data.trustedDeviceToken ||
+    data.trust_device_token ||
+    data.device_token ||
+    "";
+
+  if (!trustedDeviceToken) {
+    return false;
+  }
+
+  localStorage.setItem(TRUST_LOGIN_KEYS.enabled, "true");
+  localStorage.setItem(TRUST_LOGIN_KEYS.deviceId, deviceId);
+  localStorage.setItem(TRUST_LOGIN_KEYS.deviceToken, trustedDeviceToken);
+  localStorage.setItem(TRUST_LOGIN_KEYS.trustedAt, new Date().toISOString());
+
+  return true;
+};
+
+const clearTrustedLoginSession = () => {
+  localStorage.removeItem(TRUST_LOGIN_KEYS.enabled);
+  localStorage.removeItem(TRUST_LOGIN_KEYS.deviceToken);
+  localStorage.removeItem(TRUST_LOGIN_KEYS.trustedAt);
+};
 
 export default function Telegram_Login() {
   const navigate = useNavigate();
@@ -47,8 +225,12 @@ export default function Telegram_Login() {
     showPassword: false,
   });
 
+  const [trustLogin, setTrustLogin] = useState(false);
+  const [trustedSessionReady, setTrustedSessionReady] = useState(false);
+
   const [registerForm, setRegisterForm] = useState({
     fullName: "",
+    username: "",
     mobileNo: "",
     email: "",
     code: "",
@@ -81,6 +263,44 @@ export default function Telegram_Login() {
     [forgotForm.email]
   );
 
+  useEffect(() => {
+    // Never auto-fill email or password.
+    // If the current browser has a trusted-device token, keep inputs blank
+    // and let the user click Login for instant trusted login.
+    if (hasTrustedLoginSession()) {
+      setTrustedSessionReady(true);
+      setTrustLogin(true);
+      setLoginForm((prev) => ({
+        ...prev,
+        email: "",
+        password: "",
+        showPassword: false,
+      }));
+      return;
+    }
+
+    if (localStorage.getItem(TRUST_LOGIN_KEYS.enabled) === "true") {
+      clearTrustedLoginSession();
+    }
+
+    setTrustedSessionReady(false);
+    setTrustLogin(false);
+    setLoginForm((prev) => ({
+      ...prev,
+      email: "",
+      password: "",
+      showPassword: false,
+    }));
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (popupTimerRef.current) {
+        clearTimeout(popupTimerRef.current);
+      }
+    };
+  }, []);
+
   const showPopup = (message, type = "success") => {
     if (popupTimerRef.current) {
       clearTimeout(popupTimerRef.current);
@@ -109,12 +329,49 @@ export default function Telegram_Login() {
     return /^[6-9]\d{9}$/.test(String(mobile || "").trim());
   };
 
+  const isValidUsername = (username) => {
+    const value = String(username || "").trim();
+    if (!value) return true;
+    return /^[a-zA-Z0-9_]{3,80}$/.test(value);
+  };
+
+  const isValidLoginIdentifier = (value) => {
+    const text = String(value || "").trim();
+    if (!text) return false;
+    return isValidEmail(text) || isValidMobile(text) || /^[a-zA-Z0-9_]{3,80}$/.test(text);
+  };
+
   const parseApiMessage = async (res, fallback) => {
     const data = await res.json().catch(() => ({}));
     return {
       data,
       message: data?.message || fallback,
     };
+  };
+
+  const removeTrustedDeviceOnServer = async () => {
+    const trustedDeviceToken = getSavedTrustedDeviceToken();
+
+    if (!trustedDeviceToken) {
+      clearTrustedLoginSession();
+      return;
+    }
+
+    try {
+      await fetch(API_ENDPOINTS.logoutTrustedDevice, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          trusted_device_token: trustedDeviceToken,
+        }),
+      });
+    } catch (error) {
+      console.warn("Remove trusted device failed:", error);
+    } finally {
+      clearTrustedLoginSession();
+    }
   };
 
   const resetRegisterState = () => {
@@ -124,6 +381,7 @@ export default function Telegram_Login() {
     setCodeVerifying(false);
     setRegisterForm({
       fullName: "",
+      username: "",
       mobileNo: "",
       email: "",
       code: "",
@@ -282,11 +540,17 @@ export default function Telegram_Login() {
 
   const registerUser = async () => {
     const fullName = String(registerForm.fullName || "").trim();
+    const username = String(registerForm.username || "").trim().toLowerCase();
     const mobileNo = String(registerForm.mobileNo || "").trim();
     const password = String(registerForm.password || "");
 
     if (fullName.length < 3) {
       showPopup("Enter full name", "error");
+      return;
+    }
+
+    if (username && !isValidUsername(username)) {
+      showPopup("Username: letters, numbers, underscore only", "error");
       return;
     }
 
@@ -315,6 +579,9 @@ export default function Telegram_Login() {
 
       const formData = new FormData();
       formData.append("full_name", fullName);
+      if (username) {
+        formData.append("username", username);
+      }
       formData.append("mobile_no", mobileNo);
       formData.append("email", cleanRegisterEmail);
       formData.append("password", password);
@@ -362,12 +629,85 @@ export default function Telegram_Login() {
     }
   };
 
+  const trustedLoginUser = async () => {
+    const trustedDeviceToken = getSavedTrustedDeviceToken();
+
+    if (!hasTrustedLoginSession() || !trustedDeviceToken) {
+      clearTrustedLoginSession();
+      setTrustedSessionReady(false);
+      setTrustLogin(false);
+      showPopup("Trusted login expired. Enter email and password", "error");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const res = await fetch(API_ENDPOINTS.trustedLogin, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          trusted_device_token: trustedDeviceToken,
+          device_id: localStorage.getItem(TRUST_LOGIN_KEYS.deviceId) || "",
+        }),
+      });
+
+      const { data, message } = await parseApiMessage(
+        res,
+        "Trusted login failed"
+      );
+
+      if (!res.ok) {
+        clearTrustedLoginSession();
+        setTrustedSessionReady(false);
+        setTrustLogin(false);
+        showPopup(message, "error");
+        return;
+      }
+
+      saveCommonLoginStorage(data);
+
+      if (data.trusted_device_token || data.trustedDeviceToken) {
+        saveTrustedLoginSession(data);
+      }
+
+      showPopup("Login successful", "success");
+
+      window.setTimeout(() => {
+        navigate(LOGIN_SUCCESS_REDIRECT_ROUTE, {
+          replace: true,
+          state: {
+            trustedLogin: true,
+            user: data.user,
+            token: data.token,
+          },
+        });
+      }, 550);
+    } catch (error) {
+      console.error("Trusted login error:", error);
+      showPopup("Server error", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLoginButtonClick = () => {
+    if (trustedSessionReady) {
+      trustedLoginUser();
+      return;
+    }
+
+    loginUser();
+  };
+
   const loginUser = async () => {
-    const email = String(loginForm.email || "").trim().toLowerCase();
+    const loginId = String(loginForm.email || "").trim().toLowerCase();
     const password = String(loginForm.password || "");
 
-    if (!isValidEmail(email)) {
-      showPopup("Enter valid email", "error");
+    if (!isValidLoginIdentifier(loginId)) {
+      showPopup("Enter valid email, username, or mobile", "error");
       return;
     }
 
@@ -385,8 +725,13 @@ export default function Telegram_Login() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          email,
+          username: loginId,
+          email: isValidEmail(loginId) ? loginId : undefined,
+          mobile_no: isValidMobile(loginId) ? loginId : undefined,
           password,
+          trust_device: trustLogin,
+          device_id: getOrCreateTrustedDeviceId(),
+          device_name: getDeviceName(),
         }),
       });
 
@@ -397,45 +742,31 @@ export default function Telegram_Login() {
         return;
       }
 
-      if (data.token) {
-        // Store token in all common keys so Telegram_Dashboard.jsx can read it.
-        localStorage.setItem("telegram_token", data.token);
-        localStorage.setItem("telegram_auth_token", data.token);
-        localStorage.setItem("token", data.token);
-        localStorage.setItem("authToken", data.token);
+      saveCommonLoginStorage(data);
+
+      if (trustLogin && data.token) {
+        const trustedSaved = saveTrustedLoginSession(data);
+
+        if (!trustedSaved) {
+          showPopup("Login successful, but trusted token not received", "error");
+        }
+
+        setTrustedSessionReady(trustedSaved);
+      } else {
+        clearTrustedLoginSession();
+        setTrustedSessionReady(false);
       }
 
-      if (data.user) {
-        localStorage.setItem("telegram_user_details", JSON.stringify(data.user));
-      }
+      setLoginForm((prev) => ({
+        ...prev,
+        password: "",
+        showPassword: false,
+      }));
 
-      if (data.user?.telegram_user_id || data.user?.user_id) {
-        localStorage.setItem(
-          "telegram_user_id",
-          String(data.user.telegram_user_id || data.user.user_id)
-        );
-      }
-
-      if (data.user?.full_name) {
-        localStorage.setItem("telegram_user_name", data.user.full_name);
-      }
-
-      if (data.user?.email) {
-        localStorage.setItem("telegram_user_email", data.user.email);
-      }
-
-      if (data.user?.mobile_no) {
-        localStorage.setItem("telegram_user_mobile", data.user.mobile_no);
-      }
-
-      if (data.user?.profile_image_url) {
-        localStorage.setItem(
-          "telegram_user_profile_image",
-          data.user.profile_image_url
-        );
-      }
-
-      showPopup("Login successful", "success");
+      showPopup(
+        trustLogin ? "Login successful. Device trusted" : "Login successful",
+        "success"
+      );
 
       window.setTimeout(() => {
         navigate(LOGIN_SUCCESS_REDIRECT_ROUTE, {
@@ -566,7 +897,9 @@ export default function Telegram_Login() {
 
   const cardSubTitle =
     mode === "login"
-      ? "Login to continue your notes channel"
+      ? trustedSessionReady
+        ? "Trusted device ready. Click Login to continue."
+        : "Enter email and password to continue."
       : mode === "register"
       ? "Create verified account with optional profile image"
       : forgotStep === 1
@@ -617,18 +950,6 @@ export default function Telegram_Login() {
           </div>
 
           <h1>Telegram Login</h1>
-          <p>
-            Professional secure access for notes management with verified email,
-            optional profile image and mobile-safe layout.
-          </p>
-
-          <div className="tl-feature-list">
-            <span>Verified Email</span>
-            <span>Safe Login</span>
-            <span>Mobile Ready</span>
-          </div>
-
-          <div className="tl-api-chip">API Connected</div>
         </section>
 
         <section className="tl-auth-wrap">
@@ -642,13 +963,19 @@ export default function Telegram_Login() {
             {mode === "login" && (
               <div className="tl-auth-card tl-login-card">
                 <div className="tl-form">
-                  <label>Email / Username</label>
+                  <label>Email / Username / Mobile</label>
                   <div className="tl-input-box">
                     <span>@</span>
                     <input
-                      type="email"
-                      placeholder="Enter email"
-                      value={loginForm.email}
+                      type="text"
+                      placeholder={
+                        trustedSessionReady
+                          ? "Trusted device ready"
+                          : "Enter email, username or mobile"
+                      }
+                      value={trustedSessionReady ? "" : loginForm.email}
+                      disabled={trustedSessionReady || loading}
+                      autoComplete={trustedSessionReady ? "off" : "username"}
                       onChange={(e) =>
                         setLoginForm((prev) => ({
                           ...prev,
@@ -663,8 +990,14 @@ export default function Telegram_Login() {
                     <span>●</span>
                     <input
                       type={loginForm.showPassword ? "text" : "password"}
-                      placeholder="Enter password"
-                      value={loginForm.password}
+                      placeholder={
+                        trustedSessionReady
+                          ? "Password hidden"
+                          : "Enter password"
+                      }
+                      value={trustedSessionReady ? "" : loginForm.password}
+                      disabled={trustedSessionReady || loading}
+                      autoComplete={trustedSessionReady ? "off" : "current-password"}
                       onChange={(e) =>
                         setLoginForm((prev) => ({
                           ...prev,
@@ -674,32 +1007,71 @@ export default function Telegram_Login() {
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
                           e.preventDefault();
-                          loginUser();
+                          handleLoginButtonClick();
                         }
                       }}
                     />
 
-                    <button
-                      type="button"
-                      className="tl-eye-btn"
-                      onClick={() =>
-                        setLoginForm((prev) => ({
-                          ...prev,
-                          showPassword: !prev.showPassword,
-                        }))
-                      }
-                    >
-                      {loginForm.showPassword ? "Hide" : "Show"}
-                    </button>
+                    {!trustedSessionReady && (
+                      <button
+                        type="button"
+                        className="tl-eye-btn"
+                        onClick={() =>
+                          setLoginForm((prev) => ({
+                            ...prev,
+                            showPassword: !prev.showPassword,
+                          }))
+                        }
+                      >
+                        {loginForm.showPassword ? "Hide" : "Show"}
+                      </button>
+                    )}
                   </div>
+
+                  <label className="tl-trust-row">
+                    <input
+                      type="checkbox"
+                      checked={trustLogin}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+
+                        setTrustLogin(checked);
+
+                        if (!checked) {
+                          removeTrustedDeviceOnServer();
+                          setTrustedSessionReady(false);
+                        }
+                      }}
+                    />
+                    <span></span>
+                    <p>
+                      <strong>Trust Login</strong>
+                      <small>
+                        Save secure session on this device
+                      </small>
+                    </p>
+                  </label>
+
+                  {trustedSessionReady && (
+                    <div className="tl-trusted-line">
+                      ✓ Trusted device active. Email and password are hidden.
+                    </div>
+                  )}
 
                   <button
                     type="button"
                     className="tl-main-btn"
-                    onClick={loginUser}
+                    onClick={handleLoginButtonClick}
                     disabled={loading}
                   >
-                    {loading ? "Please wait..." : "Login"}
+                    {loading ? (
+                      <span className="tl-btn-loading">
+                        <span className="tl-btn-spinner"></span>
+                        Logging in...
+                      </span>
+                    ) : (
+                      "Login"
+                    )}
                   </button>
 
                   <div className="tl-card-links">
@@ -766,6 +1138,25 @@ export default function Telegram_Login() {
                         setRegisterForm((prev) => ({
                           ...prev,
                           fullName: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <label>Username <small className="tl-label-small">Optional</small></label>
+                  <div className="tl-input-box">
+                    <span>@</span>
+                    <input
+                      type="text"
+                      placeholder="Create username optional"
+                      value={registerForm.username}
+                      onChange={(e) =>
+                        setRegisterForm((prev) => ({
+                          ...prev,
+                          username: e.target.value
+                            .toLowerCase()
+                            .replace(/[^a-z0-9_]/g, "")
+                            .slice(0, 80),
                         }))
                       }
                     />
@@ -1148,12 +1539,13 @@ export default function Telegram_Login() {
         }
 
         .tl-shell {
-          width: min(890px, 100%);
-          min-height: 530px;
+          width: min(480px, 100%);
+          min-height: auto;
           position: relative;
           z-index: 2;
           display: grid;
-          grid-template-columns: 0.92fr 1.08fr;
+          grid-template-columns: 1fr;
+          gap: 10px;
           border-radius: 30px;
           padding: 12px;
           background: rgba(255, 255, 255, 0.12);
@@ -1168,15 +1560,17 @@ export default function Telegram_Login() {
         .tl-brand-card {
           position: relative;
           border-radius: 24px;
-          padding: 30px 25px;
-          min-height: 100%;
+          padding: 22px 18px;
+          min-height: auto;
           color: white;
           background:
             radial-gradient(circle at 20% 15%, rgba(255,255,255,0.28), transparent 20%),
             linear-gradient(145deg, #1d4ed8, #0891b2 68%, #0f766e);
           display: flex;
           flex-direction: column;
+          align-items: center;
           justify-content: center;
+          text-align: center;
           overflow: hidden;
         }
 
@@ -1222,7 +1616,7 @@ export default function Telegram_Login() {
           align-items: center;
           justify-content: center;
           color: white;
-          margin-bottom: 22px;
+          margin-bottom: 12px;
           box-shadow: inset 0 0 0 1px rgba(255,255,255,0.25);
           position: relative;
           z-index: 1;
@@ -1281,7 +1675,7 @@ export default function Telegram_Login() {
         }
 
         .tl-auth-wrap {
-          padding: 28px 25px;
+          padding: 8px 6px 10px;
           display: flex;
           flex-direction: column;
           justify-content: center;
@@ -1382,6 +1776,12 @@ export default function Telegram_Login() {
           font-weight: 950;
           letter-spacing: 0.2px;
           margin-top: 3px;
+        }
+
+        .tl-label-small {
+          color: #64748b;
+          font-size: 10px;
+          font-weight: 800;
         }
 
         .tl-input-box {
@@ -1488,7 +1888,8 @@ export default function Telegram_Login() {
           color: #15803d;
         }
 
-        .tl-verified-line {
+        .tl-verified-line,
+        .tl-trusted-line {
           min-height: 32px;
           border-radius: 13px;
           padding: 8px 11px;
@@ -1498,6 +1899,92 @@ export default function Telegram_Login() {
           font-size: 11.5px;
           font-weight: 950;
           animation: smallSlide 0.2s ease;
+        }
+
+        .tl-trusted-line {
+          background: #eff6ff;
+          border-color: #bfdbfe;
+          color: #1d4ed8;
+        }
+
+        .tl-trust-row {
+          min-height: 48px;
+          margin-top: 5px !important;
+          padding: 8px 10px;
+          border-radius: 15px;
+          background: linear-gradient(135deg, #f8fafc, #eef2ff);
+          border: 1px solid #dbeafe;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          cursor: pointer;
+          user-select: none;
+          transition: 0.2s ease;
+        }
+
+        .tl-trust-row:hover {
+          border-color: #93c5fd;
+          background: #ffffff;
+        }
+
+        .tl-trust-row input {
+          position: absolute;
+          opacity: 0;
+          pointer-events: none;
+        }
+
+        .tl-trust-row > span {
+          width: 20px;
+          height: 20px;
+          border-radius: 7px;
+          border: 2px solid #93c5fd;
+          background: #ffffff;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          transition: 0.18s ease;
+        }
+
+        .tl-trust-row > span::after {
+          content: "✓";
+          color: white;
+          font-size: 12px;
+          font-weight: 950;
+          transform: scale(0);
+          transition: 0.18s ease;
+        }
+
+        .tl-trust-row input:checked + span {
+          border-color: #2563eb;
+          background: linear-gradient(135deg, #2563eb, #06b6d4);
+          box-shadow: 0 6px 13px rgba(37, 99, 235, 0.22);
+        }
+
+        .tl-trust-row input:checked + span::after {
+          transform: scale(1);
+        }
+
+        .tl-trust-row p {
+          margin: 0;
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+
+        .tl-trust-row strong {
+          color: #0f172a;
+          font-size: 12px;
+          font-weight: 950;
+          line-height: 1.1;
+        }
+
+        .tl-trust-row small {
+          color: #64748b;
+          font-size: 10.5px;
+          font-weight: 800;
+          line-height: 1.1;
         }
 
         .tl-main-btn {
@@ -1687,21 +2174,50 @@ export default function Telegram_Login() {
           flex-shrink: 0;
         }
 
-        .tl-popup.success span {
+        .tl-popup.success {
           background: #16a34a;
+          border-color: #16a34a;
         }
 
-        .tl-popup.error span {
+        .tl-popup.error {
           background: #dc2626;
+          border-color: #dc2626;
+        }
+
+        .tl-popup.success span,
+        .tl-popup.error span {
+          background: rgba(255, 255, 255, 0.22);
         }
 
         .tl-popup p {
           margin: 0;
-          color: #0f172a;
+          color: #ffffff;
           font-size: 12px;
           line-height: 1.25;
           font-weight: 950;
           text-align: center;
+        }
+
+        .tl-btn-loading {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+        }
+
+        .tl-btn-spinner {
+          width: 15px;
+          height: 15px;
+          border-radius: 50%;
+          border: 2px solid rgba(255, 255, 255, 0.55);
+          border-top-color: #ffffff;
+          animation: tlSpin 0.75s linear infinite;
+        }
+
+        @keyframes tlSpin {
+          to {
+            transform: rotate(360deg);
+          }
         }
 
         @media (max-width: 740px) {
