@@ -98,7 +98,7 @@ function AppRoutes() {
         <Route path="/teligram-channels" element={<ChannelList />} />
 
         {/* Telegram Dashboard after login */}
-        <Route path="/telegram_loginnotes" element={<Telegram_Dashboard />} />
+        <Route path="/telegram_logidashboard" element={<Telegram_Dashboard />} />
 
         {/* Public share link route, but dashboard will allow only logged-in users */}
         <Route path="/channel/join/:shareCode" element={<Telegram_Dashboard />} />
