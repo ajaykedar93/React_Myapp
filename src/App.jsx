@@ -60,7 +60,6 @@ import Telegram_Dashboard from "./Pages/Teligram_message/Telegram_Dashboard.jsx"
 import TelegramLoading from "./Pages/Teligram_message/TelegramLoading.jsx";
 import ChannelList from "./Pages/Teligram_message/ChannelList.jsx";
 import Teligram from "./Pages/Teligram_message/Teligram.jsx";
-import Telegram_loginuser_notes from "./Pages/Teligram_message/Telegram_loginuser_notes.jsx";
 
 
 
@@ -90,6 +89,8 @@ function AppRoutes() {
 
         {/* Telegram Login Page */}
         <Route path="/telegram-login" element={<Telegram_Login />} />
+     
+
 
         {/* First show loading page */}
         <Route path="/teligram-loading" element={<TelegramLoading />} />
@@ -99,11 +100,10 @@ function AppRoutes() {
 
         {/* Telegram Dashboard after login */}
         <Route path="/telegram_logidashboard" element={<Telegram_Dashboard />} />
+          <Route path="/channel/join/:share_code" element={<Telegram_Dashboard />} />
+       <Route path="/channel/join/:code" element={<Telegram_Dashboard />} />
 
-        {/* Public share link route, but dashboard will allow only logged-in users */}
-        <Route path="/channel/join/:shareCode" element={<Telegram_Dashboard />} />
-        <Route path="/telegram-channel/:channelId" element={<Telegram_loginuser_notes />} />
-
+      
         {/* Notes page */}
         <Route path="/teligram-notes" element={<Teligram />} />
 

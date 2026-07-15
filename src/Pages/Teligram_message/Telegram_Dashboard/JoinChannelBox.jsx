@@ -3,102 +3,75 @@ import { Modal, Spinner, Button } from 'react-bootstrap';
 import { Link45deg, BoxArrowInRight, ShieldLock, CheckLg, Globe, LockFill } from 'react-bootstrap-icons';
 
 const CHANNEL_PREFIX = "/api/telegramlogin-channels";
-const getChannelApi = () => {
+const ALLMISS_PREFIX = "/api/telegramlogin-allmiss";
+const getApi = (prefix) => {
   const raw = import.meta.env.VITE_TELEGRAM_CHANNELS_API_URL || import.meta.env.VITE_TELEGRAM_USERS_API_URL || "http://localhost:5000";
   const clean = String(raw).replace(/\/$/, "");
-  if (clean.endsWith(CHANNEL_PREFIX)) return clean;
-  if (/\/api\/[^/]+$/i.test(clean)) return clean.replace(/\/api\/[^/]+$/i, CHANNEL_PREFIX);
-  return `${clean}${CHANNEL_PREFIX}`;
+  if (clean.endsWith(prefix)) return clean;
+  if (/\/api\/[^/]+$/i.test(clean)) return clean.replace(/\/api\/[^/]+$/i, prefix);
+  return `${clean}${prefix}`;
 };
-const CHANNEL_API = getChannelApi();
+const CHANNEL_API = getApi(CHANNEL_PREFIX);
+const ALLMISS_API = getApi(ALLMISS_PREFIX);
+
 const getToken = () => localStorage.getItem("telegram_token") || localStorage.getItem("telegram_auth_token") || localStorage.getItem("authToken") || localStorage.getItem("token") || "";
-const checkTrust = () => localStorage.getItem("telegram_trust_login_enabled") === "true";
+const getDeviceId = () => { let id=localStorage.getItem("telegram_device_id"); if(!id){ id=`dev_${Date.now()}${Math.random().toString(36).slice(2,6)}`; localStorage.setItem("telegram_device_id",id);} return id; };
+
+const extractCode = (v) => {
+  const t = String(v||"").trim(); if(!t) return "";
+  try{ const u=new URL(t); const p=u.pathname.split("/").filter(Boolean); const j=p.indexOf("join"); if(j>=0&&p[j+1]) return p[j+1]; return p[p.length-1]||t; }catch{ const p=t.split("/").filter(Boolean); return p[p.length-1]||t; }
+};
 
 const JoinChannelBox = ({ onChannelJoined, onOpenChannel }) => {
   const [inviteUrl, setInviteUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [inlineErr, setInlineErr] = useState("");
   const [toast, setToast] = useState({ show: false, msg: '', type: 'success' });
-  const [pinModal, setPinModal] = useState({ show: false, channel: null, pin: '', err: '', loading: false });
 
   const inputRef = useRef(null);
   const showCenter = (m, t = 'success') => { setToast({ show: true, msg: m, type: t }); setTimeout(() => setToast({ show: false, msg: '', type: 'success' }), 2600); };
 
   const isValidInvite = (url) => {
     if (!url) return false;
-    try {
-      const u = new URL(url);
-      if (!u.protocol.startsWith('http')) return false;
-      const hostOk = u.hostname.includes('t.me') || u.hostname.includes('telegram') || u.hostname.includes('localhost') || u.hostname.includes('127.0.0.1');
-      const pathOk = u.pathname.length > 1 || u.search.length > 0;
-      return hostOk ? pathOk : true; // allow custom invite domains too
-    } catch { return false; }
+    try { const u = new URL(url); if (!u.protocol.startsWith('http')) return false; return true; } catch { return url.length>=6; }
   };
 
   const handleJoin = async () => {
     const url = inviteUrl.trim(); setInlineErr("");
-
     if (!url) { const m="Paste invitation link"; setInlineErr(m); showCenter(m,"danger"); return; }
     if (!isValidInvite(url)) { const m="Invalid invitation link"; setInlineErr(m); showCenter(m,"danger"); return; }
 
-    const used = JSON.parse(localStorage.getItem("used_invites") || "[]");
-    if (used.includes(url)) { const m="This invitation link has already been used."; setInlineErr(m); showCenter(m,"danger"); return; }
+    const code = extractCode(url);
+    if(!code){ const m="Invalid share code"; setInlineErr(m); showCenter(m,"danger"); return; }
 
     setLoading(true);
     try {
-      const res = await fetch(`${CHANNEL_API}/join`, {
+      // ✅ NEW LOGIC: hosted URL direct join - Private la PIN nako, PIN open kartana lagel
+      const res = await fetch(`${ALLMISS_API}/join`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
-        body: JSON.stringify({ invite_url: url, invitation_url: url })
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}`, "x-device-id": getDeviceId() },
+        body: JSON.stringify({ share_code: code, code, device_id: getDeviceId() })
       });
       const data = await res.json().catch(()=>({}));
 
-      if (res.status === 409 || (data.message && data.message.toLowerCase().includes("already"))) {
-        const m="This invitation link has already been used."; setInlineErr(m); showCenter(m,"danger"); return;
+      if (res.status === 404 || res.status === 400) {
+        throw new Error(data.message || "Invalid link - check hosted URL");
       }
-      if (res.status === 410 || (data.message && data.message.toLowerCase().includes("expire"))) {
-        const m="Invitation link expired"; setInlineErr(m); showCenter(m,"danger"); return;
-      }
-      if (!res.ok) throw new Error(data.message || "Invalid invitation link");
+      // ✅ backend ne PIN magitala tari join jhalay samja - PIN open la vicharu
+      if (!res.ok && res.status!==403) throw new Error(data.message || "Join failed");
 
-      const channel = data.channel || data.data || data;
-      if (!channel || (!channel.channel_id && !channel.id)) throw new Error("Invalid invitation link");
+      const channel = data.channel || data.data || { channel_id: data.channel_id, channel_name: data.channel_name, channel_type: data.channel_type || "public" };
+      
+      setInviteUrl(""); setInlineErr("");
+      showCenter(channel.channel_type==='private' ? "Private channel joined - PIN takun open kara" : "Channel joined successfully", "success");
 
-      localStorage.setItem("used_invites", JSON.stringify([...used, url]));
-      setInviteUrl(""); setInlineErr(""); showCenter(channel.is_private || channel.type==='private' ? "Private channel joined" : "Channel joined successfully", "success");
-
+      // ✅ Real-time add
       if (onChannelJoined) onChannelJoined(channel);
-
-      // Private -> ask PIN before open
-      const isPriv = channel.is_private || channel.type==='private' || channel.channel_type==='private';
-      if (isPriv) {
-        const key = `trusted_pin_${channel.channel_id || channel.id}`;
-        if (checkTrust() && localStorage.getItem(key)==="true") { if(onOpenChannel) onOpenChannel(channel); }
-        else { setTimeout(()=> setPinModal({ show:true, channel, pin:'', err:'', loading:false }), 300); }
-      } else {
-        if (onOpenChannel) onOpenChannel(channel);
-      }
 
     } catch (e) {
       const m = e.message?.toLowerCase().includes("expire") ? "Invitation link expired" : e.message || "Invalid invitation link";
       setInlineErr(m); showCenter(m,"danger");
     } finally { setLoading(false); }
-  };
-
-  const verifyPin = async () => {
-    if (!/^\d{4}$/.test(pinModal.pin)) { setPinModal(s=>({...s,err:"Enter 4-digit PIN"})); return; }
-    setPinModal(s=>({...s,loading:true,err:''}));
-    try{
-      const res = await fetch(`${CHANNEL_API}/verify-pin`, {
-        method:"POST", headers:{"Content-Type":"application/json",Authorization:`Bearer ${getToken()}`},
-        body:JSON.stringify({ channel_id: pinModal.channel.channel_id || pinModal.channel.id, pin: pinModal.pin })
-      });
-      const d = await res.json().catch(()=>({})); if(!res.ok) throw new Error(d.message||"Invalid PIN");
-      if (checkTrust()) localStorage.setItem(`trusted_pin_${pinModal.channel.channel_id||pinModal.channel.id}`,"true");
-      setPinModal({ show:false, channel:null, pin:'', err:'', loading:false });
-      showCenter("PIN verified","success");
-      if(onOpenChannel) onOpenChannel(pinModal.channel);
-    }catch(e){ setPinModal(s=>({...s,err:e.message||"Invalid PIN",loading:false})); }
   };
 
   return (
@@ -116,19 +89,6 @@ const JoinChannelBox = ({ onChannelJoined, onOpenChannel }) => {
           {inlineErr && <div className="jce">{inlineErr}</div>}
         </div>
       </div>
-
-      <Modal show={pinModal.show} onHide={()=>setPinModal({show:false,channel:null,pin:'',err:'',loading:false})} centered backdrop="static">
-        <Modal.Header closeButton className="py-2"><Modal.Title className="fs-6 fw-bold d-flex align-items-center gap-2"><ShieldLock size={15}/> Private Channel PIN</Modal.Title></Modal.Header>
-        <Modal.Body>
-          <div className="small mb-2">Enter 4-digit PIN for <b>{pinModal.channel?.channel_name||pinModal.channel?.name||'Private Channel'}</b></div>
-          <div className="jcr">
-            <input type="password" inputMode="numeric" maxLength={4} className="jci flex text-center fw-bold" style={{letterSpacing:8,fontSize:16}} placeholder="••••" value={pinModal.pin} onChange={e=>setPinModal(s=>({...s,pin:e.target.value.replace(/\D/g,'').slice(0,4)}))} autoFocus />
-            <button className="jcb" onClick={verifyPin} disabled={pinModal.loading || pinModal.pin.length!==4}>{pinModal.loading?<Spinner size="sm"/>:<CheckLg size={16}/>}</button>
-          </div>
-          {pinModal.err && <div className="jce mt-2">{pinModal.err}</div>}
-          {checkTrust() ? <div className="small text-success mt-2">✓ Trust enabled - PIN once on this device</div> : <div className="small text-muted mt-2">Trust disabled - PIN required every time</div>}
-        </Modal.Body>
-      </Modal>
 
       {toast.show && <div className="jtc"><div className={`jtt ${toast.type}`}><span className="jti">{toast.type==='success'?'✓':'!'}</span>{toast.msg}</div></div>}
 
