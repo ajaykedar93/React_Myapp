@@ -1,4 +1,4 @@
-// ✅ FINAL - same layout, auto-join fix + error free
+// ✅ FINAL - Fixed Profile + Scroll Content + Menu Safe + Vibrant Modern
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Modal, Form, Spinner, Button } from "react-bootstrap";
@@ -44,9 +44,9 @@ function ProfileCard({ userData, onUpdateProfile, onSendOTP, onVerifyOTP }){
   const eImg=form.preview?form.preview:uImg; const name=user.fullName||user.full_name||'User'; const email=user.email||''; const uname=user.username||''; const mobile=user.mobileNumber||user.mobile_no||'';
   return (
     <>
-      <div className="my-pcw">
+      <div className="my-pcw-fixed">
         <div className="my-pcc" onClick={()=>setShowPreview(true)}>
-          <div className="my-pcr"><div className="my-ring">{uImg?<img src={uImg} alt={name} className="my-av"/>:<PersonCircle size={56}/>}</div><span className="my-cam"><Camera size={11}/></span></div>
+          <div className="my-pcr"><div className="my-ring">{uImg?<img src={uImg} alt={name} className="my-av"/>:<PersonCircle size={52}/>}</div><span className="my-cam"><Camera size={11}/></span></div>
           <div className="my-pct"><div className="my-pn">{name}</div><div className="my-pu">@{uname||'username'}</div><div className="my-pe">{email}</div></div>
         </div>
         <div className="my-upw"><button type="button" className="my-upb" onClick={(e)=>{e.stopPropagation(); openEdit();}}><PencilSquare size={12}/> Update Profile</button></div>
@@ -69,7 +69,6 @@ export default function Telegram_Dashboard(){
 
   useEffect(()=>{ const check=async()=>{ const token=getToken(); if(!token) return navigate("/telegram-login"); try{ const r=await fetch(`${API_URL}/me`,{headers:{Authorization:`Bearer ${token}`}}); if(!r.ok) throw new Error("Auth failed"); const d=await r.json(); const u=d.user||d; setUser({telegram_user_id:u.telegram_user_id,fullName:u.full_name,full_name:u.full_name,username:u.username,email:u.email,mobileNumber:u.mobile_no,mobile_no:u.mobile_no,profileImage:u.profile_image_url,profile_image_url:u.profile_image_url}); try{ const r2=await fetch(`${CHANNEL_API}/my-channels`,{headers:{Authorization:`Bearer ${token}`}}); if(r2.ok){ const d2=await r2.json(); const all=d2.channels||d2.data||[]; setPublicChannels(all.filter(c=>!(c.is_private||c.type==='private'||c.channel_type==='private'))||[]); setPrivateChannels(all.filter(c=>c.is_private||c.type==='private'||c.channel_type==='private')||[]); } }catch{} }catch{ localStorage.clear(); navigate("/telegram-login"); } finally{ setLoading(false); } }; check(); },[navigate]);
 
-  // ✅ AUTO-JOIN FIX for https://.../#/channel/join/CODE
   useEffect(()=>{
     const tryAutoJoin=async()=>{
       const token=getToken(); if(!token) return;
@@ -82,7 +81,6 @@ export default function Telegram_Dashboard(){
         const r=await fetch(`${ALLMISS_API}/join`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`,"x-device-id":getDeviceId()},body:JSON.stringify({share_code:finalCode,code:finalCode,device_id:getDeviceId()})});
         const d=await r.json(); if(!r.ok) throw new Error(d.message||"Invalid link");
         showCenter(d.channel?.channel_type==="private"?"Private joined - PIN takun open kara":"Channel joined");
-        // clean hash
         window.history.replaceState(null,"",window.location.pathname + window.location.search);
         handleRefresh();
       }catch(e){ showCenter(e.message,"danger"); }
@@ -98,37 +96,87 @@ export default function Telegram_Dashboard(){
   const handleChannelJoined=(ch)=>{ handleRefresh(); showCenter("Channel joined - real-time"); };
   const handleChannelCreated=(ch)=>{ const isP=ch.is_private||ch.type==='private'||ch.channel_type==='private'; if(isP) setPrivateChannels(p=>[ch,...p]); else setPublicChannels(p=>[ch,...p]); };
   const handleOpenChannel=(ch)=> navigate(`/channel/${ch.channel_id||ch.id}`);
-  const handleShareRequest=()=>{ showCenter("Invite sent - only receiver sees PIN+URL in Link Requests"); };
+  const handleShareRequest=()=>{ showCenter("Invite sent - only receiver sees in Link Requests"); };
 
   if(loading) return <div className="d-flex justify-content-center align-items-center vh-100"><Spinner animation="border"/></div>;
 
   return (
     <>
       <div className="top-safe"/><DashboardNavbar onRefresh={handleRefresh} onLogout={handleLogout} />
-      <div className="dash-root"><div className="dash-content">
-        <ProfileCard userData={user} onUpdateProfile={handleUpdateProfile} onSendOTP={handleSendOTP} onVerifyOTP={handleVerifyOTP} />
-        <JoinChannelBox onChannelJoined={handleChannelJoined} onOpenChannel={handleOpenChannel} />
-        <CreateChannel onChannelCreated={handleChannelCreated} showCenterToast={showCenter} />
-        <PublicChannelSection channels={publicChannels} onUpdated={(u)=>setPublicChannels(p=>p.map(x=>String(x.channel_id||x.id)===String(u.channel_id||u.id)?{...x,...u}:x))} onDeleted={(id)=>setPublicChannels(p=>p.filter(x=>String(x.channel_id||x.id)!==String(id)))} onOpen={handleOpenChannel} onShareRequest={handleShareRequest} showCenterToast={showCenter} />
-        <PrivateChannelSection channels={privateChannels} onUpdated={(u)=>setPrivateChannels(p=>p.map(x=>String(x.channel_id||x.id)===String(u.channel_id||u.id)?{...x,...u}:x))} onDeleted={(id)=>setPrivateChannels(p=>p.filter(x=>String(x.channel_id||x.id)!==String(id)))} onOpen={handleOpenChannel} showCenterToast={showCenter} />
-      </div></div>
+      <div className="dash-shell">
+        <div className="dash-fixed-wrap">
+          <div className="dash-fixed-inner">
+            <ProfileCard userData={user} onUpdateProfile={handleUpdateProfile} onSendOTP={handleSendOTP} onVerifyOTP={handleVerifyOTP} />
+          </div>
+        </div>
+        <div className="dash-scroll">
+          <div className="dash-scroll-inner">
+            <JoinChannelBox onChannelJoined={handleChannelJoined} onOpenChannel={handleOpenChannel} />
+            <CreateChannel onChannelCreated={handleChannelCreated} showCenterToast={showCenter} />
+            <PublicChannelSection channels={publicChannels} onUpdated={(u)=>setPublicChannels(p=>p.map(x=>String(x.channel_id||x.id)===String(u.channel_id||u.id)?{...x,...u}:x))} onDeleted={(id)=>setPublicChannels(p=>p.filter(x=>String(x.channel_id||x.id)!==String(id)))} onOpen={handleOpenChannel} onShareRequest={handleShareRequest} showCenterToast={showCenter} />
+            <PrivateChannelSection channels={privateChannels} onUpdated={(u)=>setPrivateChannels(p=>p.map(x=>String(x.channel_id||x.id)===String(u.channel_id||u.id)?{...x,...u}:x))} onDeleted={(id)=>setPrivateChannels(p=>p.filter(x=>String(x.channel_id||x.id)!==String(id)))} onOpen={handleOpenChannel} onShareRequest={handleShareRequest} showCenterToast={showCenter} />
+            <div className="bottom-safe-space" />
+          </div>
+        </div>
+      </div>
       {toast.show&&<div className="jtc"><div className={`jtt ${toast.type}`}><span className="jti">{toast.type==='success'?'✓':'!'}</span>{toast.msg}</div></div>}
       <style>{`
-       :root{--sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px)} html,body{margin:0;background:#f6f8fb;overflow-x:hidden}
-   .top-safe{position:fixed;top:0;left:0;right:0;height:var(--sat);background:#fff;z-index:1036}
-   .dash-root{min-height:100vh;background:linear-gradient(180deg,#f6f8fb,#eef2f7);padding-bottom:calc(24px + var(--sab))}.dash-content{max-width:760px;margin:0 auto;padding:calc(70px + var(--sat)) 12px 0;overflow:visible}
-      nav.navbar{position:fixed!important;top:var(--sat)!important;left:0!important;right:0!important;z-index:1035!important;height:58px!important;backdrop-filter:blur(14px)!important;background:#ffffffee!important;border-bottom:1px solid #e2e8f0!important;box-shadow:0 2px 16px rgba(15,23,42,.06)!important}
-   .secw,.grid,.pcard{overflow:visible!important}.pcard.menu-open{z-index:9999!important;box-shadow:0 20px 40px rgba(0,0,0,.16)!important}.dmenu{z-index:10000!important}
-   .center-modal,.my-center{margin:auto!important;display:flex!important;align-items:center!important;justify-content:center!important;min-height:calc(100vh - 24px)!important}.pop-card,.my-pop{border:none!important;border-radius:20px!important;box-shadow:0 28px 80px rgba(15,23,42,.26)!important;animation:pop.28s cubic-bezier(.16,1,.3,1)!important}
-   .jtc{position:fixed!important;inset:0!important;display:flex!important;align-items:center!important;justify-content:center!important;z-index:100000!important;pointer-events:none!important;padding:20px}.jtt{display:flex!important;gap:10px!important;align-items:center!important;padding:14px 20px!important;border-radius:14px!important;color:#fff!important;font-weight:800!important;box-shadow:0 20px 44px rgba(0,0,0,.28)!important;animation:pop.28s!important;pointer-events:auto!important}.jtt.success{background:linear-gradient(135deg,#16a34a,#15803d)!important}.jtt.danger{background:linear-gradient(135deg,#ef4444,#dc2626)!important}.jti{width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center}
-   .my-pcw{padding:4px 0 8px;max-width:760px;margin:0 auto;overflow:visible}.my-pcc{background:linear-gradient(180deg,#fff,#fbfdff);border:1px solid #e2e8f0;border-radius:18px;display:flex;align-items:center;gap:14px;padding:14px 16px;box-shadow:0 6px 24px rgba(15,23,42,.06);overflow:visible;transition:.2s;cursor:pointer}.my-pcc:hover{transform:translateY(-1px);box-shadow:0 12px 32px rgba(15,23,42,.1)}.my-pcr{position:relative;flex-shrink:0}.my-ring{width:66px;height:66px;border-radius:50%;padding:3px;background:linear-gradient(135deg,#2563eb,#06b6d4,#8b5cf6);display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 4px 16px rgba(37,99,235,.18)}.my-av{width:60px;height:60px;border-radius:50%;object-fit:cover;display:block;background:#fff}.my-cam{position:absolute;right:-2px;bottom:-1px;width:22px;height:22px;background:#0ea5e9;border:2px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.15)}.my-pct{flex:1;min-width:0}.my-pn{font-size:16px;font-weight:900;letter-spacing:-.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.my-pu{font-size:12.5px;font-weight:700;color:#2563eb}.my-pe{font-size:12.5px;color:#475569;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.my-upw{display:flex;justify-content:center;padding:10px 2px 0}.my-upb{height:38px;padding:0 18px;border:none;border-radius:999px;background:linear-gradient(135deg,#0ea5e9,#2563eb);color:#fff;font-size:13px;font-weight:800;display:flex;align-items:center;gap:7px;box-shadow:0 6px 18px rgba(37,99,235,.22);cursor:pointer;transition:.15s}.my-upb:hover{transform:translateY(-1px)}.my-upb:active{transform:scale(.96)}
-   .my-pv{display:flex;align-items:center;justify-content:center;padding:16px}.my-pvbox{position:relative}.my-pvimg{max-width:92vw;max-height:84vh;object-fit:contain;border-radius:18px;background:#000;display:block}.my-pxb{position:absolute;top:-8px;right:-8px;width:34px;height:34px;border-radius:50%;border:2px solid #fff;background:#0f172a;color:#fff;display:flex;align-items:center;justify-content:center;z-index:2}
-   .my-ec{text-align:center;margin-bottom:14px}.my-ear{position:relative;display:inline-block;cursor:pointer}.my-eimg{width:96px;height:96px;border-radius:50%;object-fit:cover;border:3px dashed #93c5fd;background:#f1f5f9}.my-ecam{position:absolute;right:2px;bottom:2px;width:28px;height:28px;background:linear-gradient(135deg,#2563eb,#06b6d4);border:2px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff}.my-tap{font-size:11px;color:#64748b;margin-top:8px}
-   .my-ff{margin-bottom:12px}.my-ff label{font-size:11px;font-weight:800;margin-bottom:4px;display:block;color:#334155}.my-inp{width:100%;height:42px;border:1px solid #dbe2f0;border-radius:12px;padding:0 13px;font-size:13px;outline:none;background:#fff}.my-inp:focus{border-color:#2563eb;box-shadow:0 0 0 4px rgba(37,99,235,.12)}.dis{background:#f8fafc;color:#64748b}.my-row{display:flex;gap:8px;align-items:center}.flex{flex:1;min-width:0}.mt{margin-top:8px}.full{width:100%}.my-b1{height:42px;padding:0 16px;border:none;border-radius:12px;background:linear-gradient(135deg,#2563eb,#06b6d4);color:#fff;font-weight:800;font-size:12px}.my-b2{height:42px;width:46px;border:none;border-radius:12px;background:#16a34a;color:#fff;display:flex;align-items:center;justify-content:center}.my-ib{height:42px;width:44px;border:1px solid #dbe2f0;border-radius:12px;background:#fff}.my-otpb{background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:12px}
-   .my-adj{width:300px;height:300px;margin:0 auto;background:#0f172a;border-radius:18px;overflow:hidden;display:flex;align-items:center;justify-content:center;touch-action:none}.my-adj img{max-width:100%;will-change:transform}
-   .my-tc{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:99999;pointer-events:none}.my-tt{display:flex;gap:8px;align-items:center;padding:12px 18px;border-radius:14px;color:#fff;font-weight:800;font-size:13px;box-shadow:0 16px 36px rgba(0,0,0,.26);animation:pop.28s}.my-tt.success{background:linear-gradient(135deg,#16a34a,#15803d)}.my-tt.danger{background:linear-gradient(135deg,#ef4444,#dc2626)}.my-ti{width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center}
-   .my-pbtn{background:linear-gradient(135deg,#2563eb,#06b6d4)!important;border:none!important;font-weight:800!important;border-radius:12px!important}
-      @keyframes pop{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+       :root{--sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px);--navH:56px}
+       html,body{margin:0;background:#eef2f7;overflow:hidden;height:100dvh}
+      .top-safe{position:fixed;top:0;left:0;right:0;height:var(--sat);background:#ffffff;z-index:1045}
+       nav.navbar{position:fixed!important;top:var(--sat)!important;left:0!important;right:0!important;z-index:1044!important;height:var(--navH)!important;backdrop-filter:blur(18px)!important;background:rgba(255,255,255,0.96)!important;border-bottom:1px solid #e9eef5!important;box-shadow:0 1px 0 #f1f5f9,0 8px 24px rgba(15,23,42,.04)!important}
+
+       /* SHELL - FIXED PROFILE + SCROLL CONTENT */
+      .dash-shell{position:fixed;top:calc(var(--navH) + var(--sat));left:0;right:0;bottom:0;display:flex;flex-direction:column;background:linear-gradient(180deg,#f6f8fb 0%,#eef2f7 100%);overflow:hidden}
+      .dash-fixed-wrap{flex-shrink:0;background:linear-gradient(180deg,#ffffff 0%,#f8fbff 100%);border-bottom:1px solid #e8eef7;box-shadow:0 8px 24px rgba(15,23,42,.05);z-index:10;padding:12px 12px;backdrop-filter:blur(12px)}
+      .dash-fixed-inner{max-width:760px;margin:0 auto;width:100%}
+      .dash-scroll{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding:12px 12px 0;scrollbar-width:thin}
+      .dash-scroll-inner{max-width:760px;margin:0 auto;width:100%;display:flex;flex-direction:column;gap:10px}
+      .bottom-safe-space{height:calc(160px + var(--sab));flex-shrink:0}
+
+       /* PROFILE CARD - Image sarkha */
+      .my-pcw-fixed{width:100%;display:flex;flex-direction:column;gap:10px}
+      .my-pcc{background:#ffffff;border:1px solid #e9eef5;border-radius:20px;display:flex;align-items:center;gap:14px;padding:14px 16px;box-shadow:0 2px 12px rgba(15,23,42,.04),0 0 0 1px rgba(255,255,255,.8) inset;transition:.2s;cursor:pointer}
+      .my-pcc:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(15,23,42,.08)}
+      .my-pcr{position:relative;flex-shrink:0}.my-ring{width:64px;height:64px;border-radius:50%;padding:3px;background:linear-gradient(135deg,#0ea5e9 0%,#2563eb 45%,#7c3aed 100%);display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 6px 20px rgba(37,99,235,.25)}.my-av{width:58px;height:58px;border-radius:50%;object-fit:cover;display:block;background:#fff;border:2px solid #fff}.my-cam{position:absolute;right:-2px;bottom:-1px;width:22px;height:22px;background:#0ea5e9;border:2.5px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+      .my-pct{flex:1;min-width:0}.my-pn{font-size:16px;font-weight:800;letter-spacing:-.4px;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.my-pu{font-size:12.5px;font-weight:700;color:#2563eb;margin-top:1px}.my-pe{font-size:12px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+      .my-upw{display:flex;justify-content:center;padding:2px 0 2px}.my-upb{height:38px;padding:0 18px;border:none;border-radius:999px;background:linear-gradient(135deg,#0ea5e9 0%,#2563eb 100%);color:#fff;font-size:13px;font-weight:800;display:flex;align-items:center;gap:7px;box-shadow:0 6px 16px rgba(14,165,233,.28);cursor:pointer;transition:.18s}.my-upb:hover{transform:translateY(-1px);box-shadow:0 10px 22px rgba(14,165,233,.36)}.my-upb:active{transform:scale(.96)}
+
+       /* CHANNEL CARDS - PROFESSIONAL + NO HIDE MENU */
+      .secw,.grid{overflow:visible!important}
+      .pcard{overflow:visible!important;position:relative;background:#fff;border:1px solid #e9eef5;border-radius:16px;box-shadow:0 1px 3px rgba(15,23,42,.04),0 4px 12px rgba(15,23,42,.03);transition:.18s}
+      .pcard:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(15,23,42,.08);border-color:#dde7f5}
+      .pcard.menu-open{z-index:9999!important;box-shadow:0 20px 40px rgba(0,0,0,.16)!important}
+      .dmenu{position:absolute!important;right:10px!important;z-index:10000!important;min-width:160px!important;background:#ffffff!important;border:1px solid #e2e8f0!important;border-radius:14px!important;box-shadow:0 20px 40px rgba(15,23,42,.18)!important;padding:6px!important;animation:menuPop.2s cubic-bezier(.16,1,.3,1)!important}
+       /* LAST 2 CHANNELS - OPEN UPWARD */
+      .pcard:last-child.dmenu,.pcard:nth-last-child(2).dmenu,.pcard:nth-last-child(3).dmenu{top:auto!important;bottom:46px!important}
+
+       /* MODALS CENTER */
+      .center-modal,.my-center{margin:auto!important;display:flex!important;align-items:center!important;justify-content:center!important;min-height:calc(100vh - 24px)!important}
+      .pop-card,.my-pop{border:none!important;border-radius:22px!important;box-shadow:0 28px 80px rgba(15,23,42,.26)!important;animation:pop.28s cubic-bezier(.16,1,.3,1)!important;overflow:hidden!important}
+
+       /* TOAST CENTER */
+      .jtc{position:fixed!important;inset:0!important;display:flex!important;align-items:center!important;justify-content:center!important;z-index:100000!important;pointer-events:none!important;padding:20px}.jtt{display:flex!important;gap:10px!important;align-items:center!important;padding:14px 20px!important;border-radius:14px!important;color:#fff!important;font-weight:800!important;box-shadow:0 20px 44px rgba(0,0,0,.28)!important;animation:pop.28s!important;pointer-events:auto!important}.jtt.success{background:linear-gradient(135deg,#16a34a,#15803d)!important}.jtt.danger{background:linear-gradient(135deg,#ef4444,#dc2626)!important}.jti{width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center}
+
+       /* PROFILE EDIT */
+      .my-pv{display:flex;align-items:center;justify-content:center;padding:16px}.my-pvbox{position:relative}.my-pvimg{max-width:92vw;max-height:84vh;object-fit:contain;border-radius:18px;background:#000;display:block}.my-pxb{position:absolute;top:-8px;right:-8px;width:34px;height:34px;border-radius:50%;border:2px solid #fff;background:#0f172a;color:#fff;display:flex;align-items:center;justify-content:center;z-index:2}
+      .my-ec{text-align:center;margin-bottom:14px}.my-ear{position:relative;display:inline-block;cursor:pointer}.my-eimg{width:96px;height:96px;border-radius:50%;object-fit:cover;border:3px dashed #93c5fd;background:#f1f5f9}.my-ecam{position:absolute;right:2px;bottom:2px;width:28px;height:28px;background:linear-gradient(135deg,#2563eb,#06b6d4);border:2px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff}.my-tap{font-size:11px;color:#64748b;margin-top:8px}
+      .my-ff{margin-bottom:12px}.my-ff label{font-size:11px;font-weight:800;margin-bottom:4px;display:block;color:#334155}.my-inp{width:100%;height:42px;border:1px solid #dbe2f0;border-radius:12px;padding:0 13px;font-size:13px;outline:none;background:#fff}.my-inp:focus{border-color:#2563eb;box-shadow:0 0 0 4px rgba(37,99,235,.12)}.dis{background:#f8fafc;color:#64748b}.my-row{display:flex;gap:8px;align-items:center}.flex{flex:1;min-width:0}.mt{margin-top:8px}.full{width:100%}.my-b1{height:42px;padding:0 16px;border:none;border-radius:12px;background:linear-gradient(135deg,#2563eb,#06b6d4);color:#fff;font-weight:800;font-size:12px}.my-b2{height:42px;width:46px;border:none;border-radius:12px;background:#16a34a;color:#fff;display:flex;align-items:center;justify-content:center}.my-ib{height:42px;width:44px;border:1px solid #dbe2f0;border-radius:12px;background:#fff}.my-otpb{background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:12px}
+      .my-adj{width:300px;height:300px;margin:0 auto;background:#0f172a;border-radius:18px;overflow:hidden;display:flex;align-items:center;justify-content:center;touch-action:none}.my-adj img{max-width:100%;will-change:transform}
+      .my-tc{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:99999;pointer-events:none}.my-tt{display:flex;gap:8px;align-items:center;padding:12px 18px;border-radius:14px;color:#fff;font-weight:800;font-size:13px;box-shadow:0 16px 36px rgba(0,0,0,.26);animation:pop.28s}.my-tt.success{background:linear-gradient(135deg,#16a34a,#15803d)}.my-tt.danger{background:linear-gradient(135deg,#ef4444,#dc2626)}.my-ti{width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center}
+      .my-pbtn{background:linear-gradient(135deg,#0ea5e9,#2563eb)!important;border:none!important;font-weight:800!important;border-radius:12px!important}
+
+       @keyframes pop{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+       @keyframes menuPop{from{opacity:0;transform:translateY(6px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
+
+       /* RESPONSIVE */
+       @media(max-width:480px){
+        .dash-fixed-wrap{padding:10px 10px 10px}
+        .my-pcc{padding:12px 14px;border-radius:18px}
+        .my-ring{width:56px;height:56px}.my-av{width:50px;height:50px}
+        .my-pn{font-size:15px}.dash-scroll{padding:10px 10px 0}
+        .bottom-safe-space{height:calc(200px + var(--sab))}
+       }
       `}</style>
     </>
   );
