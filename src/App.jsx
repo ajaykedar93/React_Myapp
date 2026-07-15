@@ -99,10 +99,9 @@ function AppRoutes() {
         <Route path="/teligram-channels" element={<ChannelList />} />
 
         {/* Telegram Dashboard after login */}
-        <Route path="/telegram_logidashboard" element={<Telegram_Dashboard />} />
-          <Route path="/channel/join/:share_code" element={<Telegram_Dashboard />} />
-       <Route path="/channel/join/:code" element={<Telegram_Dashboard />} />
-
+       <Route path="/channel/join/:share_code" element={<Telegram_Dashboard />} />
+<Route path="/channel/join/:share_code" element={<Telegram_Dashboard />} />
+<Route path="/telegram_logidashboard" element={<Telegram_Dashboard />} />
       
         {/* Notes page */}
         <Route path="/teligram-notes" element={<Teligram />} />

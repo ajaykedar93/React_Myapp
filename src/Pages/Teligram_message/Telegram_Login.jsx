@@ -19,16 +19,7 @@ import { useNavigate } from "react-router-dom";
 
 const API_ROUTE_PREFIX = "/api/telegramlogin-users";
 
-/*
-  Correct backend mount:
-  app.use("/api/telegramlogin-users", telegramloginUsersRoutes);
 
-  Set VITE_TELEGRAM_USERS_API_URL in .env only if needed:
-  VITE_TELEGRAM_USERS_API_URL=http://localhost:5000/api/telegramlogin-users
-
-  If you give only http://localhost:5000, this page automatically adds
-  /api/telegramlogin-users.
-*/
 const buildApiBaseUrl = () => {
   const rawBase =
     import.meta.env.VITE_TELEGRAM_USERS_API_URL || "https://express-backend-myapp.onrender.com" || "http://localhost:5000" ;
