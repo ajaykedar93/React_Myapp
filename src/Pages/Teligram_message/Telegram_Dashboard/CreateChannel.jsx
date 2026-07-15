@@ -1,182 +1,143 @@
 import React, { useState, useRef } from 'react';
-import { Modal, Spinner, Button } from 'react-bootstrap';
-import { PlusLg, Globe, LockFill, Camera, CheckLg, ShieldLock } from 'react-bootstrap-icons';
+import { Modal, Spinner } from 'react-bootstrap';
+import { Globe, LockFill, Camera, PencilFill, ShieldLock, CheckLg, PlusLg, XLg } from 'react-bootstrap-icons';
 
-const CHANNEL_PREFIX = "/api/telegramlogin-channels";
-const getChannelApi = () => {
-  const raw = import.meta.env.VITE_TELEGRAM_CHANNELS_API_URL || import.meta.env.VITE_TELEGRAM_USERS_API_URL || "http://localhost:5000";
-  const clean = String(raw).replace(/\/$/, "");
-  if (clean.endsWith(CHANNEL_PREFIX)) return clean;
-  if (/\/api\/[^/]+$/i.test(clean)) return clean.replace(/\/api\/[^/]+$/i, CHANNEL_PREFIX);
-  return `${clean}${CHANNEL_PREFIX}`;
-};
-const CHANNEL_API = getChannelApi();
-const API_ORIGIN = CHANNEL_API.replace(CHANNEL_PREFIX, "");
-const getToken = () => localStorage.getItem("telegram_token") || localStorage.getItem("telegram_auth_token") || localStorage.getItem("authToken") || localStorage.getItem("token") || "";
+const API_BASE = (import.meta.env.VITE_API_URL || "https://express-backend-myapp.onrender.com").replace(/\/$/, "");
+const CHANNEL_API = `${API_BASE}/api/telegramlogin-channels`;
+const getToken = () => localStorage.getItem("telegram_token") || localStorage.getItem("token") || "";
 
-// AUTO DEVICE ID - user never enters
-const getDeviceId = () => {
-  let id = localStorage.getItem("telegram_device_id") || localStorage.getItem("device_id") || localStorage.getItem("x-device-id");
-  if (!id) {
-    id = (window.crypto?.randomUUID && window.crypto.randomUUID()) || `dev_${Math.random().toString(36).slice(2,11)}${Date.now().toString(36)}`;
-    localStorage.setItem("telegram_device_id", id);
-    localStorage.setItem("device_id", id);
-  }
-  return id;
-};
-const checkTrust = () => localStorage.getItem("telegram_trust_login_enabled") === "true";
-
-const CreateChannel = ({ onChannelCreated, showCenterToast }) => {
+export default function CreateChannel({ onChannelCreated, showCenterToast }) {
   const [show, setShow] = useState(false);
-  const [type, setType] = useState('public'); // public | private
+  const [type, setType] = useState("public");
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
   const [pin, setPin] = useState("");
   const [logoFile, setLogoFile] = useState(null);
-  const [logoPrev, setLogoPrev] = useState("");
+  const [preview, setPreview] = useState("");
   const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState("");
-  const [toast, setToast] = useState({ show:false, msg:'', t:'success' });
-
   const fileRef = useRef(null);
-  const toastC = (m,t='success')=>{ setToast({show:true,msg:m,t}); showCenterToast?.(m,t); setTimeout(()=>setToast({show:false,msg:'',t:'success'}),2600); };
 
-  const reset = () => { setName(""); setDesc(""); setPin(""); setLogoFile(null); setLogoPrev(""); setErr(""); setType('public'); };
-
-  const onLogo = (e) => {
-    const f=e.target.files[0]; if(!f) return;
-    if(!f.type.startsWith('image/')){ toastC("Only image allowed","danger"); return; }
-    setLogoFile(f); const r=new FileReader(); r.onload=()=>setLogoPrev(r.result); r.readAsDataURL(f);
+  const handleLogo = (e) => {
+    const f = e.target.files?.[0];
+    if(!f) return;
+    if(!f.type.startsWith("image/")) { showCenterToast?.("Only image allowed","danger"); return; }
+    if(f.size > 3*1024*1024){ showCenterToast?.("Max 3MB","danger"); return; }
+    setLogoFile(f);
+    setPreview(URL.createObjectURL(f));
   };
 
-  const handleCreate = async () => {
-    setErr("");
-    if(name.trim().length<3){ setErr("Channel name min 3 chars"); return; }
-    if(type==='private' && !/^\d{4,8}$/.test(pin)){ setErr("Private PIN must be 4-8 digits"); return; }
+  const reset = ()=>{ setName(""); setDesc(""); setPin(""); setLogoFile(null); setPreview(""); setType("public"); };
 
+  const handleCreate = async () => {
+    if(!name.trim()){ showCenterToast?.("Channel name required","danger"); return; }
+    if(type==="private" &&!/^\d{4}$/.test(pin)){ showCenterToast?.("Enter 4 digit PIN","danger"); return; }
     setLoading(true);
     try{
-      const deviceId = getDeviceId(); // auto
       const fd = new FormData();
       fd.append("channel_name", name.trim());
-      fd.append("name", name.trim());
-      fd.append("channel_description", desc.trim());
       fd.append("description", desc.trim());
       fd.append("channel_type", type);
-      fd.append("type", type);
-      fd.append("device_id", deviceId);
-      fd.append("deviceId", deviceId);
-
-      if(type==='private'){
-        fd.append("security_pin", pin);
-        fd.append("pin", pin);
-      }
-      if(logoFile){
-        fd.append("channel_logo", logoFile); // API expects this key
-      }
-
-      const res = await fetch(`${CHANNEL_API}/create`, {
-        method:"POST",
-        headers:{ Authorization:`Bearer ${getToken()}`, "x-device-id": deviceId, "x-device": deviceId },
-        body: fd
-      });
+      if(type==="private") fd.append("security_pin", pin);
+      if(logoFile) fd.append("channel_logo", logoFile);
+      const token = getToken();
+      let res = await fetch(`${CHANNEL_API}/create`, { method:"POST", headers:{Authorization:`Bearer ${token}`}, body:fd });
+      if(!res.ok){ res = await fetch(`${CHANNEL_API}`, { method:"POST", headers:{Authorization:`Bearer ${token}`}, body:fd }); }
       const data = await res.json().catch(()=>({}));
-      if(!res.ok) throw new Error(data.message || "Create failed");
-
-      const apiCh = data.channel;
-      // Normalize to frontend shape for Public/Private sections
-      const normalized = {
-        channel_id: apiCh.channel_id,
-        id: apiCh.channel_id,
-        channel_name: apiCh.channel_name,
-        name: apiCh.channel_name,
-        channel_description: apiCh.channel_description,
-        description: apiCh.channel_description,
-        channel_type: apiCh.channel_type,
-        type: apiCh.channel_type,
-        is_private: apiCh.channel_type === 'private',
-        has_channel_logo: apiCh.has_channel_logo,
-        logo_url: apiCh.channel_logo_url ? (apiCh.channel_logo_url.startsWith('http')?apiCh.channel_logo_url:`${API_ORIGIN}${apiCh.channel_logo_url}`) : logoPrev,
-        channel_logo: apiCh.channel_logo_url,
-        invite_url: apiCh.share_link,
-        invitation_url: apiCh.share_link,
-        share_code: apiCh.share_code,
-        share_link: apiCh.share_link,
-        created_at: apiCh.created_at,
-        created_device_id: apiCh.created_device_id,
-        is_owner: true,
-        pin: type==='private'? pin : undefined
-      };
-
-      // Owner device rule - Public delete only from this device
-      const my = JSON.parse(localStorage.getItem("my_created_channels")||"[]");
-      localStorage.setItem("my_created_channels", JSON.stringify([...my, String(normalized.channel_id)]));
-      if(type==='private'){
-        localStorage.setItem(`private_pin_${normalized.channel_id}`, pin);
-        if(checkTrust()) localStorage.setItem(`trusted_pin_${normalized.channel_id}`,"true");
-      }
-
-      if(onChannelCreated) onChannelCreated(normalized);
-      setShow(false); reset();
-      toastC(type==='private'?"Private channel created":"Public channel created","success");
-    }catch(e){
-      setErr(e.message); toastC(e.message,"danger");
-    }finally{ setLoading(false); }
+      if(!res.ok) throw new Error(data.message||"Create failed");
+      const ch = data.channel || data.data || data;
+      showCenterToast?.(`${type==="private"?"Private":"Public"} channel created`,"success");
+      reset(); setShow(false);
+      onChannelCreated?.(ch);
+    }catch(e){ showCenterToast?.(e.message,"danger"); }
+    finally{ setLoading(false); }
   };
 
   return (
     <>
-      <div className="crw"><div className="crc"><button className="crb" onClick={()=>setShow(true)}><PlusLg size={11}/> Create Channel</button><span className="crhint">Public or Private with auto device</span></div></div>
+      {/* ✅ DASHBOARD VAR FAKT BUTTON */}
+      <div className="cc-wrap">
+        <div className="cc-card btn-only">
+          <button className="cc-open-main" onClick={()=>setShow(true)}><PlusLg size={14}/> Create Channel</button>
+        </div>
+      </div>
 
-      <Modal show={show} onHide={()=>{setShow(false); setErr("");}} centered backdrop="static">
-        <Modal.Header closeButton className="py-2"><Modal.Title className="fs-6 fw-bold">Create Channel</Modal.Title></Modal.Header>
-        <Modal.Body>
-          <div className="crtype">
-            <button className={`ctb ${type==='public'?'on':''}`} onClick={()=>setType('public')}><Globe size={13}/> Public</button>
-            <button className={`ctb ${type==='private'?'on priv':''}`} onClick={()=>setType('private')}><LockFill size={11}/> Private</button>
+      {/* ✅ CLICK KELEVAR MODAL OPEN */}
+      <Modal show={show} onHide={()=>setShow(false)} centered dialogClassName="center-modal" contentClassName="pop-card cc-pop">
+        <div className="cc-mhead">
+          <span>Create Channel</span>
+          <button className="cc-x" onClick={()=>setShow(false)}><XLg size={14}/></button>
+        </div>
+        <div className="cc-mbody">
+          <div className="cc-toggle">
+            <button className={`tbtn ${type==="public"?"active":""}`} onClick={()=>setType("public")}><Globe size={14}/> Public</button>
+            <button className={`tbtn ${type==="private"?"active":""}`} onClick={()=>setType("private")}><LockFill size={12}/> Private</button>
           </div>
 
-          <div className="clogo-wrap">
-            <div className="clogo" onClick={()=>fileRef.current?.click()}>
-              {logoPrev ? <img src={logoPrev} alt="logo" className="clogo-img"/> : <Camera size={18}/>}
-              <span className="clogo-cam"><Camera size={10}/></span>
+          <div className="logo-block">
+            <div className="logo-circle" onClick={()=>fileRef.current?.click()}>
+              {preview? <img src={preview} alt="logo" /> : <Camera size={22} color="#94a3b8" />}
             </div>
-            <div className="small text-muted" style={{fontSize:11}}>Logo any size • round preview</div>
-            <input ref={fileRef} type="file" accept="image/*" hidden onChange={onLogo}/>
+            <input ref={fileRef} type="file" hidden accept="image/*" onChange={handleLogo} />
+            <div className="logo-below" onClick={()=>fileRef.current?.click()}>
+              <PencilFill size={10}/> {preview? "Change logo" : "Tap to add logo"}
+            </div>
           </div>
 
-          <div className="ff"><label>Channel Name *</label><input className="inp" value={name} onChange={e=>setName(e.target.value)} placeholder="Ex: Tech Updates" maxLength={30}/></div>
-          <div className="ff"><label>Description <span className="opt">(optional)</span></label><textarea className="inp area" value={desc} onChange={e=>setDesc(e.target.value)} placeholder="About channel" rows={2} maxLength={120}/></div>
-
-          {type==='private' && (
-            <div className="ff pinbox">
-              <label><ShieldLock size={11}/> 4-digit PIN * <span className="opt">can't change later, same PIN to open & delete</span></label>
-              <input type="password" inputMode="numeric" maxLength={8} className="inp text-center fw-bold" style={{letterSpacing:8,fontSize:16}} placeholder="••••" value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,'').slice(0,8))}/>
-              <div className="small mt-1" style={{fontSize:11,color:'#64748b'}}>{checkTrust() ? "✓ Trust enabled - PIN once on this device" : "Trust disabled - PIN every time"}</div>
+          <div className="cc-fields">
+            <input className="cc-inp" value={name} onChange={e=>setName(e.target.value)} placeholder="Channel name *" maxLength={60} />
+            <textarea className="cc-inp area" value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Description (optional)" rows={2} maxLength={180} />
+            {type==="private" && (
+              <>
+                <div className="pin-head"><ShieldLock size={12}/> Private PIN - 4 digit</div>
+                <div className="pin-box">
+                  <ShieldLock size={14} className="pin-ico" />
+                  <input className="pin-inp" value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,"").slice(0,4))} inputMode="numeric" placeholder="••••" maxLength={4} />
+                </div>
+              </>
+            )}
+            <div className="cc-actions">
+              <button className="cc-cancel" onClick={()=>{reset(); setShow(false);}}>Cancel</button>
+              <button className="cc-create" onClick={handleCreate} disabled={loading}>{loading? <Spinner size="sm"/> : <><CheckLg size={14}/> Create</>}</button>
             </div>
-          )}
-
-          {err && <div className="jce">{err}</div>}
-          <div className="crules small">{type==='public' ? <><b>Public:</b> Opens direct • Owner delete only on same auto device_id • Share = Invite URL only</> : <><b>Private:</b> PIN to open & delete • Owner can delete any device via PIN • Share = Invite URL + PIN • Accept copies only</>}</div>
-        </Modal.Body>
-        <Modal.Footer className="py-2">
-          <Button size="sm" variant="light" onClick={()=>setShow(false)}>Cancel</Button>
-          <Button size="sm" onClick={handleCreate} disabled={loading || !name.trim() || (type==='private' && pin.length<4)} style={{background:'linear-gradient(135deg,#2563eb,#06b6d4)',border:'none',fontWeight:800,minWidth:90}}>{loading?<Spinner size="sm"/>:<><CheckLg size={13}/> Create</>}</Button>
-        </Modal.Footer>
+          </div>
+        </div>
       </Modal>
 
-      {toast.show && <div className="jtc"><div className={`jtt ${toast.t}`}><span className="jti">{toast.t==='success'?'✓':'!'}</span>{toast.msg}</div></div>}
-
       <style>{`
-       .crw{padding:6px 10px 10px;background:#f8fafc}.crc{max-width:760px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:8px 10px;display:flex;align-items:center;gap:10px}
-       .crb{height:32px;padding:0 14px;border:none;border-radius:999px;background:#0f172a;color:#fff;font-size:12px;font-weight:800;display:flex;gap:6px;align-items:center}.crhint{font-size:11px;color:#64748b;font-weight:600}
-       .crtype{display:flex;gap:8px;margin-bottom:12px}.ctb{flex:1;height:36px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:6px}.ctb.on{border-color:#2563eb;background:#eff6ff;color:#2563eb}.ctb.on.priv{border-color:#d97706;background:#fffbeb;color:#92400e}
-       .clogo-wrap{text-align:center;margin-bottom:12px}.clogo{position:relative;width:72px;height:72px;border-radius:50%;border:2px dashed #cbd5e1;background:#f8fafc;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden}.clogo-img{width:100%;height:100%;object-fit:cover}.clogo-cam{position:absolute;right:0;bottom:0;width:20px;height:20px;background:#2563eb;border:2px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff}
-       .ff{margin-bottom:11px}.ff label{font-size:11px;font-weight:800;margin-bottom:4px;display:block}.opt{font-weight:600;color:#94a3b8;font-size:10px}.inp{width:100%;border:1px solid #dbe2f0;border-radius:10px;padding:0 12px;font-size:13px;font-weight:600;outline:none}.inp:not(.area){height:38px}.inp.area{height:56px;padding:8px 12px;resize:none}.pinbox{background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:10px}.jce{margin-top:8px;font-size:11.5px;font-weight:700;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:7px 10px}.crules{margin-top:8px;background:#f8fafc;border:1px solid #f1f5f9;border-radius:8px;padding:8px 10px;line-height:1.4;color:#475569;font-size:11px}
-       .jtc{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:9999;pointer-events:none;padding:20px}.jtt{display:flex;gap:8px;align-items:center;padding:12px 16px;border-radius:12px;color:#fff;font-weight:800;font-size:13px;box-shadow:0 14px 32px rgba(0,0,0,.24);animation:pop .28s ease}.jtt.success{background:linear-gradient(135deg,#16a34a,#15803d)}.jtt.danger{background:linear-gradient(135deg,#ef4444,#dc2626)}.jti{width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center}@keyframes pop{from{opacity:0;transform:scale(.88)}to{opacity:1;transform:scale(1)}}
+     .cc-wrap{padding:8px 10px;background:#f8fafc}
+     .cc-card{max-width:760px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:12px;box-shadow:0 2px 12px rgba(15,23,42,.04)}
+     .cc-card.btn-only{display:flex;justify-content:center;padding:14px}
+     .cc-open-main{height:42px;padding:0 22px;border-radius:999px;border:1px solid #0f172a;background:#0f172a;color:#fff;font-size:13px;font-weight:800;display:flex;align-items:center;gap:8px;transition:.18s}
+     .cc-open-main:hover{transform:translateY(-1px);box-shadow:0 8px 20px rgba(15,23,42,.2)}
+
+     .center-modal{margin:auto!important;display:flex!important;align-items:center!important;justify-content:center!important}
+     .pop-card{border:none!important;border-radius:20px!important;box-shadow:0 24px 60px rgba(15,23,42,.22)!important;overflow:hidden!important}
+     .cc-pop{border:1px solid #e2e8f0!important}
+     .cc-mhead{height:52px;padding:0 18px;display:flex;align-items:center;justify-content:space-between;font-size:14px;font-weight:800;border-bottom:1px solid #f1f5f9;background:#fff}
+     .cc-x{width:32px;height:32px;border-radius:8px;border:1px solid #e2e8f0;background:#fff;display:flex;align-items:center;justify-content:center}
+     .cc-mbody{padding:18px 16px;background:#fff}
+
+     .cc-toggle{display:flex;gap:10px;justify-content:center;margin-bottom:18px}
+     .tbtn{height:38px;padding:0 18px;border-radius:999px;border:1px solid #e2e8f0;background:#fff;font-size:13px;font-weight:700;color:#475569;display:flex;align-items:center;gap:6px;transition:.18s}
+     .tbtn.active{background:#eff6ff;border-color:#bfdbfe;color:#1e40af}
+     .tbtn.active:last-child{background:#fef9c3;border-color:#fde68a;color:#854d0e}
+
+     .logo-block{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:18px}
+     .logo-circle{width:86px;height:86px;border-radius:50%;border:1.5px dashed #cbd5e1;background:#f8fafc;display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer}
+     .logo-circle img{width:100%;height:100%;object-fit:cover}
+     .logo-below{font-size:11px;font-weight:700;color:#64748b;display:flex;align-items:center;gap:5px;cursor:pointer}
+
+     .cc-fields{display:flex;flex-direction:column;gap:12px}
+     .cc-inp{width:100%;height:44px;border:1px solid #e2e8f0;border-radius:14px;padding:0 14px;font-size:13px;font-weight:600;outline:none;background:#fff}
+     .cc-inp:focus{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+     .cc-inp.area{height:auto;min-height:64px;padding:12px 14px;resize:none}
+     .pin-head{font-size:11px;font-weight:800;color:#334155;display:flex;align-items:center;gap:6px;margin-top:4px}
+     .pin-box{height:44px;border:1px solid #fde68a;background:#fefce8;border-radius:14px;display:flex;align-items:center;gap:10px;padding:0 14px}
+     .pin-ico{color:#ca8a04}.pin-inp{flex:1;height:100%;border:none;outline:none;background:transparent;font-size:16px;font-weight:800;letter-spacing:6px;text-align:center}
+     .cc-actions{display:flex;gap:10px;margin-top:6px}
+     .cc-cancel{flex:1;height:42px;border-radius:12px;border:1px solid #e2e8f0;background:#fff;font-size:13px;font-weight:700;color:#475569}
+     .cc-create{flex:1;height:42px;border-radius:12px;border:none;background:#0f172a;color:#fff;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:6px}
       `}</style>
     </>
   );
-};
-
-export default CreateChannel;
+}
