@@ -62,6 +62,11 @@ import ChannelList from "./Pages/Teligram_message/ChannelList.jsx";
 import Teligram from "./Pages/Teligram_message/Teligram.jsx";
 
 
+// Channel Pages Imports
+import ChannelChatScreen from "./Pages/Teligram_message/Telegram_Dashboard/ChannelChatScreen.jsx";
+import ChannelInfo from "./Pages/Teligram_message/Telegram_Dashboard/ChannelInfo.jsx";
+import { io } from "socket.io-client"; // socket sathi lagel - npm install socket.io-client
+
 
 // ✅ Private Route Wrapper
 function PrivateRoute({ children }) {
@@ -102,7 +107,10 @@ function AppRoutes() {
        <Route path="/channel/join/:share_code" element={<Telegram_Dashboard />} />
 <Route path="/channel/join/:share_code" element={<Telegram_Dashboard />} />
 <Route path="/telegram_logidashboard" element={<Telegram_Dashboard />} />
-      
+      <Route path="/channel/:id" element={<ChannelChatScreen/>} />
+<Route path="/channel/:id/info" element={<ChannelInfo/>} />
+
+
         {/* Notes page */}
         <Route path="/teligram-notes" element={<Teligram />} />
 

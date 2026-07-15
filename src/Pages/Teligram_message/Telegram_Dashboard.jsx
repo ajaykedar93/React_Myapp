@@ -1,4 +1,4 @@
-// ✅ FINAL - Fixed Profile + Scroll + Footer Red Icon Fix
+// ✅ FINAL - Dashboard + Footer Safe Gap Mobile Fix
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Modal, Form, Spinner, Button } from "react-bootstrap";
@@ -95,7 +95,14 @@ export default function Telegram_Dashboard(){
   const handleVerifyOTP=async(email,otp,type)=>{ const token=getToken(); const ep=type==="new"?`${API_URL}/update-email/verify-new-code`:`${API_URL}/update-email/verify-old-code`; const body=type==="new"?{email,code:otp}:{code:otp}; const r=await fetch(ep,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify(body)}); const d=await r.json(); if(!r.ok) throw new Error(d.message); return d; };
   const handleChannelJoined=(ch)=>{ handleRefresh(); showCenter("Channel joined - real-time"); };
   const handleChannelCreated=(ch)=>{ const isP=ch.is_private||ch.type==='private'||ch.channel_type==='private'; if(isP) setPrivateChannels(p=>[ch,...p]); else setPublicChannels(p=>[ch,...p]); };
-  const handleOpenChannel=(ch)=> navigate(`/channel/${ch.channel_id||ch.id}`);
+  const handleOpenChannel = (ch) => {
+    const cid = ch.channel_id || ch.id;
+    if(!cid) return;
+    localStorage.setItem('current_channel', JSON.stringify(ch));
+    localStorage.setItem('current_channel_id', String(cid));
+    navigate(`/channel/${cid}`);
+  };
+
   const handleShareRequest=()=>{ showCenter("Invite sent - only receiver sees in Link Requests"); };
 
   if(loading) return <div className="d-flex justify-content-center align-items-center vh-100"><Spinner animation="border"/></div>;
@@ -124,6 +131,7 @@ export default function Telegram_Dashboard(){
         <span className="red-icon"><CodeSlash size={16} /></span>
         <span>Developed By <b>Ajay Kedar</b></span>
       </footer>
+      <div className="footer-bottom-safe"></div>
 
       {toast.show&&<div className="jtc"><div className={`jtt ${toast.type}`}><span className="jti">{toast.type==='success'?'✓':'!'}</span>{toast.msg}</div></div>}
       <style>{`
@@ -131,7 +139,7 @@ export default function Telegram_Dashboard(){
        html,body{margin:0;background:#eef2f7;overflow:hidden;height:100dvh}
       .top-safe{position:fixed;top:0;left:0;right:0;height:var(--sat);background:#fff;z-index:1045}
        nav.navbar{position:fixed!important;top:var(--sat)!important;left:0!important;right:0!important;z-index:1044!important;height:var(--navH)!important;backdrop-filter:blur(18px)!important;background:rgba(255,255,255,0.96)!important;border-bottom:1px solid #e9eef5!important;box-shadow:0 1px 0 #f1f5f9,0 8px 24px rgba(15,23,42,.04)!important}
-      .dash-shell{position:fixed;top:calc(var(--navH) + var(--sat));left:0;right:0;bottom:var(--footH);display:flex;flex-direction:column;background:linear-gradient(180deg,#f6f8fb 0%,#eef2f7 100%);overflow:hidden}
+      .dash-shell{position:fixed;top:calc(var(--navH) + var(--sat));left:0;right:0;bottom:calc(var(--footH) + var(--sab) + 10px);display:flex;flex-direction:column;background:linear-gradient(180deg,#f6f8fb 0%,#eef2f7 100%);overflow:hidden}
       .dash-fixed-wrap{flex-shrink:0;background:linear-gradient(180deg,#ffffff 0%,#f8fbff 100%);border-bottom:1px solid #e8eef7;box-shadow:0 8px 24px rgba(15,23,42,.05);z-index:10;padding:12px 12px;backdrop-filter:blur(12px)}
       .dash-fixed-inner{max-width:760px;margin:0 auto;width:100%}
       .dash-scroll{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding:12px 12px 0;scrollbar-width:thin}
@@ -158,15 +166,18 @@ export default function Telegram_Dashboard(){
       .my-tc{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:99999;pointer-events:none}.my-tt{display:flex;gap:8px;align-items:center;padding:12px 18px;border-radius:14px;color:#fff;font-weight:800;font-size:13px;box-shadow:0 16px 36px rgba(0,0,0,.26)}.my-tt.success{background:linear-gradient(135deg,#16a34a,#15803d)}.my-tt.danger{background:linear-gradient(135deg,#ef4444,#dc2626)}.my-ti{width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center}
       .my-pbtn{background:linear-gradient(135deg,#0ea5e9,#2563eb)!important;border:none!important;font-weight:800!important;border-radius:12px!important}
 
-       /* ✅ FOOTER RED ICON FIX */
-      .dev-footer{position:fixed;left:0;right:0;bottom:0;height:var(--footH);display:flex;align-items:center;justify-content:center;gap:7px;background:#ffffff;border-top:1px solid #e8eef5;box-shadow:0 -6px 24px rgba(15,23,42,.06);z-index:1060;font-size:11.5px;font-weight:700;color:#334155;letter-spacing:.2px;padding-bottom:env(safe-area-inset-bottom)}
+       /* ✅ FOOTER + SAFE GAP - MOBILE MEIN HIDE NAHI HOGA */
+      .dev-footer{position:fixed;left:0;right:0;bottom:calc(var(--sab) + 10px);height:var(--footH);display:flex;align-items:center;justify-content:center;gap:7px;background:#ffffff;border-top:1px solid #e8eef5;box-shadow:0 -6px 24px rgba(15,23,42,.06);z-index:1060;font-size:11.5px;font-weight:700;color:#334155;letter-spacing:.2px}
       .red-icon{color:#ef4444!important;display:flex;align-items:center;justify-content:center}
       .red-icon svg{color:#ef4444!important;fill:#ef4444!important;stroke:#ef4444!important}
       .dev-footer b{color:#0f172a;font-weight:800}
+      .footer-bottom-safe{position:fixed;left:0;right:0;bottom:0;height:calc(var(--sab) + 10px);background:#ffffff;z-index:1059}
 
        @keyframes pop{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
        @media(max-width:480px){
-      .dev-footer{height:40px;font-size:11px}
+       .dev-footer{height:40px;font-size:11px;bottom:calc(var(--sab) + 14px)}
+       .footer-bottom-safe{height:calc(var(--sab) + 14px)}
+       .dash-shell{bottom:calc(var(--footH) + var(--sab) + 14px)}
        }
       `}</style>
     </>
