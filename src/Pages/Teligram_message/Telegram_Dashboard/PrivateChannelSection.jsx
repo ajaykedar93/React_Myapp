@@ -33,7 +33,23 @@ export default function PrivateChannelSection({ channels=[], onUpdated, onDelete
   useEffect(()=>setVisible(6),[channels?.length]);
 
   const list = (channels||[]).slice(0,visible);
-  const openCard=(ch,e)=>{ if(e.target.closest('.no-open')) return; const id=String(ch.channel_id||ch.id); if(isTrusted(id)){ onOpen?.(ch); return; } setPinBox({show:true,mode:"open",ch,pin:"",trust:true,err:"",loading:false}); };
+
+  // ✅ PRIVATE CHECK FAKT YA PAGE VAR
+  const openCard=(ch,e)=>{
+    if(e.target.closest('.no-open')) return;
+    const id=String(ch.channel_id||ch.id);
+    if(isOwner(ch)){ // owner la PIN nako
+      onOpen?.(ch);
+      return;
+    }
+    if(isTrusted(id)){
+      // already verified - direct open, pudhchya page var check nako
+      onOpen?.(ch);
+      return;
+    }
+    // first time - PIN box dakhav
+    setPinBox({show:true,mode:"open",ch,pin:"",trust:true,err:"",loading:false});
+  };
 
   const handleDotClick = (e, id) => {
     e.stopPropagation();
@@ -98,6 +114,7 @@ export default function PrivateChannelSection({ channels=[], onUpdated, onDelete
   const copyUrl=(ch)=>{ try{ navigator.clipboard.writeText(getJoinUrl(ch)); }catch{} toastC("Hosted URL copied"); setMenuId(null); };
   const askPin=(ch,mode)=>{ setMenuId(null); setPinBox({show:true,mode,ch,pin:"",trust:true,err:"",loading:false}); };
 
+  // ✅ FIXED PIN LOGIC - EKDA VERIFY -> PARAT NAKO
   const submitPin=async()=>{
     if(!/^\d{4,8}$/.test(pinBox.pin)) return setPinBox(s=>({...s,err:"4-8 digit PIN taka"}));
     setPinBox(s=>({...s,loading:true,err:""}));
@@ -106,8 +123,18 @@ export default function PrivateChannelSection({ channels=[], onUpdated, onDelete
       if(pinBox.mode==="open"){
         const res=await fetch(`${API}/${id}/verify-pin`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${getToken()}`,"x-device-id":did},body:JSON.stringify({security_pin:pinBox.pin,device_id:did,trust_device:pinBox.trust})});
         const d=await res.json(); if(!res.ok) throw new Error(d.message||"Wrong PIN");
-        if(pinBox.trust) localStorage.setItem(`priv_trust_${id}_${did}`,"1");
-        setPinBox({show:false,ch:null,pin:"",trust:true,err:"",loading:false}); onOpen?.(ch); toastC("Verified"); return;
+        // ✅ 3 thikani save - pudhchya page var check nako
+        localStorage.setItem(`priv_trust_${id}_${did}`,"1");
+        localStorage.setItem(`verified_${id}`,"1");
+        try{
+          const old=JSON.parse(localStorage.getItem('verified_pins')||'{}');
+          old[id]=Date.now();
+          localStorage.setItem('verified_pins', JSON.stringify(old));
+        }catch{}
+        setPinBox({show:false,ch:null,pin:"",trust:true,err:"",loading:false});
+        onOpen?.(ch); // ata direct open - delay nahi
+        toastC("Verified");
+        return;
       }
       if(pinBox.mode==="delete"){
         const res=await fetch(`${API}/${id}`,{method:"DELETE",headers:{"Content-Type":"application/json",Authorization:`Bearer ${getToken()}`,"x-device-id":did},body:JSON.stringify({device_id:did,security_pin:pinBox.pin})});
@@ -184,7 +211,7 @@ export default function PrivateChannelSection({ channels=[], onUpdated, onDelete
         <div className="mhead"><span>{pinBox.mode==="open"?"Enter PIN":pinBox.mode}</span><button className="mx" onClick={()=>setPinBox(s=>({...s,show:false}))}><XLg size={14}/></button></div>
         <div className="mbody">
           <input className="inp pinp" type="password" inputMode="numeric" maxLength={8} value={pinBox.pin} onChange={e=>setPinBox(s=>({...s,pin:e.target.value.replace(/\D/g,"")}))} placeholder="••••" autoFocus/>
-          {pinBox.mode==="open" && <Form.Check label="Trust this device" checked={pinBox.trust} onChange={e=>setPinBox(s=>({...s,trust:e.target.checked}))} className="mt-3 small fw-bold"/>}
+          {pinBox.mode==="open" && <Form.Check label="Trust this device - next time PIN nako" checked={pinBox.trust} onChange={e=>setPinBox(s=>({...s,trust:e.target.checked}))} className="mt-3 small fw-bold"/>}
           {pinBox.err && <div className="errbox mt-2">{pinBox.err}</div>}
         </div>
         <div className="mfoot">
