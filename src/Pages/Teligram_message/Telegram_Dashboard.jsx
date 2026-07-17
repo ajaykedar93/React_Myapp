@@ -17,7 +17,57 @@ const CHANNEL_API = api("/api/telegramlogin-channels");
 const ALLMISS_API = api("/api/telegramlogin-allmiss");
 const getToken = () => localStorage.getItem("telegram_token") || localStorage.getItem("telegram_auth_token") || localStorage.getItem("authToken") || localStorage.getItem("token") || "";
 const getDeviceId = () => { let id=localStorage.getItem("telegram_device_id"); if(!id){ id=`dev_${Date.now()}${Math.random().toString(36).slice(2,6)}`; localStorage.setItem("telegram_device_id",id);} return id; };
-const resolveImg = (u) => { if(!u) return ""; if(u.startsWith("data:")||u.startsWith("http")) return u; if(u.startsWith("/")) return `${API_BASE}${u}`; return u; };
+const resolveImg = (u) => { if(!u) return ""; if(u.startsWith("data:")||u.startsWith("http")||u.startsWith("blob:")) return u; if(u.startsWith("/")) return `${API_BASE}${u}`; return u; };
+
+const getChannelStorageKey = (id) => `tg_channel_logo_${id}`;
+const getChannelTransformKey = (id) => `tg_channel_logo_transform_${id}`;
+const cacheChannelLogo = (channel) => {
+  const id = String(channel.channel_id || channel.id || "");
+  if(!id) return;
+  const logo = channel.logo_url || channel.channel_logo_url || channel.channel_logo || "";
+  if(logo) localStorage.setItem(getChannelStorageKey(id), logo);
+  const transform = {
+    logo_zoom: channel.logo_zoom,
+    logo_x: channel.logo_x,
+    logo_y: channel.logo_y,
+  };
+  if(transform.logo_zoom !== undefined || transform.logo_x !== undefined || transform.logo_y !== undefined) {
+    localStorage.setItem(getChannelTransformKey(id), JSON.stringify(transform));
+  }
+};
+const normalizeLogoUrl = (url="") => {
+  if(!url) return "";
+  return url.split('?')[0];
+};
+const hydrateChannels = (channels=[]) => {
+  return (channels || []).map((channel) => {
+    const id = String(channel.channel_id || channel.id || "");
+    if(!id) return channel;
+    const savedLogo = localStorage.getItem(getChannelStorageKey(id));
+    const savedTransform = localStorage.getItem(getChannelTransformKey(id));
+    let hydrated = {...channel};
+    if(savedLogo) {
+      const currentLogo = hydrated.logo_url || hydrated.channel_logo_url || hydrated.channel_logo || "";
+      const normalizedCurrent = normalizeLogoUrl(currentLogo);
+      const normalizedSaved = normalizeLogoUrl(savedLogo);
+      if(!currentLogo || (normalizedCurrent && normalizedSaved && normalizedCurrent === normalizedSaved) || !normalizedCurrent) {
+        hydrated = {
+          ...hydrated,
+          logo_url: savedLogo,
+          channel_logo_url: savedLogo,
+          channel_logo: savedLogo,
+        };
+      }
+    }
+    if(savedTransform) {
+      try{
+        const parsed = JSON.parse(savedTransform);
+        hydrated = {...hydrated, ...parsed};
+      }catch{}
+    }
+    return hydrated;
+  });
+};
 
 function ProfileCard({ userData, onUpdateProfile, onSendOTP, onVerifyOTP }){
   const [user,setUser]=useState(()=> userData || (()=>{ try{return JSON.parse(localStorage.getItem('telegram_user_details')||"null")}catch{return null}})());
@@ -88,7 +138,11 @@ export default function Telegram_Dashboard(){
     if(!loading) tryAutoJoin();
   },[loading, params]);
 
-  const handleRefresh=async()=>{ const t=getToken(); try{ const r=await fetch(`${API_URL}/me`,{headers:{Authorization:`Bearer ${t}`}}); const d=await r.json(); const u=d.user||d; setUser({telegram_user_id:u.telegram_user_id,fullName:u.full_name,full_name:u.full_name,username:u.username,email:u.email,mobileNumber:u.mobile_no,mobile_no:u.mobile_no,profileImage:u.profile_image_url,profile_image_url:u.profile_image_url}); const r2=await fetch(`${CHANNEL_API}/my-channels`,{headers:{Authorization:`Bearer ${t}`}}); if(r2.ok){ const d2=await r2.json(); const all=d2.channels||d2.data||[]; setPublicChannels(all.filter(c=>!(c.is_private||c.type==='private'||c.channel_type==='private'))||[]); setPrivateChannels(all.filter(c=>c.is_private||c.type==='private'||c.channel_type==='private')||[]); } showCenter("Refreshed"); }catch{ showCenter("Refresh failed","danger"); } };
+  const handleRefresh=async()=>{ const t=getToken(); try{ const r=await fetch(`${API_URL}/me`,{headers:{Authorization:`Bearer ${t}`}}); const d=await r.json(); const u=d.user||d; setUser({telegram_user_id:u.telegram_user_id,fullName:u.full_name,full_name:u.full_name,username:u.username,email:u.email,mobileNumber:u.mobile_no,mobile_no:u.mobile_no,profileImage:u.profile_image_url,profile_image_url:u.profile_image_url}); const r2=await fetch(`${CHANNEL_API}/my-channels`,{headers:{Authorization:`Bearer ${t}`}}); if(r2.ok){ const d2=await r2.json(); const all = hydrateChannels(d2.channels||d2.data||[]);
+        all.forEach(cacheChannelLogo);
+        setPublicChannels(all.filter(c=>!(c.is_private||c.type==='private'||c.channel_type==='private'))||[]);
+        setPrivateChannels(all.filter(c=>c.is_private||c.type==='private'||c.channel_type==='private')||[]);
+      } showCenter("Refreshed"); }catch{ showCenter("Refresh failed","danger"); } };
   const handleLogout=()=>{ localStorage.clear(); sessionStorage.clear(); navigate("/telegram-login"); };
   const handleUpdateProfile=async(fd)=>{ const token=getToken(); const uid=user?.telegram_user_id; const f=new FormData(); if(fd.fullName) f.append("full_name",fd.fullName); if(fd.email&&fd.email!==user.email) f.append("email",fd.email); if(fd.password) f.append("password",fd.password); if(fd.profileImage) f.append("profile_image",fd.profileImage); const r=await fetch(`${API_URL}/${uid}`,{method:"PUT",headers:{Authorization:`Bearer ${token}`},body:f}); const res=await r.json(); if(!r.ok) throw new Error(res.message||"Update failed"); const u=res.user; const fmt={telegram_user_id:u.telegram_user_id,fullName:u.full_name,full_name:u.full_name,username:u.username,email:u.email,mobileNumber:u.mobile_no,mobile_no:u.mobile_no,profileImage:u.profile_image_url,profile_image_url:u.profile_image_url}; setUser(fmt); localStorage.setItem("telegram_user_details",JSON.stringify(u)); return fmt; };
   const handleSendOTP=async(email,type)=>{ const token=getToken(); const ep=type==="new"?`${API_URL}/update-email/send-new-code`:`${API_URL}/update-email/send-old-code`; const body=type==="new"?{email}:{}; const r=await fetch(ep,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify(body)}); const d=await r.json(); if(!r.ok) throw new Error(d.message); return d; };
@@ -120,8 +174,8 @@ export default function Telegram_Dashboard(){
           <div className="dash-scroll-inner">
             <JoinChannelBox onChannelJoined={handleChannelJoined} onOpenChannel={handleOpenChannel} />
             <CreateChannel onChannelCreated={handleChannelCreated} showCenterToast={showCenter} />
-            <PublicChannelSection channels={publicChannels} onUpdated={(u)=>setPublicChannels(p=>p.map(x=>String(x.channel_id||x.id)===String(u.channel_id||u.id)?{...x,...u}:x))} onDeleted={(id)=>setPublicChannels(p=>p.filter(x=>String(x.channel_id||x.id)!==String(id)))} onOpen={handleOpenChannel} onShareRequest={handleShareRequest} showCenterToast={showCenter} />
-            <PrivateChannelSection channels={privateChannels} onUpdated={(u)=>setPrivateChannels(p=>p.map(x=>String(x.channel_id||x.id)===String(u.channel_id||u.id)?{...x,...u}:x))} onDeleted={(id)=>setPrivateChannels(p=>p.filter(x=>String(x.channel_id||x.id)!==String(id)))} onOpen={handleOpenChannel} onShareRequest={handleShareRequest} showCenterToast={showCenter} />
+            <PublicChannelSection channels={publicChannels} onUpdated={(u)=>{ cacheChannelLogo(u); setPublicChannels(p=>p.map(x=>String(x.channel_id||x.id)===String(u.channel_id||u.id)?{...x,...u}:x)); }} onDeleted={(id)=>setPublicChannels(p=>p.filter(x=>String(x.channel_id||x.id)!==String(id)))} onOpen={handleOpenChannel} onShareRequest={handleShareRequest} showCenterToast={showCenter} />
+            <PrivateChannelSection channels={privateChannels} onUpdated={(u)=>{ cacheChannelLogo(u); setPrivateChannels(p=>p.map(x=>String(x.channel_id||x.id)===String(u.channel_id||u.id)?{...x,...u}:x)); }} onDeleted={(id)=>setPrivateChannels(p=>p.filter(x=>String(x.channel_id||x.id)!==String(id)))} onOpen={handleOpenChannel} onShareRequest={handleShareRequest} showCenterToast={showCenter} />
             <div className="bottom-safe-space" />
           </div>
         </div>

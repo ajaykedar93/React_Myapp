@@ -22,7 +22,7 @@ const API_ROUTE_PREFIX = "/api/telegramlogin-users";
 
 const buildApiBaseUrl = () => {
   const rawBase =
-    import.meta.env.VITE_TELEGRAM_USERS_API_URL || "https://express-backend-myapp.onrender.com" || "http://localhost:5000" ;
+    import.meta.env.VITE_TELEGRAM_USERS_API_URL || "http://localhost:5000" || "https://express-backend-myapp.onrender.com" ;
 
   const cleanBase = String(rawBase || "").replace(/\/$/, "");
 

@@ -1,20 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Spinner } from 'react-bootstrap';
-import { ArrowLeft, Globe, LockFill, PersonBadge, Hash, InfoCircle, PeopleFill, ShieldCheck, Link45deg, PersonCircle, Trash, XLg } from 'react-bootstrap-icons';
+import { ArrowLeft, Globe, LockFill, PersonBadge, Hash, InfoCircle, PeopleFill, ShieldCheck, Link45deg, PersonCircle, Trash, XLg, ExclamationTriangleFill } from 'react-bootstrap-icons';
 
 const API_BASE = (import.meta.env.VITE_API_URL || "https://express-backend-myapp.onrender.com").replace(/\/$/, "");
 const CHANNEL_API = `${API_BASE}/api/telegramlogin-channels`;
 const getToken = () => localStorage.getItem("telegram_token") || localStorage.getItem("token") || "";
-const getDeviceId = () => localStorage.getItem("telegram_device_id") || `dev_${Date.now()}`;
+const getDeviceId = () => {
+  let id = localStorage.getItem("telegram_device_id");
+  if (!id) {
+    id = `dev_${Date.now()}`;
+    localStorage.setItem("telegram_device_id", id);
+  }
+  return id;
+};
 const resolveImg = (u)=>{ if(!u) return ""; if(u.startsWith("data:")||u.startsWith("http")||u.startsWith("blob:")) return u; if(u.startsWith("/")) return `${API_BASE}${u}`; return u; };
 const getInitials = (name)=>{ if(!name) return "C"; const w=name.trim().split(/\s+/); if(w.length>=2) return (w[0][0]+w[1][0]).toUpperCase(); return w[0][0].toUpperCase(); };
 
 export default function ChannelInfo(){
   const { id } = useParams(); const navigate=useNavigate();
-  const [channel,setChannel]=useState(null); const [members,setMembers]=useState([]); const [loading,setLoading]=useState(true); const [preview,setPreview]=useState(null); const [toast,setToast]=useState({show:false,msg:""}); const [logoErr,setLogoErr]=useState(false);
+  const [channel,setChannel]=useState(null); const [members,setMembers]=useState([]); const [loading,setLoading]=useState(true);
+  const [preview,setPreview]=useState(null); const [toast,setToast]=useState({show:false,msg:"",green:false});
+  const [logoErr,setLogoErr]=useState(false);
+  const [removeModal,setRemoveModal]=useState({open:false,member:null,loading:false});
   const myId = (()=>{ try{ const t=getToken(); return JSON.parse(atob(t.split('.')[1])).telegram_user_id; }catch{ return 0; }})();
-  const showT=(m)=>{ setToast({show:true,msg:m}); setTimeout(()=>setToast({show:false,msg:""}),2000); };
+  const showT=(m,green=false)=>{ setToast({show:true,msg:m,green}); setTimeout(()=>setToast({show:false,msg:"",green:false}),1800); };
 
   useEffect(()=>{
     const fetchInfo=async()=>{
@@ -32,17 +42,50 @@ export default function ChannelInfo(){
   const showLogo = logoUrl &&!logoErr;
   const initials = getInitials(channel?.channel_name||"Channel");
 
-  const removeMember = async(uid)=>{
-    if(!confirm("Remove this member?")) return;
+  const openRemove=(m)=> setRemoveModal({open:true,member:m,loading:false});
+  const closeRemove=()=> setRemoveModal({open:false,member:null,loading:false});
+
+  const confirmRemove=async()=>{
+    const member=removeModal.member; if(!member) return;
+    const uid=member.telegram_user_id||member.id;
+    const prev=[...members];
+    // immediate UI remove - optimistic
+    setMembers(p=>p.filter(x=> String(x.telegram_user_id||x.id)!==String(uid)));
+    setRemoveModal(s=>({...s,loading:true}));
     try{
-      const res=await fetch(`${CHANNEL_API}/${id}/members/${uid}`,{method:'DELETE', headers:{Authorization:`Bearer ${getToken()}`,"x-device-id":getDeviceId(),"Content-Type":"application/json"}, body:JSON.stringify({device_id:getDeviceId()})});
-      let d=await res.json().catch(()=>({}));
-      if(!res.ok){
-        const r2=await fetch(`${API_BASE}/api/telegramlogin-allmiss/remove-member`,{method:'POST', headers:{Authorization:`Bearer ${getToken()}`,"Content-Type":"application/json"}, body:JSON.stringify({channel_id:id, member_id:uid, device_id:getDeviceId()})}); d=await r2.json(); if(!r2.ok) throw new Error(d.message||"Failed");
+      const deviceId = getDeviceId();
+      const authHeaders = { Authorization: `Bearer ${getToken()}`, "x-device-id": deviceId };
+
+      // Try DELETE without body first (some servers reject DELETE bodies)
+      let res = await fetch(`${CHANNEL_API}/${id}/members/${uid}`, { method: 'DELETE', headers: authHeaders });
+      let data = {};
+
+      if (!res.ok) {
+        // Try DELETE with JSON body
+        res = await fetch(`${CHANNEL_API}/${id}/members/${uid}`, { method: 'DELETE', headers: { ...authHeaders, "Content-Type": "application/json" }, body: JSON.stringify({ device_id: deviceId, channel_id: Number(id), member_id: Number(uid) }) });
+        data = await res.json().catch(()=>({}));
+      } else {
+        data = await res.json().catch(()=>({}));
       }
-      setMembers(p=>p.filter(m=> String(m.telegram_user_id||m.id)!==String(uid)));
-      showT("Removed");
-    }catch(e){ showT(e.message); }
+
+      if (!res.ok) {
+        // Try POST to a remove endpoint under channel API
+        res = await fetch(`${CHANNEL_API}/${id}/members/remove`, { method: 'POST', headers: { ...authHeaders, "Content-Type": "application/json" }, body: JSON.stringify({ device_id: deviceId, channel_id: Number(id), member_id: Number(uid) }) });
+        data = await res.json().catch(()=>({}));
+      }
+
+      if (!res.ok) {
+        // Fallback to legacy endpoint
+        const r2 = await fetch(`${API_BASE}/api/telegramlogin-allmiss/remove-member`, { method:'POST', headers: { ...authHeaders, "Content-Type": "application/json" }, body: JSON.stringify({ channel_id: Number(id), member_id: Number(uid), device_id: deviceId }) });
+        data = await r2.json().catch(()=>({}));
+        if (!r2.ok) throw new Error(data.message || "Failed to remove");
+      }
+
+      closeRemove(); showT(`${member.full_name||'Member'} removed`,true);
+    }catch(e){
+      setMembers(prev); // restore on fail
+      closeRemove(); showT(e.message||"Remove failed");
+    }
   };
 
   if(loading) return <div className="d-flex justify-content-center align-items-center vh-100"><Spinner animation="border"/></div>;
@@ -52,7 +95,7 @@ export default function ChannelInfo(){
       <div className="info-head">
         <button className="back-btn" onClick={()=>navigate(`/channel/${id}`)}><ArrowLeft size={16}/></button>
         <span className="head-title">Channel Info</span>
-        <button className="head-icon" onClick={()=>{navigator.clipboard.writeText(channel?.share_link||window.location.href); showT("Link copied");}}><Link45deg size={16}/></button>
+        <button className="head-icon" onClick={()=>{navigator.clipboard.writeText(channel?.share_link||window.location.href); showT("Link copied",true);}}><Link45deg size={16}/></button>
       </div>
 
       <div className="info-scroll">
@@ -89,14 +132,29 @@ export default function ChannelInfo(){
               return <div key={uid} className="m-item">
                 <div className="m-av-wrap">{av? <img src={av} alt="" onError={e=>e.target.style.display='none'}/> : <div className="m-initial">{mInit}</div>}</div>
                 <div className="m-info"><div className="m-name">{m.full_name||m.username} {isMe&&<span className="you-tag">You</span>} {isChannelOwner&&<span className="owner-tag">Owner</span>}</div><div className="m-mail">{m.email||m.username}</div></div>
-                {isOwner &&!isMe &&!isChannelOwner && <button className="rm-btn" onClick={()=>removeMember(uid)}><Trash size={11}/> Remove</button>}
+                {isOwner &&!isMe &&!isChannelOwner && <button className="rm-btn" onClick={()=>openRemove(m)}><Trash size={11}/> Remove</button>}
               </div>
             })}
         </div>
       </div>
 
+      {/* CENTER DELETE MODAL */}
+      {removeModal.open && (
+        <div className="del-overlay" onClick={closeRemove}>
+          <div className="del-box" onClick={e=>e.stopPropagation()}>
+            <div className="del-ico"><ExclamationTriangleFill size={22}/></div>
+            <div className="del-title">Remove Member?</div>
+            <div className="del-msg"><b>{removeModal.member?.full_name||'This member'}</b> will lose access and this channel will be removed from his dashboard immediately.</div>
+            <div className="del-actions">
+              <button className="del-cancel" onClick={closeRemove} disabled={removeModal.loading}>Cancel</button>
+              <button className="del-confirm" onClick={confirmRemove} disabled={removeModal.loading}>{removeModal.loading? <Spinner animation="border" size="sm"/> : <><Trash size={12}/> Remove</>}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {preview && <div className="pvw" onClick={()=>setPreview(null)}><div className="pvbox"><button className="px" onClick={()=>setPreview(null)}><XLg size={14}/></button><img src={preview} alt="" className="pvimg"/></div></div>}
-      {toast.show && <div className="toast-center">{toast.msg}</div>}
+      {toast.show && <div className={`toast-center ${toast.green?'green':''}`}>{toast.msg}</div>}
 
       <style>{`
  :root{--sat:env(safe-area-inset-top,0px)}
@@ -118,7 +176,11 @@ export default function ChannelInfo(){
 .rm-btn{height:28px;padding:0 10px;border-radius:8px;background:#fff1f2;color:#dc2626;border:1px solid #fecaca;font-size:10px;font-weight:800;display:flex;align-items:center;gap:4px}
 .empty-m{padding:16px;text-align:center;color:#94a3b8;font-size:12px;border:1px dashed #e2e8f0;border-radius:12px}
 .pvw{position:fixed;inset:0;background:rgba(15,23,42,.82);backdrop-filter:blur(12px);display:flex;align-items:center;justify-content:center;z-index:99999;padding:20px}.pvbox{position:relative}.pvimg{max-width:92vw;max-height:84vh;border-radius:20px}.px{position:absolute;top:-12px;right:-12px;width:36px;height:36px;border-radius:50%;border:2px solid #fff;background:#0f172a;color:#fff;display:flex;align-items:center;justify-content:center}
-.toast-center{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;padding:10px 18px;border-radius:999px;font-size:11px;font-weight:800;z-index:99999}
+.toast-center{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;padding:8px 14px;border-radius:999px;font-size:11px;font-weight:700;z-index:99999}.toast-center.green{background:#16a34a}
+.del-overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:99999;padding:16px}
+.del-box{width:100%;max-width:320px;background:#fff;border-radius:18px;padding:20px;display:flex;flex-direction:column;align-items:center;gap:10px;box-shadow:0 20px 40px rgba(0,0,0,.2)}
+.del-ico{width:48px;height:48px;border-radius:50%;background:#fef2f2;color:#dc2626;display:flex;align-items:center;justify-content:center;border:1px solid #fecaca}
+.del-title{font-size:15px;font-weight:800;color:#0f172a}.del-msg{font-size:12px;color:#64748b;text-align:center;line-height:1.4}.del-actions{display:flex;gap:8px;width:100%;margin-top:6px}.del-cancel{flex:1;height:38px;border-radius:10px;border:1px solid #e2e8f0;background:#fff;font-size:12px;font-weight:700}.del-confirm{flex:1;height:38px;border-radius:10px;border:none;background:#dc2626;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:6px}
       `}</style>
     </div>
   );
