@@ -189,16 +189,16 @@ export default function Telegram_Dashboard(){
 
       {toast.show&&<div className="jtc"><div className={`jtt ${toast.type}`}><span className="jti">{toast.type==='success'?'✓':'!'}</span>{toast.msg}</div></div>}
       <style>{`
-       :root{--sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px);--navH:56px;--footH:38px}
+       :root{--sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px);--topSafe:min(var(--sat),12px);--botSafe:min(var(--sab),8px);--navH:56px;--footH:38px}
        html,body{margin:0;background:#eef2f7;overflow:hidden;height:100dvh}
-      .top-safe{position:fixed;top:0;left:0;right:0;height:var(--sat);background:#fff;z-index:1045}
-       nav.navbar{position:fixed!important;top:var(--sat)!important;left:0!important;right:0!important;z-index:1044!important;height:var(--navH)!important;backdrop-filter:blur(18px)!important;background:rgba(255,255,255,0.96)!important;border-bottom:1px solid #e9eef5!important;box-shadow:0 1px 0 #f1f5f9,0 8px 24px rgba(15,23,42,.04)!important}
-      .dash-shell{position:fixed;top:calc(var(--navH) + var(--sat));left:0;right:0;bottom:calc(var(--footH) + var(--sab) + 10px);display:flex;flex-direction:column;background:linear-gradient(180deg,#f6f8fb 0%,#eef2f7 100%);overflow:hidden}
+      .top-safe{position:fixed;top:0;left:0;right:0;height:var(--topSafe);background:#fff;z-index:1045}
+       nav.navbar{position:fixed!important;top:var(--topSafe)!important;left:0!important;right:0!important;z-index:1044!important;height:var(--navH)!important;backdrop-filter:blur(18px)!important;background:rgba(255,255,255,0.96)!important;border-bottom:1px solid #e9eef5!important;box-shadow:0 1px 0 #f1f5f9,0 8px 24px rgba(15,23,42,.04)!important}
+      .dash-shell{position:fixed;top:calc(var(--navH) + var(--topSafe));left:0;right:0;bottom:calc(var(--footH) + var(--botSafe) + 4px);display:flex;flex-direction:column;background:linear-gradient(180deg,#f6f8fb 0%,#eef2f7 100%);overflow:hidden}
       .dash-fixed-wrap{flex-shrink:0;background:linear-gradient(180deg,#ffffff 0%,#f8fbff 100%);border-bottom:1px solid #e8eef7;box-shadow:0 8px 24px rgba(15,23,42,.05);z-index:10;padding:12px 12px;backdrop-filter:blur(12px)}
       .dash-fixed-inner{max-width:760px;margin:0 auto;width:100%}
       .dash-scroll{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding:12px 12px 0;scrollbar-width:thin}
       .dash-scroll-inner{max-width:760px;margin:0 auto;width:100%;display:flex;flex-direction:column;gap:10px}
-      .bottom-safe-space{height:calc(120px + var(--sab));flex-shrink:0}
+      .bottom-safe-space{height:calc(48px + var(--botSafe));flex-shrink:0}
       .my-pcw-fixed{width:100%;display:flex;flex-direction:column;gap:10px}
       .my-pcc{background:#fff;border:1px solid #e9eef5;border-radius:20px;display:flex;align-items:center;gap:14px;padding:14px 16px;box-shadow:0 2px 12px rgba(15,23,42,.04);transition:.2s;cursor:pointer}
       .my-pcr{position:relative;flex-shrink:0}.my-ring{width:64px;height:64px;border-radius:50%;padding:3px;background:linear-gradient(135deg,#0ea5e9 0%,#2563eb 45%,#7c3aed 100%);display:flex;align-items:center;justify-content:center;overflow:hidden}.my-av{width:58px;height:58px;border-radius:50%;object-fit:cover;display:block;background:#fff;border:2px solid #fff}.my-cam{position:absolute;right:-2px;bottom:-1px;width:22px;height:22px;background:#0ea5e9;border:2.5px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff}

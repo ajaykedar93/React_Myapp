@@ -33,11 +33,19 @@ export default function ChannelChatScreen(){
   const getHeaders=()=>({ Authorization:`Bearer ${getToken()}`, "x-device-id":getDeviceId() });
   const getHeadersNoCT=()=>({ Authorization:`Bearer ${getToken()}`, "x-device-id":getDeviceId() });
 
+
   useEffect(()=>{
-    const vp=window.visualViewport;
+    const vp = window.visualViewport;
     if(!vp) return;
-    const onResize=()=>{ const diff=window.innerHeight - vp.height; setKbHeight(diff>100?diff:0); if(diff>100) scrollBottom(); };
-    vp.addEventListener('resize',onResize); return()=>vp.removeEventListener('resize',onResize);
+    const onResize = ()=>{
+      const diff = window.innerHeight - vp.height;
+      const height = diff > 80 ? diff : 0;
+      setKbHeight(height);
+      if(height) scrollBottom();
+    };
+    onResize();
+    vp.addEventListener('resize', onResize);
+    return ()=>vp.removeEventListener('resize', onResize);
   },[]);
 
   const fetchChannel=async()=>{ try{ const r=await fetch(`${CHANNEL_API}/${id}`,{headers:getHeaders()}); const d=await r.json(); if(r.ok) setChannel(d.channel||d.data||d); }catch{} };
@@ -191,7 +199,7 @@ export default function ChannelChatScreen(){
         </div>
       </div>
 
-      <div className="input-wrap" style={{paddingBottom:`calc(8px + var(--sab) + ${kbHeight}px)`}}>
+      <div className="input-wrap" style={{marginBottom:`${kbHeight}px`}}>
         <div className="input-box" onClick={()=>{editorRef.current?.focus();}}>
           <div ref={editorRef} contentEditable suppressContentEditableWarning className="editor" data-placeholder="Enter text..." onFocus={()=>{ setTimeout(()=>placeCaretAtEnd(editorRef.current),10); scrollBottom(); }} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault(); sendNote();}}}></div>
         </div>
@@ -211,10 +219,10 @@ export default function ChannelChatScreen(){
 
       <style>{`
 *{box-sizing:border-box}
-:root{--sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px)}
-.chat-shell{position:fixed;inset:0;display:flex;flex-direction:column;background:#f6f7fb;padding-top:var(--sat);width:100vw;max-width:100vw;overflow:hidden}
-.nav-dark-outer{padding:calc(6px + var(--sat)) 10px 6px;flex-shrink:0;background:#f6f7fb}
-.nav-dark-inner{height:66px;background:linear-gradient(135deg,#ffffff 0%,#f0f9ff 46%,#e0f2fe 100%);border:1px solid #dbeafe;border-radius:22px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;box-shadow:0 8px 24px rgba(14,165,233,.18);position:relative;overflow:hidden}
+:root{--sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px);--topSafe:min(var(--sat),10px);--botSafe:min(var(--sab),8px)}
+.chat-shell{position:fixed;inset:0;display:flex;flex-direction:column;background:#f6f7fb;padding-top:var(--topSafe);width:100vw;max-width:100vw;overflow:hidden}
+.nav-dark-outer{padding:calc(4px + var(--topSafe)) 10px 4px;flex-shrink:0;background:#f6f7fb}
+.nav-dark-inner{height:64px;background:linear-gradient(135deg,#ffffff 0%,#f0f9ff 46%,#e0f2fe 100%);border:1px solid #dbeafe;border-radius:22px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;box-shadow:0 8px 24px rgba(14,165,233,.18);position:relative;overflow:hidden}
 .nav-dark-btn{width:42px;height:42px;min-width:42px;border-radius:14px;background:linear-gradient(180deg,#fff,#f8fbff);border:1px solid #dbeafe;display:flex;align-items:center;justify-content:center;transition:transform .15s,box-shadow .15s}
 .nav-dark-btn:hover{transform:translateY(-1px);box-shadow:0 8px 18px rgba(14,165,233,.12)}
 .nav-dark-mid{display:flex;align-items:center;gap:10px;flex:1;margin:0 10px;min-width:0}
@@ -256,8 +264,8 @@ export default function ChannelChatScreen(){
 .fmt-b{width:44px;height:44px;min-width:44px;border-radius:12px;border:1px solid #e2e8f0;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
 .fmt-b.bold{background:#eff6ff;color:#2563eb}.fmt-b.under{background:#ede9fe;color:#7c3aed}.fmt-b.pal{background:#fef3c7;color:#d97706}.fmt-b.imgbtn{background:#f0fdf4;color:#16a34a}.fmt-b.filebtn{background:#ffedd5;color:#ea580c}
 .fmt-b.on{background:#0f172a!important;color:#fff!important}
-.input-wrap{display:flex;gap:8px;padding:10px 12px;background:#fff;border-top:1px solid #e2e8f0;align-items:flex-end;flex-shrink:0;transition:all.18s ease}
-.input-box{flex:1;border:1.5px solid #e2e8f0;border-radius:24px;background:#f8fafc;padding:3px 16px;transition:all.18s ease;min-height:46px;display:flex;align-items:center}
+.input-wrap{display:flex;gap:8px;padding:8px 12px 8px;background:#fff;border-top:1px solid #e2e8f0;align-items:flex-end;flex-shrink:0;transition:all.18s ease}
+.input-box{flex:1;border:1.5px solid #e2e8f0;border-radius:24px;background:#f8fafc;padding:4px 14px;transition:all.18s ease;min-height:44px;display:flex;align-items:center}
 .input-box:focus-within{border-color:#7c3aed;background:#fff;box-shadow:0 0 0 4px rgba(124,58,237,0.12);transform:translateY(-1px)}
 .input-box:active{transform:scale(0.985)}
 .editor{flex:1;min-height:20px;max-height:100px;border:none;outline:none;background:transparent;font-size:14.5px;padding:8px 0;overflow-y:auto;white-space:pre-wrap}.editor:empty:before{content:attr(data-placeholder);color:#94a3b8}

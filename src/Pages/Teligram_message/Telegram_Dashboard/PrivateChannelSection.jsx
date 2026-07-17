@@ -2,8 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Modal, Spinner, Button, Form } from 'react-bootstrap';
 import { ThreeDotsVertical, LockFill, PencilSquare, Trash, Share, Link45deg, Search, CheckLg, XLg, Camera, PencilFill, ExclamationTriangle, ZoomIn, ZoomOut } from 'react-bootstrap-icons';
 
-const API_BASE = "https://express-backend-myapp.onrender.com";
-const FRONTEND_BASE = "https://react-myapp-omega.vercel.app";
+const API_BASE = (import.meta.env.VITE_API_URL || "https://express-backend-myapp.onrender.com").replace(/\/$/, "");
+const FRONTEND_BASE = (import.meta.env.VITE_APP_URL || "https://react-myapp-omega.vercel.app").replace(/\/$/, "");
 const API = `${API_BASE}/api/telegramlogin-channels`;
 const USERS_API = `${API_BASE}/api/telegramlogin-users`;
 const ALLMISS_API = `${API_BASE}/api/telegramlogin-allmiss`;
@@ -11,8 +11,12 @@ const ALLMISS_API = `${API_BASE}/api/telegramlogin-allmiss`;
 const getToken = () => localStorage.getItem("telegram_token") || localStorage.getItem("token") || "";
 const getDeviceId = () => { let id=localStorage.getItem("telegram_device_id"); if(!id){ id=`dev_${Date.now()}${Math.random().toString(36).slice(2,6)}`; localStorage.setItem("telegram_device_id",id);} return id; };
 const getUid = ()=>{ try{ const t=getToken(); if(!t) return 0; const p=JSON.parse(atob(t.split('.')[1])); return Number(p.telegram_user_id||p.id||0);}catch{return 0;} };
-const img = (u)=>{ if(!u) return `https://ui-avatars.com/api/?name=P&background=fee2e2&color=991b1b`; if(u.startsWith("data:")||u.startsWith("http")) return u; if(u.startsWith("/")) return `${API_BASE}${u}`; return u; };
+const normalizeLogoUrl = (u)=>{ if(!u) return ""; const value = String(u).trim(); if(value.startsWith("data:")||value.startsWith("blob:")) return value; if(/^https?:\/\//i.test(value)) return value; if(value.startsWith("/")) return `${API_BASE}${value}`; if(value.startsWith("api/")) return `${API_BASE}/${value}`; return `${API_BASE}/${value}`; };
+const defaultAvatar = (name="P") => `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=fee2e2&color=991b1b`;
+const appendCacheBuster = (url)=>{ if(!url) return url; if(url.startsWith('data:')||url.startsWith('blob:')) return url; return `${url}${url.includes('?')?'&':'?'}v=${Date.now()}`; };
 const fmt = (iso)=>{ try{ if(!iso) return ""; const d=new Date(iso); if(isNaN(d)) return ""; return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric',timeZone:'Asia/Kolkata'});}catch{return "";} };
+const getChannelLogo = (ch)=>{ const raw = ch.logo_url||ch.channel_logo_url||ch.channel_logo||""; const resolved = normalizeLogoUrl(raw); return resolved || defaultAvatar(ch.channel_name||"P"); };
+const handleImgError = (e, name)=>{ const fallback = defaultAvatar(name||"P"); if(e.currentTarget.src !== fallback){ e.currentTarget.onerror = null; e.currentTarget.src = fallback; } };
 const isOwner = (ch)=>{ try{ const uid=String(getUid()); const raw=localStorage.getItem("my_created_channels"); const my=raw?JSON.parse(raw):[]; if(uid==="0") return my.includes(String(ch.channel_id||ch.id)); return String(ch.created_by_user_id)===uid || ch.is_owner===true || String(ch.member_role||"").toLowerCase()==="owner" || my.includes(String(ch.channel_id||ch.id)); }catch{ return ch.is_owner===true; } };
 const getJoinUrl = (ch) => `${FRONTEND_BASE}/#/channel/join/${ch.share_code||ch.channel_id||ch.id}`;
 const isTrusted = (id) => { try{ return localStorage.getItem(`priv_trust_${id}_${getDeviceId()}`)==="1"; }catch{return false;} };
@@ -23,7 +27,7 @@ export default function PrivateChannelSection({ channels=[], onUpdated, onDelete
   const [menuUp,setMenuUp]=useState(false);
   const [preview,setPreview]=useState(null);
   const [edit,setEdit]=useState({show:false,ch:null,name:"",desc:"",file:null,prev:"",loading:false});
-  const [adjust,setAdjust]=useState({open:false,src:"",scale:1,pos:{x:0,y:0},dragging:false,start:{x:0,y:0},modified:false});
+  const [adjust,setAdjust]=useState({open:false,src:"",scale:1,pos:{x:0,y:0},dragging:false,start:{x:0,y:0},modified:false,preview:""});
   const [share,setShare]=useState({show:false,ch:null,users:[],filtered:[],sel:[],search:"",pinInput:"",loading:false,fetching:false});
   const [pinBox,setPinBox]=useState({show:false,mode:"open",ch:null,pin:"",trust:true,err:"",loading:false});
   const [toast,setToast]=useState({show:false,msg:"",t:"success"});
@@ -76,11 +80,14 @@ export default function PrivateChannelSection({ channels=[], onUpdated, onDelete
   const onAdjustMove=(e)=>{ if(!adjust.dragging) return; const point=getPoint(e); setAdjust(a=>({...a,pos:{x:point.x-a.start.x,y:point.y-a.start.y},modified:true})); };
   const onAdjustUp=()=>{ if(adjust.dragging) setAdjust(a=>({...a,dragging:false})); };
   const onAdjustWheel=(e)=>{ if(!adjust.open) return; e.preventDefault(); const delta = e.deltaY > 0 ? -0.05 : 0.05; setAdjust(a=>({ ...a, scale: Math.min(3, Math.max(1, a.scale + delta)), modified:true })); };
-  const createAdjustedLogo=()=>{
+  const createAdjustedLogo=({withPreview=false}={})=>{
     return new Promise((resolve)=>{
       const sourceUrl = adjust.src || (edit.file ? URL.createObjectURL(edit.file) : "");
-      if(!sourceUrl){ resolve(edit.file); return; }
-      const image=new Image(); image.crossOrigin="anonymous";
+      if(!sourceUrl){ resolve(withPreview?{file:edit.file,preview:edit.prev}:edit.file); return; }
+      const image=new Image();
+      if (/^https?:\/\//i.test(sourceUrl)) {
+        image.crossOrigin = "anonymous";
+      }
       const tempUrl = (!adjust.src && edit.file) ? sourceUrl : null;
       image.onload=()=>{
         const size=500; const canvas=document.createElement('canvas'); canvas.width=size; canvas.height=size;
@@ -94,18 +101,33 @@ export default function PrivateChannelSection({ channels=[], onUpdated, onDelete
         const y=size/2 + adjust.pos.y - height/2;
         ctx.drawImage(image,x,y,width,height);
         ctx.restore();
-        canvas.toBlob((blob)=>{
+        const finalize=(blob)=>{
           if(tempUrl) URL.revokeObjectURL(tempUrl);
-          if(blob){ resolve(new File([blob],`channel_logo_${Date.now()}.png`,{type:'image/png'})); }
-          else { resolve(edit.file); }
-        },'image/png');
+          if(blob){
+            const file=new File([blob],`channel_logo_${Date.now()}.png`,{type:'image/png'});
+            if(withPreview){ resolve({file,preview:canvas.toDataURL('image/png')}); }
+            else { resolve(file); }
+          } else {
+            resolve(withPreview?{file:edit.file,preview:edit.prev}:edit.file);
+          }
+        };
+        canvas.toBlob((blob)=>finalize(blob),'image/png');
       };
       image.onerror=()=>{
         if(tempUrl) URL.revokeObjectURL(tempUrl);
-        resolve(edit.file);
+        resolve(withPreview?{file:edit.file,preview:edit.prev}:edit.file);
       };
       image.src=sourceUrl;
     });
+  };
+  const applyAdjustedPreview=async()=>{
+    const result = await createAdjustedLogo({withPreview:true});
+    if(result?.preview){
+      setEdit(s=>({...s,prev:result.preview}));
+      setAdjust(a=>({...a,open:false,preview:result.preview,modified:true}));
+    } else {
+      setAdjust(a=>({...a,open:false}));
+    }
   };
   const onLogoPick = (e) => {
     const f=e.target.files?.[0]; if(!f) return;
@@ -122,18 +144,37 @@ export default function PrivateChannelSection({ channels=[], onUpdated, onDelete
     try{
       const fd=new FormData();
       fd.append("channel_name",edit.name.trim());
+      fd.append("name",edit.name.trim());
       fd.append("channel_description",(edit.desc||"").trim());
+      fd.append("description",(edit.desc||"").trim());
       fd.append("device_id",getDeviceId());
       if(edit.file || adjust.modified){
         const adjustedFile = await createAdjustedLogo();
-        if(adjustedFile) fd.append("channel_logo",adjustedFile);
+        if(adjustedFile) {
+          fd.append("channel_logo",adjustedFile);
+        } else {
+          throw new Error("Logo processing failed");
+        }
       }
       const id=edit.ch.channel_id||edit.ch.id;
-      const res=await fetch(`${API}/${id}`,{method:"PUT",headers:{Authorization:`Bearer ${getToken()}`,"x-device-id":getDeviceId()},body:fd});
+      const url = (edit.file || adjust.modified) ? `${API}/${id}/logo` : `${API}/${id}`;
+      const res=await fetch(url,{method:"PUT",headers:{Authorization:`Bearer ${getToken()}`,"x-device-id":getDeviceId()},body:fd});
       const d=await res.json(); if(!res.ok) throw new Error(d.message||"Update failed");
       const updated = d.channel||d.data||d;
-      const updatedChannel = {...edit.ch,...updated,channel_logo_url:updated.channel_logo_url||updated.logo_url||updated.channel_logo||edit.prev,logo_zoom:adjust.scale,logo_x:adjust.pos.x,logo_y:adjust.pos.y};
-      onUpdated?.(updatedChannel); setEdit({show:false,ch:null,name:"",desc:"",file:null,prev:"",loading:false}); setAdjust({open:false,src:"",scale:1,pos:{x:0,y:0},dragging:false,start:{x:0,y:0},modified:false}); toastC("Private updated");
+      const updatedLogo = updated.channel_logo_url||updated.logo_url||updated.channel_logo||edit.prev;
+      const updatedChannel = {
+        ...edit.ch,
+        ...updated,
+        channel_logo_url: appendCacheBuster(updatedLogo),
+        logo_url: appendCacheBuster(updatedLogo),
+        logo_zoom:adjust.scale,
+        logo_x:adjust.pos.x,
+        logo_y:adjust.pos.y,
+      };
+      onUpdated?.(updatedChannel);
+      setEdit({show:false,ch:null,name:"",desc:"",file:null,prev:"",loading:false});
+      setAdjust({open:false,src:"",scale:1,pos:{x:0,y:0},dragging:false,start:{x:0,y:0},modified:false,preview:""});
+      toastC("Private updated");
     }catch(e){ toastC(e.message,"danger"); setEdit(s=>({...s,loading:false})); }
   };
 
@@ -210,7 +251,7 @@ export default function PrivateChannelSection({ channels=[], onUpdated, onDelete
           <div className="grid">{list.map(ch=>{ const id=String(ch.channel_id||ch.id); const logo=ch.logo_url||ch.channel_logo_url||""; const owner=isOwner(ch); const trusted=isTrusted(id); const active=menuId===id; return(
             <div key={id} className={`pcard privcard ${active?'menu-open':''}`} onClick={(e)=>openCard(ch,e)}>
               <div className="pcard-top">
-                <div className="logo no-open" onClick={()=>setPreview(img(logo))}><img src={img(logo)} alt="" style={ch.logo_zoom?{transform:`translate(${ch.logo_x||0}px,${ch.logo_y||0}px) scale(${ch.logo_zoom||1})`}:undefined}/></div>
+                <div className="logo no-open" onClick={()=>setPreview(getChannelLogo(ch))}><img src={getChannelLogo(ch)} alt="" onError={(e)=>handleImgError(e,ch.channel_name||'P')} style={ch.logo_zoom?{transform:`translate(${ch.logo_x||0}px,${ch.logo_y||0}px) scale(${ch.logo_zoom||1})`}:undefined}/></div>
                 <div className="pinfo"><div className="pname">{ch.channel_name||"Private"}</div><div className="row2"><span className="pbadge priv">Private</span><span className="pdate">{fmt(ch.created_at)}</span>{!owner && trusted && <span className="pinchip">Trusted</span>}</div></div>
                 <div className="mdot-wrap no-open">
                   <button className="mdot" onClick={(e)=>handleDotClick(e,id)}><ThreeDotsVertical size={14}/></button>
@@ -235,7 +276,7 @@ export default function PrivateChannelSection({ channels=[], onUpdated, onDelete
         <div className="mbody">
           <div className="logo-block">
             <div className="logo-circle" onClick={()=>fileRef.current?.click()}>
-              {edit.prev? <img src={img(edit.prev)} alt="" /> : <Camera size={20} color="#94a3b8"/>}
+              {edit.prev? <img src={edit.prev?.startsWith('data:')?edit.prev:normalizeLogoUrl(edit.prev)} alt="" onError={(e)=>handleImgError(e,edit.name||'P')} /> : <Camera size={20} color="#94a3b8"/>}
             </div>
             <input ref={fileRef} type="file" hidden accept="image/*" onChange={onLogoPick}/>
             <div className="logo-below" onClick={()=>fileRef.current?.click()}><PencilFill size={10}/> Tap to change</div>
@@ -264,7 +305,7 @@ export default function PrivateChannelSection({ channels=[], onUpdated, onDelete
           <div className="adjust-foot">Drag image to reposition. Use zoom buttons or mouse wheel.</div>
           <div className="mfoot">
             <button className="cb-cancel" onClick={()=>setAdjust(a=>({...a,open:false,dragging:false}))}>Close</button>
-            <button className="cb-save" onClick={()=>setAdjust(a=>({...a,open:false}))}>Done</button>
+            <button className="cb-save" onClick={applyAdjustedPreview}>Done</button>
           </div>
         </div>
       </Modal>
