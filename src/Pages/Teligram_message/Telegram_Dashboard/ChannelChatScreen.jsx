@@ -179,6 +179,7 @@ export default function ChannelChatScreen(){
               <div id={`msg_${note.note_id}`} className={`msg ${isMe?'me':'other'}`}>
                 {!isMe && <div className="avatar" style={{background:ubg,borderColor:uborder,color:uborder}}>{(note.created_by_name||"U")[0].toUpperCase()}</div>}
                 <div className={`bubble ${isPinned?'is-pinned':''}`}>
+                  <div className="sender-badge" style={isMe?{background:'#eff6ff',borderColor:'#bfdbfe',color:'#1d4ed8'}:{background:ubg,borderColor:uborder,color:uborder}}>{isMe?'You':(note.created_by_name||note.created_by_username||'Member')}</div>
                   {isPinned && <div className="pin-only-badge"><PinAngleFill size={8}/> Pinned</div>}
                   {isImg && <div className="img-card" onClick={(e)=>{e.stopPropagation(); imgUrl? viewBig(note.note_id):loadSmall(note.note_id);}}>{imgUrl? <img src={imgUrl} className="img-full" alt=""/> : <div className="tap">{isLoadingThis? <Spinner animation="border" size="sm"/> : <><ImgIcon size={12}/><span>Tap to load</span></>}</div>}</div>}
                   {isFile && <div className="file-card"><span className="file-ico">{getFileIcon(note.attachment_name)}</span><div className="file-meta"><b>{note.attachment_name}</b><small>{(note.attachment_name||"").split('.').pop()} • Tap</small></div><button className="file-dl" onClick={(e)=>{e.stopPropagation(); downloadOne(note);}}><Download size={11}/></button></div>}
@@ -263,6 +264,7 @@ export default function ChannelChatScreen(){
 .msg{display:flex;gap:6px}.msg.me{justify-content:flex-end}.msg.hl{outline:2px solid #facc15;border-radius:12px}
 .avatar{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;border:1px solid;align-self:flex-end;flex-shrink:0}
 .bubble{position:relative;max-width:76%;background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:10px 24px 10px 12px;box-shadow:0 2px 10px rgba(0,0,0,0.05)}
+.sender-badge{display:inline-flex;align-items:center;max-width:100%;margin-bottom:6px;padding:2px 7px;border:1px solid;border-radius:999px;font-size:9px;line-height:1.2;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bubble.is-pinned{border-color:#facc15;background:#fffbeb}
 .pin-only-badge{font-size:9px;font-weight:700;background:#facc15;color:#78350f;padding:2px 8px;border-radius:999px;display:inline-flex;align-items:center;gap:4px;margin-bottom:6px}
 .b-text{font-size:13.5px;line-height:1.45;word-break:break-word;color:#0f172a}

@@ -64,13 +64,13 @@ export default function DashboardNavbar({ onRefresh, onLogout }) {
       await navigator.clipboard.writeText(req.inviteUrl).catch(()=>{});
       try{ await fetch(`${ALLMISS_API}/received-links/${req.id}`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`,"x-device-id":did},body:JSON.stringify({action:"accept"})}); }catch{}
       setRequests(p=>p.filter(x=>x.id!==req.id));
-      toastC("URL copied - Join Box madhe paste kara");
+      toastC("Link copied — paste it in the Join Channel box");
       if(requests.length<=1) setTimeout(()=>setShow(false),300);
     }else{
       // FAKT URL COPY, PIN NAKO COPY
       await navigator.clipboard.writeText(req.inviteUrl).catch(()=>{});
       setAcceptedMap(m=>({...m,[req.id]:true}));
-      toastC(`URL copied - PIN ${req.pin} lakshat theva, open kartana lagel`);
+      toastC(`Link copied — remember PIN ${req.pin}; you need it to open this private channel`);
     }
   };
 
@@ -119,7 +119,7 @@ export default function DashboardNavbar({ onRefresh, onLogout }) {
                        {r.type==="private" &&!isPrivAccepted && <span className="sub-text">Accept to see PIN</span>}
                        {r.type==="private" && isPrivAccepted && <span className="pin-pill"><ShieldLock size={10}/> PIN: <b>{r.pin}</b></span>}
                      </div>
-                     {r.type==="private" && isPrivAccepted && <div className="pin-hint">URL copied - Join kara, nanter open la ha PIN taka - open jhala ki request auto delete</div>}
+                     {r.type==="private" && isPrivAccepted && <div className="pin-hint">Link copied. Keep this PIN safe — you need it to open the private channel.</div>}
                    </div>
                    <div className="req-act">
                      {!isPrivAccepted? (
@@ -128,7 +128,7 @@ export default function DashboardNavbar({ onRefresh, onLogout }) {
                          <button className="sbtn reject" onClick={()=>handleReject(r.id)}><XLg size={10}/>Reject</button>
                        </>
                      ) : (
-                       r.type==="private"? <div className="accepted-label">PIN saved - Open channel</div> : null
+                       r.type==="private"? <div className="accepted-label">PIN saved — open channel when ready</div> : null
                      )}
                      {isPrivAccepted && r.type==="private" && <button className="sbtn reject small" onClick={()=>handleReject(r.id)}>Dismiss</button>}
                    </div>
