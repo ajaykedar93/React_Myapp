@@ -25,7 +25,7 @@ export default function ChannelChatScreen(){
   const [imgViewer,setImgViewer]=useState({open:false,url:""}); const [logoView,setLogoView]=useState(false);
   const [boldOn,setBoldOn]=useState(false); const [ulOn,setUlOn]=useState(false); const [showFmt,setShowFmt]=useState(false);
   const [pinned,setPinned]=useState(()=>{ try{ return JSON.parse(localStorage.getItem(`pinned_${id}`)||"[]"); }catch{ return []; } });
-  const listRef=useRef(null); const editorRef=useRef(null); const fileRef=useRef(null); const imgRef=useRef(null); const myId=getMyId();
+  const listRef=useRef(null); const editorRef=useRef(null); const fileRef=useRef(null); const imgRef=useRef(null); const selectionRef=useRef(null); const myId=getMyId();
   const showToast=(m,green=false)=>{ setToast({show:true,msg:m,green}); setTimeout(()=>setToast({show:false,msg:"",green:false}),1100); };
   const scrollBottom=()=> setTimeout(()=> listRef.current?.scrollTo({top:listRef.current.scrollHeight, behavior:'smooth'}),100);
   const scrollToMsg=(nid)=>{ const el=document.getElementById(`msg_${nid}`); if(el){ el.scrollIntoView({behavior:'smooth',block:'center'}); el.classList.add('hl'); setTimeout(()=>el.classList.remove('hl'),1500); } };
@@ -37,7 +37,18 @@ export default function ChannelChatScreen(){
   useEffect(()=>{ fetchChannel(); fetchNotes(); },[id]);
 
   const placeCaretAtEnd=(el)=>{ if(!el) return; el.focus(); const range=document.createRange(); range.selectNodeContents(el); range.collapse(false); const sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(range); };
-  const exec=(cmd,val=null)=>{ if(!editorRef.current) return; editorRef.current.focus(); document.execCommand(cmd,false,val); setTimeout(()=>placeCaretAtEnd(editorRef.current),10); };
+  const rememberEditorSelection=()=>{
+    const selection=window.getSelection();
+    if(selection?.rangeCount && editorRef.current?.contains(selection.getRangeAt(0).commonAncestorContainer)) selectionRef.current=selection.getRangeAt(0).cloneRange();
+  };
+  const exec=(cmd,val=null)=>{
+    if(!editorRef.current) return;
+    editorRef.current.focus();
+    if(selectionRef.current){ const selection=window.getSelection(); selection.removeAllRanges(); selection.addRange(selectionRef.current); }
+    document.execCommand('styleWithCSS', false, true);
+    document.execCommand(cmd,false,val);
+    rememberEditorSelection();
+  };
 
   const loadSmall=async(nid)=>{
     if(attachUrls[nid]) return attachUrls[nid];
@@ -89,7 +100,8 @@ export default function ChannelChatScreen(){
     const tempId=`tmp_${Date.now()}`; const tempFile=file; const tempPreview=filePreview;
     const optimistic={note_id:tempId, channel_id:Number(id), created_by_user_id:myId, created_by_name:"You", note_text: html||text, attachment_available:!!tempFile, attachment_category:tempFile?.type?.startsWith('image/')?'image': tempFile?'file':'text', attachment_name:tempFile?.name||"", created_at:new Date().toISOString()};
     setNotes(p=>[...p, optimistic]); if(tempPreview) setAttachUrls(p=>({...p,[tempId]:tempPreview}));
-    if(editorRef.current) editorRef.current.innerHTML=""; setFile(null); setFilePreview(""); setBoldOn(false); setUlOn(false); scrollBottom();
+    if(editorRef.current){ editorRef.current.innerHTML=""; editorRef.current.focus(); document.execCommand('removeFormat',false,null); rememberEditorSelection(); } setFile(null); setFilePreview(""); setBoldOn(false); setUlOn(false);
+    requestAnimationFrame(scrollBottom);
     try{ const fd=new FormData(); fd.append('device_id',getDeviceId()); fd.append('note_text',html||text); if(tempFile) fd.append('attachment',tempFile); const res=await fetch(`${NOTES_API}/${id}/add`,{method:'POST',headers:getHeadersNoCT(),body:fd}); const d=await res.json(); if(!res.ok) throw new Error(); setNotes(p=>p.map(n=> String(n.note_id)===tempId? d.note : n)); if(tempPreview && d.note) setAttachUrls(p=>{ const np={...p}; np[d.note.note_id]=tempPreview; delete np[tempId]; return np; }); }catch{ setNotes(p=>p.filter(n=> String(n.note_id)!==tempId)); showToast("Failed"); }
   };
   const startEdit=(note)=>{ setEditingId(note.note_id); setMenuId(null); setShowFmt(true); setTimeout(()=>{ if(editorRef.current){ editorRef.current.innerHTML=note.note_text||""; placeCaretAtEnd(editorRef.current); }},60); };
@@ -175,8 +187,8 @@ export default function ChannelChatScreen(){
       <div className="fmt-row">
         <button className="fmt-main" onClick={(e)=>{e.stopPropagation(); setShowFmt(!showFmt);}}>{showFmt? <DashLg size={18}/>: <PlusLg size={18}/>}</button>
         <div className={`fmt-bar ${showFmt?'open':''}`}>
-          <button className={`fmt-b bold ${boldOn?'on':''}`} onClick={()=>{setBoldOn(!boldOn); exec('bold');}}><TypeBold size={16}/></button>
-          <button className={`fmt-b under ${ulOn?'on':''}`} onClick={()=>{setUlOn(!ulOn); exec('underline');}}><TypeUnderline size={16}/></button>
+          <button className={`fmt-b bold ${boldOn?'on':''}`} onPointerDown={e=>e.preventDefault()} onMouseDown={e=>e.preventDefault()} onClick={()=>{setBoldOn(!boldOn); exec('bold');}}><TypeBold size={16}/></button>
+          <button className={`fmt-b under ${ulOn?'on':''}`} onPointerDown={e=>e.preventDefault()} onMouseDown={e=>e.preventDefault()} onClick={()=>{setUlOn(!ulOn); exec('underline');}}><TypeUnderline size={16}/></button>
           <label className="fmt-b pal"><Palette size={16}/><input type="color" hidden onChange={e=>exec('foreColor',e.target.value)} /></label>
           <label className="fmt-b imgbtn"><ImgIcon size={16}/><input ref={imgRef} type="file" accept="image/*" hidden onChange={onFileSelect} /></label>
           <label className="fmt-b filebtn"><Paperclip size={16}/><input ref={fileRef} type="file" accept=".pdf,.xls,.xlsx,.doc,.docx,.txt,.csv" hidden onChange={onFileSelect} /></label>
@@ -185,7 +197,7 @@ export default function ChannelChatScreen(){
 
       <div className="input-wrap">
         <div className="input-box" onClick={()=>{editorRef.current?.focus();}}>
-          <div ref={editorRef} contentEditable suppressContentEditableWarning className="editor" data-placeholder="Enter text..." onFocus={()=>{ setTimeout(()=>placeCaretAtEnd(editorRef.current),10); scrollBottom(); }} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault(); sendNote();}}}></div>
+          <div ref={editorRef} contentEditable suppressContentEditableWarning className="editor" data-placeholder="Enter text..." onFocus={()=>{ setTimeout(()=>{ placeCaretAtEnd(editorRef.current); rememberEditorSelection(); },10); scrollBottom(); }} onInput={rememberEditorSelection} onKeyUp={rememberEditorSelection} onMouseUp={rememberEditorSelection} onTouchEnd={rememberEditorSelection} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault(); sendNote();}}}></div>
         </div>
         <button className="send-out" onClick={sendNote}>{editingId?<CheckLg size={18}/>:<SendFill size={16}/>}</button>
       </div>
@@ -224,11 +236,11 @@ export default function ChannelChatScreen(){
 .date-pill{align-self:center;font-size:9px;font-weight:700;padding:4px 12px;border-radius:999px;border:1px solid}
 .msg{display:flex;gap:6px}.msg.me{justify-content:flex-end}.msg.hl{outline:2px solid #facc15;border-radius:12px}
 .avatar{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;border:1px solid;align-self:flex-end;flex-shrink:0}
-.bubble{position:relative;max-width:76%;background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:10px 24px 18px 12px;box-shadow:0 2px 10px rgba(0,0,0,0.05)}
+.bubble{position:relative;max-width:76%;background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:10px 24px 10px 12px;box-shadow:0 2px 10px rgba(0,0,0,0.05)}
 .bubble.is-pinned{border-color:#facc15;background:#fffbeb}
 .pin-only-badge{font-size:9px;font-weight:700;background:#facc15;color:#78350f;padding:2px 8px;border-radius:999px;display:inline-flex;align-items:center;gap:4px;margin-bottom:6px}
 .b-text{font-size:13.5px;line-height:1.45;word-break:break-word;color:#0f172a}
-.b-time{position:absolute;right:8px;bottom:4px;font-size:9px;color:#94a3b8}
+.b-time{margin-top:4px;text-align:right;font-size:9px;line-height:1;color:#0f172a;font-weight:600}
 .m-dot{position:absolute;top:6px;right:6px;width:18px;height:18px;border-radius:6px;background:#f8fafc;border:1px solid #e2e8f0;display:flex;align-items:center;justify-content:center;cursor:pointer}
 .m-menu{position:absolute;right:0;top:26px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 10px 24px rgba(0,0,0,.14);z-index:99;min-width:120px;padding:4px;display:flex;flex-direction:column;gap:3px}
 .m-menu.up{top:auto;bottom:26px}.m-menu button{height:28px;border:none;display:flex;align-items:center;gap:6px;padding:0 10px;font-size:11px;font-weight:600;border-radius:8px;cursor:pointer;width:100%;background:#fff}
