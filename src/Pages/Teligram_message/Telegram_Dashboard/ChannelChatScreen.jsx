@@ -49,6 +49,31 @@ export default function ChannelChatScreen(){
     document.execCommand(cmd,false,val);
     rememberEditorSelection();
   };
+  const applyColor=(color)=>{
+    if(!editorRef.current) return;
+    editorRef.current.focus();
+    const selection=window.getSelection();
+    if(selectionRef.current){ selection.removeAllRanges(); selection.addRange(selectionRef.current); }
+    if(!selection?.rangeCount) return;
+    const range=selection.getRangeAt(0);
+    const span=document.createElement('span');
+    span.style.color=color;
+    if(range.collapsed){
+      span.appendChild(document.createTextNode('\u200B'));
+      range.insertNode(span);
+      range.setStart(span.firstChild,1);
+      range.collapse(true);
+    }else{
+      const selected=range.extractContents();
+      span.appendChild(selected);
+      range.insertNode(span);
+      range.selectNodeContents(span);
+      range.collapse(false);
+    }
+    selection.removeAllRanges();
+    selection.addRange(range);
+    rememberEditorSelection();
+  };
 
   const loadSmall=async(nid)=>{
     if(attachUrls[nid]) return attachUrls[nid];
@@ -88,7 +113,7 @@ export default function ChannelChatScreen(){
     if(f.type.startsWith('image/')){ const url=URL.createObjectURL(f); setFilePreview(url); } else setFilePreview(""); e.target.value="";
   };
   const sendNote=async()=>{
-    const html=editorRef.current?.innerHTML||""; const text=editorRef.current?.innerText?.trim()||""; if(!text &&!file) return;
+    const html=(editorRef.current?.innerHTML||"").replace(/\u200B/g,""); const text=(editorRef.current?.innerText||"").replace(/\u200B/g,"").trim(); if(!text &&!file) return;
     if(editingId){
       const eid=editingId; const prev=[...notes];
       setNotes(p=>p.map(n=> String(n.note_id)===String(eid)? {...n, note_text: html, attachment_name: file?.name||n.attachment_name} : n));
@@ -189,7 +214,7 @@ export default function ChannelChatScreen(){
         <div className={`fmt-bar ${showFmt?'open':''}`}>
           <button className={`fmt-b bold ${boldOn?'on':''}`} onPointerDown={e=>e.preventDefault()} onMouseDown={e=>e.preventDefault()} onClick={()=>{setBoldOn(!boldOn); exec('bold');}}><TypeBold size={16}/></button>
           <button className={`fmt-b under ${ulOn?'on':''}`} onPointerDown={e=>e.preventDefault()} onMouseDown={e=>e.preventDefault()} onClick={()=>{setUlOn(!ulOn); exec('underline');}}><TypeUnderline size={16}/></button>
-          <label className="fmt-b pal"><Palette size={16}/><input type="color" hidden onChange={e=>exec('foreColor',e.target.value)} /></label>
+          <label className="fmt-b pal"><Palette size={16}/><input type="color" aria-label="Choose text color" onChange={e=>applyColor(e.target.value)} /></label>
           <label className="fmt-b imgbtn"><ImgIcon size={16}/><input ref={imgRef} type="file" accept="image/*" hidden onChange={onFileSelect} /></label>
           <label className="fmt-b filebtn"><Paperclip size={16}/><input ref={fileRef} type="file" accept=".pdf,.xls,.xlsx,.doc,.docx,.txt,.csv" hidden onChange={onFileSelect} /></label>
         </div>
@@ -197,7 +222,7 @@ export default function ChannelChatScreen(){
 
       <div className="input-wrap">
         <div className="input-box" onClick={()=>{editorRef.current?.focus();}}>
-          <div ref={editorRef} contentEditable suppressContentEditableWarning className="editor" data-placeholder="Enter text..." onFocus={()=>{ setTimeout(()=>{ placeCaretAtEnd(editorRef.current); rememberEditorSelection(); },10); scrollBottom(); }} onInput={rememberEditorSelection} onKeyUp={rememberEditorSelection} onMouseUp={rememberEditorSelection} onTouchEnd={rememberEditorSelection} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault(); sendNote();}}}></div>
+          <div ref={editorRef} contentEditable suppressContentEditableWarning className="editor" data-placeholder="Enter text..." onFocus={()=>{ if(!editorRef.current?.textContent) setTimeout(()=>{ placeCaretAtEnd(editorRef.current); rememberEditorSelection(); },10); scrollBottom(); }} onInput={rememberEditorSelection} onKeyUp={rememberEditorSelection} onMouseUp={rememberEditorSelection} onTouchEnd={rememberEditorSelection} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault(); sendNote();}}}></div>
         </div>
         <button className="send-out" onClick={sendNote}>{editingId?<CheckLg size={18}/>:<SendFill size={16}/>}</button>
       </div>
@@ -258,7 +283,7 @@ export default function ChannelChatScreen(){
 .fmt-bar{display:flex;gap:8px;align-items:center;overflow:hidden;max-width:0;opacity:0;transition:all.24s ease;pointer-events:none}
 .fmt-bar.open{max-width:340px;opacity:1;pointer-events:auto}
 .fmt-b{width:44px;height:44px;min-width:44px;border-radius:12px;border:1px solid #e2e8f0;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
-.fmt-b.bold{background:#eff6ff;color:#2563eb}.fmt-b.under{background:#ede9fe;color:#7c3aed}.fmt-b.pal{background:#fef3c7;color:#d97706}.fmt-b.imgbtn{background:#f0fdf4;color:#16a34a}.fmt-b.filebtn{background:#ffedd5;color:#ea580c}
+.fmt-b.bold{background:#eff6ff;color:#2563eb}.fmt-b.under{background:#ede9fe;color:#7c3aed}.fmt-b.pal{position:relative;overflow:hidden;background:#fef3c7;color:#d97706}.fmt-b.pal input[type=color]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}.fmt-b.imgbtn{background:#f0fdf4;color:#16a34a}.fmt-b.filebtn{background:#ffedd5;color:#ea580c}
 .fmt-b.on{background:#0f172a!important;color:#fff!important}
 .input-wrap{display:flex;gap:8px;padding:8px 12px calc(8px + var(--botSafe));background:#fff;border-top:1px solid #e2e8f0;align-items:flex-end;flex-shrink:0;transition:all.18s ease}
 .input-box{flex:1;border:1.5px solid #e2e8f0;border-radius:24px;background:#f8fafc;padding:4px 14px;transition:all.18s ease;min-height:44px;display:flex;align-items:center}
