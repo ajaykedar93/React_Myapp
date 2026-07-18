@@ -189,7 +189,7 @@ export default function Telegram_Dashboard(){
 
       {toast.show&&<div className="jtc"><div className={`jtt ${toast.type}`}><span className="jti">{toast.type==='success'?'✓':'!'}</span>{toast.msg}</div></div>}
       <style>{`
-       :root{--sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px);--topSafe:min(var(--sat),12px);--botSafe:min(var(--sab),8px);--navH:56px;--footH:38px}
+       :root{--sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px);--topSafe:var(--sat);--botSafe:min(var(--sab),8px);--navH:56px;--footH:38px}
        html,body{margin:0;background:#eef2f7;overflow:hidden;height:100dvh}
       .top-safe{position:fixed;top:0;left:0;right:0;height:var(--topSafe);background:#fff;z-index:1045}
        nav.navbar{position:fixed!important;top:var(--topSafe)!important;left:0!important;right:0!important;z-index:1044!important;height:var(--navH)!important;backdrop-filter:blur(18px)!important;background:rgba(255,255,255,0.96)!important;border-bottom:1px solid #e9eef5!important;box-shadow:0 1px 0 #f1f5f9,0 8px 24px rgba(15,23,42,.04)!important}
