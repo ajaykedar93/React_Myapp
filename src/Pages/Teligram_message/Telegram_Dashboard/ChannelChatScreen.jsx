@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Spinner } from 'react-bootstrap';
-import { Search, ThreeDotsVertical, TypeBold, TypeUnderline, Palette, Image as ImgIcon, Paperclip, SendFill, XLg, Calendar, PencilSquare, Trash, Files, Eye, Download, ArrowLeft, CheckLg, LockFill, Globe2, XCircleFill, PlusLg, DashLg, PinAngleFill, FileEarmarkPdfFill, FileEarmarkExcelFill, FileEarmarkWordFill } from 'react-bootstrap-icons';
+import { Search, ThreeDotsVertical, TypeBold, TypeUnderline, Palette, Image as ImgIcon, Paperclip, SendFill, XLg, Calendar, PencilSquare, Trash, Files, Eye, Download, ArrowLeft, CheckLg, LockFill, Globe2, XCircleFill, PlusLg, DashLg, PinAngleFill, FileEarmarkPdfFill, FileEarmarkExcelFill, FileEarmarkWordFill, CodeSlash } from 'react-bootstrap-icons';
 
 const API_BASE = (import.meta.env.VITE_API_URL || "https://express-backend-myapp.onrender.com").replace(/\/$/, "");
 const NOTES_API = `${API_BASE}/api/telegramlogin-notes`;
@@ -226,6 +226,7 @@ export default function ChannelChatScreen(){
         </div>
         <button className="send-out" onClick={sendNote}>{editingId?<CheckLg size={18}/>:<SendFill size={16}/>}</button>
       </div>
+      <div className="chat-dev-footer"><CodeSlash size={13}/><span>Developed By <b>Ajay Kedar</b></span></div>
 
       {imgViewer.open && <div className="viewer" onClick={()=>setImgViewer({open:false,url:""})}><div className="v-box" onClick={e=>e.stopPropagation()}><img src={imgViewer.url} alt=""/><button className="v-close" onClick={()=>setImgViewer({open:false,url:""})}><XLg size={12}/></button></div></div>}
       {logoView && (
@@ -285,7 +286,8 @@ export default function ChannelChatScreen(){
 .fmt-b{width:44px;height:44px;min-width:44px;border-radius:12px;border:1px solid #e2e8f0;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
 .fmt-b.bold{background:#eff6ff;color:#2563eb}.fmt-b.under{background:#ede9fe;color:#7c3aed}.fmt-b.pal{position:relative;overflow:hidden;background:#fef3c7;color:#d97706}.fmt-b.pal input[type=color]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}.fmt-b.imgbtn{background:#f0fdf4;color:#16a34a}.fmt-b.filebtn{background:#ffedd5;color:#ea580c}
 .fmt-b.on{background:#0f172a!important;color:#fff!important}
-.input-wrap{display:flex;gap:8px;padding:8px 12px calc(8px + var(--botSafe));background:#fff;border-top:1px solid #e2e8f0;align-items:flex-end;flex-shrink:0;transition:all.18s ease}
+.input-wrap{display:flex;gap:8px;padding:8px 12px;background:#fff;border-top:1px solid #e2e8f0;align-items:flex-end;flex-shrink:0;transition:all.18s ease}
+.chat-dev-footer{min-height:25px;padding:4px 12px calc(4px + var(--botSafe));display:flex;align-items:center;justify-content:center;gap:5px;background:#fff;border-top:1px solid #f1f5f9;color:#9a3412;font-size:10px;font-weight:700;line-height:1;flex-shrink:0}.chat-dev-footer svg{color:#dc2626;stroke-width:3;flex-shrink:0}.chat-dev-footer b{font-weight:900;color:#7c2d12}
 .input-box{flex:1;border:1.5px solid #e2e8f0;border-radius:24px;background:#f8fafc;padding:4px 14px;transition:all.18s ease;min-height:44px;display:flex;align-items:center}
 .input-box:focus-within{border-color:#7c3aed;background:#fff;box-shadow:0 0 0 4px rgba(124,58,237,0.12);transform:translateY(-1px)}
 .input-box:active{transform:scale(0.985)}
