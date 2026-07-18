@@ -25,28 +25,12 @@ export default function ChannelChatScreen(){
   const [imgViewer,setImgViewer]=useState({open:false,url:""}); const [logoView,setLogoView]=useState(false);
   const [boldOn,setBoldOn]=useState(false); const [ulOn,setUlOn]=useState(false); const [showFmt,setShowFmt]=useState(false);
   const [pinned,setPinned]=useState(()=>{ try{ return JSON.parse(localStorage.getItem(`pinned_${id}`)||"[]"); }catch{ return []; } });
-  const [kbHeight,setKbHeight]=useState(0);
   const listRef=useRef(null); const editorRef=useRef(null); const fileRef=useRef(null); const imgRef=useRef(null); const myId=getMyId();
   const showToast=(m,green=false)=>{ setToast({show:true,msg:m,green}); setTimeout(()=>setToast({show:false,msg:"",green:false}),1100); };
   const scrollBottom=()=> setTimeout(()=> listRef.current?.scrollTo({top:listRef.current.scrollHeight, behavior:'smooth'}),100);
   const scrollToMsg=(nid)=>{ const el=document.getElementById(`msg_${nid}`); if(el){ el.scrollIntoView({behavior:'smooth',block:'center'}); el.classList.add('hl'); setTimeout(()=>el.classList.remove('hl'),1500); } };
   const getHeaders=()=>({ Authorization:`Bearer ${getToken()}`, "x-device-id":getDeviceId() });
   const getHeadersNoCT=()=>({ Authorization:`Bearer ${getToken()}`, "x-device-id":getDeviceId() });
-
-
-  useEffect(()=>{
-    const vp = window.visualViewport;
-    if(!vp) return;
-    const onResize = ()=>{
-      const diff = window.innerHeight - vp.height;
-      const height = diff > 80 ? diff : 0;
-      setKbHeight(height);
-      if(height) scrollBottom();
-    };
-    onResize();
-    vp.addEventListener('resize', onResize);
-    return ()=>vp.removeEventListener('resize', onResize);
-  },[]);
 
   const fetchChannel=async()=>{ try{ const r=await fetch(`${CHANNEL_API}/${id}`,{headers:getHeaders()}); const d=await r.json(); if(r.ok) setChannel(d.channel||d.data||d); }catch{} };
   const fetchNotes=async()=>{ try{ const r=await fetch(`${NOTES_API}/${id}/all`,{headers:getHeaders()}); const d=await r.json(); if(r.ok) setNotes(d.notes||[]); }catch{} finally{ setLoading(false); } };
@@ -199,7 +183,7 @@ export default function ChannelChatScreen(){
         </div>
       </div>
 
-      <div className="input-wrap" style={{marginBottom:`${kbHeight}px`}}>
+      <div className="input-wrap">
         <div className="input-box" onClick={()=>{editorRef.current?.focus();}}>
           <div ref={editorRef} contentEditable suppressContentEditableWarning className="editor" data-placeholder="Enter text..." onFocus={()=>{ setTimeout(()=>placeCaretAtEnd(editorRef.current),10); scrollBottom(); }} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault(); sendNote();}}}></div>
         </div>
@@ -219,8 +203,8 @@ export default function ChannelChatScreen(){
 
       <style>{`
 *{box-sizing:border-box}
-:root{--sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px);--topSafe:min(var(--sat),10px);--botSafe:min(var(--sab),8px)}
-.chat-shell{position:fixed;inset:0;display:flex;flex-direction:column;background:#f6f7fb;padding-top:var(--topSafe);width:100vw;max-width:100vw;overflow:hidden}
+:root{--sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px);--topSafe:var(--sat);--botSafe:var(--sab)}
+.chat-shell{position:fixed;inset:0;display:flex;flex-direction:column;background:#f6f7fb;width:100vw;max-width:100vw;overflow:hidden}
 .nav-dark-outer{padding:calc(4px + var(--topSafe)) 10px 4px;flex-shrink:0;background:#f6f7fb}
 .nav-dark-inner{height:64px;background:linear-gradient(135deg,#ffffff 0%,#f0f9ff 46%,#e0f2fe 100%);border:1px solid #dbeafe;border-radius:22px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;box-shadow:0 8px 24px rgba(14,165,233,.18);position:relative;overflow:hidden}
 .nav-dark-btn{width:42px;height:42px;min-width:42px;border-radius:14px;background:linear-gradient(180deg,#fff,#f8fbff);border:1px solid #dbeafe;display:flex;align-items:center;justify-content:center;transition:transform .15s,box-shadow .15s}
@@ -264,7 +248,7 @@ export default function ChannelChatScreen(){
 .fmt-b{width:44px;height:44px;min-width:44px;border-radius:12px;border:1px solid #e2e8f0;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
 .fmt-b.bold{background:#eff6ff;color:#2563eb}.fmt-b.under{background:#ede9fe;color:#7c3aed}.fmt-b.pal{background:#fef3c7;color:#d97706}.fmt-b.imgbtn{background:#f0fdf4;color:#16a34a}.fmt-b.filebtn{background:#ffedd5;color:#ea580c}
 .fmt-b.on{background:#0f172a!important;color:#fff!important}
-.input-wrap{display:flex;gap:8px;padding:8px 12px 8px;background:#fff;border-top:1px solid #e2e8f0;align-items:flex-end;flex-shrink:0;transition:all.18s ease}
+.input-wrap{display:flex;gap:8px;padding:8px 12px calc(8px + var(--botSafe));background:#fff;border-top:1px solid #e2e8f0;align-items:flex-end;flex-shrink:0;transition:all.18s ease}
 .input-box{flex:1;border:1.5px solid #e2e8f0;border-radius:24px;background:#f8fafc;padding:4px 14px;transition:all.18s ease;min-height:44px;display:flex;align-items:center}
 .input-box:focus-within{border-color:#7c3aed;background:#fff;box-shadow:0 0 0 4px rgba(124,58,237,0.12);transform:translateY(-1px)}
 .input-box:active{transform:scale(0.985)}
