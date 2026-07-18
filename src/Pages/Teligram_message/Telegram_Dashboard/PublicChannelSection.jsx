@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Modal, Spinner, Button } from 'react-bootstrap';
-import { ThreeDotsVertical, XLg, Globe, PencilSquare, Trash, Share, Link45deg, Camera, Search, CheckLg, ExclamationTriangle, PencilFill, ZoomIn, ZoomOut } from 'react-bootstrap-icons';
+import { ThreeDotsVertical, XLg, Globe, PencilSquare, Trash, Share, Link45deg, Camera, Search, CheckLg, ExclamationTriangle, PencilFill, ZoomIn, ZoomOut, ArrowLeft, ArrowRight, ArrowUp, ArrowDown } from 'react-bootstrap-icons';
 
 const API_BASE = (import.meta.env.VITE_API_URL || "https://express-backend-myapp.onrender.com").replace(/\/$/, "");
 const FRONTEND_BASE = (import.meta.env.VITE_APP_URL || "https://react-myapp-omega.vercel.app").replace(/\/$/, "");
@@ -20,6 +20,7 @@ const normalizeLogoUrl = (u)=>{
   if(value.startsWith("api/")) return `${API_BASE}/${value}`;
   return `${API_BASE}/${value}`;
 };
+const resolveImg = (u)=>normalizeLogoUrl(u);
 const defaultAvatar = (name="P") => `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0D8ABC&color=fff`;
 const appendCacheBuster = (url)=>{ if(!url) return url; if(url.startsWith('data:')||url.startsWith('blob:')) return url; return `${url}${url.includes('?')?'&':'?'}v=${Date.now()}`; };
 const formatIST = (iso)=>{ if(!iso) return ""; const d=new Date(iso); return `${d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric',timeZone:'Asia/Kolkata'})}`; };
@@ -157,13 +158,15 @@ export default function PublicChannelSection({ channels=[], onUpdated, onDeleted
       }
       const id=edit.ch.channel_id||edit.ch.id;
       const url = (edit.file || adjust.modified) ? `${API}/${id}/logo` : `${API}/${id}`;
+      const optimisticChannel={...edit.ch,channel_name:edit.name.trim(),channel_description:edit.desc.trim(),logo_url:edit.prev||edit.ch.logo_url,channel_logo_url:edit.prev||edit.ch.channel_logo_url,logo_zoom:adjust.scale,logo_x:adjust.pos.x,logo_y:adjust.pos.y};
+      onUpdated?.(optimisticChannel);
+      setEdit({show:false, ch:null, name:"", desc:"", file:null, prev:"", loading:false});
+      setAdjust({open:false,src:"",scale:1,pos:{x:0,y:0},dragging:false,start:{x:0,y:0},modified:false});
       const res=await fetch(url,{method:"PUT",headers:{Authorization:`Bearer ${getToken()}`,"x-device-id":did},body:fd});
       const d=await res.json(); if(!res.ok) throw new Error(d.message||"Update failed");
       const upd=d.channel||d.data||d;
       const updatedLogo = upd.channel_logo_url||upd.logo_url||upd.channel_logo||edit.prev;
       onUpdated?.({...edit.ch,...upd,channel_name:upd.channel_name||edit.name.trim(),logo_url:appendCacheBuster(updatedLogo),logo_zoom:adjust.scale,logo_x:adjust.pos.x,logo_y:adjust.pos.y});
-      setEdit({show:false, ch:null, name:"", desc:"", file:null, prev:"", loading:false});
-      setAdjust({open:false,src:"",scale:1,pos:{x:0,y:0},dragging:false,start:{x:0,y:0},modified:false});
       toastC("Channel updated");
     }catch(e){ console.error('Public channel update error:', e); toastC(e.message,"danger"); setEdit(s=>({...s,loading:false})); }
   };
@@ -279,6 +282,7 @@ export default function PublicChannelSection({ channels=[], onUpdated, onDeleted
             <input type="range" min="1" max="3" step="0.02" value={adjust.scale} onChange={e=>setAdjust(a=>({...a,scale:parseFloat(e.target.value)}))} className="adj-range" />
             <button type="button" className="adj-btn" onClick={()=>setAdjust(a=>({...a,scale:Math.min(3,a.scale+0.1)}))}><ZoomIn size={14}/></button>
           </div>
+          <div className="move-row"><button type="button" className="move-btn" onClick={()=>setAdjust(a=>({...a,pos:{...a.pos,x:a.pos.x-10},modified:true}))}><ArrowLeft size={13}/></button><button type="button" className="move-btn" onClick={()=>setAdjust(a=>({...a,pos:{...a.pos,y:a.pos.y-10},modified:true}))}><ArrowUp size={13}/></button><button type="button" className="move-btn" onClick={()=>setAdjust(a=>({...a,pos:{...a.pos,y:a.pos.y+10},modified:true}))}><ArrowDown size={13}/></button><button type="button" className="move-btn" onClick={()=>setAdjust(a=>({...a,pos:{...a.pos,x:a.pos.x+10},modified:true}))}><ArrowRight size={13}/></button></div>
           <div className="mfoot">
             <button className="cb-cancel" onClick={()=>setAdjust(a=>({...a,open:false,dragging:false}))}>Close</button>
             <button className="cb-save" onClick={applyAdjustedPreview}>Done</button>
@@ -325,7 +329,7 @@ export default function PublicChannelSection({ channels=[], onUpdated, onDeleted
  .mhead{height:50px;padding:0 16px;display:flex;align-items:center;justify-content:space-between;font-size:13px;font-weight:800;border-bottom:1px solid #f1f5f9;background:#fff;flex-shrink:0}.mx{width:30px;height:30px;border-radius:8px;border:1px solid #e2e8f0;background:#fff;display:flex;align-items:center;justify-content:center;transition:.15s}.mx:active{transform:scale(.9)}
  .mbody{padding:16px;background:#fff;max-height:70vh;overflow-y:auto}.mfoot{display:flex;gap:8px;padding:12px 16px calc(12px + env(safe-area-inset-bottom));border-top:1px solid #f1f5f9;background:#fff;flex-shrink:0}
  .ff{margin-bottom:12px}.ff label{font-size:11px;font-weight:700;margin-bottom:5px;display:block;color:#334155}.inp{width:100%;border:1px solid #e2e8f0;border-radius:12px;padding:0 12px;font-size:13px;outline:none;background:#fff;height:42px}.inp.area{height:60px;padding:10px 12px;resize:none}
- .logo-block{display:flex;flex-direction:column;align-items:center;gap:7px;margin-bottom:16px}.logo-circle{width:76px;height:76px;border-radius:50%;border:1.5px dashed #cbd5e1;background:#f8fafc;display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer}.logo-circle img{width:100%;height:100%;object-fit:cover}.logo-below{font-size:10px;font-weight:700;color:#64748b;display:flex;align-items:center;gap:4px;cursor:pointer}.adj-link{font-size:11px;font-weight:700;color:#2563eb;border:none;background:transparent;cursor:pointer;display:flex;align-items:center;gap:4px}.adjust-area{position:relative;width:100%;height:260px;border:1px solid #e2e8f0;border-radius:16px;background:#f8fafc;overflow:hidden;display:flex;align-items:center;justify-content:center;margin-bottom:12px}.adjust-area img{max-width:none;min-width:100%;min-height:100%;user-select:none;pointer-events:none}.adjust-mask{position:absolute;inset:0;box-shadow:inset 0 0 0 9999px rgba(15,23,42,.35);border-radius:16px;pointer-events:none}.control-row{display:flex;align-items:center;gap:8px;margin-bottom:10px}.adj-btn{width:36px;height:36px;border-radius:12px;border:1px solid #e2e8f0;background:#fff;color:#0f172a;display:flex;align-items:center;justify-content:center;cursor:pointer}.adj-range{flex:1;height:28px}.adjust-foot{font-size:11px;color:#64748b;text-align:center;margin-bottom:8px}
+ .logo-block{display:flex;flex-direction:column;align-items:center;gap:7px;margin-bottom:16px}.logo-circle{width:76px;height:76px;border-radius:50%;border:1.5px dashed #cbd5e1;background:#f8fafc;display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer}.logo-circle img{width:100%;height:100%;object-fit:cover}.logo-below{font-size:10px;font-weight:700;color:#64748b;display:flex;align-items:center;gap:4px;cursor:pointer}.adj-link{font-size:11px;font-weight:700;color:#2563eb;border:none;background:transparent;cursor:pointer;display:flex;align-items:center;gap:4px}.adjust-area{position:relative;width:100%;height:260px;border:1px solid #e2e8f0;border-radius:16px;background:#f8fafc;overflow:hidden;display:flex;align-items:center;justify-content:center;margin-bottom:12px}.adjust-area img{max-width:none;min-width:100%;min-height:100%;user-select:none;pointer-events:none}.adjust-mask{position:absolute;inset:0;box-shadow:inset 0 0 0 9999px rgba(15,23,42,.35);border-radius:16px;pointer-events:none}.control-row{display:flex;align-items:center;gap:8px;margin-bottom:10px}.adj-btn{width:36px;height:36px;border-radius:12px;border:1px solid #e2e8f0;background:#fff;color:#0f172a;display:flex;align-items:center;justify-content:center;cursor:pointer}.adj-range{flex:1;height:28px}.move-row{display:flex;justify-content:center;gap:8px;margin:-2px 0 12px}.move-btn{width:32px;height:32px;border:1px solid #dbeafe;border-radius:10px;background:#f8fbff;color:#2563eb;display:flex;align-items:center;justify-content:center}.adjust-foot{font-size:11px;color:#64748b;text-align:center;margin-bottom:8px}
  .cb-cancel{flex:1;height:38px;border-radius:10px;border:1px solid #e2e8f0;background:#fff;font-size:12px;font-weight:700;transition:.15s}.cb-save{flex:1;height:38px;border-radius:10px;border:none;background:#0f172a;color:#fff;font-size:12px;font-weight:800;transition:.15s;display:flex;align-items:center;justify-content:center;gap:6px}.cb-cancel:active,.cb-save:active{transform:scale(.96)}.cb-del{flex:1;height:38px;border-radius:10px;border:none;background:#ef4444;color:#fff;font-weight:700}
  .ssearch{display:flex;align-items:center;gap:8px;border:1px solid #e2e8f0;border-radius:11px;padding:0 11px;height:38px;background:#f8fafc;margin-bottom:10px}.ssearch input{border:none;outline:none;flex:1;font-size:12px;background:transparent}
  .ulist{max-height:300px;overflow:auto;border:1px solid #eef2ff;border-radius:12px;padding:4px;background:#fbfdff}.uitem{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;cursor:pointer;transition:.12s}.uitem.sel{background:#eff6ff;border:1px solid #bfdbfe}.ucheck{width:18px;height:18px;border:1.5px solid #cbd5e1;border-radius:6px;background:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0}.ucheck.on{background:#0f172a;border-color:#0f172a;color:#fff}.uitem img{width:32px;height:32px;border-radius:50%;object-fit:cover}.uinfo{min-width:0;flex:1}.uname{font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.umail{font-size:10px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
