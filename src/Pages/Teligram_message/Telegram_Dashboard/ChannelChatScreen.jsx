@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Spinner } from 'react-bootstrap';
 import { Search, ThreeDotsVertical, TypeBold, TypeUnderline, Palette, Image as ImgIcon, Paperclip, SendFill, XLg, Calendar, PencilSquare, Trash, Files, Eye, Download, ArrowLeft, CheckLg, LockFill, Globe2, XCircleFill, PlusLg, DashLg, PinAngleFill, FileEarmarkPdfFill, FileEarmarkExcelFill, FileEarmarkWordFill, CodeSlash } from 'react-bootstrap-icons';
@@ -16,25 +16,110 @@ const badgeColor = (str)=>{ const c=[["#eff6ff","#2563eb"],["#f0fdf4","#16a34a"]
 const getFileIcon = (name)=>{ const n=(name||"").toLowerCase(); if(n.endsWith('.pdf')) return <FileEarmarkPdfFill size={16} color="#dc2626"/>; if(n.endsWith('.xls')||n.endsWith('.xlsx')) return <FileEarmarkExcelFill size={16} color="#16a34a"/>; if(n.endsWith('.doc')||n.endsWith('.docx')) return <FileEarmarkWordFill size={16} color="#2563eb"/>; return "📎"; };
 
 export default function ChannelChatScreen(){
-  const { id } = useParams(); const navigate=useNavigate();
-  const [channel,setChannel]=useState(null); const [notes,setNotes]=useState([]); const [loading,setLoading]=useState(true);
-  const [searchOpen,setSearchOpen]=useState(false); const [q,setQ]=useState(""); const [qDate,setQDate]=useState("");
-  const [file,setFile]=useState(null); const [filePreview,setFilePreview]=useState(""); const [editingId,setEditingId]=useState(null);
-  const [menuId,setMenuId]=useState(null); const [menuUp,setMenuUp]=useState(false); const [toast,setToast]=useState({show:false,msg:"",green:false});
-  const [attachUrls,setAttachUrls]=useState({}); const [loadingImgId,setLoadingImgId]=useState(null);
-  const [imgViewer,setImgViewer]=useState({open:false,url:""}); const [logoView,setLogoView]=useState(false);
-  const [boldOn,setBoldOn]=useState(false); const [ulOn,setUlOn]=useState(false); const [showFmt,setShowFmt]=useState(false);
+  const { id } = useParams();
+  const navigate=useNavigate();
+  const [channel,setChannel]=useState(null);
+  const [notes,setNotes]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [searchOpen,setSearchOpen]=useState(false);
+  const [q,setQ]=useState("");
+  const [qDate,setQDate]=useState("");
+  const [file,setFile]=useState(null);
+  const [filePreview,setFilePreview]=useState("");
+  const [editingId,setEditingId]=useState(null);
+  const [menuId,setMenuId]=useState(null);
+  const [menuUp,setMenuUp]=useState(false);
+  const [toast,setToast]=useState({show:false,msg:"",green:false});
+  const [attachUrls,setAttachUrls]=useState({});
+  const [loadingImgId,setLoadingImgId]=useState(null);
+  const [imgViewer,setImgViewer]=useState({open:false,url:""});
+  const [logoView,setLogoView]=useState(false);
+  const [boldOn,setBoldOn]=useState(false);
+  const [ulOn,setUlOn]=useState(false);
+  const [showFmt,setShowFmt]=useState(false);
   const [pinned,setPinned]=useState(()=>{ try{ return JSON.parse(localStorage.getItem(`pinned_${id}`)||"[]"); }catch{ return []; } });
-  const listRef=useRef(null); const editorRef=useRef(null); const fileRef=useRef(null); const imgRef=useRef(null); const selectionRef=useRef(null); const myId=getMyId();
+  const listRef=useRef(null);
+  const editorRef=useRef(null);
+  const fileRef=useRef(null);
+  const imgRef=useRef(null);
+  const selectionRef=useRef(null);
+  const notesRef = useRef([]);
+  const isNearBottomRef = useRef(true);
+  const myId=getMyId();
+
   const showToast=(m,green=false)=>{ setToast({show:true,msg:m,green}); setTimeout(()=>setToast({show:false,msg:"",green:false}),1100); };
-  const scrollBottom=()=> setTimeout(()=> listRef.current?.scrollTo({top:listRef.current.scrollHeight, behavior:'smooth'}),100);
+  const scrollBottom=(force=false)=> setTimeout(()=>{
+    if(!listRef.current) return;
+    if(force || isNearBottomRef.current){
+      listRef.current?.scrollTo({top:listRef.current.scrollHeight, behavior:'smooth'});
+    }
+  },100);
   const scrollToMsg=(nid)=>{ const el=document.getElementById(`msg_${nid}`); if(el){ el.scrollIntoView({behavior:'smooth',block:'center'}); el.classList.add('hl'); setTimeout(()=>el.classList.remove('hl'),1500); } };
   const getHeaders=()=>({ Authorization:`Bearer ${getToken()}`, "x-device-id":getDeviceId() });
   const getHeadersNoCT=()=>({ Authorization:`Bearer ${getToken()}`, "x-device-id":getDeviceId() });
 
-  const fetchChannel=async()=>{ try{ const r=await fetch(`${CHANNEL_API}/${id}`,{headers:getHeaders()}); const d=await r.json(); if(r.ok) setChannel(d.channel||d.data||d); }catch{} };
-  const fetchNotes=async()=>{ try{ const r=await fetch(`${NOTES_API}/${id}/all`,{headers:getHeaders()}); const d=await r.json(); if(r.ok) setNotes(d.notes||[]); }catch{} finally{ setLoading(false); } };
-  useEffect(()=>{ fetchChannel(); fetchNotes(); },[id]);
+  useEffect(()=>{ notesRef.current = notes; },[notes]);
+
+  useEffect(()=>{
+    const el = listRef.current;
+    if(!el) return;
+    const onScroll = ()=>{
+      const near = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+      isNearBottomRef.current = near;
+    };
+    el.addEventListener('scroll', onScroll);
+    return ()=> el.removeEventListener('scroll', onScroll);
+  },[]);
+
+  const fetchChannel=useCallback(async()=>{
+    try{
+      const r=await fetch(`${CHANNEL_API}/${id}`,{headers:getHeaders()});
+      const d=await r.json();
+      if(r.ok) setChannel(d.channel||d.data||d);
+    }catch{}
+  },[id]);
+
+  const fetchNotes = useCallback(async(silent=false)=>{
+    try{
+      const r=await fetch(`${NOTES_API}/${id}/all`,{headers:getHeaders()});
+      const d=await r.json();
+      if(!r.ok) return;
+      const serverNotes = d.notes||[];
+      setNotes(prev=>{
+        const tmp = prev.filter(n=> String(n.note_id).startsWith('tmp_'));
+        const prevServer = prev.filter(n=>!String(n.note_id).startsWith('tmp_'));
+        if(silent && prevServer.length===serverNotes.length){
+          const lastPrev = prevServer[prevServer.length-1]?.note_id;
+          const lastServer = serverNotes[serverNotes.length-1]?.note_id;
+          if(String(lastPrev)===String(lastServer)) return prev;
+        }
+        const hasNew = serverNotes.length > prevServer.length;
+        if(hasNew && silent){ setTimeout(()=>scrollBottom(false), 80); }
+        return [...serverNotes,...tmp];
+      });
+      if(!silent) setLoading(false);
+    }catch{
+      if(!silent) setLoading(false);
+    }
+  },[id]);
+
+  useEffect(()=>{
+    fetchChannel();
+    fetchNotes(false);
+  },[fetchChannel, fetchNotes]);
+
+  useEffect(()=>{
+    const interval = setInterval(()=> fetchNotes(true), 2000);
+    const onFocus = ()=> fetchNotes(true);
+    const onVisible = ()=>{ if(document.visibilityState==='visible') fetchNotes(true); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisible);
+    return ()=>{
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  },[fetchNotes]);
 
   const placeCaretAtEnd=(el)=>{ if(!el) return; el.focus(); const range=document.createRange(); range.selectNodeContents(el); range.collapse(false); const sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(range); };
   const rememberEditorSelection=()=>{
@@ -126,19 +211,28 @@ export default function ChannelChatScreen(){
     const optimistic={note_id:tempId, channel_id:Number(id), created_by_user_id:myId, created_by_name:"You", note_text: html||text, attachment_available:!!tempFile, attachment_category:tempFile?.type?.startsWith('image/')?'image': tempFile?'file':'text', attachment_name:tempFile?.name||"", created_at:new Date().toISOString()};
     setNotes(p=>[...p, optimistic]); if(tempPreview) setAttachUrls(p=>({...p,[tempId]:tempPreview}));
     if(editorRef.current){ editorRef.current.innerHTML=""; editorRef.current.focus(); document.execCommand('removeFormat',false,null); rememberEditorSelection(); } setFile(null); setFilePreview(""); setBoldOn(false); setUlOn(false);
-    requestAnimationFrame(scrollBottom);
-    try{ const fd=new FormData(); fd.append('device_id',getDeviceId()); fd.append('note_text',html||text); if(tempFile) fd.append('attachment',tempFile); const res=await fetch(`${NOTES_API}/${id}/add`,{method:'POST',headers:getHeadersNoCT(),body:fd}); const d=await res.json(); if(!res.ok) throw new Error(); setNotes(p=>p.map(n=> String(n.note_id)===tempId? d.note : n)); if(tempPreview && d.note) setAttachUrls(p=>{ const np={...p}; np[d.note.note_id]=tempPreview; delete np[tempId]; return np; }); }catch{ setNotes(p=>p.filter(n=> String(n.note_id)!==tempId)); showToast("Failed"); }
+    isNearBottomRef.current = true;
+    requestAnimationFrame(()=>scrollBottom(true));
+    try{ const fd=new FormData(); fd.append('device_id',getDeviceId()); fd.append('note_text',html||text); if(tempFile) fd.append('attachment',tempFile); const res=await fetch(`${NOTES_API}/${id}/add`,{method:'POST',headers:getHeadersNoCT(),body:fd}); const d=await res.json(); if(!res.ok) throw new Error(); setNotes(p=>p.map(n=> String(n.note_id)===tempId? d.note : n)); if(tempPreview && d.note) setAttachUrls(p=>{ const np={...p}; np[d.note.note_id]=tempPreview; delete np[tempId]; return np; }); fetchNotes(true); }catch{ setNotes(p=>p.filter(n=> String(n.note_id)!==tempId)); showToast("Failed"); }
   };
   const startEdit=(note)=>{ setEditingId(note.note_id); setMenuId(null); setShowFmt(true); setTimeout(()=>{ if(editorRef.current){ editorRef.current.innerHTML=note.note_text||""; placeCaretAtEnd(editorRef.current); }},60); };
   const handleDot=(e,mid)=>{ e.stopPropagation(); if(menuId===mid){ setMenuId(null); return; } const r=e.currentTarget.getBoundingClientRect(); setMenuUp(window.innerHeight - r.bottom < 160); setMenuId(mid); };
 
   if(loading) return <div className="d-flex justify-content-center align-items-center vh-100"><Spinner/></div>;
-  let lastDate=""; const chName=channel?.channel_name||"Ajay Kedar"; const chLogo=resolveImg(channel?.logo_url||channel?.channel_logo_url); const isPrivate=channel?.channel_type==='private'; const initial=chName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()||"AK";
+
+  let lastDate="";
+  const chName=channel?.channel_name||"Ajay Kedar";
+  const chLogo=resolveImg(channel?.logo_url||channel?.channel_logo_url);
+  const isPrivate=channel?.channel_type==='private';
+  const initial=chName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()||"AK";
+
   return (
     <div className="chat-shell" onClick={()=>setMenuId(null)}>
       <div className="nav-dark-outer">
         <div className="nav-dark-inner">
-          <button className="nav-dark-btn" onClick={()=>navigate("/telegram_logidashboard")}><ArrowLeft size={18} color="#0f172a"/></button>
+          <button className="nav-dark-btn" onClick={()=>navigate("/telegram_logidashboard")}>
+            <ArrowLeft size={18} color="#0f172a"/>
+          </button>
           <div className="nav-dark-mid">
             <div className="nav-dark-avatar" onClick={(e)=>{e.stopPropagation(); setLogoView(true);}}>
               {chLogo? <img src={chLogo} alt=""/> : <span>{initial}</span>}
@@ -148,7 +242,9 @@ export default function ChannelChatScreen(){
               <div className="nav-dark-sub">Tap to view info</div>
             </div>
           </div>
-          <button className="nav-dark-btn" onClick={(e)=>{e.stopPropagation(); setSearchOpen(!searchOpen);}}><Search size={16} color="#0f172a"/></button>
+          <button className="nav-dark-btn" onClick={(e)=>{e.stopPropagation(); setSearchOpen(!searchOpen);}}>
+            <Search size={16} color="#0f172a"/>
+          </button>
         </div>
       </div>
 
@@ -171,8 +267,17 @@ export default function ChannelChatScreen(){
 
       <div className="msg-wrap" ref={listRef}>
         {filtered.map(note=>{
-          const dStr=fmtDate(note.created_at); const showDate=dStr!==lastDate; if(showDate) lastDate=dStr;
-          const isMe=String(note.created_by_user_id)===String(myId); const isImg=note.attachment_category==='image'||note.note_type==='image'; const isFile=note.attachment_available &&!isImg; const [bg,border]=badgeColor(dStr); const [ubg,uborder]=badgeColor(note.created_by_name||"A"); const imgUrl=attachUrls[note.note_id]; const isLoadingThis=loadingImgId===note.note_id; const isPinned=pinned.find(p=>String(p.note_id)===String(note.note_id));
+          const dStr=fmtDate(note.created_at);
+          const showDate=dStr!==lastDate;
+          if(showDate) lastDate=dStr;
+          const isMe=String(note.created_by_user_id)===String(myId);
+          const isImg=note.attachment_category==='image'||note.note_type==='image';
+          const isFile=note.attachment_available &&!isImg;
+          const [bg,border]=badgeColor(dStr);
+          const [ubg,uborder]=badgeColor(note.created_by_name||"A");
+          const imgUrl=attachUrls[note.note_id];
+          const isLoadingThis=loadingImgId===note.note_id;
+          const isPinned=pinned.find(p=>String(p.note_id)===String(note.note_id));
           return (
             <React.Fragment key={note.note_id}>
               {showDate && <div className="date-pill" style={{background:bg,borderColor:border,color:border}}>{dStr}</div>}
@@ -223,10 +328,11 @@ export default function ChannelChatScreen(){
 
       <div className="input-wrap">
         <div className="input-box" onClick={()=>{editorRef.current?.focus();}}>
-          <div ref={editorRef} contentEditable suppressContentEditableWarning className="editor" data-placeholder="Enter text..." onFocus={()=>{ if(!editorRef.current?.textContent) setTimeout(()=>{ placeCaretAtEnd(editorRef.current); rememberEditorSelection(); },10); scrollBottom(); }} onInput={rememberEditorSelection} onKeyUp={rememberEditorSelection} onMouseUp={rememberEditorSelection} onTouchEnd={rememberEditorSelection} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault(); sendNote();}}}></div>
+          <div ref={editorRef} contentEditable suppressContentEditableWarning className="editor" data-placeholder="Enter text..." onFocus={()=>{ if(!editorRef.current?.textContent) setTimeout(()=>{ placeCaretAtEnd(editorRef.current); rememberEditorSelection(); },10); scrollBottom(true); }} onInput={rememberEditorSelection} onKeyUp={rememberEditorSelection} onMouseUp={rememberEditorSelection} onTouchEnd={rememberEditorSelection} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault(); sendNote();}}}></div>
         </div>
         <button className="send-out" onClick={sendNote}>{editingId?<CheckLg size={18}/>:<SendFill size={16}/>}</button>
       </div>
+
       <div className="chat-dev-footer"><CodeSlash size={13}/><span>Developed By <b>Ajay Kedar</b></span></div>
 
       {imgViewer.open && <div className="viewer" onClick={()=>setImgViewer({open:false,url:""})}><div className="v-box" onClick={e=>e.stopPropagation()}><img src={imgViewer.url} alt=""/><button className="v-close" onClick={()=>setImgViewer({open:false,url:""})}><XLg size={12}/></button></div></div>}
@@ -246,8 +352,7 @@ export default function ChannelChatScreen(){
 .chat-shell{position:fixed;inset:0;display:flex;flex-direction:column;background:#f6f7fb;width:100vw;max-width:100vw;overflow:hidden}
 .nav-dark-outer{padding:calc(4px + var(--topSafe)) 10px 4px;flex-shrink:0;background:#f6f7fb}
 .nav-dark-inner{height:64px;background:linear-gradient(135deg,#ffffff 0%,#f0f9ff 46%,#e0f2fe 100%);border:1px solid #dbeafe;border-radius:22px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;box-shadow:0 8px 24px rgba(14,165,233,.18);position:relative;overflow:hidden}
-.nav-dark-btn{width:42px;height:42px;min-width:42px;border-radius:14px;background:linear-gradient(180deg,#fff,#f8fbff);border:1px solid #dbeafe;display:flex;align-items:center;justify-content:center;transition:transform .15s,box-shadow .15s}
-.nav-dark-btn:hover{transform:translateY(-1px);box-shadow:0 8px 18px rgba(14,165,233,.12)}
+.nav-dark-btn{width:42px;height:42px;min-width:42px;border-radius:14px;background:linear-gradient(180deg,#fff,#f8fbff);border:1px solid #dbeafe;display:flex;align-items:center;justify-content:center;transition:transform.15s,box-shadow.15s}
 .nav-dark-mid{display:flex;align-items:center;gap:10px;flex:1;margin:0 10px;min-width:0}
 .nav-dark-avatar{width:48px;height:48px;min-width:48px;border-radius:50%;background:#fff;border:2px solid #bfdbfe;overflow:hidden;display:flex;align-items:center;justify-content:center;font-weight:800;color:#1e293b;font-size:16px;flex-shrink:0;box-shadow:0 10px 28px rgba(15,23,42,.08)}
 .nav-dark-avatar img{width:100%;height:100%;object-fit:cover;object-position:center}
