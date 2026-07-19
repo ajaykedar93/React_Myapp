@@ -141,7 +141,11 @@ export default function PrivateChannelSection({ channels=[], onUpdated, onDelete
   };
   const saveEdit=async()=>{
     if((edit.name||"").trim().length<3) return toastC("Min 3 chars","danger");
-    setEdit(s=>({...s,loading:true}));
+    // Do not keep the editor open while logo processing or the API runs.
+    const optimisticChannel={...edit.ch,channel_name:edit.name.trim(),channel_description:(edit.desc||"").trim(),logo_url:edit.prev||edit.ch.logo_url,channel_logo_url:edit.prev||edit.ch.channel_logo_url,logo_zoom:adjust.scale,logo_x:adjust.pos.x,logo_y:adjust.pos.y};
+    onUpdated?.(optimisticChannel);
+    setEdit({show:false,ch:null,name:"",desc:"",file:null,prev:"",loading:false});
+    setAdjust({open:false,src:"",scale:1,pos:{x:0,y:0},dragging:false,start:{x:0,y:0},modified:false,preview:""});
     try{
       const fd=new FormData();
       fd.append("channel_name",edit.name.trim());
@@ -159,10 +163,6 @@ export default function PrivateChannelSection({ channels=[], onUpdated, onDelete
       }
       const id=edit.ch.channel_id||edit.ch.id;
       const url = (edit.file || adjust.modified) ? `${API}/${id}/logo` : `${API}/${id}`;
-      const optimisticChannel={...edit.ch,channel_name:edit.name.trim(),channel_description:(edit.desc||"").trim(),logo_url:edit.prev||edit.ch.logo_url,channel_logo_url:edit.prev||edit.ch.channel_logo_url,logo_zoom:adjust.scale,logo_x:adjust.pos.x,logo_y:adjust.pos.y};
-      onUpdated?.(optimisticChannel);
-      setEdit({show:false,ch:null,name:"",desc:"",file:null,prev:"",loading:false});
-      setAdjust({open:false,src:"",scale:1,pos:{x:0,y:0},dragging:false,start:{x:0,y:0},modified:false,preview:""});
       const res=await fetch(url,{method:"PUT",headers:{Authorization:`Bearer ${getToken()}`,"x-device-id":getDeviceId()},body:fd});
       const d=await res.json(); if(!res.ok) throw new Error(d.message||"Update failed");
       const updated = d.channel||d.data||d;
@@ -192,22 +192,22 @@ export default function PrivateChannelSection({ channels=[], onUpdated, onDelete
     }catch(e){ setShare(s=>({...s,fetching:false})); toastC(e.message,"danger"); }
   };
 
-  const doShare=async()=>{
+  const doShare=()=>{
     if(share.sel.length===0) return toastC("Select user","danger");
     if(!/^\d{4,8}$/.test(share.pinInput)) return toastC("Enter original 4-8 digit PIN","danger");
-    setShare(s=>({...s,loading:true}));
-    try{
-      const ch=share.ch;
+    const ch=share.ch; const selected=[...share.sel]; const securityPin=share.pinInput;
+    setShare({show:false,ch:null,users:[],filtered:[],sel:[],search:"",pinInput:"",loading:false,fetching:false});
+    toastC(`Sending to ${selected.length}`);
+    void (async()=>{ try{
       const res=await fetch(`${ALLMISS_API}/send-link`,{
         method:"POST",
         headers:{"Content-Type":"application/json",Authorization:`Bearer ${getToken()}`,"x-device-id":getDeviceId()},
-        body:JSON.stringify({ channel_id: ch.channel_id||ch.id, receiver_ids: share.sel, security_pin: share.pinInput })
+        body:JSON.stringify({ channel_id: ch.channel_id||ch.id, receiver_ids: selected, security_pin: securityPin })
       });
       const d=await res.json(); if(!res.ok) throw new Error(d.message||"Share failed");
-      try{ await navigator.clipboard.writeText(`${getJoinUrl(ch)}\nPIN: ${share.pinInput}`); }catch{}
-      toastC(`Shared to ${d.sent_count||share.sel.length}`);
-      setShare({show:false,ch:null,users:[],filtered:[],sel:[],search:"",pinInput:"",loading:false,fetching:false});
-    }catch(e){ toastC(e.message,"danger"); setShare(s=>({...s,loading:false})); }
+      try{ await navigator.clipboard.writeText(`${getJoinUrl(ch)}\nPIN: ${securityPin}`); }catch{}
+      toastC(`Shared to ${d.sent_count||selected.length}`);
+    }catch(e){ toastC(e.message||"Share failed","danger"); } })();
   };
 
   const copyUrl=(ch)=>{ try{ navigator.clipboard.writeText(getJoinUrl(ch)); }catch{} toastC("Hosted URL copied"); setMenuId(null); };
@@ -236,12 +236,22 @@ export default function PrivateChannelSection({ channels=[], onUpdated, onDelete
         return;
       }
       if(pinBox.mode==="delete"){
-        const res=await fetch(`${API}/${id}`,{method:"DELETE",headers:{"Content-Type":"application/json",Authorization:`Bearer ${getToken()}`,"x-device-id":did},body:JSON.stringify({device_id:did,security_pin:pinBox.pin})});
-        const d=await res.json(); if(!res.ok) throw new Error(d.message||"Wrong PIN"); onDeleted?.(id); toastC("Deleted"); setPinBox({show:false}); return;
+        const securityPin=pinBox.pin;
+        onDeleted?.(id); setPinBox({show:false}); toastC("Deleted");
+        void (async()=>{ try{
+          const res=await fetch(`${API}/${id}`,{method:"DELETE",headers:{"Content-Type":"application/json",Authorization:`Bearer ${getToken()}`,"x-device-id":did},body:JSON.stringify({device_id:did,security_pin:securityPin})});
+          const d=await res.json(); if(!res.ok) throw new Error(d.message||"Delete failed");
+        }catch(e){ toastC(e.message||"Delete failed. Please refresh to verify.","danger"); } })();
+        return;
       }
       if(pinBox.mode==="remove"){
-        const res=await fetch(`${ALLMISS_API}/remove/${id}`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${getToken()}`,"x-device-id":did},body:JSON.stringify({security_pin:pinBox.pin})});
-        const d=await res.json(); if(!res.ok) throw new Error(d.message||"Wrong PIN"); onDeleted?.(id); toastC("Removed"); setPinBox({show:false}); return;
+        const securityPin=pinBox.pin;
+        onDeleted?.(id); setPinBox({show:false}); toastC("Removed");
+        void (async()=>{ try{
+          const res=await fetch(`${ALLMISS_API}/remove/${id}`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${getToken()}`,"x-device-id":did},body:JSON.stringify({security_pin:securityPin})});
+          const d=await res.json(); if(!res.ok) throw new Error(d.message||"Remove failed");
+        }catch(e){ toastC(e.message||"Remove failed. Please refresh to verify.","danger"); } })();
+        return;
       }
     }catch(e){ setPinBox(s=>({...s,err:e.message,loading:false})); toastC(e.message,"danger"); }
   };

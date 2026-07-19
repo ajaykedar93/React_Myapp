@@ -148,7 +148,8 @@ export default function Telegram_Dashboard(){
   const handleSendOTP=async(email,type)=>{ const token=getToken(); const ep=type==="new"?`${API_URL}/update-email/send-new-code`:`${API_URL}/update-email/send-old-code`; const body=type==="new"?{email}:{}; const r=await fetch(ep,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify(body)}); const d=await r.json(); if(!r.ok) throw new Error(d.message); return d; };
   const handleVerifyOTP=async(email,otp,type)=>{ const token=getToken(); const ep=type==="new"?`${API_URL}/update-email/verify-new-code`:`${API_URL}/update-email/verify-old-code`; const body=type==="new"?{email,code:otp}:{code:otp}; const r=await fetch(ep,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify(body)}); const d=await r.json(); if(!r.ok) throw new Error(d.message); return d; };
   const handleChannelJoined=(ch)=>{ handleRefresh(); showCenter("Channel joined - real-time"); };
-  const handleChannelCreated=(ch)=>{ const isP=ch.is_private||ch.type==='private'||ch.channel_type==='private'; if(isP) setPrivateChannels(p=>[ch,...p]); else setPublicChannels(p=>[ch,...p]); };
+  const handleChannelCreated=(ch)=>{ const isP=ch.is_private||ch.type==='private'||ch.channel_type==='private'; const setChannels=isP?setPrivateChannels:setPublicChannels; setChannels(p=>ch._replacePendingId?p.map(x=>String(x.channel_id||x.id)===String(ch._replacePendingId)?{...ch,_pending:false}:x):[ch,...p]); };
+  const handleChannelCreateFailed=(pendingId)=>{ setPublicChannels(p=>p.filter(x=>String(x.channel_id||x.id)!==String(pendingId))); setPrivateChannels(p=>p.filter(x=>String(x.channel_id||x.id)!==String(pendingId))); };
   const handleOpenChannel = (ch) => {
     const cid = ch.channel_id || ch.id;
     if(!cid) return;
@@ -173,7 +174,7 @@ export default function Telegram_Dashboard(){
         <div className="dash-scroll">
           <div className="dash-scroll-inner">
             <JoinChannelBox onChannelJoined={handleChannelJoined} onOpenChannel={handleOpenChannel} />
-            <CreateChannel onChannelCreated={handleChannelCreated} showCenterToast={showCenter} />
+            <CreateChannel onChannelCreated={handleChannelCreated} onChannelCreateFailed={handleChannelCreateFailed} showCenterToast={showCenter} />
             <PublicChannelSection channels={publicChannels} onUpdated={(u)=>{ cacheChannelLogo(u); setPublicChannels(p=>p.map(x=>String(x.channel_id||x.id)===String(u.channel_id||u.id)?{...x,...u}:x)); }} onDeleted={(id)=>setPublicChannels(p=>p.filter(x=>String(x.channel_id||x.id)!==String(id)))} onOpen={handleOpenChannel} onShareRequest={handleShareRequest} showCenterToast={showCenter} />
             <PrivateChannelSection channels={privateChannels} onUpdated={(u)=>{ cacheChannelLogo(u); setPrivateChannels(p=>p.map(x=>String(x.channel_id||x.id)===String(u.channel_id||u.id)?{...x,...u}:x)); }} onDeleted={(id)=>setPrivateChannels(p=>p.filter(x=>String(x.channel_id||x.id)!==String(id)))} onOpen={handleOpenChannel} onShareRequest={handleShareRequest} showCenterToast={showCenter} />
             <div className="bottom-safe-space" />

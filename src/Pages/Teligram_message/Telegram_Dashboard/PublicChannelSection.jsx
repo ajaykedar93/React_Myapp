@@ -140,7 +140,11 @@ export default function PublicChannelSection({ channels=[], onUpdated, onDeleted
   };
   const saveEdit=async()=>{
     if(edit.name.trim().length<3) return toastC("Name min 3 chars","danger");
-    setEdit(s=>({...s,loading:true}));
+    // Render the edit first; image conversion and the API request can continue afterwards.
+    const optimisticChannel={...edit.ch,channel_name:edit.name.trim(),channel_description:edit.desc.trim(),logo_url:edit.prev||edit.ch.logo_url,channel_logo_url:edit.prev||edit.ch.channel_logo_url,logo_zoom:adjust.scale,logo_x:adjust.pos.x,logo_y:adjust.pos.y};
+    onUpdated?.(optimisticChannel);
+    setEdit({show:false, ch:null, name:"", desc:"", file:null, prev:"", loading:false});
+    setAdjust({open:false,src:"",scale:1,pos:{x:0,y:0},dragging:false,start:{x:0,y:0},modified:false});
     try{
       const fd=new FormData(); const did=getDeviceId();
       fd.append("channel_name",edit.name.trim());
@@ -158,10 +162,6 @@ export default function PublicChannelSection({ channels=[], onUpdated, onDeleted
       }
       const id=edit.ch.channel_id||edit.ch.id;
       const url = (edit.file || adjust.modified) ? `${API}/${id}/logo` : `${API}/${id}`;
-      const optimisticChannel={...edit.ch,channel_name:edit.name.trim(),channel_description:edit.desc.trim(),logo_url:edit.prev||edit.ch.logo_url,channel_logo_url:edit.prev||edit.ch.channel_logo_url,logo_zoom:adjust.scale,logo_x:adjust.pos.x,logo_y:adjust.pos.y};
-      onUpdated?.(optimisticChannel);
-      setEdit({show:false, ch:null, name:"", desc:"", file:null, prev:"", loading:false});
-      setAdjust({open:false,src:"",scale:1,pos:{x:0,y:0},dragging:false,start:{x:0,y:0},modified:false});
       const res=await fetch(url,{method:"PUT",headers:{Authorization:`Bearer ${getToken()}`,"x-device-id":did},body:fd});
       const d=await res.json(); if(!res.ok) throw new Error(d.message||"Update failed");
       const upd=d.channel||d.data||d;
@@ -184,40 +184,42 @@ export default function PublicChannelSection({ channels=[], onUpdated, onDeleted
   const onSearch=v=>setShare(s=>{ const q=v.toLowerCase(); return {...s,search:v,filtered:s.users.filter(u=>(u.full_name||"").toLowerCase().includes(q)||(u.email||"").toLowerCase().includes(q))}; });
   const toggleSelect=(id)=>setShare(s=>{ const has=s.selected.includes(id); return {...s,selected:has?s.selected.filter(x=>x!==id):[...s.selected,id]}; });
 
-  const doShare=async()=>{
+  const doShare=()=>{
     const ch=share.ch; const joinUrl = getJoinUrl(ch);
     if(share.selected.length===0){ navigator.clipboard.writeText(joinUrl); toastC("Hosted URL copied"); return; }
-    setShare(s=>({...s,loading:true}));
-    try{
+    const selected=[...share.selected];
+    setShare({show:false,ch:null,users:[],filtered:[],selected:[],search:"",loading:false,fetching:false});
+    toastC(`Sending invite to ${selected.length}`);
+    void (async()=>{ try{
       const res=await fetch(`${ALLMISS_API}/send-link`,{
         method:"POST",
         headers:{"Content-Type":"application/json",Authorization:`Bearer ${getToken()}`,"x-device-id":getDeviceId()},
-        body:JSON.stringify({ channel_id: ch.channel_id||ch.id, receiver_ids: share.selected, invite_url: joinUrl })
+        body:JSON.stringify({ channel_id: ch.channel_id||ch.id, receiver_ids: selected, invite_url: joinUrl })
       });
       const d=await res.json(); if(!res.ok) throw new Error(d.message||"Share failed");
       navigator.clipboard.writeText(joinUrl);
-      toastC(`Invite sent to ${d.sent_count||share.selected.length}`);
-      setShare({show:false,ch:null,users:[],filtered:[],selected:[],search:"",loading:false,fetching:false});
-    }catch(e){ toastC(e.message,"danger"); setShare(s=>({...s,loading:false})); }
+      toastC(`Invite sent to ${d.sent_count||selected.length}`);
+    }catch(e){ toastC(e.message||"Share failed","danger"); } })();
   };
 
   const handleCopy=(ch)=>{ const url=getJoinUrl(ch); navigator.clipboard.writeText(url); toastC("Hosted URL copied"); setMenuId(null); };
   const askDelete=(ch)=>{ setMenuId(null); setConfirm({show:true,ch,mode:isOwner(ch)?"delete":"remove"}); };
-  const doDelete=async()=>{
+  const doDelete=()=>{
     const ch=confirm.ch; const id=String(ch.channel_id||ch.id); const did=getDeviceId();
-    try{
-      if(confirm.mode==="delete"){
+    const mode=confirm.mode;
+    onDeleted?.(id);
+    setConfirm({show:false});
+    toastC(mode==="delete"?"Channel deleted":"Channel removed");
+    void (async()=>{ try{
+      if(mode==="delete"){
         const res=await fetch(`${API}/${id}`,{method:"DELETE",headers:{Authorization:`Bearer ${getToken()}`,"Content-Type":"application/json","x-device-id":did},body:JSON.stringify({device_id:did})});
         const d=await res.json(); if(!res.ok) throw new Error(d.message||"Only owner can delete");
         const my=JSON.parse(localStorage.getItem("my_created_channels")||"[]"); localStorage.setItem("my_created_channels",JSON.stringify(my.filter(x=>x!==id)));
-        onDeleted?.(id); toastC("Deleted");
       }else{
         const res=await fetch(`${ALLMISS_API}/remove/${id}`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${getToken()}`,"x-device-id":did},body:JSON.stringify({})});
         const d=await res.json().catch(()=>({})); if(!res.ok && d.message) throw new Error(d.message);
-        onDeleted?.(id); toastC("Removed");
       }
-      setConfirm({show:false});
-    }catch(e){ toastC(e.message,"danger"); }
+    }catch(e){ toastC(e.message||"Request failed. Please refresh to verify.","danger"); } })();
   };
 
   return (
