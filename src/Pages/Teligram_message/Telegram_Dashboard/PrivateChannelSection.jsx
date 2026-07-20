@@ -17,7 +17,7 @@ const defaultAvatar = (name="P") => `https://ui-avatars.com/api/?name=${encodeUR
 const appendCacheBuster = (url)=>{ if(!url) return url; if(url.startsWith('data:')||url.startsWith('blob:')) return url; return `${url}${url.includes('?')?'&':'?'}v=${Date.now()}`; };
 const fmt = (iso)=>{ try{ if(!iso) return ""; const d=new Date(iso); if(isNaN(d)) return ""; return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric',timeZone:'Asia/Kolkata'});}catch{return "";} };
 const getChannelLogo = (ch)=>{ const raw = ch.logo_url||ch.channel_logo_url||ch.channel_logo||""; const resolved = normalizeLogoUrl(raw); return resolved || defaultAvatar(ch.channel_name||"P"); };
-const handleImgError = (e, name)=>{ const fallback = defaultAvatar(name||"P"); if(e.currentTarget.src !== fallback){ e.currentTarget.onerror = null; e.currentTarget.src = fallback; } };
+const handleImgError = (e, name)=>{ const fallback = defaultAvatar(name||"P"); if(e.currentTarget.src!== fallback){ e.currentTarget.onerror = null; e.currentTarget.src = fallback; } };
 const isOwner = (ch)=>{ try{ const uid=String(getUid()); const raw=localStorage.getItem("my_created_channels"); const my=raw?JSON.parse(raw):[]; if(uid==="0") return my.includes(String(ch.channel_id||ch.id)); return String(ch.created_by_user_id)===uid || ch.is_owner===true || String(ch.member_role||"").toLowerCase()==="owner" || my.includes(String(ch.channel_id||ch.id)); }catch{ return ch.is_owner===true; } };
 const getJoinUrl = (ch) => `${FRONTEND_BASE}/#/channel/join/${ch.share_code||ch.channel_id||ch.id}`;
 const isTrusted = (id) => { try{ return localStorage.getItem(`priv_trust_${id}_${getDeviceId()}`)==="1"; }catch{return false;} };
@@ -37,23 +37,13 @@ export default function PrivateChannelSection({ channels=[], onUpdated, onDelete
 
   useEffect(()=>{ const h=e=>{ if(!e.target.closest('.mdot-wrap')&&!e.target.closest('.dmenu')) setMenuId(null); }; document.addEventListener('click',h); return()=>document.removeEventListener('click',h); },[]);
   useEffect(()=>setVisible(6),[channels?.length]);
-
   const list = (channels||[]).slice(0,visible);
 
-  // ✅ PRIVATE CHECK FAKT YA PAGE VAR
   const openCard=(ch,e)=>{
     if(e.target.closest('.no-open')) return;
     const id=String(ch.channel_id||ch.id);
-    if(isOwner(ch)){ // owner la PIN nako
-      onOpen?.(ch);
-      return;
-    }
-    if(isTrusted(id)){
-      // already verified - direct open, pudhchya page var check nako
-      onOpen?.(ch);
-      return;
-    }
-    // first time - PIN box dakhav
+    if(isOwner(ch)){ onOpen?.(ch); return; }
+    if(isTrusted(id)){ onOpen?.(ch); return; }
     setPinBox({show:true,mode:"open",ch,pin:"",trust:true,err:"",loading:false});
   };
 
@@ -61,35 +51,25 @@ export default function PrivateChannelSection({ channels=[], onUpdated, onDelete
     e.stopPropagation();
     if(menuId===id){ setMenuId(null); return; }
     const rect = e.currentTarget.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom;
-    setMenuUp(spaceBelow < 160);
+    setMenuUp(window.innerHeight - rect.bottom < 160);
     setMenuId(id);
   };
 
   const startEdit=(ch)=>{ setMenuId(null); setEdit({show:true,ch,name:ch.channel_name||"",desc:ch.channel_description||"",file:null,prev:ch.logo_url||ch.channel_logo_url||"",loading:false}); setAdjust({open:false,src:"",scale:1,pos:{x:0,y:0},dragging:false,start:{x:0,y:0},modified:false}); };
-  const onAdjustPick=(file)=>{
-    if(!file) return;
-    const reader=new FileReader();
-    reader.onload=()=>{
-      setEdit(s=>({...s,file,prev:reader.result}));
-      setAdjust({open:true,src:reader.result,scale:1,pos:{x:0,y:0},dragging:false,start:{x:0,y:0},modified:false});
-    };
-    reader.readAsDataURL(file);
-  };
+  const onAdjustPick=(file)=>{ if(!file) return; const reader=new FileReader(); reader.onload=()=>{ setEdit(s=>({...s,file,prev:reader.result})); setAdjust({open:true,src:reader.result,scale:1,pos:{x:0,y:0},dragging:false,start:{x:0,y:0},modified:true}); }; reader.readAsDataURL(file); };
   const getPoint=(e)=>{ const p=e.touches?.[0]||e; return {x:p.clientX,y:p.clientY}; };
   const onAdjustDown=(e)=>{ e.preventDefault(); const point=getPoint(e); setAdjust(a=>({...a,dragging:true,start:{x:point.x-a.pos.x,y:point.y-a.pos.y}})); };
   const onAdjustMove=(e)=>{ if(!adjust.dragging) return; const point=getPoint(e); setAdjust(a=>({...a,pos:{x:point.x-a.start.x,y:point.y-a.start.y},modified:true})); };
   const onAdjustUp=()=>{ if(adjust.dragging) setAdjust(a=>({...a,dragging:false})); };
-  const onAdjustWheel=(e)=>{ if(!adjust.open) return; e.preventDefault(); const delta = e.deltaY > 0 ? -0.05 : 0.05; setAdjust(a=>({ ...a, scale: Math.min(3, Math.max(1, a.scale + delta)), modified:true })); };
+  const onAdjustWheel=(e)=>{ if(!adjust.open) return; e.preventDefault(); const delta = e.deltaY > 0? -0.05 : 0.05; setAdjust(a=>({...a, scale: Math.min(3, Math.max(1, a.scale + delta)), modified:true })); };
+
   const createAdjustedLogo=({withPreview=false}={})=>{
     return new Promise((resolve)=>{
-      const sourceUrl = adjust.src || (edit.file ? URL.createObjectURL(edit.file) : "");
+      const sourceUrl = adjust.src || (edit.file? URL.createObjectURL(edit.file) : "");
       if(!sourceUrl){ resolve(withPreview?{file:edit.file,preview:edit.prev}:edit.file); return; }
       const image=new Image();
-      if (/^https?:\/\//i.test(sourceUrl)) {
-        image.crossOrigin = "anonymous";
-      }
-      const tempUrl = (!adjust.src && edit.file) ? sourceUrl : null;
+      if (/^https?:\/\//i.test(sourceUrl)) image.crossOrigin = "anonymous";
+      const tempUrl = (!adjust.src && edit.file)? sourceUrl : null;
       image.onload=()=>{
         const size=500; const canvas=document.createElement('canvas'); canvas.width=size; canvas.height=size;
         const ctx=canvas.getContext('2d'); ctx.clearRect(0,0,size,size);
@@ -114,38 +94,37 @@ export default function PrivateChannelSection({ channels=[], onUpdated, onDelete
         };
         canvas.toBlob((blob)=>finalize(blob),'image/png');
       };
-      image.onerror=()=>{
-        if(tempUrl) URL.revokeObjectURL(tempUrl);
-        resolve(withPreview?{file:edit.file,preview:edit.prev}:edit.file);
-      };
+      image.onerror=()=>{ if(tempUrl) URL.revokeObjectURL(tempUrl); resolve(withPreview?{file:edit.file,preview:edit.prev}:edit.file); };
       image.src=sourceUrl;
     });
   };
+
   const applyAdjustedPreview=async()=>{
     const result = await createAdjustedLogo({withPreview:true});
     if(result?.preview){
-      setEdit(s=>({...s,prev:result.preview}));
+      setEdit(s=>({...s,prev:result.preview,file:result.file||s.file}));
       setAdjust(a=>({...a,open:false,preview:result.preview,modified:true}));
+      toastC("Logo adjusted");
     } else {
       setAdjust(a=>({...a,open:false}));
     }
   };
-  const onLogoPick = (e) => {
-    const f=e.target.files?.[0]; if(!f) return;
-    onAdjustPick(f);
-  };
+
+  const onLogoPick = (e) => { const f=e.target.files?.[0]; if(!f) return; onAdjustPick(f); };
   const openAdjustModal=()=>{
-    const source = edit.prev || edit.ch?.logo_url || edit.ch?.channel_logo_url || edit.ch?.logo_url || "";
+    const source = edit.prev || edit.ch?.logo_url || edit.ch?.channel_logo_url || "";
     if(!source) return toastC("No logo to adjust","danger");
-    setAdjust(a=>({ ...a, open:true, src:source, scale:a.scale, pos:a.pos, modified:false }));
+    setAdjust(a=>({...a, open:true, src:source, scale:a.scale||1, pos:a.pos||{x:0,y:0}, modified:false }));
   };
+
   const saveEdit=async()=>{
     if((edit.name||"").trim().length<3) return toastC("Min 3 chars","danger");
-    // Do not keep the editor open while logo processing or the API runs.
-    const optimisticChannel={...edit.ch,channel_name:edit.name.trim(),channel_description:(edit.desc||"").trim(),logo_url:edit.prev||edit.ch.logo_url,channel_logo_url:edit.prev||edit.ch.channel_logo_url,logo_zoom:adjust.scale,logo_x:adjust.pos.x,logo_y:adjust.pos.y};
+    const finalPreview = edit.prev;
+    const optimisticChannel={...edit.ch,channel_name:edit.name.trim(),channel_description:(edit.desc||"").trim(),logo_url:finalPreview||edit.ch.logo_url,channel_logo_url:finalPreview||edit.ch.channel_logo_url,logo_zoom:adjust.scale,logo_x:adjust.pos.x,logo_y:adjust.pos.y};
     onUpdated?.(optimisticChannel);
     setEdit({show:false,ch:null,name:"",desc:"",file:null,prev:"",loading:false});
     setAdjust({open:false,src:"",scale:1,pos:{x:0,y:0},dragging:false,start:{x:0,y:0},modified:false,preview:""});
+    toastC("Updating...");
     try{
       const fd=new FormData();
       fd.append("channel_name",edit.name.trim());
@@ -153,37 +132,28 @@ export default function PrivateChannelSection({ channels=[], onUpdated, onDelete
       fd.append("channel_description",(edit.desc||"").trim());
       fd.append("description",(edit.desc||"").trim());
       fd.append("device_id",getDeviceId());
+      fd.append("logo_zoom", String(adjust.scale||1));
+      fd.append("logo_x", String(adjust.pos.x||0));
+      fd.append("logo_y", String(adjust.pos.y||0));
       if(edit.file || adjust.modified){
         const adjustedFile = await createAdjustedLogo();
-        if(adjustedFile) {
-          fd.append("channel_logo",adjustedFile);
-        } else {
-          throw new Error("Logo processing failed");
-        }
+        if(adjustedFile) fd.append("channel_logo",adjustedFile);
+        else throw new Error("Logo processing failed");
       }
       const id=edit.ch.channel_id||edit.ch.id;
-      const url = (edit.file || adjust.modified) ? `${API}/${id}/logo` : `${API}/${id}`;
+      const url = (edit.file || adjust.modified)? `${API}/${id}/logo` : `${API}/${id}`;
       const res=await fetch(url,{method:"PUT",headers:{Authorization:`Bearer ${getToken()}`,"x-device-id":getDeviceId()},body:fd});
       const d=await res.json(); if(!res.ok) throw new Error(d.message||"Update failed");
       const updated = d.channel||d.data||d;
-      const updatedLogo = updated.channel_logo_url||updated.logo_url||updated.channel_logo||edit.prev;
-      const updatedChannel = {
-        ...edit.ch,
-        ...updated,
-        channel_logo_url: appendCacheBuster(updatedLogo),
-        logo_url: appendCacheBuster(updatedLogo),
-        logo_zoom:adjust.scale,
-        logo_x:adjust.pos.x,
-        logo_y:adjust.pos.y,
-      };
+      const updatedLogo = updated.channel_logo_url||updated.logo_url||updated.channel_logo||finalPreview;
+      const updatedChannel = {...edit.ch,...updated, channel_logo_url: appendCacheBuster(updatedLogo), logo_url: appendCacheBuster(updatedLogo), logo_zoom:adjust.scale, logo_x:adjust.pos.x, logo_y:adjust.pos.y };
       onUpdated?.(updatedChannel);
       toastC("Private updated");
-    }catch(e){ toastC(e.message,"danger"); setEdit(s=>({...s,loading:false})); }
+    }catch(e){ toastC(e.message,"danger"); }
   };
 
   const openShare=async(ch)=>{
-    setMenuId(null);
-    setShare({show:true,ch,users:[],filtered:[],sel:[],search:"",pinInput:"",loading:false,fetching:true});
+    setMenuId(null); setShare({show:true,ch,users:[],filtered:[],sel:[],search:"",pinInput:"",loading:false,fetching:true});
     try{
       const res=await fetch(`${USERS_API}/all-register-users?limit=100`,{headers:{Authorization:`Bearer ${getToken()}`}});
       const d=await res.json(); if(!res.ok) throw new Error(d.message||"Users load failed");
@@ -199,11 +169,7 @@ export default function PrivateChannelSection({ channels=[], onUpdated, onDelete
     setShare({show:false,ch:null,users:[],filtered:[],sel:[],search:"",pinInput:"",loading:false,fetching:false});
     toastC(`Sending to ${selected.length}`);
     void (async()=>{ try{
-      const res=await fetch(`${ALLMISS_API}/send-link`,{
-        method:"POST",
-        headers:{"Content-Type":"application/json",Authorization:`Bearer ${getToken()}`,"x-device-id":getDeviceId()},
-        body:JSON.stringify({ channel_id: ch.channel_id||ch.id, receiver_ids: selected, security_pin: securityPin })
-      });
+      const res=await fetch(`${ALLMISS_API}/send-link`,{ method:"POST", headers:{"Content-Type":"application/json",Authorization:`Bearer ${getToken()}`,"x-device-id":getDeviceId()}, body:JSON.stringify({ channel_id: ch.channel_id||ch.id, receiver_ids: selected, security_pin: securityPin }) });
       const d=await res.json(); if(!res.ok) throw new Error(d.message||"Share failed");
       try{ await navigator.clipboard.writeText(`${getJoinUrl(ch)}\nPIN: ${securityPin}`); }catch{}
       toastC(`Shared to ${d.sent_count||selected.length}`);
@@ -213,7 +179,6 @@ export default function PrivateChannelSection({ channels=[], onUpdated, onDelete
   const copyUrl=(ch)=>{ try{ navigator.clipboard.writeText(getJoinUrl(ch)); }catch{} toastC("Hosted URL copied"); setMenuId(null); };
   const askPin=(ch,mode)=>{ setMenuId(null); setPinBox({show:true,mode,ch,pin:"",trust:true,err:"",loading:false}); };
 
-  // ✅ FIXED PIN LOGIC - EKDA VERIFY -> PARAT NAKO
   const submitPin=async()=>{
     if(!/^\d{4,8}$/.test(pinBox.pin)) return setPinBox(s=>({...s,err:"4-8 digit PIN taka"}));
     setPinBox(s=>({...s,loading:true,err:""}));
@@ -222,35 +187,34 @@ export default function PrivateChannelSection({ channels=[], onUpdated, onDelete
       if(pinBox.mode==="open"){
         const res=await fetch(`${API}/${id}/verify-pin`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${getToken()}`,"x-device-id":did},body:JSON.stringify({security_pin:pinBox.pin,device_id:did,trust_device:pinBox.trust})});
         const d=await res.json(); if(!res.ok) throw new Error(d.message||"Wrong PIN");
-        // ✅ 3 thikani save - pudhchya page var check nako
         localStorage.setItem(`priv_trust_${id}_${did}`,"1");
         localStorage.setItem(`verified_${id}`,"1");
-        try{
-          const old=JSON.parse(localStorage.getItem('verified_pins')||'{}');
-          old[id]=Date.now();
-          localStorage.setItem('verified_pins', JSON.stringify(old));
-        }catch{}
+        try{ const old=JSON.parse(localStorage.getItem('verified_pins')||'{}'); old[id]=Date.now(); localStorage.setItem('verified_pins', JSON.stringify(old)); }catch{}
         setPinBox({show:false,ch:null,pin:"",trust:true,err:"",loading:false});
-        onOpen?.(ch); // ata direct open - delay nahi
+        onOpen?.(ch);
         toastC("Verified");
         return;
       }
       if(pinBox.mode==="delete"){
         const securityPin=pinBox.pin;
-        onDeleted?.(id); setPinBox({show:false}); toastC("Deleted");
+        onDeleted?.(id);
+        setPinBox({show:false,ch:null,pin:"",trust:true,err:"",loading:false});
+        toastC("Deleted");
         void (async()=>{ try{
           const res=await fetch(`${API}/${id}`,{method:"DELETE",headers:{"Content-Type":"application/json",Authorization:`Bearer ${getToken()}`,"x-device-id":did},body:JSON.stringify({device_id:did,security_pin:securityPin})});
-          const d=await res.json(); if(!res.ok) throw new Error(d.message||"Delete failed");
-        }catch(e){ toastC(e.message||"Delete failed. Please refresh to verify.","danger"); } })();
+          const data=await res.json(); if(!res.ok) throw new Error(data.message||"Delete failed");
+        }catch(e){ toastC(e.message||"Delete failed","danger"); } })();
         return;
       }
       if(pinBox.mode==="remove"){
         const securityPin=pinBox.pin;
-        onDeleted?.(id); setPinBox({show:false}); toastC("Removed");
+        onDeleted?.(id);
+        setPinBox({show:false,ch:null,pin:"",trust:true,err:"",loading:false});
+        toastC("Removed");
         void (async()=>{ try{
           const res=await fetch(`${ALLMISS_API}/remove/${id}`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${getToken()}`,"x-device-id":did},body:JSON.stringify({security_pin:securityPin})});
-          const d=await res.json(); if(!res.ok) throw new Error(d.message||"Remove failed");
-        }catch(e){ toastC(e.message||"Remove failed. Please refresh to verify.","danger"); } })();
+          const data=await res.json().catch(()=>({})); if(!res.ok && data.message) throw new Error(data.message);
+        }catch(e){ toastC(e.message||"Remove failed","danger"); } })();
         return;
       }
     }catch(e){ setPinBox(s=>({...s,err:e.message,loading:false})); toastC(e.message,"danger"); }
@@ -261,28 +225,51 @@ export default function PrivateChannelSection({ channels=[], onUpdated, onDelete
       <div className="secw priv-sec">
         <div className="sech"><span className="hico privico"><LockFill size={12}/></span> Private Channels <span className="cbadge privb">{channels?.length||0}</span></div>
         {!channels || channels.length===0? <div className="empty">No private channels</div> :
-          <div className="grid">{list.map(ch=>{ const id=String(ch.channel_id||ch.id); const logo=ch.logo_url||ch.channel_logo_url||""; const owner=isOwner(ch); const trusted=isTrusted(id); const active=menuId===id; return(
-            <div key={id} className={`pcard privcard ${active?'menu-open':''}`} onClick={(e)=>openCard(ch,e)}>
-              <div className="pcard-top">
-                <div className="logo no-open" onClick={()=>setPreview(getChannelLogo(ch))}><img src={getChannelLogo(ch)} alt="" onError={(e)=>handleImgError(e,ch.channel_name||'P')} style={ch.logo_zoom?{transform:`translate(${ch.logo_x||0}px,${ch.logo_y||0}px) scale(${ch.logo_zoom||1})`}:undefined}/></div>
-                <div className="pinfo"><div className="pname">{ch.channel_name||"Private"}</div><div className="row2"><span className="pbadge priv">Private</span><span className="pdate">{fmt(ch.created_at)}</span>{!owner && trusted && <span className="pinchip">Trusted</span>}</div></div>
-                <div className="mdot-wrap no-open">
-                  <button className="mdot" onClick={(e)=>handleDotClick(e,id)}><ThreeDotsVertical size={14}/></button>
-                  {active && <div className={`dmenu ${menuUp?'up':''}`} onClick={e=>e.stopPropagation()}>
-                    {owner && <button onClick={()=>startEdit(ch)}><PencilSquare size={12}/> Update</button>}
-                    {owner && <button onClick={()=>openShare(ch)}><Share size={12}/> Share PIN</button>}
-                    <button onClick={()=>copyUrl(ch)}><Link45deg size={13}/> Copy Link</button>
-                    {owner? <button className="de52l" onClick={()=>askPin(ch,"delete")}><Trash size={12}/> Delete</button> : <button className="del" onClick={()=>askPin(ch,"remove")}><Trash size={12}/> Remove</button>}
-                  </div>}
+          <div className="grid">
+            {list.map(ch=>{
+              const id=String(ch.channel_id||ch.id);
+              const owner=isOwner(ch);
+              const trusted=isTrusted(id);
+              const active=menuId===id;
+              return(
+                <div key={id} className={`pcard privcard ${active?'menu-open':''}`} onClick={(e)=>openCard(ch,e)}>
+                  <div className="pcard-top">
+                    <div className="logo no-open" onClick={()=>setPreview(getChannelLogo(ch))}>
+                      <img src={getChannelLogo(ch)} alt="" onError={(e)=>handleImgError(e,ch.channel_name||'P')} style={ch.logo_zoom?{transform:`translate(${ch.logo_x||0}px,${ch.logo_y||0}px) scale(${ch.logo_zoom||1})`}:undefined}/>
+                    </div>
+                    <div className="pinfo">
+                      <div className="pname">{ch.channel_name||"Private"}</div>
+                      <div className="row2"><span className="pbadge priv">Private</span><span className="pdate">{fmt(ch.created_at)}</span>{!owner && trusted && <span className="pinchip">Trusted</span>}</div>
+                    </div>
+                    <div className="mdot-wrap no-open">
+                      <button className="mdot" onClick={(e)=>handleDotClick(e,id)}><ThreeDotsVertical size={14}/></button>
+                      {active && <div className={`dmenu ${menuUp?'up':''}`} onClick={e=>e.stopPropagation()}>
+                        {owner && <button onClick={()=>startEdit(ch)}><PencilSquare size={12}/> Update</button>}
+                        {owner && <button onClick={()=>openShare(ch)}><Share size={12}/> Share PIN</button>}
+                        <button onClick={()=>copyUrl(ch)}><Link45deg size={13}/> Copy Link</button>
+                        {owner? <button className="del" onClick={()=>askPin(ch,"delete")}><Trash size={12}/> Delete</button> : <button className="del" onClick={()=>askPin(ch,"remove")}><Trash size={12}/> Remove</button>}
+                      </div>}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          );})}</div>
+              );
+            })}
+          </div>
         }
         {channels?.length>visible && <div className="text-center mt-2"><Button size="sm" variant="light" className="nextb" onClick={()=>setVisible(v=>v+6)}>Load more</Button></div>}
       </div>
 
-      {preview && <div className="imgprev" onClick={()=>setPreview(null)}><img src={preview} alt=""/><button className="xbtn" onClick={()=>setPreview(null)}><XLg size={14}/></button></div>}
+      {/* ✅ LOGO PREVIEW CENTER + CROSS JUST ABOVE RIGHT */}
+      {preview && (
+        <div className="imgprev" onClick={()=>setPreview(null)}>
+          <div className="pv-center" onClick={e=>e.stopPropagation()}>
+            <div className="pv-box">
+              <button className="xbtn-top" onClick={()=>setPreview(null)}><XLg size={14}/></button>
+              <img src={preview} alt="logo preview" className="pv-img" />
+            </div>
+          </div>
+        </div>
+      )}
 
       <Modal show={edit.show} onHide={()=>setEdit(s=>({...s,show:false}))} centered dialogClassName="center-modal" contentClassName="pop-card">
         <div className="mhead"><span>Update Private</span><button className="mx" onClick={()=>setEdit(s=>({...s,show:false}))}><XLg size={14}/></button></div>
@@ -297,17 +284,18 @@ export default function PrivateChannelSection({ channels=[], onUpdated, onDelete
           </div>
           <div className="ff"><label>Name</label><input className="inp" value={edit.name} onChange={e=>setEdit(s=>({...s,name:e.target.value}))}/></div>
           <div className="ff"><label>Description</label><textarea className="inp area" value={edit.desc} onChange={e=>setEdit(s=>({...s,desc:e.target.value}))}/></div>
-          <div className="mfoot">
-            <button className="cb-cancel" onClick={()=>setEdit(s=>({...s,show:false}))}>Cancel</button>
-            <button className="cb-save" onClick={saveEdit} disabled={edit.loading}>{edit.loading?<Spinner size="sm"/>:"Save"}</button>
-          </div>
+        </div>
+        <div className="mfoot">
+          <button className="cb-cancel" onClick={()=>setEdit(s=>({...s,show:false}))}>Cancel</button>
+          <button className="cb-save" onClick={saveEdit} disabled={edit.loading}>{edit.loading?<Spinner size="sm"/>:"Save"}</button>
         </div>
       </Modal>
+
       <Modal show={adjust.open} onHide={()=>setAdjust(a=>({...a,open:false,dragging:false}))} centered dialogClassName="center-modal" contentClassName="pop-card">
         <div className="mhead"><span>Adjust Logo</span><button className="mx" onClick={()=>setAdjust(a=>({...a,open:false,dragging:false}))}><XLg size={14}/></button></div>
         <div className="mbody">
           <div className="adjust-area" onMouseDown={onAdjustDown} onMouseMove={onAdjustMove} onMouseUp={onAdjustUp} onMouseLeave={onAdjustUp} onTouchStart={onAdjustDown} onTouchMove={onAdjustMove} onTouchEnd={onAdjustUp} onWheel={onAdjustWheel}>
-            {adjust.src ? <img src={adjust.src} alt="adjust" style={{transform:`translate(${adjust.pos.x}px, ${adjust.pos.y}px) scale(${adjust.scale})`}} draggable={false} /> : <div className="adjust-empty">Logo preview</div>}
+            {adjust.src? <img src={adjust.src} alt="adjust" style={{transform:`translate(${adjust.pos.x}px, ${adjust.pos.y}px) scale(${adjust.scale})`}} draggable={false} /> : <div className="adjust-empty">Logo preview</div>}
             <div className="adjust-mask" />
           </div>
           <div className="control-row">
@@ -315,12 +303,17 @@ export default function PrivateChannelSection({ channels=[], onUpdated, onDelete
             <input type="range" min="1" max="3" step="0.02" value={adjust.scale} onChange={e=>setAdjust(a=>({...a,scale:parseFloat(e.target.value),modified:true}))} className="adj-range" />
             <button type="button" className="adj-btn" onClick={()=>setAdjust(a=>({...a,scale:Math.min(3,a.scale+0.1),modified:true}))}><ZoomIn size={14}/></button>
           </div>
-          <div className="move-row"><button type="button" className="move-btn" onClick={()=>setAdjust(a=>({...a,pos:{...a.pos,x:a.pos.x-10},modified:true}))}><ArrowLeft size={13}/></button><button type="button" className="move-btn" onClick={()=>setAdjust(a=>({...a,pos:{...a.pos,y:a.pos.y-10},modified:true}))}><ArrowUp size={13}/></button><button type="button" className="move-btn" onClick={()=>setAdjust(a=>({...a,pos:{...a.pos,y:a.pos.y+10},modified:true}))}><ArrowDown size={13}/></button><button type="button" className="move-btn" onClick={()=>setAdjust(a=>({...a,pos:{...a.pos,x:a.pos.x+10},modified:true}))}><ArrowRight size={13}/></button></div>
-          <div className="adjust-foot">Drag image to reposition. Use zoom buttons or mouse wheel.</div>
-          <div className="mfoot">
-            <button className="cb-cancel" onClick={()=>setAdjust(a=>({...a,open:false,dragging:false}))}>Close</button>
-            <button className="cb-save" onClick={applyAdjustedPreview}>Done</button>
+          <div className="move-row">
+            <button type="button" className="move-btn" onClick={()=>setAdjust(a=>({...a,pos:{...a.pos,x:a.pos.x-10},modified:true}))}><ArrowLeft size={13}/></button>
+            <button type="button" className="move-btn" onClick={()=>setAdjust(a=>({...a,pos:{...a.pos,y:a.pos.y-10},modified:true}))}><ArrowUp size={13}/></button>
+            <button type="button" className="move-btn" onClick={()=>setAdjust(a=>({...a,pos:{...a.pos,y:a.pos.y+10},modified:true}))}><ArrowDown size={13}/></button>
+            <button type="button" className="move-btn" onClick={()=>setAdjust(a=>({...a,pos:{...a.pos,x:a.pos.x+10},modified:true}))}><ArrowRight size={13}/></button>
           </div>
+          <div className="adjust-foot">Drag image to reposition. Use zoom buttons or mouse wheel.</div>
+        </div>
+        <div className="mfoot">
+          <button className="cb-cancel" onClick={()=>setAdjust(a=>({...a,open:false,dragging:false}))}>Close</button>
+          <button className="cb-save" onClick={applyAdjustedPreview}>Done</button>
         </div>
       </Modal>
 
@@ -329,7 +322,18 @@ export default function PrivateChannelSection({ channels=[], onUpdated, onDelete
         <div className="mbody share-body">
           <div className="ff"><label>Original PIN *</label><input className="inp pinp" type="password" inputMode="numeric" maxLength={8} value={share.pinInput} onChange={e=>setShare(s=>({...s,pinInput:e.target.value.replace(/\D/g,"")}))} placeholder="••••"/></div>
           <div className="ssearch"><Search size={13}/><input value={share.search} onChange={e=>{ const v=e.target.value; const q=v.toLowerCase(); setShare(s=>({...s,search:v,filtered:s.users.filter(u=>(u.full_name||"").toLowerCase().includes(q) || (u.email||"").toLowerCase().includes(q))})); }} placeholder="Search users..."/></div>
-          <div className="ulist">{share.fetching? <div className="text-center py-3"><Spinner size="sm"/></div> : share.filtered.length===0? <div className="empty small">No users</div> : share.filtered.map(u=>{ const uid=Number(u.telegram_user_id||u.id); const sel=share.sel.includes(uid); return <div key={uid} className={`uitem ${sel?'sel':''}`} onClick={()=>setShare(s=>{ const has=s.sel.includes(uid); return {...s,sel:has?s.sel.filter(x=>x!==uid):[...s.sel,uid]}; })}><div className={`ucheck ${sel?'on':''}`}>{sel&&<CheckLg size={10}/>}</div><img src={img(u.profile_image_url)} alt="" className="uava"/><div className="uinfo"><div className="uname">{u.full_name||u.username}</div><div className="uemail">{u.email||""}</div></div></div>})}</div>
+          <div className="ulist">
+            {share.fetching? <div className="text-center py-3"><Spinner size="sm"/></div> : share.filtered.length===0? <div className="empty small">No users</div> :
+              share.filtered.map(u=>{
+                const uid=Number(u.telegram_user_id||u.id);
+                const sel=share.sel.includes(uid);
+                return <div key={uid} className={`uitem ${sel?'sel':''}`} onClick={()=>setShare(s=>{ const has=s.sel.includes(uid); return {...s,sel:has?s.sel.filter(x=>x!==uid):[...s.sel,uid]}; })}>
+                  <div className={`ucheck ${sel?'on':''}`}>{sel&&<CheckLg size={10}/>}</div>
+                  <img src={img(u.profile_image_url)} alt="" className="uava"/>
+                  <div className="uinfo"><div className="uname">{u.full_name||u.username}</div><div className="uemail">{u.email||""}</div></div>
+                </div>
+              })}
+          </div>
         </div>
         <div className="mfoot">
           <button className="cb-cancel" onClick={()=>setShare(s=>({...s,show:false}))}>Cancel</button>
@@ -362,10 +366,18 @@ export default function PrivateChannelSection({ channels=[], onUpdated, onDelete
 .pinfo{flex:1;min-width:0}.pname{font-size:13px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.row2{display:flex;gap:6px;align-items:center;margin-top:3px;flex-wrap:wrap}.pbadge{font-size:9px;font-weight:900;padding:2px 7px;border-radius:999px;border:1px solid}.pbadge.priv{background:#fee2e2;color:#9f1239;border-color:#fecaca}.pdate{font-size:10px;color:#94a3b8}.pinchip{font-size:9px;background:#fff1f2;border:1px solid #fecdd3;color:#be123c;padding:1px 7px;border-radius:999px;font-weight:800}
 .mdot-wrap{position:relative;flex-shrink:0}
 .mdot{width:30px;height:30px;border-radius:9px;border:1px solid #e2e8f0;background:#fff;display:flex;align-items:center;justify-content:center;transition:.12s}.mdot:active{transform:scale(.9)}
-.dmenu{position:absolute;right:0;top:36px;z-index:99999;min-width:148px;background:#fff;border:1px solid #e8eef7;border-radius:12px;box-shadow:0 12px 28px rgba(15,23,42,.18);padding:4px;display:flex;flex-direction:column;gap:2px;animation:pop .16s ease}
+.dmenu{position:absolute;right:0;top:36px;z-index:99999;min-width:148px;background:#fff;border:1px solid #e8eef7;border-radius:12px;box-shadow:0 12px 28px rgba(15,23,42,.18);padding:4px;display:flex;flex-direction:column;gap:2px;animation:pop.16s ease}
 .dmenu.up{top:auto!important;bottom:36px!important}
-.dmenu button{height:32px;border:none;background:#fff;text-align:left;padding:0 10px;border-radius:8px;font-size:11.5px;font-weight:600;display:flex;align-items:center;gap:8px;white-space:nowrap;transition:.12s}.dmenu button:hover{background:#f8fafc}.dmenu button:active{transform:scale(.96)}.dmenu .del{color:#dc2626}
-.imgprev{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:100000;display:flex;align-items:center;justify-content:center;padding:20px}.imgprev img{max-width:90vw;max-height:85vh;border-radius:18px}.xbtn{position:absolute;top:20px;right:20px;width:32px;height:32px;border-radius:50%;border:2px solid #fff;background:#0f172a;color:#fff;display:flex;align-items:center;justify-content:center}
+.dmenu button{height:32px;border:none;background:#fff;text-align:left;padding:0 10px;border-radius:8px;font-size:11.5px;font-weight:600;display:flex;align-items:center;gap:8px;white-space:nowrap;transition:.12s}.dmenu button:hover{background:#f8fafc}.dmenu button:active{transform:scale(.96)}.dmenu.del{color:#dc2626}
+
+/* ✅ CENTER IMAGE PREVIEW - CROSS JUST ABOVE RIGHT */
+.imgprev{position:fixed;inset:0;background:rgba(2,6,23,.88);backdrop-filter:blur(10px);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px}
+.pv-center{display:flex;align-items:center;justify-content:center;width:100%;height:100%;max-width:100vw;max-height:100vh}
+.pv-box{position:relative;display:inline-block;max-width:min(92vw,420px);max-height:86vh}
+.pv-img{width:100%;height:auto;max-width:min(92vw,420px);max-height:80vh;object-fit:contain;border-radius:20px;background:#000;box-shadow:0 20px 60px rgba(0,0,0,.5);display:block}
+.xbtn-top{position:absolute;top:-10px;right:-10px;width:34px;height:34px;border-radius:50%;border:2px solid #fff;background:#0f172a;color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:2;cursor:pointer}
+.xbtn-top:active{transform:scale(.92)}
+
 .center-modal{display:flex!important;align-items:center!important;justify-content:center!important;min-height:calc(100vh - 20px)!important}.pop-card{border:none!important;border-radius:20px!important;box-shadow:0 28px 80px rgba(15,23,42,.26)!important;overflow:hidden!important}
 .mhead{height:50px;padding:0 16px;display:flex;align-items:center;justify-content:space-between;font-size:13px;font-weight:800;border-bottom:1px solid #f1f5f9;background:#fff;flex-shrink:0}.mx{width:30px;height:30px;border-radius:8px;border:1px solid #e2e8f0;background:#fff;display:flex;align-items:center;justify-content:center}.mbody{padding:16px;background:#fff;max-height:70vh;overflow-y:auto}.mfoot{display:flex;gap:8px;padding:12px 16px calc(12px + env(safe-area-inset-bottom));border-top:1px solid #f1f5f9;background:#fff;flex-shrink:0}
 .ff{margin-bottom:10px}.ff label{font-size:11px;font-weight:800;color:#334155;margin-bottom:4px;display:block}.inp{width:100%;height:42px;border:1px solid #e2e8f0;border-radius:12px;padding:0 12px;font-size:13px;background:#fff}.inp.area{height:66px;padding:10px 12px;resize:none}.pinp{letter-spacing:6px;text-align:center;font-weight:900;font-size:16px}
@@ -376,8 +388,9 @@ export default function PrivateChannelSection({ channels=[], onUpdated, onDelete
 .errbox{background:#fef2f2;border:1px solid #fecaca;color:#991b1b;padding:8px 12px;border-radius:10px;font-size:12px;font-weight:700;text-align:center}
 .jtc{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:100000;pointer-events:none}.jtt{padding:11px 16px;border-radius:12px;color:#fff;font-weight:800;font-size:12px}.jtt.success{background:#16a34a}.jtt.danger{background:#ef4444}
 .empty{padding:18px;text-align:center;font-size:13px;color:#94a3b8;border:1px dashed #e2e8f0;border-radius:12px}.nextb{height:34px;border-radius:999px;font-size:12px;font-weight:700}
-@keyframes pop{from{opacity:0;transform:translateY(6px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
-`}</style>
-    </>
+ @keyframes pop{from{opacity:0;transform:translateY(6px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+ @media(max-width:480px){.pv-box{max-width:94vw}.pv-img{max-width:94vw;max-height:78vh}.xbtn-top{width:32px;height:32px;top:-8px;right:-8px}}
+ `}</style>
+      </>
   );
 }
