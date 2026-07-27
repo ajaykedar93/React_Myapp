@@ -7122,7 +7122,7 @@ export default function Teligram() {
         ========================================= */
 
         .text-input {
-          color: #111111 !important;
+          color: var(--composerColor, #111111) !important;
           caret-color: var(--composerColor, #111111) !important;
           background: #ffffff !important;
           min-height: 40px !important;
@@ -7132,7 +7132,7 @@ export default function Teligram() {
           line-height: 1.38 !important;
           font-weight: 500 !important;
           opacity: 1 !important;
-          -webkit-text-fill-color: #111111 !important;
+          -webkit-text-fill-color: var(--composerColor, #111111) !important;
         }
 
         .text-input *,
@@ -7143,7 +7143,7 @@ export default function Teligram() {
           color: inherit !important;
           font-size: inherit !important;
           line-height: inherit !important;
-          -webkit-text-fill-color: inherit !important;
+          -webkit-text-fill-color: var(--composerColor, #111111) !important;
         }
 
         .text-input:empty::before {
@@ -9176,8 +9176,8 @@ export default function Teligram() {
           border: 1px solid rgba(203, 213, 225, 0.90) !important;
           border-radius: 20px !important;
           background: #ffffff !important;
-          color: #111111 !important;
-          -webkit-text-fill-color: #111111 !important;
+          color: var(--composerColor, #111111) !important;
+          -webkit-text-fill-color: var(--composerColor, #111111) !important;
           caret-color: var(--composerColor, #111111) !important;
           font-family: Inter, Arial, sans-serif !important;
           font-size: 14px !important;
@@ -9204,7 +9204,7 @@ export default function Teligram() {
           padding: 0 !important;
           white-space: inherit !important;
           color: inherit !important;
-          -webkit-text-fill-color: inherit !important;
+          -webkit-text-fill-color: var(--composerColor, #111111) !important;
           font-size: inherit !important;
           line-height: inherit !important;
         }
