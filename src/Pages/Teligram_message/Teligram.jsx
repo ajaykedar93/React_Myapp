@@ -96,6 +96,9 @@ export default function Teligram() {
   const [selectedImage, setSelectedImage] = useState(null);
   const [previewImage, setPreviewImage] = useState("");
   const [fullImagePreview, setFullImagePreview] = useState("");
+  const [imageViewerLoading, setImageViewerLoading] = useState(false);
+  const [imageViewerError, setImageViewerError] = useState(false);
+  const [inlineImageStates, setInlineImageStates] = useState({});
   const [imageViewerTransform, setImageViewerTransform] = useState({
     scale: 1,
     x: 0,
@@ -118,7 +121,7 @@ export default function Teligram() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [loading, setLoading] = useState(false);
-  const [toolsOpen, setToolsOpen] = useState(false);
+  const [sendingMessage, setSendingMessage] = useState(false);
 
   const [toast, setToast] = useState({
     show: false,
@@ -653,7 +656,6 @@ export default function Teligram() {
 
     if (editorRef.current) {
       editorRef.current.style.setProperty("--composerColor", finalColor);
-      editorRef.current.style.color = finalColor;
       editorRef.current.style.caretColor = finalColor;
     }
 
@@ -1026,7 +1028,7 @@ export default function Teligram() {
       }
     });
 
-    return wrapper.innerHTML;
+    return wrapper.innerHTML.replace(/\u200B/g, "");
   };
 
   const getEditorHtml = () => {
@@ -1144,11 +1146,15 @@ export default function Teligram() {
       baseX: 0,
       baseY: 0,
     };
+    setImageViewerError(false);
+    setImageViewerLoading(true);
     setFullImagePreview(url);
   };
 
   const closeFullImagePreview = () => {
     setFullImagePreview("");
+    setImageViewerLoading(false);
+    setImageViewerError(false);
     setImageViewerTransform({ scale: 1, x: 0, y: 0 });
   };
 
@@ -1711,10 +1717,10 @@ export default function Teligram() {
         if (range && !range.collapsed) {
           applyInlineColorToRange(range.cloneRange(), finalColor);
           setComposerTextColor("#111111");
+          setTypingColorAtCaret("#111111");
         } else {
           setComposerTextColor(finalColor);
-          document.execCommand("styleWithCSS", false, true);
-          document.execCommand("foreColor", false, finalColor);
+          setTypingColorAtCaret(finalColor);
         }
       }
 
@@ -1769,13 +1775,13 @@ export default function Teligram() {
 
         // Keep the next typed text black. Only the selected word/line keeps the chosen color.
         setComposerTextColor("#111111");
+        setTypingColorAtCaret("#111111");
         return;
       }
 
       // No selection: selected color becomes the typing color for new text.
       setComposerTextColor(finalColor);
-      document.execCommand("styleWithCSS", false, true);
-      document.execCommand("foreColor", false, finalColor);
+      setTypingColorAtCaret(finalColor);
     } catch (error) {
       console.error("Color apply error:", error);
     } finally {
@@ -1859,9 +1865,9 @@ export default function Teligram() {
     }
   };
 
-  const resetForm = () => {
+  const resetForm = ({ keepPreviewImage = false } = {}) => {
     setComposerTextColor("#111111");
-    if (previewImage && previewImage.startsWith("blob:")) {
+    if (!keepPreviewImage && previewImage && previewImage.startsWith("blob:")) {
       URL.revokeObjectURL(previewImage);
     }
 
@@ -1875,7 +1881,6 @@ export default function Teligram() {
     setComposerMode("message");
     setActiveFormats({ bold: false, underline: false });
     setActiveMenuId(null);
-    setToolsOpen(false);
     savedRangeRef.current = null;
 
     if (editorRef.current) {
@@ -1925,7 +1930,9 @@ export default function Teligram() {
     const currentFile = selectedFile;
     const currentPreviewFile = previewFile;
     const currentRemoveFile = removeOldFile;
-    const currentTextColor = selectedTextColorRef.current || textColor || "#111111";
+    // Individual text fragments carry their own inline color. The note's base
+    // color remains black so a later color choice cannot recolor earlier text.
+    const currentTextColor = "#111111";
     const currentDeviceId = getCurrentDeviceId();
     const oldEditingId = editingNoteId;
     const oldNotes = notes;
@@ -1981,7 +1988,10 @@ export default function Teligram() {
       setNotes((prev) => [...prev, optimisticNote]);
     }
 
-    resetForm();
+    setSendingMessage(true);
+    // Keep the local image URL alive so its optimistic View button works while
+    // the upload continues in the background.
+    resetForm({ keepPreviewImage: Boolean(currentPreviewImage) });
 
     try {
       isSavingNoteRef.current = true;
@@ -2108,6 +2118,10 @@ export default function Teligram() {
         );
       }
 
+      if (currentPreviewImage?.startsWith("blob:")) {
+        URL.revokeObjectURL(currentPreviewImage);
+      }
+
       fetch(
         `${API_URL}/api/telegram-channels/${selectedChannel.channel_id}/last-message`,
         {
@@ -2129,10 +2143,41 @@ export default function Teligram() {
       console.error("Save note error:", error);
       showToast("Server error", "error");
       setNotes(oldNotes);
+      if (currentPreviewImage?.startsWith("blob:")) {
+        URL.revokeObjectURL(currentPreviewImage);
+      }
     } finally {
       isSavingNoteRef.current = false;
       setLoading(false);
+      setSendingMessage(false);
     }
+  };
+
+  const setTypingColorAtCaret = (color) => {
+    if (!editorRef.current) return false;
+
+    const selection = window.getSelection();
+    const range = selection && selection.rangeCount > 0
+      ? selection.getRangeAt(0)
+      : savedRangeRef.current;
+
+    if (!range || !range.collapsed) return false;
+
+    const marker = document.createElement("span");
+    const finalColor = normalizeTextColor(color);
+    marker.style.setProperty("color", finalColor, "important");
+    marker.style.setProperty("-webkit-text-fill-color", finalColor, "important");
+    marker.textContent = "\u200B";
+    range.insertNode(marker);
+
+    const nextRange = document.createRange();
+    nextRange.setStart(marker.firstChild, 1);
+    nextRange.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(nextRange);
+    savedRangeRef.current = nextRange.cloneRange();
+
+    return true;
   };
 
   const startEdit = (note) => {
@@ -2763,28 +2808,59 @@ export default function Teligram() {
 
                           {hasImage && (
                             <div className={`image-message-wrap ${hasText ? "with-description" : ""}`}>
-                              <div className="whatsapp-image-frame">
-                                <img
-                                  src={getNoteImageUrl(note)}
-                                  alt="note"
-                                  className="message-image"
-                                  loading="lazy"
-                                  role="button"
-                                  tabIndex={0}
+                              {inlineImageStates[String(note.note_id)] === "loaded" ? (
+                                <div className="whatsapp-image-frame">
+                                  <img
+                                    src={getNoteImageUrl(note)}
+                                    alt="note"
+                                    className="message-image"
+                                    onError={() =>
+                                      setInlineImageStates((states) => ({
+                                        ...states,
+                                        [String(note.note_id)]: "error",
+                                      }))
+                                    }
+                                  />
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="image-view-card"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    openFullImagePreview(getNoteImageUrl(note));
+                                    setInlineImageStates((states) => ({
+                                      ...states,
+                                      [String(note.note_id)]: "loading",
+                                    }));
                                   }}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter" || e.key === " ") {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      openFullImagePreview(getNoteImageUrl(note));
-                                    }
-                                  }}
-                                  onError={(e) => handleImageError(e, "", "telegram-notes")}
-                                />
-                              </div>
+                                  aria-label="View image"
+                                >
+                                  {inlineImageStates[String(note.note_id)] === "loading" ? (
+                                    <>
+                                      <span className="image-spinner image-card-spinner" />
+                                      <img
+                                        src={getNoteImageUrl(note)}
+                                        alt=""
+                                        className="inline-image-preloader"
+                                        onLoad={() =>
+                                          setInlineImageStates((states) => ({
+                                            ...states,
+                                            [String(note.note_id)]: "loaded",
+                                          }))
+                                        }
+                                        onError={() =>
+                                          setInlineImageStates((states) => ({
+                                            ...states,
+                                            [String(note.note_id)]: "error",
+                                          }))
+                                        }
+                                      />
+                                    </>
+                                  ) : (
+                                    <span>{inlineImageStates[String(note.note_id)] === "error" ? "Image unavailable" : "View image"}</span>
+                                  )}
+                                </button>
+                              )}
 
                               {hasText && (
                                 <div
@@ -2857,14 +2933,14 @@ export default function Teligram() {
                                   className="square-action update-square"
                                   onClick={() => startImageUpdate(note)}
                                 >
-                                  Image
+                                  Image update
                                 </button>
 
                                 <button
                                   className="square-action text-square"
                                   onClick={() => startImageCaption(note)}
                                 >
-                                  {hasText ? "Text" : "Add Text"}
+                                  Add Text
                                 </button>
 
                                 <button
@@ -2872,6 +2948,16 @@ export default function Teligram() {
                                   onClick={(e) => downloadNoteImage(e, note)}
                                 >
                                   Download
+                                </button>
+
+                                <button
+                                  className="square-action view-full-square"
+                                  onClick={() => {
+                                    setActiveMenuId(null);
+                                    openFullImagePreview(getNoteImageUrl(note));
+                                  }}
+                                >
+                                  View Full Image
                                 </button>
                               </>
                             ) : hasAttachment ? (
@@ -2977,12 +3063,29 @@ export default function Teligram() {
                     src={fullImagePreview}
                     alt="Full preview"
                     className="image-viewer-img"
+                    onLoad={() => setImageViewerLoading(false)}
+                    onError={() => {
+                      setImageViewerLoading(false);
+                      setImageViewerError(true);
+                    }}
                     onDoubleClick={toggleImageViewerZoom}
                     style={{
                       transform: `translate3d(${imageViewerTransform.x}px, ${imageViewerTransform.y}px, 0) scale(${imageViewerTransform.scale})`,
                     }}
                   />
+                  {imageViewerLoading && (
+                    <div className="image-viewer-loading" role="status" aria-label="Loading image">
+                      <span className="image-spinner" />
+                    </div>
+                  )}
+                  {imageViewerError && <div className="image-viewer-error">Image could not be loaded</div>}
                 </div>
+              </div>
+            )}
+
+            {sendingMessage && (
+              <div className="sending-message-indicator" role="status">
+                <span className="sending-message-dot" /> Sending message
               </div>
             )}
 
@@ -3021,28 +3124,11 @@ export default function Teligram() {
             <footer className="composer" onClick={(e) => e.stopPropagation()}>
               <div className="composer-card">
                 <div className="composer-tools-top">
-                  <button
-                    type="button"
-                    className={`tools-ball-btn ${toolsOpen ? "active" : ""}`}
-                    title="Formatting and attachments"
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      saveSelection();
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setToolsOpen((prev) => !prev);
-                    }}
+                  <div
+                    className="composer-tools-popover composer-tools-always-visible"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    <span></span>
-                  </button>
-
-                  {toolsOpen && (
-                    <div
-                      className="composer-tools-popover"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={(e) => e.stopPropagation()}
-                    >
                       <button
                         type="button"
                         className={`tool-btn format-btn ${activeFormats.bold ? "active" : ""}`}
@@ -3113,8 +3199,7 @@ export default function Teligram() {
                       >
                         <img src={FILE_ICON} alt="file" className="tool-icon file-icon-img" />
                       </button>
-                    </div>
-                  )}
+                  </div>
                 </div>
 
                 <div className="composer-input-row">
@@ -3123,7 +3208,7 @@ export default function Teligram() {
                     className="text-input"
                     contentEditable
                     data-placeholder={composerMode === "title" ? "Type title..." : composerMode === "image-update" ? "Select new image, then tap send" : composerMode === "image-caption" ? "Add image description..." : composerMode === "file-update" ? "Select new file, then tap send" : composerMode === "file-caption" ? "Add file description..." : "Type message..."}
-                    style={{ "--composerColor": textColor, color: textColor, caretColor: textColor }}
+                    style={{ "--composerColor": textColor, caretColor: textColor }}
                     onFocus={saveSelection}
                     onMouseUp={saveSelection}
                     onKeyUp={saveSelection}
@@ -7037,7 +7122,7 @@ export default function Teligram() {
         ========================================= */
 
         .text-input {
-          color: var(--composerColor, #111111) !important;
+          color: #111111 !important;
           caret-color: var(--composerColor, #111111) !important;
           background: #ffffff !important;
           min-height: 40px !important;
@@ -7047,7 +7132,7 @@ export default function Teligram() {
           line-height: 1.38 !important;
           font-weight: 500 !important;
           opacity: 1 !important;
-          -webkit-text-fill-color: var(--composerColor, #111111) !important;
+          -webkit-text-fill-color: #111111 !important;
         }
 
         .text-input *,
@@ -7058,7 +7143,7 @@ export default function Teligram() {
           color: inherit !important;
           font-size: inherit !important;
           line-height: inherit !important;
-          -webkit-text-fill-color: var(--composerColor, #111111) !important;
+          -webkit-text-fill-color: inherit !important;
         }
 
         .text-input:empty::before {
@@ -9091,8 +9176,8 @@ export default function Teligram() {
           border: 1px solid rgba(203, 213, 225, 0.90) !important;
           border-radius: 20px !important;
           background: #ffffff !important;
-          color: var(--composerColor, #111111) !important;
-          -webkit-text-fill-color: var(--composerColor, #111111) !important;
+          color: #111111 !important;
+          -webkit-text-fill-color: #111111 !important;
           caret-color: var(--composerColor, #111111) !important;
           font-family: Inter, Arial, sans-serif !important;
           font-size: 14px !important;
@@ -9119,7 +9204,7 @@ export default function Teligram() {
           padding: 0 !important;
           white-space: inherit !important;
           color: inherit !important;
-          -webkit-text-fill-color: var(--composerColor, #111111) !important;
+          -webkit-text-fill-color: inherit !important;
           font-size: inherit !important;
           line-height: inherit !important;
         }
@@ -10538,6 +10623,94 @@ export default function Teligram() {
             min-height: 31px !important;
           }
         }
+
+        /* Chat images are fetched only after the user chooses to view them. */
+        .image-view-card {
+          width: min(82vw, 334px) !important;
+          height: 190px !important;
+          border: 1px solid #dbe4f0 !important;
+          border-radius: 18px !important;
+          background: linear-gradient(145deg, #f8fafc, #eef6ff) !important;
+          color: #2563eb !important;
+          display: flex !important;
+          flex-direction: column !important;
+          align-items: center !important;
+          justify-content: center !important;
+          gap: 8px !important;
+          font: 800 13px/1.2 "Poppins", "Inter", sans-serif !important;
+          cursor: pointer !important;
+        }
+
+        .image-view-card:hover,
+        .image-view-card:focus-visible {
+          background: #eff6ff !important;
+          border-color: #93c5fd !important;
+          outline: none !important;
+        }
+
+        .inline-image-preloader {
+          position: absolute !important;
+          width: 1px !important;
+          height: 1px !important;
+          opacity: 0 !important;
+          pointer-events: none !important;
+        }
+
+        .image-card-spinner {
+          border-color: rgba(37, 99, 235, 0.25) !important;
+          border-top-color: #2563eb !important;
+        }
+
+        .image-viewer-loading,
+        .image-viewer-error {
+          position: absolute !important;
+          inset: 0 !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          border-radius: 16px !important;
+          background: rgba(15, 23, 42, 0.72) !important;
+          color: #fff !important;
+          font: 700 13px/1.2 "Poppins", "Inter", sans-serif !important;
+        }
+
+        .image-spinner {
+          width: 28px !important;
+          height: 28px !important;
+          border: 3px solid rgba(255, 255, 255, 0.35) !important;
+          border-top-color: #fff !important;
+          border-radius: 50% !important;
+          animation: imageViewerSpin 0.72s linear infinite !important;
+        }
+
+        .sending-message-indicator {
+          position: fixed !important;
+          left: 50% !important;
+          top: 50% !important;
+          z-index: 10001 !important;
+          transform: translate(-50%, -50%) !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 8px !important;
+          padding: 10px 15px !important;
+          border-radius: 999px !important;
+          background: #16a34a !important;
+          color: #fff !important;
+          box-shadow: 0 12px 28px rgba(22, 163, 74, 0.28) !important;
+          font: 800 12px/1 "Poppins", "Inter", sans-serif !important;
+          pointer-events: none !important;
+        }
+
+        .sending-message-dot {
+          width: 7px !important;
+          height: 7px !important;
+          border-radius: 50% !important;
+          background: #dcfce7 !important;
+          animation: sendingMessagePulse 0.9s ease-in-out infinite !important;
+        }
+
+        @keyframes imageViewerSpin { to { transform: rotate(360deg); } }
+        @keyframes sendingMessagePulse { 50% { transform: scale(0.55); opacity: 0.55; } }
 
 
       `}</style>
