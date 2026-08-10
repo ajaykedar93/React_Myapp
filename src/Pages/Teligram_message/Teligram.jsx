@@ -1946,6 +1946,10 @@ export default function Teligram() {
     const noteTitle = getComposerTitleValue(oldNote);
     const originalDeviceId = getNoteSenderDeviceId(oldNote) || currentDeviceId;
 
+    // Lock realtime replacement while this add/update request is in flight.
+    // The optimistic UI is shown immediately; API continues in the background.
+    isSavingNoteRef.current = true;
+
     const optimisticNote = {
       note_id: tempId,
       user_id: PUBLIC_USER_ID,
@@ -1994,7 +1998,6 @@ export default function Teligram() {
     resetForm({ keepPreviewImage: Boolean(currentPreviewImage) });
 
     try {
-      isSavingNoteRef.current = true;
       setLoading(true);
 
       const formData = new FormData();
@@ -2335,6 +2338,9 @@ export default function Teligram() {
     const nextTitle = noteWasTitle ? "" : "title";
     const successMessage = noteWasTitle ? "Title style removed" : "Title style added";
 
+    // Keep the optimistic title change visible until the API finishes.
+    isSavingNoteRef.current = true;
+
     setActiveMenuId(null);
     preserveChatView(note.note_id);
 
@@ -2460,6 +2466,10 @@ export default function Teligram() {
   const deleteNote = async (noteId) => {
     const oldNotes = notes;
 
+    // Lock realtime replacement first. The deleted card disappears immediately
+    // while the DELETE request runs in the background.
+    isSavingNoteRef.current = true;
+
     preserveChatView(noteId);
 
     setNotes((prev) =>
@@ -2485,6 +2495,7 @@ export default function Teligram() {
 
       if (!res.ok) {
         showToast(data.message || "Delete failed", "error");
+        // API failed: restore the previous UI exactly.
         preserveChatView();
         setNotes(oldNotes);
 
@@ -10712,6 +10723,273 @@ export default function Teligram() {
         @keyframes imageViewerSpin { to { transform: rotate(360deg); } }
         @keyframes sendingMessagePulse { 50% { transform: scale(0.55); opacity: 0.55; } }
 
+
+
+        /* =========================================================
+           FINAL MODERN GLASS UI
+           - Channel logo: perfect 360° circle
+           - Full logo visible: contain, never crop/zoom
+           - Fresh modern cyan / indigo / violet palette
+           - Glass look for all interactive buttons
+           - Preserve all existing page functionality
+        ========================================================= */
+
+        :root {
+          --glass-white: rgba(255,255,255,0.18);
+          --glass-white-strong: rgba(255,255,255,0.28);
+          --glass-border: rgba(255,255,255,0.34);
+          --modern-cyan: #06b6d4;
+          --modern-blue: #3b82f6;
+          --modern-indigo: #6366f1;
+          --modern-violet: #8b5cf6;
+          --modern-pink: #ec4899;
+          --modern-slate: #0f172a;
+        }
+
+        .nm-screen {
+          background:
+            radial-gradient(circle at 8% 8%, rgba(6,182,212,0.28), transparent 28%),
+            radial-gradient(circle at 92% 18%, rgba(99,102,241,0.28), transparent 30%),
+            radial-gradient(circle at 50% 100%, rgba(139,92,246,0.24), transparent 36%),
+            linear-gradient(145deg, #020617 0%, #0b1225 48%, #111827 100%) !important;
+        }
+
+        .nm-phone {
+          background:
+            linear-gradient(145deg, #f7fbff 0%, #eef7ff 48%, #f5f3ff 100%) !important;
+        }
+
+        .nm-header {
+          background:
+            radial-gradient(circle at 12% 0%, rgba(255,255,255,0.30), transparent 28%),
+            radial-gradient(circle at 92% 100%, rgba(139,92,246,0.28), transparent 32%),
+            linear-gradient(135deg, #0891b2 0%, #2563eb 48%, #6366f1 100%) !important;
+          border-bottom: 1px solid rgba(255,255,255,0.24) !important;
+          box-shadow:
+            0 12px 35px rgba(37,99,235,0.22),
+            inset 0 1px 0 rgba(255,255,255,0.22) !important;
+        }
+
+        /* Perfect circular channel logo. */
+        .header-brand-row .header-logo,
+        .header-logo {
+          width: 50px !important;
+          height: 50px !important;
+          min-width: 50px !important;
+          max-width: 50px !important;
+          flex: 0 0 50px !important;
+          border-radius: 50% !important;
+          overflow: hidden !important;
+          padding: 2px !important;
+          background:
+            linear-gradient(135deg, rgba(255,255,255,0.98), rgba(224,242,254,0.96)) !important;
+          border: 2px solid rgba(255,255,255,0.82) !important;
+          box-shadow:
+            0 0 0 2px rgba(255,255,255,0.12),
+            0 10px 24px rgba(15,23,42,0.24),
+            inset 0 1px 1px rgba(255,255,255,0.95) !important;
+          position: relative !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+        }
+
+        /* Never crop or zoom the channel logo. */
+        .header-brand-row .header-logo img,
+        .header-logo img {
+          width: 100% !important;
+          height: 100% !important;
+          max-width: 100% !important;
+          max-height: 100% !important;
+          object-fit: contain !important;
+          object-position: center !important;
+          border-radius: 50% !important;
+          display: block !important;
+          background: transparent !important;
+        }
+
+        .header-brand-row {
+          background: rgba(255,255,255,0.16) !important;
+          border: 1px solid rgba(255,255,255,0.30) !important;
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.24),
+            0 10px 28px rgba(15,23,42,0.16) !important;
+          backdrop-filter: blur(18px) saturate(145%) !important;
+          -webkit-backdrop-filter: blur(18px) saturate(145%) !important;
+        }
+
+        /* Universal glass treatment for buttons. */
+        button {
+          -webkit-backdrop-filter: blur(14px) saturate(145%) !important;
+          backdrop-filter: blur(14px) saturate(145%) !important;
+          transition:
+            transform 0.16s ease,
+            background 0.16s ease,
+            border-color 0.16s ease,
+            box-shadow 0.16s ease,
+            filter 0.16s ease !important;
+        }
+
+        button:hover:not(:disabled) {
+          filter: brightness(1.04) saturate(1.06) !important;
+          transform: translateY(-1px) !important;
+        }
+
+        button:active:not(:disabled) {
+          transform: translateY(0) scale(0.97) !important;
+        }
+
+        .header-icon-btn,
+        .back-btn,
+        .search-btn,
+        .unlock-back-btn,
+        .unlock-open-btn {
+          background: rgba(255,255,255,0.16) !important;
+          border: 1px solid rgba(255,255,255,0.34) !important;
+          color: #ffffff !important;
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.22),
+            0 8px 20px rgba(15,23,42,0.14) !important;
+        }
+
+        .header-icon-btn:hover:not(:disabled),
+        .search-btn.active {
+          background: rgba(255,255,255,0.28) !important;
+          border-color: rgba(255,255,255,0.52) !important;
+        }
+
+        .tool-btn,
+        .square-action,
+        .format-btn,
+        .color-tool,
+        .image-tool,
+        .file-tool,
+        .text-square,
+        .title-square,
+        .update-square,
+        .download-square,
+        .view-full-square,
+        .pin-square,
+        .delete-square,
+        .pinned-note-jump,
+        .message-dot-btn,
+        .search-box button,
+        .cancel-confirm,
+        .delete-confirm {
+          background: rgba(255,255,255,0.52) !important;
+          border: 1px solid rgba(148,163,184,0.30) !important;
+          color: #1e293b !important;
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.78),
+            0 7px 18px rgba(15,23,42,0.08) !important;
+        }
+
+        .tool-btn:hover:not(:disabled),
+        .square-action:hover:not(:disabled),
+        .format-btn:hover:not(:disabled),
+        .search-box button:hover:not(:disabled) {
+          background: rgba(255,255,255,0.78) !important;
+          border-color: rgba(99,102,241,0.30) !important;
+        }
+
+        .send-btn {
+          background:
+            linear-gradient(135deg, rgba(6,182,212,0.88), rgba(37,99,235,0.88), rgba(139,92,246,0.88)) !important;
+          border: 1px solid rgba(255,255,255,0.36) !important;
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.28),
+            0 10px 24px rgba(37,99,235,0.26) !important;
+        }
+
+        .delete-square,
+        .delete-confirm {
+          background: rgba(239,68,68,0.16) !important;
+          border-color: rgba(239,68,68,0.28) !important;
+          color: #b91c1c !important;
+        }
+
+        .composer {
+          background: rgba(248,250,252,0.72) !important;
+          border-top: 1px solid rgba(148,163,184,0.22) !important;
+          box-shadow: 0 -12px 30px rgba(15,23,42,0.08) !important;
+          backdrop-filter: blur(20px) saturate(135%) !important;
+          -webkit-backdrop-filter: blur(20px) saturate(135%) !important;
+        }
+
+        .composer-card {
+          background: rgba(255,255,255,0.48) !important;
+          border: 1px solid rgba(148,163,184,0.25) !important;
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.78),
+            0 10px 28px rgba(15,23,42,0.07) !important;
+          backdrop-filter: blur(18px) saturate(140%) !important;
+          -webkit-backdrop-filter: blur(18px) saturate(140%) !important;
+        }
+
+        .text-input {
+          background: rgba(255,255,255,0.64) !important;
+          border-color: rgba(99,102,241,0.20) !important;
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.84),
+            0 4px 14px rgba(15,23,42,0.04) !important;
+          backdrop-filter: blur(12px) !important;
+          -webkit-backdrop-filter: blur(12px) !important;
+        }
+
+        .text-input:focus {
+          border-color: rgba(37,99,235,0.48) !important;
+          box-shadow:
+            0 0 0 3px rgba(59,130,246,0.12),
+            inset 0 1px 0 rgba(255,255,255,0.90) !important;
+        }
+
+        .chat-body {
+          background:
+            radial-gradient(circle at 5% 4%, rgba(6,182,212,0.12), transparent 27%),
+            radial-gradient(circle at 95% 12%, rgba(99,102,241,0.13), transparent 30%),
+            radial-gradient(circle at 55% 100%, rgba(139,92,246,0.10), transparent 32%),
+            linear-gradient(135deg, #f4fbff 0%, #f8fbff 48%, #f7f5ff 100%) !important;
+        }
+
+        .message-bubble,
+        .empty-card,
+        .search-box,
+        .confirm-card {
+          background: rgba(255,255,255,0.62) !important;
+          border-color: rgba(148,163,184,0.20) !important;
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.80),
+            0 10px 28px rgba(15,23,42,0.075) !important;
+          backdrop-filter: blur(16px) saturate(135%) !important;
+          -webkit-backdrop-filter: blur(16px) saturate(135%) !important;
+        }
+
+        .date-separator span {
+          background:
+            linear-gradient(135deg, rgba(6,182,212,0.90), rgba(99,102,241,0.90), rgba(139,92,246,0.90)) !important;
+          border: 1px solid rgba(255,255,255,0.30) !important;
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.25),
+            0 9px 22px rgba(99,102,241,0.18) !important;
+        }
+
+        .toast {
+          background: rgba(255,255,255,0.72) !important;
+          border: 1px solid rgba(255,255,255,0.52) !important;
+          backdrop-filter: blur(22px) saturate(145%) !important;
+          -webkit-backdrop-filter: blur(22px) saturate(145%) !important;
+        }
+
+        @media (max-width: 480px) {
+          .header-brand-row .header-logo,
+          .header-logo {
+            width: 48px !important;
+            height: 48px !important;
+            min-width: 48px !important;
+            max-width: 48px !important;
+            flex-basis: 48px !important;
+          }
+        }
 
       `}</style>
     </div>
