@@ -2778,32 +2778,18 @@ export default function Teligram() {
           </div>
 
           {!privateChannelLocked && (
-            <>
-              <button
-                type="button"
-                className={`header-icon-btn refresh-btn ${manualRefreshing ? "is-refreshing" : ""}`}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={refreshCurrentPage}
-                title="Refresh messages"
-                aria-label="Refresh messages"
-                disabled={manualRefreshing}
-              >
-                ↻
-              </button>
-
-              <button
-                type="button"
-                className={`header-icon-btn search-btn ${searchOpen ? "active" : ""}`}
-                onClick={() => {
-                  setSearchOpen(!searchOpen);
-                  setSearchText("");
-                }}
-                title="Search"
-                aria-label="Search"
-              >
-                🔍
-              </button>
-            </>
+            <button
+              type="button"
+              className={`header-icon-btn search-btn ${searchOpen ? "active" : ""}`}
+              onClick={() => {
+                setSearchOpen(!searchOpen);
+                setSearchText("");
+              }}
+              title="Search"
+              aria-label="Search"
+            >
+              🔍
+            </button>
           )}
         </header>
 
@@ -3444,6 +3430,20 @@ export default function Teligram() {
                       >
                         <span className="heading-tool-icon">H+</span>
                       </button>
+
+                      {!privateChannelLocked && (
+                        <button
+                          type="button"
+                          className={`tool-btn composer-refresh-tool ${manualRefreshing ? "is-refreshing" : ""}`}
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={refreshCurrentPage}
+                          title="Refresh messages"
+                          aria-label="Refresh messages"
+                          disabled={manualRefreshing}
+                        >
+                          ↻
+                        </button>
+                      )}
                   </div>
                 </div>
 
@@ -11427,6 +11427,47 @@ export default function Teligram() {
           line-height: 1 !important;
           font-weight: 950 !important;
           letter-spacing: -.3px !important;
+        }
+
+        /* Refresh belongs in the composer toolbar, immediately after H+. */
+        .composer-tools-popover .composer-refresh-tool {
+          display: inline-flex !important;
+          visibility: visible !important;
+          opacity: 1 !important;
+          flex: 0 0 34px !important;
+          width: 34px !important;
+          min-width: 34px !important;
+          height: 31px !important;
+          min-height: 31px !important;
+          align-items: center !important;
+          justify-content: center !important;
+          border-radius: 9px !important;
+          background: linear-gradient(135deg, rgba(16,185,129,.18), rgba(14,165,233,.18)) !important;
+          color: #047857 !important;
+          border: 1px solid rgba(16,185,129,.52) !important;
+          font-size: 16px !important;
+          line-height: 1 !important;
+          font-weight: 900 !important;
+          padding: 0 !important;
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,.82),
+            0 6px 15px rgba(16,185,129,.15) !important;
+        }
+
+        .composer-tools-popover .composer-refresh-tool:hover:not(:disabled),
+        .composer-tools-popover .composer-refresh-tool:focus-visible {
+          transform: translateY(-1px) scale(1.04) !important;
+          background: linear-gradient(135deg, rgba(16,185,129,.28), rgba(14,165,233,.25)) !important;
+          outline: none !important;
+        }
+
+        .composer-tools-popover .composer-refresh-tool:disabled {
+          opacity: .72 !important;
+          cursor: default !important;
+        }
+
+        .composer-tools-popover .composer-refresh-tool.is-refreshing {
+          animation: noteRefreshSpin 0.75s linear infinite !important;
         }
 
         .date-separator > span {
