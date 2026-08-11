@@ -107,6 +107,18 @@ export default function ChannelList() {
     error: "",
   });
 
+  // Private-channel update requires the same 4-digit channel PIN.
+  // Public-channel update uses the device that created the channel.
+  const [updatePinChecking, setUpdatePinChecking] = useState(false);
+  const [updatePinBox, setUpdatePinBox] = useState({
+    show: false,
+    channel: null,
+    pin: "",
+    error: "",
+  });
+  const [editingChannelPin, setEditingChannelPin] = useState("");
+  const [editingChannelPrivate, setEditingChannelPrivate] = useState(false);
+
   const [fullLogoViewer, setFullLogoViewer] = useState({
     show: false,
     src: "",
@@ -729,6 +741,15 @@ export default function ChannelList() {
     setEditingId(null);
     setRemoveLogo(false);
     setActiveMenuId(null);
+    setEditingChannelPin("");
+    setEditingChannelPrivate(false);
+    setUpdatePinBox({
+      show: false,
+      channel: null,
+      pin: "",
+      error: "",
+    });
+    setUpdatePinChecking(false);
     setShowCreateForm(false);
 
     if (fileRef.current) {
@@ -803,6 +824,14 @@ export default function ChannelList() {
     const updatingChannel = Boolean(currentEditingId);
     const oldChannels = channels;
 
+    // Permission rule:
+    // Public update -> only the creating device is allowed by the API.
+    // Private update -> the same 4-digit channel PIN is required.
+    if (updatingChannel && editingChannelPrivate && !/^[0-9]{4}$/.test(editingChannelPin)) {
+      showToast("Enter the same 4 digit PIN to update this private channel", "error");
+      return;
+    }
+
     if (updatingChannel) {
       actionBusyRef.current = true;
     }
@@ -817,12 +846,19 @@ export default function ChannelList() {
       formData.append("remove_logo", removeLogo ? "true" : "false");
 
       const currentDeviceId = getCurrentDeviceId();
-      formData.append("device_id", currentDeviceId);
 
       if (!currentEditingId) {
         formData.append("created_device_id", currentDeviceId);
         formData.append("is_private", isPrivate ? "true" : "false");
         formData.append("private_pin", isPrivate ? privatePin : "");
+        formData.append("device_id", currentDeviceId);
+      } else if (editingChannelPrivate) {
+        // Private update is authorized by the channel PIN, not by another
+        // user's device identity.
+        formData.append("pin", editingChannelPin);
+      } else {
+        // Public update is authorized by the device that created it.
+        formData.append("device_id", currentDeviceId);
       }
 
       if (channelLogo) {
@@ -834,13 +870,21 @@ export default function ChannelList() {
         : `${API_URL}/api/telegram-channels`;
 
       const method = currentEditingId ? "PUT" : "POST";
+      const requestHeaders = {};
+
+      if (currentEditingId && editingChannelPrivate) {
+        requestHeaders["x-channel-pin"] = editingChannelPin;
+      } else if (currentEditingId) {
+        requestHeaders["x-device-id"] = currentDeviceId;
+      }
 
       const res = await fetch(url, {
         method,
+        headers: requestHeaders,
         body: formData,
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
         actionBusyRef.current = false;
@@ -875,8 +919,7 @@ export default function ChannelList() {
       showToast("Channel created successfully", "success");
       resetForm();
 
-      // Create should appear instantly in the list. This silent sync only
-      // fills any backend-generated logo/time fields without reloading page.
+      // Create appears immediately; silently sync backend-generated fields.
       setTimeout(() => {
         fetchChannels({ silent: true });
       }, 250);
@@ -894,7 +937,9 @@ export default function ChannelList() {
     }
   };
 
-  const startEdit = (channel) => {
+  const beginEditForm = (channel, pin = "") => {
+    const privateChannel = isTrue(channel?.is_private);
+
     setShowCreateForm(true);
     setEditingId(channel.channel_id);
     setChannelName(channel.channel_name || "");
@@ -902,9 +947,122 @@ export default function ChannelList() {
     setLogoPreview(getChannelLogoSource(channel));
     setChannelLogo(null);
     setRemoveLogo(false);
+    setEditingChannelPrivate(privateChannel);
+    setEditingChannelPin(privateChannel ? pin : "");
+    setActiveMenuId(null);
+  };
+
+  const closeUpdatePinBox = () => {
+    if (updatePinChecking) return;
+
+    setUpdatePinBox({
+      show: false,
+      channel: null,
+      pin: "",
+      error: "",
+    });
+    setUpdatePinChecking(false);
+  };
+
+  const startEdit = (channel) => {
     setActiveMenuId(null);
 
-    // Header and create form stay fixed; only channel list scrolls.
+    // Private channel: another device/user may update only after supplying
+    // the same channel PIN. Public channel: update proceeds with device ID.
+    if (isTrue(channel?.is_private)) {
+      setUpdatePinBox({
+        show: true,
+        channel,
+        pin: "",
+        error: "",
+      });
+      return;
+    }
+
+    beginEditForm(channel);
+  };
+
+  const verifyUpdatePin = async () => {
+    const selectedChannel = updatePinBox.channel;
+    const typedPin = String(updatePinBox.pin || "").replace(/\D/g, "").slice(0, 4);
+
+    if (!selectedChannel || updatePinChecking) return;
+
+    if (!/^[0-9]{4}$/.test(typedPin)) {
+      setUpdatePinBox((prev) => ({
+        ...prev,
+        pin: typedPin,
+        error: "Enter valid 4 digit PIN",
+      }));
+      return;
+    }
+
+    try {
+      setUpdatePinChecking(true);
+      setUpdatePinBox((prev) => ({ ...prev, pin: typedPin, error: "" }));
+
+      const res = await fetch(
+        `${API_URL}/api/telegram-channels/${selectedChannel.channel_id}/verify-pin`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ pin: typedPin }),
+        }
+      );
+
+      const data = await res.json().catch(() => ({}));
+      const messageText = String(data?.message || "").toLowerCase();
+
+      const explicitFailure =
+        data?.success === false ||
+        data?.verified === false ||
+        data?.valid === false ||
+        data?.unlocked === false ||
+        isTrue(data?.mismatch) ||
+        isTrue(data?.invalid) ||
+        messageText.includes("mismatch") ||
+        messageText.includes("wrong") ||
+        messageText.includes("invalid") ||
+        messageText.includes("incorrect");
+
+      const explicitSuccess =
+        isTrue(data?.unlocked) ||
+        isTrue(data?.success) ||
+        isTrue(data?.verified) ||
+        isTrue(data?.valid) ||
+        isTrue(data?.matched) ||
+        messageText.includes("verified") ||
+        messageText.includes("success") ||
+        messageText.includes("matched") ||
+        messageText.includes("correct");
+
+      if (!res.ok || explicitFailure || (!explicitSuccess && !res.ok)) {
+        setUpdatePinBox((prev) => ({
+          ...prev,
+          error: data?.message || "PIN mismatch",
+        }));
+        return;
+      }
+
+      setUpdatePinBox({
+        show: false,
+        channel: null,
+        pin: "",
+        error: "",
+      });
+
+      beginEditForm(selectedChannel, typedPin);
+    } catch (error) {
+      console.error("Verify update PIN error:", error);
+      setUpdatePinBox((prev) => ({
+        ...prev,
+        error: "Server error",
+      }));
+    } finally {
+      setUpdatePinChecking(false);
+    }
   };
 
   const deleteChannel = async (channelId, pin = "") => {
@@ -1551,8 +1709,12 @@ export default function ChannelList() {
 
               {editingId && (
                 <div className="update-note-box">
-                  <span>Update mode</span>
-                  <p>Private setting cannot be changed after create.</p>
+                  <span>{editingChannelPrivate ? "Private update mode" : "Public update mode"}</span>
+                  <p>
+                    {editingChannelPrivate
+                      ? "This update is authorized by the same channel PIN. Private type and PIN stay unchanged."
+                      : "Only the device that created this public channel can update or delete it."}
+                  </p>
                 </div>
               )}
 
@@ -1908,6 +2070,90 @@ export default function ChannelList() {
         </div>
       )}
 
+      {updatePinBox.show && (
+        <div className="pin-overlay" onClick={closeUpdatePinBox}>
+          <div
+            className="professional-pin-card update-pin-card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="pin-top-glow"></div>
+
+            <div className="pin-logo-circle">
+              {getChannelLogoSource(updatePinBox.channel) ? (
+                <img
+                  src={getChannelLogoSource(updatePinBox.channel)}
+                  alt="channel"
+                  onError={(e) => handleLogoError(e, updatePinBox.channel, 0)}
+                />
+              ) : (
+                <span>{getInitial(updatePinBox.channel?.channel_name)}</span>
+              )}
+            </div>
+
+            <div className="pin-lock-icon update-lock-icon">✎</div>
+
+            <h3>Update Private Channel</h3>
+
+            <p>
+              Enter the same PIN to update <b>{updatePinBox.channel?.channel_name}</b>.
+              The private channel type and PIN cannot be changed here.
+            </p>
+
+            <input
+              className="center-pin-input"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength="4"
+              placeholder="0000"
+              value={updatePinBox.pin}
+              autoFocus
+              autoComplete="off"
+              disabled={updatePinChecking}
+              onChange={(e) =>
+                setUpdatePinBox((prev) => ({
+                  ...prev,
+                  pin: e.target.value.replace(/\D/g, "").slice(0, 4),
+                  error: "",
+                }))
+              }
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  verifyUpdatePin();
+                }
+              }}
+            />
+
+            {updatePinBox.error && (
+              <div className="wrong-pin-text">{updatePinBox.error}</div>
+            )}
+
+            <div className="pin-buttons">
+              <button
+                type="button"
+                className="pin-cancel-btn"
+                onClick={closeUpdatePinBox}
+                disabled={updatePinChecking}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                className="pin-open-btn update-pin-open-btn"
+                onClick={verifyUpdatePin}
+                disabled={
+                  updatePinChecking || String(updatePinBox.pin || "").length !== 4
+                }
+              >
+                {updatePinChecking ? "Checking..." : "Continue"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {deletePinBox.show && (
         <div className="pin-overlay" onClick={closeDeletePinBox}>
           <div
@@ -2105,18 +2351,23 @@ export default function ChannelList() {
         }
 
         .create-button-wrap {
-  width: 100%;
-  flex-shrink: 0;
-  padding: 10px 10px 8px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 7px;
-  padding-left: 10px;
-}
+          width: 100%;
+          max-width: 760px;
+          flex-shrink: 0;
+          padding: 10px 10px 8px;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          gap: 7px;
+          overflow: hidden;
+        }
+
         .open-create-btn {
-          width: min(255px, calc(100vw - 78px));
-          transform: translateX(-7px);
+          flex: 1 1 auto;
+          width: auto;
+          min-width: 0;
+          max-width: 255px;
+          transform: none;
           border: none;
           border-radius: 999px;
           min-height: 45px;
@@ -2161,6 +2412,16 @@ export default function ChannelList() {
 
         .telegram-login-icon-btn:active {
           transform: scale(0.96);
+        }
+
+        .update-lock-icon {
+          background: #eff6ff !important;
+          color: #2563eb !important;
+        }
+
+        .update-pin-open-btn {
+          background: linear-gradient(135deg, #2563eb, #06b6d4) !important;
+          box-shadow: 0 14px 28px rgba(37, 99, 235, 0.24) !important;
         }
 
         .external-login-icon-btn {
@@ -3441,7 +3702,10 @@ export default function ChannelList() {
           }
 
           .open-create-btn {
-            width: min(238px, calc(100vw - 72px));
+            width: auto;
+            max-width: 255px;
+            flex: 1 1 auto;
+            min-width: 0;
           }
 
           .open-create-btn:active {
@@ -3461,6 +3725,27 @@ export default function ChannelList() {
         }
 
         @media (max-width: 340px) {
+          .create-button-wrap {
+            padding-left: 7px;
+            padding-right: 7px;
+            gap: 5px;
+          }
+
+          .open-create-btn {
+            min-width: 0;
+            max-width: none;
+            font-size: 12px;
+            padding-left: 10px;
+            padding-right: 10px;
+            white-space: nowrap;
+          }
+
+          .telegram-login-icon-btn,
+          .external-login-icon-btn {
+            width: 40px;
+            height: 40px;
+          }
+
           .create-card {
             flex-direction: column;
           }
@@ -3493,7 +3778,10 @@ export default function ChannelList() {
           }
 
           .open-create-btn {
-            width: min(210px, calc(100vw - 64px));
+            width: auto;
+            max-width: 255px;
+            flex: 1 1 auto;
+            min-width: 0;
             font-size: 13px;
           }
 

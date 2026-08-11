@@ -81,6 +81,10 @@ export default function TryNewPageTabs() {
         --tabGetInvoice2:#2563eb;
         --tabGetInvoice3:#7c3aed;
 
+        --tabTelegram1:#229ed9;
+        --tabTelegram2:#2563eb;
+        --tabTelegram3:#7c3aed;
+
         --line:#e2e8f0;
         --ink:#0f172a;
       }
@@ -326,6 +330,13 @@ export default function TryNewPageTabs() {
         border-color:transparent;
         background:linear-gradient(135deg,var(--tabInvoice1),var(--tabInvoice2),var(--tabInvoice3));
         box-shadow:0 14px 28px rgba(236,72,153,.18);
+      }
+
+      .tnp-tabbtn.telegram-active{
+        color:#fff;
+        border-color:transparent;
+        background:linear-gradient(135deg,var(--tabTelegram1),var(--tabTelegram2),var(--tabTelegram3));
+        box-shadow:0 14px 28px rgba(34,158,217,.20);
       }
 
       .tnp-tabbtn.getinvoice-active{
@@ -642,6 +653,18 @@ export default function TryNewPageTabs() {
                 onClick={() => setActiveTab("get_invoice")}
               >
                 GET Invoice
+              </button>
+
+              <button
+                type="button"
+                className={`tnp-tabbtn ${
+                  activeTab === "telegram" ? "telegram-active" : ""
+                }`}
+                onClick={() => navigate("/teligram-channels")}
+                title="Open Telegram Channels"
+                aria-label="Open Telegram Channels"
+              >
+                Telegram
               </button>
             </div>
           </div>

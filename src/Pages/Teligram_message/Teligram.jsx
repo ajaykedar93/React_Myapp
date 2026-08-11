@@ -1000,7 +1000,6 @@ export default function Teligram() {
 
   const getComposerTitleValue = (oldNote) => {
     if (composerMode === "title") return "title";
-    if (oldNote && isTitleNote(oldNote)) return "title";
     return "";
   };
 
@@ -1040,6 +1039,108 @@ export default function Teligram() {
     }
 
     return normalizeEditorHtml(html.trim());
+  };
+
+  // Title mode affects only the first user-entered line.
+  // The remaining lines keep their normal formatting unless the user
+  // explicitly applies Bold/Underline to them.
+  const applyFirstLineHeadingHtml = (html) => {
+    if (typeof document === "undefined" || !html) return html || "";
+
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = html;
+
+    // Remove an older heading wrapper first so the operation is idempotent.
+    wrapper.querySelectorAll(".note-heading-line").forEach((heading) => {
+      const parent = heading.parentNode;
+      if (!parent) return;
+      while (heading.firstChild) parent.insertBefore(heading.firstChild, heading);
+      heading.remove();
+    });
+
+    const blockTags = new Set([
+      "DIV", "P", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "PRE",
+    ]);
+
+    // contentEditable commonly stores each Enter as <div>...</div>.
+    // In that case, make ONLY the first block a heading.
+    const firstElement = Array.from(wrapper.children).find((el) => {
+      return blockTags.has(el.tagName) || el.textContent?.trim();
+    });
+
+    if (firstElement && blockTags.has(firstElement.tagName)) {
+      const heading = document.createElement("strong");
+      heading.className = "note-heading-line";
+      while (firstElement.firstChild) {
+        heading.appendChild(firstElement.firstChild);
+      }
+      firstElement.appendChild(heading);
+      return normalizeEditorHtml(wrapper.innerHTML);
+    }
+
+    // Plain text / inline HTML: split at the first newline or BR.
+    const walker = document.createTreeWalker(
+      wrapper,
+      NodeFilter.SHOW_TEXT
+    );
+    let firstText = walker.nextNode();
+
+    while (firstText && !String(firstText.textContent || "").trim()) {
+      firstText = walker.nextNode();
+    }
+
+    if (!firstText) return normalizeEditorHtml(wrapper.innerHTML);
+
+    const textValue = firstText.textContent || "";
+    const newlineIndex = textValue.search(/\r?\n/);
+
+    if (newlineIndex >= 0) {
+      const before = textValue.slice(0, newlineIndex);
+      const after = textValue.slice(newlineIndex + 1);
+
+      const heading = document.createElement("strong");
+      heading.className = "note-heading-line";
+      heading.textContent = before;
+
+      const afterNode = document.createTextNode(after);
+      firstText.replaceWith(heading, afterNode);
+    } else {
+      const heading = document.createElement("strong");
+      heading.className = "note-heading-line";
+      firstText.parentNode.insertBefore(heading, firstText);
+      heading.appendChild(firstText);
+    }
+
+    return normalizeEditorHtml(wrapper.innerHTML);
+  };
+
+  const removeFirstLineHeadingHtml = (html) => {
+    if (typeof document === "undefined" || !html) return html || "";
+
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = html;
+
+    wrapper.querySelectorAll(".note-heading-line").forEach((heading) => {
+      const parent = heading.parentNode;
+      if (!parent) return;
+
+      while (heading.firstChild) {
+        parent.insertBefore(heading.firstChild, heading);
+      }
+      heading.remove();
+    });
+
+    return normalizeEditorHtml(wrapper.innerHTML);
+  };
+
+  const getRenderedNoteHtml = (note) => {
+    const html = note?.content_html || "";
+    return isTitleNote(note) ? applyFirstLineHeadingHtml(html) : html;
+  };
+
+  const getComposerContentHtml = () => {
+    const html = getEditorHtml();
+    return composerMode === "title" ? applyFirstLineHeadingHtml(html) : html;
   };
 
   const placeCaretAtEnd = (element = editorRef.current) => {
@@ -1910,13 +2011,44 @@ export default function Teligram() {
     }
   };
 
+  const toggleComposerTitleMode = (event) => {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+
+    if (
+      composerMode === "image-update" ||
+      composerMode === "image-caption" ||
+      composerMode === "file-update" ||
+      composerMode === "file-caption"
+    ) {
+      showToast("Heading is for text messages", "error");
+      return;
+    }
+
+    const nextMode = composerMode === "title" ? "message" : "title";
+
+    if (editorRef.current) {
+      const currentHtml = getEditorHtml();
+      editorRef.current.innerHTML =
+        nextMode === "title"
+          ? applyFirstLineHeadingHtml(currentHtml)
+          : removeFirstLineHeadingHtml(currentHtml);
+    }
+
+    setComposerMode(nextMode);
+
+    setTimeout(() => {
+      placeCaretAtEnd();
+    }, 0);
+  };
+
   const saveNote = async () => {
     if (!selectedChannel?.channel_id) {
       showToast("Please open channel first", "error");
       return;
     }
 
-    const contentHtml = getEditorHtml();
+    const contentHtml = getComposerContentHtml();
     const plainText = stripHtml(contentHtml).trim();
 
     if (!plainText && !selectedImage && !previewImage && !selectedFile && !previewFile) {
@@ -2484,8 +2616,6 @@ export default function Teligram() {
     }
 
     try {
-      setLoading(true);
-
       const res = await fetch(`${API_URL}/api/telegram-notes/${noteId}`, {
         method: "DELETE",
         headers: getAccessHeaders(),
@@ -2507,13 +2637,14 @@ export default function Teligram() {
         return;
       }
 
-      showToast("Message deleted", "success");
+      showToast("Deleted", "deleted");
     } catch (error) {
       console.error("Delete note error:", error);
       showToast("Server error while deleting", "error");
       preserveChatView();
       setNotes(oldNotes);
     } finally {
+      isSavingNoteRef.current = false;
       setLoading(false);
     }
   };
@@ -2753,6 +2884,7 @@ export default function Teligram() {
                             style={{
                               "--badge1": badgeColor1,
                               "--badge2": badgeColor2,
+                              background: `linear-gradient(135deg, ${badgeColor1}, ${badgeColor2})`,
                             }}
                           >
                             {dateLabel}
@@ -2878,7 +3010,7 @@ export default function Teligram() {
                                   className="image-description-text"
                                   style={{ "--noteColor": getNoteTextColor(note), color: getNoteTextColor(note) }}
                                   dangerouslySetInnerHTML={{
-                                    __html: sanitizeNoteHtml(note.content_html),
+                                    __html: sanitizeNoteHtml(getRenderedNoteHtml(note)),
                                   }}
                                 />
                               )}
@@ -2912,7 +3044,7 @@ export default function Teligram() {
                                   className="image-description-text file-description-text"
                                   style={{ "--noteColor": getNoteTextColor(note), color: getNoteTextColor(note) }}
                                   dangerouslySetInnerHTML={{
-                                    __html: sanitizeNoteHtml(note.content_html),
+                                    __html: sanitizeNoteHtml(getRenderedNoteHtml(note)),
                                   }}
                                 />
                               )}
@@ -2926,7 +3058,7 @@ export default function Teligram() {
                               }`}
                               style={{ "--noteColor": getNoteTextColor(note), color: getNoteTextColor(note) }}
                               dangerouslySetInnerHTML={{
-                                __html: sanitizeNoteHtml(note.content_html),
+                                __html: sanitizeNoteHtml(getRenderedNoteHtml(note)),
                               }}
                             />
                           )}
@@ -3209,6 +3341,15 @@ export default function Teligram() {
                         title="Add file"
                       >
                         <img src={FILE_ICON} alt="file" className="tool-icon file-icon-img" />
+                      </button>
+                      <button
+                        type="button"
+                        className={`tool-btn heading-tool ${composerMode === "title" ? "active" : ""}`}
+                        onMouseDown={toggleComposerTitleMode}
+                        title={composerMode === "title" ? "Remove heading" : "Add heading"}
+                        aria-pressed={composerMode === "title"}
+                      >
+                        <span className="heading-tool-icon">H+</span>
                       </button>
                   </div>
                 </div>
@@ -10991,7 +11132,241 @@ export default function Teligram() {
           }
         }
 
-      `}</style>
+
+        /* =========================================================
+           FINAL USER REQUEST FIX
+           - Stable different date badge colors
+           - Delete disappears immediately; successful delete = tiny red toast
+           - Heading button after file icon
+           - Heading mode bolds only the first entered line
+           - Glass buttons with distinct colors
+        ========================================================= */
+
+        .date-separator > span {
+          background: linear-gradient(135deg, var(--badge1), var(--badge2)) !important;
+          color: #ffffff !important;
+          border: 1px solid rgba(255,255,255,0.48) !important;
+          box-shadow:
+            0 7px 18px color-mix(in srgb, var(--badge1) 28%, transparent) !important,
+            inset 0 1px 0 rgba(255,255,255,0.32) !important;
+        }
+
+        .composer-tools-popover .tool-btn {
+          backdrop-filter: blur(14px) saturate(145%) !important;
+          -webkit-backdrop-filter: blur(14px) saturate(145%) !important;
+          border: 1px solid rgba(255,255,255,0.62) !important;
+          box-shadow:
+            0 5px 13px rgba(15,23,42,0.10),
+            inset 0 1px 0 rgba(255,255,255,0.72) !important;
+          transition: transform .16s ease, box-shadow .16s ease, background .16s ease !important;
+        }
+
+        .composer-tools-popover .format-btn:nth-child(1) {
+          background: rgba(59,130,246,.14) !important;
+          color: #1d4ed8 !important;
+          border-color: rgba(96,165,250,.45) !important;
+        }
+
+        .composer-tools-popover .format-btn:nth-child(2) {
+          background: rgba(124,58,237,.14) !important;
+          color: #6d28d9 !important;
+          border-color: rgba(167,139,250,.48) !important;
+        }
+
+        .composer-tools-popover .color-tool {
+          background: rgba(245,158,11,.16) !important;
+          color: #b45309 !important;
+          border-color: rgba(251,191,36,.48) !important;
+        }
+
+        .composer-tools-popover .image-tool {
+          background: rgba(16,185,129,.15) !important;
+          color: #047857 !important;
+          border-color: rgba(52,211,153,.48) !important;
+        }
+
+        .composer-tools-popover .file-tool {
+          background: rgba(236,72,153,.14) !important;
+          color: #be185d !important;
+          border-color: rgba(244,114,182,.48) !important;
+        }
+
+        .composer-tools-popover .heading-tool {
+          background: rgba(14,165,233,.15) !important;
+          color: #0369a1 !important;
+          border-color: rgba(56,189,248,.52) !important;
+        }
+
+        .composer-tools-popover .tool-btn:hover,
+        .composer-tools-popover .tool-btn:active,
+        .composer-tools-popover .tool-btn.active {
+          transform: translateY(-1px) scale(1.04) !important;
+          box-shadow:
+            0 8px 17px rgba(15,23,42,.14),
+            inset 0 1px 0 rgba(255,255,255,.82) !important;
+        }
+
+        .heading-tool-icon {
+          font-size: 9px !important;
+          line-height: 1 !important;
+          font-weight: 950 !important;
+          letter-spacing: -.2px !important;
+        }
+
+        .message-title-text {
+          font-weight: 500 !important;
+          color: var(--noteColor, #111111) !important;
+          font-family: "Times New Roman", Times, serif !important;
+        }
+
+        .message-title-text .note-heading-line {
+          display: block !important;
+          font-weight: 900 !important;
+          color: inherit !important;
+          margin: 0 0 4px !important;
+        }
+
+        .message-title-text .note-heading-line * {
+          font-weight: 900 !important;
+        }
+
+        .message-title-text .note-heading-line + * {
+          font-weight: 500 !important;
+        }
+
+        .message-title-text::before {
+          content: "HEADING" !important;
+          font-family: "Poppins", "Inter", sans-serif !important;
+          color: #0369a1 !important;
+          background: #e0f2fe !important;
+        }
+
+        .toast.deleted {
+          width: auto !important;
+          min-width: 0 !important;
+          max-width: 100px !important;
+          padding: 5px 9px !important;
+          border-radius: 999px !important;
+          background: rgba(254,226,226,.94) !important;
+          border: 1px solid rgba(248,113,113,.55) !important;
+          color: #dc2626 !important;
+          box-shadow: 0 5px 15px rgba(220,38,38,.12) !important;
+          font-family: "Poppins", "Inter", sans-serif !important;
+          font-size: 9px !important;
+          line-height: 1 !important;
+          font-weight: 900 !important;
+          letter-spacing: .25px !important;
+          text-transform: lowercase !important;
+        }
+
+        .toast.deleted .toast-icon {
+          display: none !important;
+        }
+
+        .toast.deleted p {
+          color: #dc2626 !important;
+          margin: 0 !important;
+          font-size: 9px !important;
+          font-weight: 900 !important;
+        }
+
+        @media (max-width: 480px) {
+          .composer-tools-popover {
+            gap: 5px !important;
+            padding: 3px 5px !important;
+          }
+
+          .composer-tools-popover .tool-btn {
+            width: 29px !important;
+            height: 29px !important;
+            min-width: 29px !important;
+            min-height: 29px !important;
+          }
+        }
+
+
+        /* =========================================================
+           FINAL HARD FIX — visible heading / per-date colors / fast UI
+        ========================================================= */
+        .composer-tools-popover {
+          display: flex !important;
+          flex-wrap: nowrap !important;
+          overflow-x: auto !important;
+          overflow-y: hidden !important;
+          scrollbar-width: none !important;
+          -ms-overflow-style: none !important;
+          width: max-content !important;
+          max-width: 100% !important;
+        }
+
+        .composer-tools-popover::-webkit-scrollbar {
+          display: none !important;
+        }
+
+        .composer-tools-popover .heading-tool {
+          display: inline-flex !important;
+          visibility: visible !important;
+          opacity: 1 !important;
+          flex: 0 0 34px !important;
+          width: 34px !important;
+          min-width: 34px !important;
+          height: 31px !important;
+          min-height: 31px !important;
+          align-items: center !important;
+          justify-content: center !important;
+          overflow: visible !important;
+          position: relative !important;
+          z-index: 20 !important;
+          background: linear-gradient(135deg, rgba(14,165,233,.22), rgba(59,130,246,.18)) !important;
+          color: #0369a1 !important;
+          border: 1px solid rgba(14,165,233,.55) !important;
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,.82),
+            0 6px 15px rgba(14,165,233,.18) !important;
+        }
+
+        .composer-tools-popover .heading-tool-icon {
+          display: inline-block !important;
+          visibility: visible !important;
+          opacity: 1 !important;
+          color: #0369a1 !important;
+          font-size: 12px !important;
+          line-height: 1 !important;
+          font-weight: 950 !important;
+          letter-spacing: -.3px !important;
+        }
+
+        .date-separator > span {
+          background: linear-gradient(135deg, var(--badge1), var(--badge2)) !important;
+          background-image: linear-gradient(135deg, var(--badge1), var(--badge2)) !important;
+        }
+
+        /* Delete-success toast: tiny red "deleted" only. */
+        .toast.deleted {
+          width: fit-content !important;
+          min-width: 0 !important;
+          max-width: 90px !important;
+          padding: 5px 9px !important;
+          background: rgba(254,226,226,.96) !important;
+          border: 1px solid rgba(248,113,113,.65) !important;
+          color: #dc2626 !important;
+          border-radius: 999px !important;
+        }
+
+        .toast.deleted .toast-icon {
+          display: none !important;
+        }
+
+        .toast.deleted p {
+          margin: 0 !important;
+          color: #dc2626 !important;
+          font-size: 9px !important;
+          font-weight: 900 !important;
+          text-transform: lowercase !important;
+        }
+
+      `}
+</style>
     </div>
   );
 }
