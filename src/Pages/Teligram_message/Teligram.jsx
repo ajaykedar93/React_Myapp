@@ -122,6 +122,7 @@ export default function Teligram() {
   const [searchText, setSearchText] = useState("");
   const [loading, setLoading] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
+  const [manualRefreshing, setManualRefreshing] = useState(false);
 
   const [toast, setToast] = useState({
     show: false,
@@ -2570,6 +2571,75 @@ export default function Teligram() {
     return "Pinned message";
   };
 
+  const refreshCurrentPage = async (event) => {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+
+    if (
+      manualRefreshing ||
+      isFetchingNotesRef.current ||
+      isSavingNoteRef.current ||
+      !selectedChannel?.channel_id ||
+      (isTrue(selectedChannel.is_private) && !channelUnlocked)
+    ) {
+      return;
+    }
+
+    preserveChatView();
+    setManualRefreshing(true);
+
+    try {
+      await fetchNotes(
+        selectedChannel.channel_id,
+        verifiedPinRef.current || getSavedChannelPin(),
+        true
+      );
+    } finally {
+      setManualRefreshing(false);
+    }
+  };
+
+  const copyNoteText = async (event, note) => {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+
+    const text = stripHtml(note?.content_html || "").trim();
+    const copyValue =
+      text ||
+      (hasNoteAttachment(note)
+        ? getNoteFileName(note)
+        : hasNoteImage(note)
+          ? "Image"
+          : "");
+
+    if (!copyValue) {
+      showToast("No text to copy", "error");
+      return;
+    }
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(copyValue);
+      } else {
+        const helper = document.createElement("textarea");
+        helper.value = copyValue;
+        helper.setAttribute("readonly", "");
+        helper.style.position = "fixed";
+        helper.style.opacity = "0";
+        document.body.appendChild(helper);
+        helper.select();
+        document.execCommand("copy");
+        helper.remove();
+      }
+
+      setActiveMenuId(null);
+      showToast("Copied", "success");
+    } catch (error) {
+      console.error("Copy note text error:", error);
+      showToast("Copy failed", "error");
+    }
+  };
+
   const goToPinnedNote = () => {
     if (!pinnedNoteId) return;
 
@@ -2708,16 +2778,32 @@ export default function Teligram() {
           </div>
 
           {!privateChannelLocked && (
-            <button
-              className={`header-icon-btn search-btn ${searchOpen ? "active" : ""}`}
-              onClick={() => {
-                setSearchOpen(!searchOpen);
-                setSearchText("");
-              }}
-              title="Search"
-            >
-              🔍
-            </button>
+            <>
+              <button
+                type="button"
+                className={`header-icon-btn refresh-btn ${manualRefreshing ? "is-refreshing" : ""}`}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={refreshCurrentPage}
+                title="Refresh messages"
+                aria-label="Refresh messages"
+                disabled={manualRefreshing}
+              >
+                ↻
+              </button>
+
+              <button
+                type="button"
+                className={`header-icon-btn search-btn ${searchOpen ? "active" : ""}`}
+                onClick={() => {
+                  setSearchOpen(!searchOpen);
+                  setSearchText("");
+                }}
+                title="Search"
+                aria-label="Search"
+              >
+                🔍
+              </button>
+            </>
           )}
         </header>
 
@@ -3143,6 +3229,13 @@ export default function Teligram() {
                                 </button>
                               </>
                             )}
+
+                            <button
+                              className="square-action copy-square"
+                              onClick={(e) => copyNoteText(e, note)}
+                            >
+                              Copy
+                            </button>
 
                             <button
                               className={`square-action pin-square ${pinnedMessage ? "active-pin" : ""}`}
@@ -11363,6 +11456,83 @@ export default function Teligram() {
           font-size: 9px !important;
           font-weight: 900 !important;
           text-transform: lowercase !important;
+        }
+
+
+        /* =========================================================
+           FINAL SAFE REFRESH + COPY UPDATE
+           API-only refresh; preserves scroll and composer state.
+        ========================================================= */
+
+        .refresh-btn {
+          width: 28px !important;
+          height: 28px !important;
+          min-width: 28px !important;
+          min-height: 28px !important;
+          border-radius: 8px !important;
+          background: rgba(255,255,255,0.16) !important;
+          color: #ffffff !important;
+          border: 1px solid rgba(255,255,255,0.22) !important;
+          font-size: 17px !important;
+          line-height: 1 !important;
+          font-weight: 800 !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          padding: 0 !important;
+          box-shadow: none !important;
+          flex: 0 0 auto !important;
+        }
+
+        .refresh-btn:hover:not(:disabled),
+        .refresh-btn:focus-visible {
+          background: rgba(255,255,255,0.25) !important;
+          outline: none !important;
+        }
+
+        .refresh-btn:disabled {
+          opacity: 0.75 !important;
+          cursor: default !important;
+        }
+
+        .refresh-btn.is-refreshing {
+          animation: noteRefreshSpin 0.75s linear infinite !important;
+        }
+
+        @keyframes noteRefreshSpin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+
+        .copy-square {
+          background: #e0f2fe !important;
+          color: #0369a1 !important;
+        }
+
+        .copy-square:hover {
+          background: #bae6fd !important;
+          color: #075985 !important;
+        }
+
+        @media (max-width: 480px) {
+          .refresh-btn {
+            width: 25px !important;
+            height: 25px !important;
+            min-width: 25px !important;
+            min-height: 25px !important;
+            border-radius: 7px !important;
+            font-size: 15px !important;
+          }
+        }
+
+        @media (max-width: 360px) {
+          .refresh-btn {
+            width: 23px !important;
+            height: 23px !important;
+            min-width: 23px !important;
+            min-height: 23px !important;
+            font-size: 14px !important;
+          }
         }
 
       `}
