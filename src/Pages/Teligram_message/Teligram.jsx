@@ -59,6 +59,7 @@ export default function Teligram() {
   const bottomRef = useRef(null);
   const chatBodyRef = useRef(null);
   const savedRangeRef = useRef(null);
+  const typingFormatsRef = useRef({ bold: false, underline: false });
   const verifiedPinRef = useRef("");
   const unlockCheckingRef = useRef(false);
   const unlockRequestIdRef = useRef(0);
@@ -85,14 +86,17 @@ export default function Teligram() {
 
   const [selectedChannel, setSelectedChannel] = useState(null);
   const [notes, setNotes] = useState([]);
-  const [pinnedNoteId, setPinnedNoteId] = useState("");
+  const [pinnedNoteIds, setPinnedNoteIds] = useState([]);
 
   const [channelUnlocked, setChannelUnlocked] = useState(false);
   const [unlockPin, setUnlockPin] = useState("");
   const [unlockError, setUnlockError] = useState("");
   const [unlockChecking, setUnlockChecking] = useState(false);
+  const [unlockTrustDevice, setUnlockTrustDevice] = useState(false);
 
   const [textColor, setTextColor] = useState("#111111");
+  const [colorModeActive, setColorModeActive] = useState(false);
+  const [showPinnedList, setShowPinnedList] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
   const [previewImage, setPreviewImage] = useState("");
   const [fullImagePreview, setFullImagePreview] = useState("");
@@ -162,11 +166,24 @@ export default function Teligram() {
 
   useEffect(() => {
     if (!selectedChannel?.channel_id || typeof window === "undefined") {
-      setPinnedNoteId("");
+      setPinnedNoteIds([]);
       return;
     }
 
-    setPinnedNoteId(localStorage.getItem(getPinnedNoteKey(selectedChannel.channel_id)) || "");
+    try {
+      const raw = localStorage.getItem(getPinnedNoteKey(selectedChannel.channel_id));
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(parsed)) {
+        setPinnedNoteIds(parsed.map(String).slice(0, 5));
+      } else if (raw) {
+        setPinnedNoteIds([String(raw)]);
+      } else {
+        setPinnedNoteIds([]);
+      }
+    } catch {
+      const legacy = localStorage.getItem(getPinnedNoteKey(selectedChannel.channel_id));
+      setPinnedNoteIds(legacy ? [String(legacy)] : []);
+    }
   }, [selectedChannel?.channel_id]);
 
   useEffect(() => {
@@ -295,14 +312,11 @@ export default function Teligram() {
     return `pinned_note_${PUBLIC_USER_ID}_${channelId}`;
   };
 
-  const savePinnedNoteId = (channelId, noteId) => {
+  const savePinnedNoteIds = (channelId, ids) => {
     if (!channelId || typeof window === "undefined") return;
-
-    if (noteId) {
-      localStorage.setItem(getPinnedNoteKey(channelId), String(noteId));
-    } else {
-      localStorage.removeItem(getPinnedNoteKey(channelId));
-    }
+    const cleanIds = Array.from(new Set((ids || []).map(String))).slice(0, 5);
+    if (cleanIds.length) localStorage.setItem(getPinnedNoteKey(channelId), JSON.stringify(cleanIds));
+    else localStorage.removeItem(getPinnedNoteKey(channelId));
   };
 
   const hasFrontendVerifiedAccess = (channelId, pin = "") => {
@@ -768,43 +782,74 @@ export default function Teligram() {
     return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
   };
 
-  const downloadNoteImage = (event, note) => {
+  const downloadBlobFromUrl = async (url, fileName, note = null) => {
+    if (!url) return false;
+
+    const response = await fetch(url, {
+      method: "GET",
+      headers: getAccessHeaders(),
+      credentials: "include",
+    });
+
+    if (!response.ok) {
+      throw new Error(`Download failed: ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = fileName || `download-${note?.note_id || Date.now()}`;
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
+    return true;
+  };
+
+  const downloadNoteImage = async (event, note) => {
     event.preventDefault();
     event.stopPropagation();
 
     const downloadUrl = getNoteDownloadUrl(note);
-    if (!downloadUrl) return;
+    if (!downloadUrl) {
+      showToast("Image download unavailable", "error");
+      return;
+    }
 
     const fileName =
       getFileNameFromUrl(note?.download_url) ||
       getFileNameFromUrl(note?.image_url) ||
       `note-image-${note?.note_id || Date.now()}.jpg`;
 
-    const link = document.createElement("a");
-    link.href = downloadUrl;
-    link.download = fileName;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+    try {
+      await downloadBlobFromUrl(downloadUrl, fileName, note);
+      showToast("Download started", "success");
+    } catch (error) {
+      console.error("Image download error:", error);
+      showToast("Download failed", "error");
+    }
   };
 
-  const downloadNoteFile = (event, note) => {
+  const downloadNoteFile = async (event, note) => {
     event.preventDefault();
     event.stopPropagation();
 
     const downloadUrl = getNoteFileDownloadUrl(note);
-    if (!downloadUrl) return;
+    if (!downloadUrl) {
+      showToast("File download unavailable", "error");
+      return;
+    }
 
-    const link = document.createElement("a");
-    link.href = downloadUrl;
-    link.download = getNoteFileName(note);
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+    try {
+      await downloadBlobFromUrl(downloadUrl, getNoteFileName(note), note);
+      showToast("Download started", "success");
+    } catch (error) {
+      console.error("File download error:", error);
+      showToast("Download failed", "error");
+    }
   };
 
   const openNoteFile = (event, note) => {
@@ -1001,7 +1046,18 @@ export default function Teligram() {
 
   const getComposerTitleValue = (oldNote) => {
     if (composerMode === "title") return "title";
-    return "";
+
+    // Once a title line has been created, turning the Heading tool OFF only
+    // changes the future typing mode. The existing first line must remain
+    // stored as a title so the Title badge can be rendered after sending.
+    const html = getEditorHtml();
+    if (typeof document !== "undefined" && html) {
+      const wrapper = document.createElement("div");
+      wrapper.innerHTML = html;
+      if (wrapper.querySelector(".note-heading-line")) return "title";
+    }
+
+    return isTitleNote(oldNote) ? "title" : "";
   };
 
   const normalizeEditorHtml = (html) => {
@@ -1141,6 +1197,9 @@ export default function Teligram() {
 
   const getComposerContentHtml = () => {
     const html = getEditorHtml();
+    // If title mode is currently ON, ensure only the first line is marked.
+    // If it was turned OFF after a title was typed, the existing heading
+    // wrapper is intentionally preserved.
     return composerMode === "title" ? applyFirstLineHeadingHtml(html) : html;
   };
 
@@ -1166,9 +1225,76 @@ export default function Teligram() {
 
   const sanitizeNoteHtml = (html) => {
     return DOMPurify.sanitize(normalizeEditorHtml(html || ""), {
-      ADD_TAGS: ["font"],
-      ADD_ATTR: ["style", "color"],
+      ADD_TAGS: ["font", "a"],
+      ADD_ATTR: ["class", "style", "color", "href", "target", "rel", "aria-label"],
+      ALLOW_UNKNOWN_PROTOCOLS: false,
     });
+  };
+
+  // Convert the complete URL text into one real anchor so the URL remains
+  // fully clickable even when the browser visually wraps it across lines.
+  const linkifyNoteHtml = (html) => {
+    if (typeof document === "undefined" || !html) return html || "";
+
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = html;
+    const urlPattern = /(?:https?:\/\/|www\.)[^\s<>"']+/gi;
+
+    const textNodes = [];
+    const walker = document.createTreeWalker(wrapper, NodeFilter.SHOW_TEXT);
+    let node = walker.nextNode();
+
+    while (node) {
+      if (node.parentElement && !node.parentElement.closest("a")) {
+        textNodes.push(node);
+      }
+      node = walker.nextNode();
+    }
+
+    textNodes.forEach((textNode) => {
+      const value = textNode.nodeValue || "";
+      urlPattern.lastIndex = 0;
+      if (!urlPattern.test(value)) return;
+      urlPattern.lastIndex = 0;
+
+      const fragment = document.createDocumentFragment();
+      let cursor = 0;
+      let match;
+
+      while ((match = urlPattern.exec(value))) {
+        let rawUrl = match[0];
+        let trailing = "";
+
+        // Keep sentence punctuation outside the actual URL.
+        while (/[.,!?;:)]$/.test(rawUrl) && !/[)]\]/.test(rawUrl)) {
+          trailing = rawUrl.slice(-1) + trailing;
+          rawUrl = rawUrl.slice(0, -1);
+        }
+
+        if (match.index > cursor) {
+          fragment.appendChild(document.createTextNode(value.slice(cursor, match.index)));
+        }
+
+        const anchor = document.createElement("a");
+        anchor.className = "message-link";
+        anchor.href = rawUrl.startsWith("www.") ? `https://${rawUrl}` : rawUrl;
+        anchor.target = "_blank";
+        anchor.rel = "noopener noreferrer";
+        anchor.textContent = rawUrl;
+        fragment.appendChild(anchor);
+
+        if (trailing) fragment.appendChild(document.createTextNode(trailing));
+        cursor = match.index + match[0].length;
+      }
+
+      if (cursor < value.length) {
+        fragment.appendChild(document.createTextNode(value.slice(cursor)));
+      }
+
+      textNode.replaceWith(fragment);
+    });
+
+    return normalizeEditorHtml(wrapper.innerHTML);
   };
 
   const preserveChatView = (noteId = "") => {
@@ -1386,28 +1512,50 @@ export default function Teligram() {
       if (isTrue(channel.is_private)) {
         const savedPin = getSavedChannelPin();
         const trustedPin = getTrustedPin(channel.channel_id);
-        const finalPin = /^[0-9]{4}$/.test(savedPin) ? savedPin : trustedPin;
         const trustedDevice =
           localStorage.getItem(SELECTED_CHANNEL_TRUST_KEY) === "true" &&
-          /^[0-9]{4}$/.test(trustedPin) &&
-          trustedPin === finalPin;
+          /^[0-9]{4}$/.test(trustedPin);
 
-        /*
-          Important:
-          This page must not call verify-pin again when ChannelList already
-          verified the PIN and marked this same browser/device as verified.
-          This prevents the small mismatch popup/lock flash after a correct PIN.
-        */
-        if (
-          /^[0-9]{4}$/.test(finalPin) &&
-          hasFrontendVerifiedAccess(channel.channel_id, finalPin)
-        ) {
-          verifiedPinRef.current = finalPin;
+        // A trusted PIN is checked only once when this channel page opens.
+        // It is NOT checked on every realtime notes request. This lets a direct
+        // pgAdmin PIN change invalidate the old trusted PIN without adding
+        // repeated PIN verification overhead.
+        if (trustedDevice) {
+          const trustedStillValid = await verifyPinFromApi(
+            channel.channel_id,
+            trustedPin
+          );
+
+          if (loadId !== channelLoadIdRef.current) return;
+
+          if (trustedStillValid) {
+            verifiedPinRef.current = trustedPin;
+            channelAccessGrantedRef.current = true;
+            localStorage.setItem(SELECTED_CHANNEL_PIN_KEY, trustedPin);
+            localStorage.setItem("selected_channel_is_private", "true");
+            markFrontendVerifiedAccess(channel.channel_id, trustedPin, true);
+            setChannelUnlocked(true);
+            setUnlockPin("");
+            setUnlockError("");
+            setUnlockTrustDevice(false);
+            return;
+          }
+
+          // Old trusted PIN is stale (for example after a pgAdmin change).
+          removeTrustedPin(channel.channel_id);
+          clearFrontendVerifiedAccess(channel.channel_id);
+          localStorage.removeItem(SELECTED_CHANNEL_PIN_KEY);
+          localStorage.setItem("selected_channel_is_private", "true");
+        } else if (/^[0-9]{4}$/.test(savedPin)) {
+          // The channel list already verified this PIN in the current flow.
+          // Reuse it without another verification call.
+          verifiedPinRef.current = savedPin;
           channelAccessGrantedRef.current = true;
-          markFrontendVerifiedAccess(channel.channel_id, finalPin, trustedDevice);
+          markFrontendVerifiedAccess(channel.channel_id, savedPin, false);
           setChannelUnlocked(true);
           setUnlockPin("");
           setUnlockError("");
+          setUnlockTrustDevice(false);
           return;
         }
 
@@ -1418,6 +1566,7 @@ export default function Teligram() {
         setChannelUnlocked(false);
         setUnlockPin("");
         setUnlockError("");
+        setUnlockTrustDevice(false);
         setNotes([]);
         return;
       }
@@ -1429,6 +1578,7 @@ export default function Teligram() {
       setChannelUnlocked(true);
       setUnlockPin("");
       setUnlockError("");
+      setUnlockTrustDevice(false);
     } catch (error) {
       if (loadId !== channelLoadIdRef.current) return;
       console.error("Channel load error:", error);
@@ -1525,10 +1675,23 @@ export default function Teligram() {
       channelAccessGrantedRef.current = true;
       localStorage.setItem(SELECTED_CHANNEL_PIN_KEY, pin);
       localStorage.setItem("selected_channel_is_private", "true");
-      markFrontendVerifiedAccess(selectedChannel.channel_id, pin, false);
+      markFrontendVerifiedAccess(
+        selectedChannel.channel_id,
+        pin,
+        unlockTrustDevice
+      );
+
+      if (unlockTrustDevice) {
+        saveTrustedPin(selectedChannel.channel_id, pin);
+        localStorage.setItem(SELECTED_CHANNEL_TRUST_KEY, "true");
+      } else {
+        removeTrustedPin(selectedChannel.channel_id);
+        localStorage.removeItem(SELECTED_CHANNEL_TRUST_KEY);
+      }
 
       setUnlockError("");
       setUnlockPin("");
+      setUnlockTrustDevice(false);
       setChannelUnlocked(true);
 
       // Notes load once through the channelUnlocked effect.
@@ -1717,178 +1880,170 @@ export default function Teligram() {
     return firstNoteIds;
   }, [groupedNotes, selectedChannel?.is_private]);
 
-  const pinnedNote = useMemo(() => {
-    if (!pinnedNoteId) return null;
-    return notes.find((note) => String(note.note_id) === String(pinnedNoteId)) || null;
-  }, [notes, pinnedNoteId]);
+  const pinnedNotes = useMemo(() => {
+    const byId = new Map(notes.map((note) => [String(note.note_id), note]));
+    return pinnedNoteIds.map((id) => byId.get(String(id))).filter(Boolean);
+  }, [notes, pinnedNoteIds]);
 
-  const saveSelection = () => {
+  const syncTypingMarker = (formats) => {
+    if (!editorRef.current) return false;
+    const selection = window.getSelection();
+    const range = selection && selection.rangeCount > 0
+      ? selection.getRangeAt(0)
+      : savedRangeRef.current;
+    if (!range || !range.collapsed) return false;
+
+    const marker = document.createElement("span");
+    marker.dataset.typingMarker = "true";
+    marker.style.fontWeight = formats.bold ? "700" : "400";
+    marker.style.textDecoration = formats.underline ? "underline" : "none";
+    marker.textContent = "\u200B";
+    range.insertNode(marker);
+
+    const nextRange = document.createRange();
+    nextRange.setStart(marker.firstChild, 1);
+    nextRange.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(nextRange);
+    savedRangeRef.current = nextRange.cloneRange();
+    return true;
+  };
+
+  const saveSelection = (syncFormat = false) => {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) return;
-
     const range = selection.getRangeAt(0);
-
-    if (
-      editorRef.current &&
-      editorRef.current.contains(range.commonAncestorContainer)
-    ) {
+    if (editorRef.current && editorRef.current.contains(range.commonAncestorContainer)) {
       savedRangeRef.current = range.cloneRange();
-      updateActiveFormats();
+      if (syncFormat || !range.collapsed) updateActiveFormats(true);
     }
   };
 
   const restoreSelection = () => {
     const selection = window.getSelection();
     if (!selection || !savedRangeRef.current) return false;
-
     selection.removeAllRanges();
     selection.addRange(savedRangeRef.current);
     return true;
   };
 
-  const applyInlineColorToRange = (range, color) => {
-    if (!editorRef.current || !range || range.collapsed) return false;
-
-    const finalColor = normalizeTextColor(color);
-    const selectedText = range.toString();
-
-    if (!selectedText) return false;
-
-    const span = document.createElement("span");
-    span.style.setProperty("color", finalColor, "important");
-    span.style.setProperty("-webkit-text-fill-color", finalColor, "important");
-
+  const updateActiveFormats = (syncTyping = false) => {
     try {
-      const selectedContent = range.extractContents();
-      span.appendChild(selectedContent);
-      range.insertNode(span);
-
       const selection = window.getSelection();
-      const afterRange = document.createRange();
-      afterRange.setStartAfter(span);
-      afterRange.collapse(true);
-
-      selection.removeAllRanges();
-      selection.addRange(afterRange);
-      savedRangeRef.current = afterRange.cloneRange();
-      editorRef.current.normalize();
-
-      return true;
-    } catch (error) {
-      console.error("Inline color apply error:", error);
-      return false;
-    }
-  };
-
-
-  const updateActiveFormats = () => {
-    try {
-      setActiveFormats({
+      const range = selection && selection.rangeCount ? selection.getRangeAt(0) : null;
+      if (!syncTyping && range?.collapsed) {
+        setActiveFormats({ ...typingFormatsRef.current });
+        return;
+      }
+      const next = {
         bold: Boolean(document.queryCommandState("bold")),
         underline: Boolean(document.queryCommandState("underline")),
-      });
-    } catch (error) {
-      setActiveFormats({ bold: false, underline: false });
+      };
+      typingFormatsRef.current = next;
+      setActiveFormats(next);
+    } catch {
+      setActiveFormats({ ...typingFormatsRef.current });
     }
   };
 
   const applySelectedFormat = (type, value = null) => {
     if (!editorRef.current) return;
-
     editorRef.current.focus();
     restoreSelection();
 
     try {
+      const selection = window.getSelection();
+      const range = selection && selection.rangeCount ? selection.getRangeAt(0) : null;
+      const hasSelection = Boolean(range && !range.collapsed);
+
       if (type === "bold" || type === "underline") {
-        document.execCommand("styleWithCSS", false, false);
-      }
-
-      if (type === "bold") {
-        document.execCommand("bold", false, null);
-      }
-
-      if (type === "underline") {
-        document.execCommand("underline", false, null);
+        if (hasSelection) {
+          document.execCommand("styleWithCSS", false, true);
+          document.execCommand(type, false, null);
+          updateActiveFormats(true);
+          saveSelection();
+        } else {
+          const next = {
+            ...typingFormatsRef.current,
+            [type]: !typingFormatsRef.current[type],
+          };
+          typingFormatsRef.current = next;
+          setActiveFormats(next);
+          syncTypingMarker(next);
+        }
       }
 
       if (type === "color") {
         const finalColor = normalizeTextColor(value);
-        const selection = window.getSelection();
-        const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : savedRangeRef.current;
-
-        if (range && !range.collapsed) {
-          applyInlineColorToRange(range.cloneRange(), finalColor);
+        const currentSelection = window.getSelection();
+        const currentRange = currentSelection && currentSelection.rangeCount > 0
+          ? currentSelection.getRangeAt(0)
+          : savedRangeRef.current;
+        if (currentRange && !currentRange.collapsed) {
+          applyInlineColorToRange(currentRange.cloneRange(), finalColor);
           setComposerTextColor("#111111");
+          setColorModeActive(true);
           setTypingColorAtCaret("#111111");
         } else {
           setComposerTextColor(finalColor);
+          setColorModeActive(true);
           setTypingColorAtCaret(finalColor);
         }
       }
-
       editorRef.current.normalize();
     } catch (error) {
       console.error("Format apply error:", error);
     }
-
     saveSelection();
-
-    setTimeout(() => {
-      updateActiveFormats();
-    }, 0);
   };
 
   const applyBold = (e) => {
     e.preventDefault();
+    e.stopPropagation();
     applySelectedFormat("bold");
   };
 
   const applyUnderline = (e) => {
     e.preventDefault();
+    e.stopPropagation();
     applySelectedFormat("underline");
   };
 
   const openColorPicker = (e) => {
     e.preventDefault();
+    e.stopPropagation();
+    if (colorModeActive) {
+      setColorModeActive(false);
+      setComposerTextColor("#111111");
+      setTypingColorAtCaret("#111111");
+      return;
+    }
     saveSelection();
     colorRef.current?.click();
   };
 
   const changeColor = (color) => {
     const finalColor = normalizeTextColor(color);
-
     if (!editorRef.current) return;
-
     editorRef.current.focus();
-
+    restoreSelection();
     try {
-      restoreSelection();
-
       const selection = window.getSelection();
-      const selectedRange =
-        selection && selection.rangeCount > 0
-          ? selection.getRangeAt(0)
-          : savedRangeRef.current;
-
-      const hasSelectedText = Boolean(selectedRange && !selectedRange.collapsed);
-
-      if (hasSelectedText) {
-        applyInlineColorToRange(selectedRange.cloneRange(), finalColor);
-
-        // Keep the next typed text black. Only the selected word/line keeps the chosen color.
+      const range = selection && selection.rangeCount ? selection.getRangeAt(0) : savedRangeRef.current;
+      if (range && !range.collapsed) {
+        applyInlineColorToRange(range.cloneRange(), finalColor);
+        setColorModeActive(true);
         setComposerTextColor("#111111");
         setTypingColorAtCaret("#111111");
-        return;
+      } else {
+        setColorModeActive(true);
+        setComposerTextColor(finalColor);
+        setTypingColorAtCaret(finalColor);
       }
-
-      // No selection: selected color becomes the typing color for new text.
-      setComposerTextColor(finalColor);
-      setTypingColorAtCaret(finalColor);
     } catch (error) {
       console.error("Color apply error:", error);
-    } finally {
-      saveSelection();
     }
+    saveSelection();
   };
 
   const handleImageSelect = (e) => {
@@ -1981,6 +2136,7 @@ export default function Teligram() {
     setRemoveOldFile(false);
     setEditingNoteId(null);
     setComposerMode("message");
+    typingFormatsRef.current = { bold: false, underline: false };
     setActiveFormats({ bold: false, underline: false });
     setActiveMenuId(null);
     savedRangeRef.current = null;
@@ -2028,18 +2184,49 @@ export default function Teligram() {
 
     const nextMode = composerMode === "title" ? "message" : "title";
 
-    if (editorRef.current) {
+    // Heading is a typing mode. Turning it OFF must NOT remove the title
+    // already created in the first line. The first line remains a title,
+    // while all text typed after the toggle stays normal.
+    if (nextMode === "message" && editorRef.current) {
       const currentHtml = getEditorHtml();
-      editorRef.current.innerHTML =
-        nextMode === "title"
-          ? applyFirstLineHeadingHtml(currentHtml)
-          : removeFirstLineHeadingHtml(currentHtml);
+      const hasText = Boolean(stripHtml(currentHtml).trim());
+
+      if (hasText) {
+        const titledHtml = applyFirstLineHeadingHtml(currentHtml);
+        const wrapper = document.createElement("div");
+        wrapper.innerHTML = titledHtml;
+
+        // If the user has only typed the title line so far, create a clean
+        // normal typing line after it. This prevents the <strong> title
+        // wrapper from leaking its bold style into the next text.
+        const textValue = wrapper.textContent || "";
+        const hasLineBreak =
+          /(<br\s*\/?>|<div\b|<p\b|<li\b)/i.test(titledHtml) ||
+          /\r?\n/.test(textValue);
+
+        if (!hasLineBreak) {
+          const nextLine = document.createElement("div");
+          nextLine.innerHTML = "<br>";
+          wrapper.appendChild(nextLine);
+        }
+
+        editorRef.current.innerHTML = normalizeEditorHtml(wrapper.innerHTML);
+      }
     }
 
     setComposerMode(nextMode);
 
     setTimeout(() => {
       placeCaretAtEnd();
+      // Heading mode is independent from Bold/Underline typing state.
+      // Turning Heading OFF must not deactivate Bold/Underline.
+      if (nextMode === "message") {
+        typingFormatsRef.current = { ...typingFormatsRef.current };
+        setActiveFormats({ ...typingFormatsRef.current });
+        syncTypingMarker(typingFormatsRef.current);
+      } else {
+        setActiveFormats({ ...typingFormatsRef.current });
+      }
     }, 0);
   };
 
@@ -2354,9 +2541,10 @@ export default function Teligram() {
       editorRef.current.innerHTML = normalizeEditorHtml(note.content_html || "");
     }
 
-    setTimeout(() => {
+    requestAnimationFrame(() => {
       placeCaretAtEnd();
-    }, 100);
+      editorRef.current?.scrollIntoView({ block: "nearest", behavior: "auto" });
+    });
   };
 
   const startImageUpdate = (note) => {
@@ -2469,6 +2657,9 @@ export default function Teligram() {
     const oldNotes = notes;
     const noteWasTitle = isTitleNote(note);
     const nextTitle = noteWasTitle ? "" : "title";
+    const nextContentHtml = nextTitle === "title"
+      ? applyFirstLineHeadingHtml(note.content_html || "")
+      : removeFirstLineHeadingHtml(note.content_html || "");
     const successMessage = noteWasTitle ? "Title style removed" : "Title style added";
 
     // Keep the optimistic title change visible until the API finishes.
@@ -2480,7 +2671,7 @@ export default function Teligram() {
     setNotes((prev) =>
       prev.map((item) =>
         String(item.note_id) === String(note.note_id)
-          ? { ...item, title: nextTitle, updated_at: new Date().toISOString() }
+          ? { ...item, title: nextTitle, content_html: nextContentHtml, updated_at: new Date().toISOString() }
           : item
       )
     );
@@ -2500,7 +2691,7 @@ export default function Teligram() {
       formData.append("is_title", nextTitle === "title" ? "true" : "false");
       formData.append("title_mode", nextTitle === "title" ? "title" : "normal");
       formData.append("note_type", nextTitle === "title" ? "title" : "normal");
-      formData.append("content_html", note.content_html || "");
+      formData.append("content_html", nextContentHtml);
       formData.append("text_color", note.text_color || "#111111");
       formData.append("remove_image", "false");
       formData.append("remove_attachment", "false");
@@ -2527,7 +2718,7 @@ export default function Teligram() {
       setNotes((prev) =>
         prev.map((item) =>
           String(item.note_id) === String(note.note_id)
-            ? { ...item, ...backendNote, title: nextTitle }
+            ? { ...item, ...backendNote, title: nextTitle, content_html: backendNote.content_html || nextContentHtml }
             : item
         )
       );
@@ -2543,19 +2734,102 @@ export default function Teligram() {
     }
   };
 
-  const togglePinnedNote = (note) => {
-    if (!selectedChannel?.channel_id || !note?.note_id) return;
+  const markNoteAsLink = async (note) => {
+    if (note?.is_temp) return;
 
-    const noteId = String(note.note_id);
-    const alreadyPinned = String(pinnedNoteId || "") === noteId;
-    const nextPinnedId = alreadyPinned ? "" : noteId;
+    const currentHtml = normalizeEditorHtml(note?.content_html || "");
+    const nextContentHtml = linkifyNoteHtml(currentHtml);
+    if (!nextContentHtml || nextContentHtml === currentHtml) {
+      setActiveMenuId(null);
+      showToast("No full URL found in this message", "error");
+      return;
+    }
 
+    const oldNotes = notes;
+    isSavingNoteRef.current = true;
     setActiveMenuId(null);
-    setPinnedNoteId(nextPinnedId);
-    savePinnedNoteId(selectedChannel.channel_id, nextPinnedId);
-    showToast(alreadyPinned ? "Pin removed" : "Message pinned", "success");
+    preserveChatView(note.note_id);
+
+    // Optimistic UI: show the complete clickable link immediately.
+    setNotes((prev) =>
+      prev.map((item) =>
+        String(item.note_id) === String(note.note_id)
+          ? { ...item, content_html: nextContentHtml, updated_at: new Date().toISOString() }
+          : item
+      )
+    );
+
+    try {
+      const formData = new FormData();
+      const noteDeviceId = getNoteSenderDeviceId(note) || getCurrentDeviceId();
+
+      formData.append("user_id", PUBLIC_USER_ID);
+      formData.append("channel_id", selectedChannel.channel_id);
+      formData.append("device_id", noteDeviceId);
+      formData.append("sender_device_id", noteDeviceId);
+      formData.append("created_device_id", noteDeviceId);
+      formData.append("title", note.title || "");
+      formData.append("is_title", isTitleNote(note) ? "true" : "false");
+      formData.append("title_mode", isTitleNote(note) ? "title" : "normal");
+      formData.append("note_type", isTitleNote(note) ? "title" : "normal");
+      formData.append("content_html", nextContentHtml);
+      formData.append("text_color", note.text_color || "#111111");
+      formData.append("remove_image", "false");
+      formData.append("remove_attachment", "false");
+
+      const res = await fetch(`${API_URL}/api/telegram-notes/${note.note_id}`, {
+        method: "PUT",
+        headers: getAccessHeaders(),
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        preserveChatView(note.note_id);
+        setNotes(oldNotes);
+        showToast(data.message || "Link update failed", "error");
+        return;
+      }
+
+      const backendNote = data.note || {};
+      preserveChatView(note.note_id);
+      setNotes((prev) =>
+        prev.map((item) =>
+          String(item.note_id) === String(note.note_id)
+            ? { ...item, ...backendNote, content_html: backendNote.content_html || nextContentHtml }
+            : item
+        )
+      );
+      showToast("Link enabled", "success");
+    } catch (error) {
+      console.error("Link update error:", error);
+      preserveChatView(note.note_id);
+      setNotes(oldNotes);
+      showToast("Server error", "error");
+    } finally {
+      isSavingNoteRef.current = false;
+    }
   };
 
+  const togglePinnedNote = (note) => {
+    if (!selectedChannel?.channel_id || !note?.note_id) return;
+    const noteId = String(note.note_id);
+    const alreadyPinned = pinnedNoteIds.some((id) => String(id) === noteId);
+    let nextPins;
+    if (alreadyPinned) {
+      nextPins = pinnedNoteIds.filter((id) => String(id) !== noteId);
+    } else {
+      if (pinnedNoteIds.length >= 5) {
+        showToast("Maximum 5 pinned messages", "error");
+        return;
+      }
+      nextPins = [...pinnedNoteIds, noteId];
+    }
+    setActiveMenuId(null);
+    setPinnedNoteIds(nextPins);
+    savePinnedNoteIds(selectedChannel.channel_id, nextPins);
+    showToast(alreadyPinned ? "Pin removed" : "Message pinned", "success");
+  };
   const getPinnedNotePreview = (note) => {
     if (!note) return "Pinned message";
 
@@ -2599,11 +2873,40 @@ export default function Teligram() {
     }
   };
 
+  const htmlToClipboardText = (html) => {
+    if (typeof document === "undefined") return "";
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = html || "";
+
+    const render = (node, listState = null) => {
+      if (node.nodeType === Node.TEXT_NODE) return node.nodeValue || "";
+      if (node.nodeType !== Node.ELEMENT_NODE) return "";
+      const tag = node.tagName.toLowerCase();
+      let out = "";
+      if (tag === "br") return "\n";
+      if (tag === "li") {
+        const index = listState?.ordered ? listState.index++ : null;
+        const prefix = listState?.ordered ? `${index}. ` : "- ";
+        out += prefix;
+      }
+      const childListState = tag === "ol" ? { ordered: true, index: 1 } : tag === "ul" ? { ordered: false } : listState;
+      for (const child of node.childNodes) out += render(child, childListState);
+      if (["div","p","li","section","article","h1","h2","h3","h4","h5","h6","pre"].includes(tag)) out += "\n";
+      return out;
+    };
+
+    return render(wrapper)
+      .replace(/\n{3,}/g, "\n\n")
+      .replace(/^\n+|\n+$/g, "")
+      .replace(/[ \t]+\n/g, "\n");
+  };
+
   const copyNoteText = async (event, note) => {
     event?.preventDefault?.();
     event?.stopPropagation?.();
 
-    const text = stripHtml(note?.content_html || "").trim();
+    const htmlValue = sanitizeNoteHtml(note?.content_html || "");
+    const text = htmlToClipboardText(htmlValue).trim();
     const copyValue =
       text ||
       (hasNoteAttachment(note)
@@ -2618,7 +2921,13 @@ export default function Teligram() {
     }
 
     try {
-      if (navigator.clipboard?.writeText) {
+      if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined" && htmlValue) {
+        const item = new ClipboardItem({
+          "text/html": new Blob([htmlValue], { type: "text/html" }),
+          "text/plain": new Blob([copyValue], { type: "text/plain" }),
+        });
+        await navigator.clipboard.write([item]);
+      } else if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(copyValue);
       } else {
         const helper = document.createElement("textarea");
@@ -2640,31 +2949,22 @@ export default function Teligram() {
     }
   };
 
-  const goToPinnedNote = () => {
-    if (!pinnedNoteId) return;
-
-    const target = noteRefs.current[String(pinnedNoteId)];
-
+  const goToPinnedNote = (noteId) => {
+    const targetId = String(noteId || "");
+    setShowPinnedList(false);
+    if (!targetId) return;
+    const target = noteRefs.current[targetId];
     if (!target) {
       showToast("Pinned message not found", "error");
       return;
     }
-
     target.scrollIntoView({ behavior: "smooth", block: "center" });
-
-    if (pinnedScrollTimerRef.current) {
-      clearTimeout(pinnedScrollTimerRef.current);
-    }
-
-    setActiveMenuId(pinnedNoteId);
-
+    if (pinnedScrollTimerRef.current) clearTimeout(pinnedScrollTimerRef.current);
+    setActiveMenuId(targetId);
     pinnedScrollTimerRef.current = setTimeout(() => {
-      setActiveMenuId((current) =>
-        String(current) === String(pinnedNoteId) ? null : current
-      );
+      setActiveMenuId((current) => String(current) === targetId ? null : current);
     }, 1400);
   };
-
   const deleteNote = async (noteId) => {
     const oldNotes = notes;
 
@@ -2680,9 +2980,10 @@ export default function Teligram() {
 
     setActiveMenuId(null);
 
-    if (String(pinnedNoteId || "") === String(noteId)) {
-      setPinnedNoteId("");
-      savePinnedNoteId(selectedChannel?.channel_id, "");
+    if (pinnedNoteIds.some((id) => String(id) === String(noteId))) {
+      const nextPins = pinnedNoteIds.filter((id) => String(id) !== String(noteId));
+      setPinnedNoteIds(nextPins);
+      savePinnedNoteIds(selectedChannel?.channel_id, nextPins);
     }
 
     try {
@@ -2843,6 +3144,21 @@ export default function Teligram() {
                 }}
               />
 
+              <label className="trust-device-row">
+                <input
+                  type="checkbox"
+                  checked={unlockTrustDevice}
+                  onChange={(e) => setUnlockTrustDevice(e.target.checked)}
+                  disabled={unlockChecking}
+                />
+                <span className="trust-device-checkmark">✓</span>
+                <span className="trust-device-label">Trust this device</span>
+              </label>
+
+              <p className="trust-device-hint">
+                Next time this device can open the channel without asking for the PIN.
+              </p>
+
               {unlockError && <div className="unlock-error">{unlockError}</div>}
 
               <button
@@ -2887,23 +3203,51 @@ export default function Teligram() {
               </div>
             )}
 
-            {pinnedNote && (
-              <button
-                type="button"
-                className="pinned-note-jump"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  goToPinnedNote();
-                }}
-                title="Go to pinned message"
-              >
-                <span className="pinned-note-icon">📌</span>
-                <span className="pinned-note-label">Pinned</span>
-                <strong>{getPinnedNotePreview(pinnedNote)}</strong>
-              </button>
+            {pinnedNotes.length > 0 && (
+              <div className="pin-section">
+                <button
+                  type="button"
+                  className={`pin-section-trigger ${showPinnedList ? "active" : ""}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowPinnedList((value) => !value);
+                  }}
+                  title={showPinnedList ? "Hide pinned messages" : "Show pinned messages"}
+                  aria-expanded={showPinnedList}
+                >
+                  <span className="pin-section-round-icon">📌</span>
+                  <span className="pin-section-count">{pinnedNotes.length}</span>
+                </button>
+
+                {showPinnedList && (
+                  <div className="pinned-note-jump-list" onClick={(e) => e.stopPropagation()}>
+                    {pinnedNotes.map((pin, index) => (
+                      <button
+                        type="button"
+                        className="pinned-note-jump"
+                        key={pin.note_id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          goToPinnedNote(pin.note_id);
+                        }}
+                        title={`Go to pinned message ${index + 1}`}
+                      >
+                        <span className="pinned-note-icon">📌</span>
+                        <span className="pinned-note-label">Pin {index + 1}</span>
+                        <strong>{getPinnedNotePreview(pin)}</strong>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
 
             <main ref={chatBodyRef} className="chat-body" onClick={closeChatKeyboard}>
+              {manualRefreshing && (
+                <div className="professional-refresh-overlay" role="status" aria-label="Refreshing messages">
+                  <div className="professional-refresh-card"><span className="professional-refresh-spinner" />Refreshing</div>
+                </div>
+              )}
               {groupedNotes.length === 0 && (
                 <div className="empty-card">
                   <div className="empty-icon">✦</div>
@@ -2929,6 +3273,9 @@ export default function Teligram() {
                   const hasImage = hasNoteImage(note);
                   const hasAttachment = hasNoteAttachment(note);
                   const titleMessage = isTitleNote(note);
+                  const linkMessage = /<a\b[^>]*href=["\'](?:https?:\/\/|mailto:|tel:)/i.test(
+                    String(note.content_html || "")
+                  );
                   const messageFromThisDevice = isMyDeviceNote(note);
                   const deviceTheme = getDeviceTheme(note);
                   const showDeviceChip =
@@ -2936,7 +3283,7 @@ export default function Teligram() {
                     !isTrue(selectedChannel?.is_private) &&
                     publicDeviceChipNoteIds.has(String(note.note_id));
 
-                  const pinnedMessage = String(pinnedNoteId || "") === String(note.note_id);
+                  const pinnedMessage = pinnedNoteIds.some((id) => String(id) === String(note.note_id));
 
                   return (
                     <div
@@ -3000,10 +3347,30 @@ export default function Teligram() {
                             <div className="device-source-chip">ND</div>
                           )}
 
-                          {pinnedMessage && (
-                            <span className="pinned-message-chip" title="Pinned message">
-                              📌
+                          {titleMessage && (
+                            <span className="message-title-badge" aria-label="Title">
+                              TITLE
                             </span>
+                          )}
+
+                          {linkMessage && (
+                            <span className="message-link-badge" aria-label="Link">
+                              LINK
+                            </span>
+                          )}
+
+                          {pinnedMessage && (
+                            <button
+                              type="button"
+                              className="pinned-message-chip"
+                              title="Open pinned message"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                goToPinnedNote(note.note_id);
+                              }}
+                            >
+                              📌
+                            </button>
                           )}
 
                           <button
@@ -3223,6 +3590,21 @@ export default function Teligram() {
                               Copy
                             </button>
 
+                            {hasText && (
+                              <button
+                                type="button"
+                                className="square-action link-square"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  markNoteAsLink(note);
+                                }}
+                                title="Make full URL clickable"
+                                aria-label="Make full URL clickable"
+                              >
+                                🔗 Link
+                              </button>
+                            )}
+
                             <button
                               className={`square-action pin-square ${pinnedMessage ? "active-pin" : ""}`}
                               onClick={(e) => {
@@ -3379,7 +3761,7 @@ export default function Teligram() {
 
                       <button
                         type="button"
-                        className={`tool-btn color-tool ${textColor !== "#111111" ? "active" : ""}`}
+                        className={`tool-btn color-tool ${colorModeActive ? "active" : ""}`}
                         onMouseDown={openColorPicker}
                         title="Text color"
                         style={{ "--pickedColor": textColor }}
@@ -3452,7 +3834,7 @@ export default function Teligram() {
                     ref={editorRef}
                     className="text-input"
                     contentEditable
-                    data-placeholder={composerMode === "title" ? "Type title..." : composerMode === "image-update" ? "Select new image, then tap send" : composerMode === "image-caption" ? "Add image description..." : composerMode === "file-update" ? "Select new file, then tap send" : composerMode === "file-caption" ? "Add file description..." : "Type message..."}
+                    data-placeholder={composerMode === "title" ? "Type title..." : composerMode === "image-update" ? "Select new image, then tap send" : composerMode === "image-caption" ? "Add image description..." : composerMode === "file-update" ? "Select new file, then tap send" : composerMode === "file-caption" ? "Add file description..." : "Enter text..."}
                     style={{ "--composerColor": textColor, caretColor: textColor }}
                     onFocus={saveSelection}
                     onMouseUp={saveSelection}
@@ -3944,6 +4326,37 @@ export default function Teligram() {
           outline: none;
         }
 
+        .message-link,
+        .message-text a[href],
+        .image-description-text a[href],
+        .file-description-text a[href] {
+          color: #2563eb !important;
+          text-decoration: underline !important;
+          text-decoration-thickness: 1.6px !important;
+          text-underline-offset: 2px !important;
+          cursor: pointer !important;
+          display: inline !important;
+          overflow-wrap: anywhere !important;
+          word-break: break-word !important;
+          white-space: normal !important;
+          user-select: text !important;
+          -webkit-user-select: text !important;
+          pointer-events: auto !important;
+          position: relative !important;
+          z-index: 20 !important;
+        }
+
+        .message-link:hover,
+        .message-text a[href]:hover,
+        .image-description-text a[href]:hover,
+        .file-description-text a[href]:hover {
+          color: #1d4ed8 !important;
+        }
+
+        .message-bubble:has(.message-link-badge) {
+          padding-top: 29px !important;
+        }
+
         .message-text {
           max-width: 100%;
           padding-right: 2px;
@@ -4044,6 +4457,12 @@ export default function Teligram() {
           color: #dc2626;
           background: #fff1f2;
           border-color: #fecdd3;
+        }
+
+        .link-square {
+          color: #7c3aed;
+          background: #f5f3ff;
+          border-color: #ddd6fe;
         }
 
         .download-square {
@@ -4238,8 +4657,10 @@ export default function Teligram() {
 
         .text-input:empty::before {
           content: attr(data-placeholder);
-          color: #94a3b8;
+          color: rgba(15, 23, 42, 0.42);
           font-weight: 700;
+          letter-spacing: 0.1px;
+          pointer-events: none;
         }
 
         .text-input::-webkit-scrollbar {
@@ -11574,6 +11995,465 @@ export default function Teligram() {
             min-height: 23px !important;
             font-size: 14px !important;
           }
+        }
+
+
+        /* USER REQUEST: final toolbar, refresh, multi-pin and rich-copy behavior */
+        .pinned-note-jump-list {
+          display: flex !important; flex-direction: column !important; gap: 5px !important;
+          width: 100% !important; flex: 0 0 auto !important;
+        }
+        .pinned-note-jump { cursor: pointer !important; text-align: left !important; }
+        .pinned-note-jump strong { min-width: 0 !important; overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; }
+        .pinned-note-block .message-bubble { box-shadow: 0 0 0 2px rgba(245,158,11,.38), 0 12px 30px rgba(245,158,11,.16) !important; }
+        .pinned-message-chip {
+          position: absolute !important; top: 7px !important; left: 7px !important; z-index: 9 !important;
+          width: 22px !important; height: 22px !important; border-radius: 50% !important;
+          display: inline-flex !important; align-items: center !important; justify-content: center !important;
+          background: #fff7ed !important; border: 1px solid #fdba74 !important;
+          box-shadow: 0 4px 12px rgba(245,158,11,.22) !important; font-size: 11px !important;
+        }
+        .composer-tools-popover .tool-btn {
+          width: 42px !important; min-width: 42px !important; height: 38px !important; min-height: 38px !important;
+          border-radius: 12px !important; font-size: 16px !important;
+          transition: transform .16s ease, box-shadow .16s ease, background .16s ease !important;
+        }
+        .composer-tools-popover .tool-btn.active {
+          background: linear-gradient(135deg,#7c3aed,#ec4899) !important;
+          color: #fff !important; border-color: transparent !important;
+          box-shadow: 0 7px 18px rgba(124,58,237,.34), 0 0 0 2px rgba(236,72,153,.12) !important;
+          transform: translateY(-1px) scale(1.04) !important;
+        }
+        .composer-tools-popover .color-tool.active {
+          background: linear-gradient(135deg,var(--pickedColor),#111827) !important;
+        }
+        .composer-tools-popover .heading-tool.active {
+          background: linear-gradient(135deg,#f97316,#ef4444) !important; color:#fff !important;
+        }
+        .composer-tools-popover .composer-refresh-tool { width:42px !important; min-width:42px !important; height:38px !important; }
+        .professional-refresh-overlay {
+          position: absolute !important; inset: 0 !important; z-index: 24 !important;
+          display:flex !important; align-items:center !important; justify-content:center !important;
+          pointer-events:none !important; background: rgba(238,247,244,.24) !important; backdrop-filter: blur(2px) !important;
+        }
+        .professional-refresh-card {
+          display:flex !important; align-items:center !important; gap:9px !important; padding:9px 14px !important;
+          border-radius:999px !important; background:rgba(255,255,255,.94) !important;
+          border:1px solid #dbe4f0 !important; color:#0f766e !important; font:900 12px Inter,Arial,sans-serif !important;
+          box-shadow:0 10px 28px rgba(15,23,42,.16) !important;
+        }
+        .professional-refresh-spinner {
+          width:16px !important; height:16px !important; border:2px solid #cbd5e1 !important;
+          border-top-color:#0ea5e9 !important; border-right-color:#14b8a6 !important; border-radius:50% !important;
+          animation: noteRefreshSpin .7s linear infinite !important;
+        }
+        .chat-body { position: relative !important; }
+        @media (max-width:480px) {
+          .composer-tools-popover .tool-btn { width:40px !important; min-width:40px !important; height:38px !important; }
+        }
+
+
+        /* FINAL USER LOGIC OVERRIDES */
+        .pin-section {
+          position: relative !important;
+          width: 100% !important;
+          display: flex !important;
+          justify-content: flex-start !important;
+          align-items: center !important;
+          padding: 4px 10px 2px !important;
+          background: rgba(255,255,255,.94) !important;
+          border-bottom: 1px solid rgba(226,232,240,.82) !important;
+          z-index: 26 !important;
+        }
+
+        .pin-section-trigger {
+          position: relative !important;
+          width: 30px !important;
+          height: 30px !important;
+          min-width: 30px !important;
+          min-height: 30px !important;
+          padding: 0 !important;
+          border: 1px solid #cbd5e1 !important;
+          border-radius: 50% !important;
+          background: #f8fafc !important;
+          color: #64748b !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          cursor: pointer !important;
+          box-shadow: 0 4px 12px rgba(15,23,42,.10) !important;
+          transition: .16s ease !important;
+        }
+
+        .pin-section-trigger.active,
+        .pin-section-trigger:hover {
+          background: linear-gradient(135deg,#7c3aed,#ec4899) !important;
+          border-color: transparent !important;
+          color: white !important;
+          transform: scale(1.04) !important;
+          box-shadow: 0 7px 17px rgba(124,58,237,.25) !important;
+        }
+
+        .pin-section-round-icon {
+          font-size: 11px !important;
+          line-height: 1 !important;
+          display: block !important;
+          transform: rotate(-8deg) !important;
+        }
+
+        .pin-section-count {
+          position: absolute !important;
+          right: -4px !important;
+          top: -4px !important;
+          min-width: 13px !important;
+          height: 13px !important;
+          padding: 0 3px !important;
+          border-radius: 999px !important;
+          background: #ef4444 !important;
+          color: white !important;
+          border: 2px solid white !important;
+          font: 900 7px/9px Inter,Arial,sans-serif !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+        }
+
+        .pinned-note-jump-list {
+          position: absolute !important;
+          top: 35px !important;
+          left: 50% !important;
+          transform: translateX(-50%) !important;
+          width: min(360px, calc(100% - 18px)) !important;
+          max-height: 250px !important;
+          overflow-y: auto !important;
+          padding: 6px !important;
+          border: 1px solid #dbe4f0 !important;
+          border-radius: 15px !important;
+          background: rgba(255,255,255,.98) !important;
+          box-shadow: 0 18px 42px rgba(15,23,42,.18) !important;
+          z-index: 60 !important;
+        }
+
+        .pinned-note-jump {
+          width: 100% !important;
+          min-height: 34px !important;
+          margin: 2px 0 !important;
+          padding: 5px 7px !important;
+          border-radius: 10px !important;
+          display: grid !important;
+          grid-template-columns: 22px 38px minmax(0,1fr) !important;
+          gap: 6px !important;
+          align-items: center !important;
+          border: 1px solid transparent !important;
+          background: #f8fafc !important;
+        }
+
+        .pinned-note-icon {
+          width: 21px !important;
+          height: 21px !important;
+          border-radius: 50% !important;
+          font-size: 10px !important;
+        }
+
+        .pinned-note-label {
+          font-size: 9px !important;
+        }
+
+        .pinned-note-jump strong {
+          font-size: 11px !important;
+        }
+
+        .message-title-badge {
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          height: 15px !important;
+          min-width: 32px !important;
+          padding: 0 5px !important;
+          margin: 0 5px 3px 0 !important;
+          border-radius: 999px !important;
+          background: linear-gradient(135deg,#f97316,#ef4444) !important;
+          color: white !important;
+          font: 900 7px/1 Inter,Arial,sans-serif !important;
+          letter-spacing: .35px !important;
+          vertical-align: middle !important;
+          box-shadow: 0 3px 8px rgba(239,68,68,.18) !important;
+        }
+
+        .message-title-text::before {
+          content: none !important;
+          display: none !important;
+        }
+
+        .message-title-text {
+          font-weight: 500 !important;
+          font-family: Inter, Arial, sans-serif !important;
+        }
+
+        .message-title-text .note-heading-line {
+          display: inline !important;
+          font-weight: 900 !important;
+          margin: 0 !important;
+        }
+
+        .message-title-text .note-heading-line * {
+          font-weight: inherit !important;
+        }
+
+        .message-title-text .note-heading-line + * {
+          font-weight: inherit !important;
+        }
+
+        .message-title-text,
+        .message-title-text * {
+          font-size: inherit !important;
+          line-height: inherit !important;
+        }
+
+        .pinned-message-chip {
+          width: 17px !important;
+          height: 17px !important;
+          min-width: 17px !important;
+          min-height: 17px !important;
+          bottom: 5px !important;
+          left: 5px !important;
+          top: auto !important;
+          border-radius: 50% !important;
+          font-size: 8px !important;
+          padding: 0 !important;
+          z-index: 8 !important;
+          box-shadow: 0 3px 8px rgba(15,23,42,.12) !important;
+        }
+
+        .pinned-message-bubble {
+          outline: none !important;
+          box-shadow: 0 0 0 1px rgba(20,184,166,.22), 0 8px 22px rgba(15,23,42,.10) !important;
+        }
+
+        .composer-tools-popover .tool-btn {
+          width: 44px !important;
+          min-width: 44px !important;
+          height: 40px !important;
+          min-height: 40px !important;
+          border-radius: 13px !important;
+        }
+
+        .composer-tools-popover .tool-btn.active {
+          background: linear-gradient(135deg,#7c3aed,#ec4899) !important;
+          color: #fff !important;
+          border-color: transparent !important;
+          box-shadow: 0 7px 18px rgba(124,58,237,.30) !important;
+        }
+
+        .composer-tools-popover .color-tool.active {
+          background: linear-gradient(135deg,var(--pickedColor),#111827) !important;
+        }
+
+        .composer-tools-popover .heading-tool.active {
+          background: linear-gradient(135deg,#f97316,#ef4444) !important;
+        }
+
+        .composer-tools-popover .image-tool.active,
+        .composer-tools-popover .file-tool.active {
+          background: linear-gradient(135deg,#0891b2,#2563eb) !important;
+          border-color: transparent !important;
+          box-shadow: 0 7px 18px rgba(37,99,235,.25) !important;
+        }
+
+        .composer-refresh-tool.is-refreshing {
+          animation: noteRefreshSpin .55s linear infinite !important;
+        }
+
+        .professional-refresh-overlay {
+          pointer-events: none !important;
+        }
+
+        @media (max-width:480px) {
+          .composer-tools-popover .tool-btn {
+            width: 40px !important;
+            min-width: 40px !important;
+            height: 38px !important;
+          }
+        }
+        /* FINAL UX FIXES: stable typing, left pin, immediate editor focus */
+        .pin-section { justify-content: flex-start !important; padding-left: 10px !important; }
+        .pin-section-trigger { width: 28px !important; height: 28px !important; min-width: 28px !important; min-height: 28px !important; }
+        .pin-section-round-icon { font-size: 10px !important; }
+        .pin-section-count { right: -3px !important; top: -3px !important; }
+        .search-box { position: relative !important; z-index: 70 !important; }
+        .pinned-message-chip { top: 5px !important; left: 5px !important; bottom: auto !important; width: 17px !important; height: 17px !important; font-size: 8px !important; }
+        .message-bubble { overflow: visible !important; }
+        .message-title-badge { flex-shrink: 0 !important; }
+        .text-input { border: 1px solid rgba(148,163,184,.55) !important; box-shadow: 0 8px 24px rgba(15,23,42,.08), inset 0 1px 0 rgba(255,255,255,.7) !important; }
+        .send-btn { backdrop-filter: blur(12px) !important; -webkit-backdrop-filter: blur(12px) !important; background: rgba(255,255,255,.42) !important; border: 1px solid rgba(255,255,255,.72) !important; box-shadow: 0 8px 20px rgba(15,23,42,.12) !important; transition: transform .12s ease, box-shadow .12s ease !important; }
+        .send-btn:active { transform: scale(.92) !important; box-shadow: 0 4px 10px rgba(15,23,42,.16) !important; }
+        .composer-tools-popover .tool-btn.active { background: linear-gradient(135deg,#7c3aed,#ec4899) !important; color:#fff !important; }
+
+
+        .trust-device-row {
+          width: 100%;
+          min-height: 40px;
+          margin: 4px 0 3px;
+          padding: 8px 11px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          border: 1px solid #dbe4f0;
+          border-radius: 13px;
+          background: linear-gradient(135deg, #f8fafc, #eef6ff);
+          color: #334155;
+          text-align: left;
+          cursor: pointer;
+          user-select: none;
+        }
+        .trust-device-row input {
+          position: absolute;
+          opacity: 0;
+          pointer-events: none;
+        }
+        .trust-device-checkmark {
+          width: 19px;
+          height: 19px;
+          border-radius: 6px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          border: 1.5px solid #94a3b8;
+          background: white;
+          color: transparent;
+          font-size: 12px;
+          font-weight: 950;
+          transition: all .16s ease;
+        }
+        .trust-device-row:has(input:checked) .trust-device-checkmark {
+          border-color: #2563eb;
+          background: linear-gradient(135deg, #2563eb, #7c3aed);
+          color: white;
+          box-shadow: 0 5px 14px rgba(37,99,235,.22);
+        }
+        .trust-device-label {
+          font-size: 12px;
+          font-weight: 900;
+          color: #0f172a;
+        }
+        .trust-device-hint {
+          margin: 4px 2px 10px !important;
+          color: #64748b !important;
+          font-size: 10.5px !important;
+          line-height: 1.35 !important;
+          font-weight: 700 !important;
+        }
+        .message-link-badge {
+          position: absolute;
+          top: 7px;
+          left: 7px;
+          z-index: 8;
+          min-width: 34px;
+          height: 18px;
+          padding: 0 6px;
+          border-radius: 999px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          background: #dbeafe;
+          border: 1px solid #93c5fd;
+          color: #1d4ed8;
+          font-size: 8px;
+          line-height: 1;
+          font-weight: 950;
+          letter-spacing: .35px;
+          box-shadow: 0 4px 12px rgba(37,99,235,.12);
+        }
+        .message-link-badge + .pinned-message-chip {
+          left: 46px;
+        }
+
+        /* FINAL LINK ACTION FIX */
+        .message-action-row .link-square {
+          display: inline-flex !important;
+          visibility: visible !important;
+          opacity: 1 !important;
+          position: relative !important;
+          z-index: 50 !important;
+          color: #1d4ed8 !important;
+          background: #eff6ff !important;
+          border: 1px solid #93c5fd !important;
+        }
+        .message-action-row .link-square:hover,
+        .message-action-row .link-square:focus-visible {
+          background: #dbeafe !important;
+          color: #1e3a8a !important;
+          outline: none !important;
+        }
+
+        /* FINAL UX OVERRIDES: private PIN buttons + reliable full-link rendering */
+        .unlock-open-btn {
+          width: 100% !important;
+          min-height: 46px !important;
+          border: 1px solid #2563eb !important;
+          border-radius: 15px !important;
+          background: linear-gradient(135deg, #2563eb 0%, #0ea5e9 100%) !important;
+          color: #ffffff !important;
+          font-size: 14px !important;
+          font-weight: 900 !important;
+          letter-spacing: .1px !important;
+          cursor: pointer !important;
+          box-shadow: 0 12px 26px rgba(37,99,235,.25) !important;
+          opacity: 1 !important;
+        }
+        .unlock-open-btn:hover:not(:disabled) {
+          background: linear-gradient(135deg, #1d4ed8 0%, #0284c7 100%) !important;
+        }
+        .unlock-open-btn:disabled {
+          opacity: .68 !important;
+          cursor: not-allowed !important;
+        }
+        .unlock-back-btn {
+          width: 100% !important;
+          min-height: 42px !important;
+          margin-top: 9px !important;
+          border: 1px solid #ef4444 !important;
+          border-radius: 14px !important;
+          background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+          color: #ffffff !important;
+          font-size: 13px !important;
+          font-weight: 900 !important;
+          cursor: pointer !important;
+          box-shadow: 0 10px 22px rgba(220,38,38,.2) !important;
+          opacity: 1 !important;
+        }
+        .unlock-back-btn:hover {
+          background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
+        }
+        .message-link-badge {
+          position: absolute !important;
+          top: 7px !important;
+          left: 7px !important;
+          z-index: 30 !important;
+          min-width: 36px !important;
+          height: 18px !important;
+          padding: 0 7px !important;
+          border-radius: 999px !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          background: #dbeafe !important;
+          border: 1px solid #60a5fa !important;
+          color: #1d4ed8 !important;
+          font-size: 8px !important;
+          line-height: 1 !important;
+          font-weight: 950 !important;
+          letter-spacing: .4px !important;
+          box-shadow: 0 4px 12px rgba(37,99,235,.16) !important;
+        }
+        .message-bubble:has(.message-link-badge) {
+          padding-top: 30px !important;
+        }
+        .message-text a[href],
+        .image-description-text a[href],
+        .file-description-text a[href] {
+          touch-action: manipulation !important;
         }
 
       `}

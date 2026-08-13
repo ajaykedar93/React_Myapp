@@ -1293,7 +1293,89 @@ export default function ChannelList() {
     }, PIN_OPEN_DELAY_MS);
   };
 
-  const openChannel = (channel) => {
+  const showPrivateChannelPinBox = (channel, error = "") => {
+    clearActivePinRequest();
+    pinSuccessRef.current = false;
+    openingChannelRef.current = false;
+    setIsOpeningChannel(false);
+
+    localStorage.setItem("selected_channel_id", channel.channel_id);
+    localStorage.setItem("selected_channel_name", channel.channel_name || "");
+    localStorage.setItem(
+      "selected_channel_tagline",
+      channel.channel_tagline || ""
+    );
+    localStorage.setItem("selected_channel_is_private", "true");
+
+    // Any previously trusted PIN must be discarded before asking for the
+    // current database PIN again. This is important when the owner changes
+    // the PIN directly in PostgreSQL/pgAdmin.
+    removeTrustedPin(channel.channel_id);
+    localStorage.removeItem(SELECTED_CHANNEL_PIN_KEY);
+    clearSelectedChannelVerified(channel.channel_id);
+
+    setPinChecking(false);
+    setPinBox({
+      show: true,
+      channel,
+      pin: "",
+      error,
+      trustDevice: false,
+    });
+  };
+
+  const verifyTrustedChannelPin = async (channel, trustedPin) => {
+    if (!channel?.channel_id || !/^[0-9]{4}$/.test(trustedPin)) return false;
+
+    try {
+      const res = await fetch(
+        `${API_URL}/api/telegram-channels/${channel.channel_id}/verify-pin`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          cache: "no-store",
+          body: JSON.stringify({ pin: trustedPin }),
+        }
+      );
+
+      const data = await res.json().catch(() => ({}));
+      const messageText = String(data?.message || "").toLowerCase();
+
+      const explicitFailure =
+        data?.success === false ||
+        data?.verified === false ||
+        data?.valid === false ||
+        data?.unlocked === false ||
+        isTrue(data?.mismatch) ||
+        isTrue(data?.invalid) ||
+        messageText.includes("mismatch") ||
+        messageText.includes("wrong") ||
+        messageText.includes("invalid") ||
+        messageText.includes("incorrect");
+
+      const explicitSuccess =
+        isTrue(data?.unlocked) ||
+        isTrue(data?.success) ||
+        isTrue(data?.verified) ||
+        isTrue(data?.valid) ||
+        isTrue(data?.matched) ||
+        messageText.includes("verified") ||
+        messageText.includes("success") ||
+        messageText.includes("matched") ||
+        messageText.includes("correct");
+
+      // A trusted PIN is valid only when the backend confirms it against the
+      // current database value. This catches a PIN changed manually in pgAdmin.
+      return Boolean(res.ok && !explicitFailure && (explicitSuccess || !explicitFailure));
+    } catch (error) {
+      console.error("Trusted PIN verification error:", error);
+      return false;
+    }
+  };
+
+  const openChannel = async (channel) => {
     if (openingChannelRef.current || isOpeningChannel) return;
 
     pinSuccessRef.current = false;
@@ -1306,39 +1388,36 @@ export default function ChannelList() {
       const trustedPin = getTrustedPin(channel.channel_id);
 
       /*
-        Trusted device rule:
-        If this browser/device was trusted after a successful PIN, open
-        directly. Another device, cleared browser data, or no trust tick
-        will ask the PIN again.
+        Trusted-device rule:
+        1. A trusted device never blindly trusts its locally stored PIN.
+        2. Before direct opening, validate that stored PIN against the backend.
+        3. If the owner changed the PIN in pgAdmin, validation fails, the old
+           trusted PIN is erased, and the normal PIN popup is shown.
+        4. After the user enters the new correct PIN and chooses Trust Device,
+           the new PIN replaces the old trust and future opens skip the popup.
       */
       if (/^[0-9]{4}$/.test(trustedPin)) {
-        goToChannel(channel, trustedPin, true);
+        openingChannelRef.current = true;
+        setIsOpeningChannel(true);
+
+        const stillCurrentChannel = await verifyTrustedChannelPin(
+          channel,
+          trustedPin
+        );
+
+        if (stillCurrentChannel) {
+          goToChannel(channel, trustedPin, true);
+          return;
+        }
+
+        showPrivateChannelPinBox(
+          channel,
+          "Channel PIN changed. Enter the new 4 digit PIN."
+        );
         return;
       }
 
-      clearActivePinRequest();
-      pinSuccessRef.current = false;
-      openingChannelRef.current = false;
-      setIsOpeningChannel(false);
-
-      localStorage.setItem("selected_channel_id", channel.channel_id);
-      localStorage.setItem("selected_channel_name", channel.channel_name || "");
-      localStorage.setItem(
-        "selected_channel_tagline",
-        channel.channel_tagline || ""
-      );
-      localStorage.setItem("selected_channel_is_private", "true");
-      localStorage.removeItem(SELECTED_CHANNEL_PIN_KEY);
-      clearSelectedChannelVerified(channel.channel_id);
-
-      setPinChecking(false);
-      setPinBox({
-        show: true,
-        channel,
-        pin: "",
-        error: "",
-        trustDevice: false,
-      });
+      showPrivateChannelPinBox(channel);
       return;
     }
 
