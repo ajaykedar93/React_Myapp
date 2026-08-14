@@ -59,7 +59,7 @@ export default function Teligram() {
   const bottomRef = useRef(null);
   const chatBodyRef = useRef(null);
   const savedRangeRef = useRef(null);
-  const typingFormatsRef = useRef({ bold: false, underline: false });
+  const typingFormatsRef = useRef({ bold: false, underline: false, color: "#111111" });
   const verifiedPinRef = useRef("");
   const unlockCheckingRef = useRef(false);
   const unlockRequestIdRef = useRef(0);
@@ -98,7 +98,9 @@ export default function Teligram() {
   const [colorModeActive, setColorModeActive] = useState(false);
   const [showPinnedList, setShowPinnedList] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
+  const [selectedImages, setSelectedImages] = useState([]);
   const [previewImage, setPreviewImage] = useState("");
+  const [previewImages, setPreviewImages] = useState([]);
   const [fullImagePreview, setFullImagePreview] = useState("");
   const [imageViewerLoading, setImageViewerLoading] = useState(false);
   const [imageViewerError, setImageViewerError] = useState(false);
@@ -119,9 +121,11 @@ export default function Teligram() {
   const [activeFormats, setActiveFormats] = useState({
     bold: false,
     underline: false,
+    color: "#111111",
   });
 
   const [activeMenuId, setActiveMenuId] = useState(null);
+  const [activeImageMenu, setActiveImageMenu] = useState(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [loading, setLoading] = useState(false);
@@ -310,6 +314,32 @@ export default function Teligram() {
 
   const getPinnedNoteKey = (channelId) => {
     return `pinned_note_${PUBLIC_USER_ID}_${channelId}`;
+  };
+
+  const getLinkedNoteKey = (channelId) => {
+    return `linked_note_${PUBLIC_USER_ID}_${channelId}`;
+  };
+
+  const getLinkedNoteIds = (channelId) => {
+    if (!channelId || typeof window === "undefined") return [];
+    try {
+      const raw = localStorage.getItem(getLinkedNoteKey(channelId));
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.map(String) : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const setLinkedNoteState = (channelId, noteId, linked) => {
+    if (!channelId || !noteId || typeof window === "undefined") return;
+    const current = new Set(getLinkedNoteIds(channelId));
+    const id = String(noteId);
+    if (linked) current.add(id);
+    else current.delete(id);
+    const next = Array.from(current);
+    if (next.length) localStorage.setItem(getLinkedNoteKey(channelId), JSON.stringify(next));
+    else localStorage.removeItem(getLinkedNoteKey(channelId));
   };
 
   const savePinnedNoteIds = (channelId, ids) => {
@@ -717,6 +747,14 @@ export default function Teligram() {
     return "";
   };
 
+  const getNoteImageUrls = (note) => {
+    const list = Array.isArray(note?.image_urls) ? note.image_urls : [];
+    const normalized = list.map(normalizeApiImageUrl).filter(Boolean);
+    if (normalized.length) return normalized;
+    const single = getNoteImageUrl(note);
+    return single ? [single] : [];
+  };
+
   const getNoteImageUrl = (note) => {
     const backendUrl = normalizeApiImageUrl(note?.image_url);
 
@@ -789,6 +827,7 @@ export default function Teligram() {
       method: "GET",
       headers: getAccessHeaders(),
       credentials: "include",
+      cache: "no-store",
     });
 
     if (!response.ok) {
@@ -796,16 +835,50 @@ export default function Teligram() {
     }
 
     const blob = await response.blob();
+    const safeName =
+      String(fileName || `download-${note?.note_id || Date.now()}`)
+        .replace(/[\\/:*?"<>|]+/g, "_")
+        .trim() || `download-${Date.now()}`;
+
     const objectUrl = URL.createObjectURL(blob);
+
+    // Primary path: browser and mobile WebView download using a local Blob.
+    // This avoids relying on the server opening the image in a new tab.
     const link = document.createElement("a");
     link.href = objectUrl;
-    link.download = fileName || `download-${note?.note_id || Date.now()}`;
-    link.style.display = "none";
+    link.download = safeName;
+    link.setAttribute("download", safeName);
+    link.style.position = "fixed";
+    link.style.left = "-9999px";
+    link.style.width = "1px";
+    link.style.height = "1px";
+    link.style.opacity = "0";
     document.body.appendChild(link);
-    link.click();
-    link.remove();
 
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
+    try {
+      link.click();
+    } finally {
+      link.remove();
+    }
+
+    // Some embedded mobile WebViews do not implement the download attribute.
+    // Give those environments a direct Blob URL fallback instead of failing.
+    const supportsDownload = "download" in HTMLAnchorElement.prototype;
+    if (!supportsDownload) {
+      const fallbackWindow = window.open(objectUrl, "_blank", "noopener,noreferrer");
+      if (!fallbackWindow) {
+        const fallbackLink = document.createElement("a");
+        fallbackLink.href = objectUrl;
+        fallbackLink.target = "_blank";
+        fallbackLink.rel = "noopener noreferrer";
+        fallbackLink.style.display = "none";
+        document.body.appendChild(fallbackLink);
+        fallbackLink.click();
+        fallbackLink.remove();
+      }
+    }
+
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
     return true;
   };
 
@@ -1045,19 +1118,10 @@ export default function Teligram() {
   };
 
   const getComposerTitleValue = (oldNote) => {
+    // Title is a real toggle. When the user turns it OFF, the edited/sent
+    // message must become a normal message instead of retaining a hidden title.
     if (composerMode === "title") return "title";
-
-    // Once a title line has been created, turning the Heading tool OFF only
-    // changes the future typing mode. The existing first line must remain
-    // stored as a title so the Title badge can be rendered after sending.
-    const html = getEditorHtml();
-    if (typeof document !== "undefined" && html) {
-      const wrapper = document.createElement("div");
-      wrapper.innerHTML = html;
-      if (wrapper.querySelector(".note-heading-line")) return "title";
-    }
-
-    return isTitleNote(oldNote) ? "title" : "";
+    return "";
   };
 
   const normalizeEditorHtml = (html) => {
@@ -1098,77 +1162,80 @@ export default function Teligram() {
     return normalizeEditorHtml(html.trim());
   };
 
-  // Title mode affects only the first user-entered line.
-  // The remaining lines keep their normal formatting unless the user
-  // explicitly applies Bold/Underline to them.
+  // Render only the first visual line as a real heading wrapper.
+  // The stored HTML remains unchanged; this wrapper is display-only.
   const applyFirstLineHeadingHtml = (html) => {
     if (typeof document === "undefined" || !html) return html || "";
 
     const wrapper = document.createElement("div");
-    wrapper.innerHTML = html;
+    wrapper.innerHTML = removeFirstLineHeadingHtml(normalizeEditorHtml(html));
 
-    // Remove an older heading wrapper first so the operation is idempotent.
-    wrapper.querySelectorAll(".note-heading-line").forEach((heading) => {
-      const parent = heading.parentNode;
-      if (!parent) return;
-      while (heading.firstChild) parent.insertBefore(heading.firstChild, heading);
-      heading.remove();
+    const heading = document.createElement("strong");
+    heading.className = "note-heading-line";
+
+    const isBlock = (node) =>
+      node?.nodeType === Node.ELEMENT_NODE &&
+      ["DIV", "P", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "PRE"].includes(node.tagName);
+
+    const firstBlock = Array.from(wrapper.childNodes).find((node) => {
+      if (node.nodeType === Node.TEXT_NODE) return Boolean((node.nodeValue || "").trim());
+      return isBlock(node) && Boolean((node.textContent || "").trim());
     });
 
-    const blockTags = new Set([
-      "DIV", "P", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "PRE",
-    ]);
+    const source = firstBlock || Array.from(wrapper.childNodes).find((node) => (node.textContent || "").trim());
+    if (!source) return wrapper.innerHTML;
 
-    // contentEditable commonly stores each Enter as <div>...</div>.
-    // In that case, make ONLY the first block a heading.
-    const firstElement = Array.from(wrapper.children).find((el) => {
-      return blockTags.has(el.tagName) || el.textContent?.trim();
-    });
+    const host = isBlock(source) ? source : wrapper;
+    const children = Array.from(host.childNodes);
+    let moved = false;
 
-    if (firstElement && blockTags.has(firstElement.tagName)) {
-      const heading = document.createElement("strong");
-      heading.className = "note-heading-line";
-      while (firstElement.firstChild) {
-        heading.appendChild(firstElement.firstChild);
+    for (const node of children) {
+      if (node.nodeType === Node.ELEMENT_NODE && node.tagName === "BR") break;
+
+      if (node.nodeType === Node.TEXT_NODE && /\r?\n/.test(node.nodeValue || "")) {
+        const parts = String(node.nodeValue || "").split(/\r?\n/);
+        const first = parts.shift() || "";
+        if (first) {
+          const firstNode = document.createTextNode(first);
+          host.replaceChild(firstNode, node);
+          heading.appendChild(firstNode);
+        }
+        break;
       }
-      firstElement.appendChild(heading);
-      return normalizeEditorHtml(wrapper.innerHTML);
+
+      host.removeChild(node);
+      heading.appendChild(node);
+      moved = true;
     }
 
-    // Plain text / inline HTML: split at the first newline or BR.
-    const walker = document.createTreeWalker(
-      wrapper,
-      NodeFilter.SHOW_TEXT
-    );
-    let firstText = walker.nextNode();
-
-    while (firstText && !String(firstText.textContent || "").trim()) {
-      firstText = walker.nextNode();
-    }
-
-    if (!firstText) return normalizeEditorHtml(wrapper.innerHTML);
-
-    const textValue = firstText.textContent || "";
-    const newlineIndex = textValue.search(/\r?\n/);
-
-    if (newlineIndex >= 0) {
-      const before = textValue.slice(0, newlineIndex);
-      const after = textValue.slice(newlineIndex + 1);
-
-      const heading = document.createElement("strong");
-      heading.className = "note-heading-line";
-      heading.textContent = before;
-
-      const afterNode = document.createTextNode(after);
-      firstText.replaceWith(heading, afterNode);
-    } else {
-      const heading = document.createElement("strong");
-      heading.className = "note-heading-line";
-      firstText.parentNode.insertBefore(heading, firstText);
-      heading.appendChild(firstText);
-    }
-
+    if (!moved && !heading.childNodes.length) return wrapper.innerHTML;
+    host.insertBefore(heading, host.firstChild);
     return normalizeEditorHtml(wrapper.innerHTML);
+  };
+
+  // Apply only color to the selected range without removing existing bold/underline
+  // markup. The new span carries an inline important color so chat and composer
+  // render the same color even when parent CSS has a base text color.
+  const applyInlineColorToRange = (range, color) => {
+    if (!range || range.collapsed) return false;
+    const finalColor = normalizeTextColor(color);
+    const fragment = range.extractContents();
+    const span = document.createElement("span");
+    span.style.setProperty("color", finalColor, "important");
+    span.style.setProperty("-webkit-text-fill-color", finalColor, "important");
+    span.appendChild(fragment);
+    range.insertNode(span);
+
+    const nextRange = document.createRange();
+    nextRange.selectNodeContents(span);
+    nextRange.collapse(false);
+    const selection = window.getSelection();
+    if (selection) {
+      selection.removeAllRanges();
+      selection.addRange(nextRange);
+    }
+    savedRangeRef.current = nextRange.cloneRange();
+    return true;
   };
 
   const removeFirstLineHeadingHtml = (html) => {
@@ -1191,16 +1258,17 @@ export default function Teligram() {
   };
 
   const getRenderedNoteHtml = (note) => {
+    // Title is display-only: only the first visual line is bold.
     const html = note?.content_html || "";
-    return isTitleNote(note) ? applyFirstLineHeadingHtml(html) : html;
+    return isTitleNote(note)
+      ? applyFirstLineHeadingHtml(html)
+      : removeFirstLineHeadingHtml(html);
   };
 
   const getComposerContentHtml = () => {
-    const html = getEditorHtml();
-    // If title mode is currently ON, ensure only the first line is marked.
-    // If it was turned OFF after a title was typed, the existing heading
-    // wrapper is intentionally preserved.
-    return composerMode === "title" ? applyFirstLineHeadingHtml(html) : html;
+    // Keep stored HTML normal. Title styling is applied only by the editor/card
+    // CSS and the title flag. Turning Title off therefore restores normal text.
+    return removeFirstLineHeadingHtml(getEditorHtml());
   };
 
   const placeCaretAtEnd = (element = editorRef.current) => {
@@ -1226,7 +1294,7 @@ export default function Teligram() {
   const sanitizeNoteHtml = (html) => {
     return DOMPurify.sanitize(normalizeEditorHtml(html || ""), {
       ADD_TAGS: ["font", "a"],
-      ADD_ATTR: ["class", "style", "color", "href", "target", "rel", "aria-label"],
+      ADD_ATTR: ["style", "color", "href", "target", "rel"],
       ALLOW_UNKNOWN_PROTOCOLS: false,
     });
   };
@@ -1294,6 +1362,19 @@ export default function Teligram() {
       textNode.replaceWith(fragment);
     });
 
+    return normalizeEditorHtml(wrapper.innerHTML);
+  };
+
+  const unlinkNoteHtml = (html) => {
+    if (typeof document === "undefined" || !html) return html || "";
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = html;
+    wrapper.querySelectorAll("a.message-link").forEach((anchor) => {
+      const parent = anchor.parentNode;
+      if (!parent) return;
+      while (anchor.firstChild) parent.insertBefore(anchor.firstChild, anchor);
+      anchor.remove();
+    });
     return normalizeEditorHtml(wrapper.innerHTML);
   };
 
@@ -1516,36 +1597,20 @@ export default function Teligram() {
           localStorage.getItem(SELECTED_CHANNEL_TRUST_KEY) === "true" &&
           /^[0-9]{4}$/.test(trustedPin);
 
-        // A trusted PIN is checked only once when this channel page opens.
-        // It is NOT checked on every realtime notes request. This lets a direct
-        // pgAdmin PIN change invalidate the old trusted PIN without adding
-        // repeated PIN verification overhead.
+        // Trusted device access is frontend-only on this page. Do NOT call the
+        // PIN verification API while opening the channel; this prevents the
+        // temporary mismatch popup seen on trusted devices.
         if (trustedDevice) {
-          const trustedStillValid = await verifyPinFromApi(
-            channel.channel_id,
-            trustedPin
-          );
-
-          if (loadId !== channelLoadIdRef.current) return;
-
-          if (trustedStillValid) {
-            verifiedPinRef.current = trustedPin;
-            channelAccessGrantedRef.current = true;
-            localStorage.setItem(SELECTED_CHANNEL_PIN_KEY, trustedPin);
-            localStorage.setItem("selected_channel_is_private", "true");
-            markFrontendVerifiedAccess(channel.channel_id, trustedPin, true);
-            setChannelUnlocked(true);
-            setUnlockPin("");
-            setUnlockError("");
-            setUnlockTrustDevice(false);
-            return;
-          }
-
-          // Old trusted PIN is stale (for example after a pgAdmin change).
-          removeTrustedPin(channel.channel_id);
-          clearFrontendVerifiedAccess(channel.channel_id);
-          localStorage.removeItem(SELECTED_CHANNEL_PIN_KEY);
+          verifiedPinRef.current = trustedPin;
+          channelAccessGrantedRef.current = true;
+          localStorage.setItem(SELECTED_CHANNEL_PIN_KEY, trustedPin);
           localStorage.setItem("selected_channel_is_private", "true");
+          markFrontendVerifiedAccess(channel.channel_id, trustedPin, true);
+          setChannelUnlocked(true);
+          setUnlockPin("");
+          setUnlockError("");
+          setUnlockTrustDevice(false);
+          return;
         } else if (/^[0-9]{4}$/.test(savedPin)) {
           // The channel list already verified this PIN in the current flow.
           // Reuse it without another verification call.
@@ -1762,15 +1827,29 @@ export default function Teligram() {
 
           return Number(note.channel_id) === Number(channelId);
         })
-        .map((note) => ({
-          ...note,
-          channel_id: note.channel_id || channelId,
-          sender_device_id:
-            note.sender_device_id ||
-            note.device_id ||
-            note.created_device_id ||
-            "",
-        }));
+        .map((note) => {
+          const normalizedNote = {
+            ...note,
+            channel_id: note.channel_id || channelId,
+            sender_device_id:
+              note.sender_device_id ||
+              note.device_id ||
+              note.created_device_id ||
+              "",
+          };
+
+          const linkedIds = getLinkedNoteIds(channelId);
+          const isLocallyLinked = linkedIds.includes(String(normalizedNote.note_id));
+          const hasAnchor = /<a\\b[^>]*class=["\\']message-link["\\'][^>]*>/i.test(
+            String(normalizedNote.content_html || "")
+          );
+
+          if (isLocallyLinked && !hasAnchor && normalizedNote.content_html) {
+            return { ...normalizedNote, content_html: linkifyNoteHtml(normalizedNote.content_html) };
+          }
+
+          return normalizedNote;
+        });
 
       setNotes((prev) => {
         if (silent && getNotesSignature(prev) === getNotesSignature(channelNotes)) {
@@ -1887,28 +1966,58 @@ export default function Teligram() {
 
   const syncTypingMarker = (formats) => {
     if (!editorRef.current) return false;
+
     const selection = window.getSelection();
     const range = selection && selection.rangeCount > 0
       ? selection.getRangeAt(0)
       : savedRangeRef.current;
     if (!range || !range.collapsed) return false;
 
-    const marker = document.createElement("span");
-    marker.dataset.typingMarker = "true";
-    marker.style.fontWeight = formats.bold ? "700" : "400";
-    marker.style.textDecoration = formats.underline ? "underline" : "none";
-    marker.textContent = "\u200B";
-    range.insertNode(marker);
+    const finalColor = normalizeTextColor(formats.color || "#111111");
+    const root = editorRef.current;
+    const caretNode = range.startContainer;
 
+    // Never stack typing markers. A nested marker inherits the previous marker's
+    // formatting, which is what caused Bold-only typing to become Bold+Underline
+    // and Underline-only typing to become Bold+Underline. Reuse the current marker
+    // whenever the caret is already inside one.
+    let marker = null;
+    if (caretNode && caretNode.nodeType === Node.TEXT_NODE) {
+      marker = caretNode.parentElement?.closest?.('[data-typing-marker="true"]') || null;
+    } else if (caretNode instanceof Element) {
+      marker = caretNode.closest?.('[data-typing-marker="true"]') || null;
+    }
+
+    if (!marker || !root.contains(marker)) {
+      marker = document.createElement("span");
+      marker.className = "typing-format-marker";
+      marker.dataset.typingMarker = "true";
+      marker.textContent = "\u200B";
+      range.insertNode(marker);
+    }
+
+    marker.dataset.bold = formats.bold ? "1" : "0";
+    marker.dataset.underline = formats.underline ? "1" : "0";
+    marker.style.setProperty("--typing-color", finalColor);
+    marker.style.setProperty("font-weight", formats.bold ? "900" : "400", "important");
+    marker.style.setProperty("text-decoration", formats.underline ? "underline" : "none", "important");
+    marker.style.setProperty("color", finalColor, "important");
+    marker.style.setProperty("-webkit-text-fill-color", finalColor, "important");
+
+    const textNode = Array.from(marker.childNodes).find((node) => node.nodeType === Node.TEXT_NODE);
+    if (!textNode) {
+      marker.textContent = "\u200B";
+    }
+
+    const caretText = Array.from(marker.childNodes).find((node) => node.nodeType === Node.TEXT_NODE);
     const nextRange = document.createRange();
-    nextRange.setStart(marker.firstChild, 1);
+    nextRange.setStart(caretText, Math.min(1, caretText.nodeValue?.length || 0));
     nextRange.collapse(true);
     selection.removeAllRanges();
     selection.addRange(nextRange);
     savedRangeRef.current = nextRange.cloneRange();
     return true;
   };
-
   const saveSelection = (syncFormat = false) => {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) return;
@@ -1931,11 +2040,14 @@ export default function Teligram() {
     try {
       const selection = window.getSelection();
       const range = selection && selection.rangeCount ? selection.getRangeAt(0) : null;
+      // A collapsed caret represents the user's explicit typing mode. Never
+      // replace that state with queryCommandState after a mobile toolbar tap.
       if (!syncTyping && range?.collapsed) {
         setActiveFormats({ ...typingFormatsRef.current });
         return;
       }
       const next = {
+        ...typingFormatsRef.current,
         bold: Boolean(document.queryCommandState("bold")),
         underline: Boolean(document.queryCommandState("underline")),
       };
@@ -1960,7 +2072,12 @@ export default function Teligram() {
         if (hasSelection) {
           document.execCommand("styleWithCSS", false, true);
           document.execCommand(type, false, null);
-          updateActiveFormats(true);
+          const next = {
+            ...typingFormatsRef.current,
+            [type]: Boolean(document.queryCommandState(type)),
+          };
+          typingFormatsRef.current = next;
+          setActiveFormats(next);
           saveSelection();
         } else {
           const next = {
@@ -1979,24 +2096,25 @@ export default function Teligram() {
         const currentRange = currentSelection && currentSelection.rangeCount > 0
           ? currentSelection.getRangeAt(0)
           : savedRangeRef.current;
+
+        typingFormatsRef.current = { ...typingFormatsRef.current, color: finalColor };
+
         if (currentRange && !currentRange.collapsed) {
           applyInlineColorToRange(currentRange.cloneRange(), finalColor);
-          setComposerTextColor("#111111");
+          setComposerTextColor(finalColor);
           setColorModeActive(true);
-          setTypingColorAtCaret("#111111");
+          saveSelection();
         } else {
           setComposerTextColor(finalColor);
           setColorModeActive(true);
-          setTypingColorAtCaret(finalColor);
+          syncTypingMarker(typingFormatsRef.current);
         }
+        setActiveFormats({ ...typingFormatsRef.current });
       }
-      editorRef.current.normalize();
     } catch (error) {
       console.error("Format apply error:", error);
     }
-    saveSelection();
   };
-
   const applyBold = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -2012,12 +2130,6 @@ export default function Teligram() {
   const openColorPicker = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (colorModeActive) {
-      setColorModeActive(false);
-      setComposerTextColor("#111111");
-      setTypingColorAtCaret("#111111");
-      return;
-    }
     saveSelection();
     colorRef.current?.click();
   };
@@ -2030,15 +2142,16 @@ export default function Teligram() {
     try {
       const selection = window.getSelection();
       const range = selection && selection.rangeCount ? selection.getRangeAt(0) : savedRangeRef.current;
+      typingFormatsRef.current = { ...typingFormatsRef.current, color: finalColor };
+      setActiveFormats({ ...typingFormatsRef.current });
+      setColorModeActive(true);
+      setComposerTextColor(finalColor);
+
       if (range && !range.collapsed) {
         applyInlineColorToRange(range.cloneRange(), finalColor);
-        setColorModeActive(true);
-        setComposerTextColor("#111111");
-        setTypingColorAtCaret("#111111");
+        saveSelection();
       } else {
-        setColorModeActive(true);
-        setComposerTextColor(finalColor);
-        setTypingColorAtCaret(finalColor);
+        syncTypingMarker(typingFormatsRef.current);
       }
     } catch (error) {
       console.error("Color apply error:", error);
@@ -2047,29 +2160,30 @@ export default function Teligram() {
   };
 
   const handleImageSelect = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    if (!file.type.startsWith("image/")) {
-      showToast("Please select only image", "error");
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    if (files.some((file) => !file.type.startsWith("image/"))) {
+      showToast("Please select only images", "error");
+      return;
+    }
+    if (files.length > 3) {
+      showToast("Maximum 3 images allowed", "error");
       return;
     }
 
-    // One upload per note: choosing image removes generic attachment preview.
-    if (previewImage && previewImage.startsWith("blob:")) {
-      URL.revokeObjectURL(previewImage);
-    }
-
-    setSelectedImage(file);
-    setPreviewImage(URL.createObjectURL(file));
+    previewImages.forEach((url) => {
+      if (url.startsWith("blob:")) URL.revokeObjectURL(url);
+    });
+    const urls = files.map((file) => URL.createObjectURL(file));
+    setSelectedImages(files);
+    setSelectedImage(files[0] || null);
+    setPreviewImages(urls);
+    setPreviewImage(urls[0] || "");
     setRemoveOldImage(false);
     setSelectedFile(null);
     setPreviewFile(null);
     setRemoveOldFile(true);
-
-    if (fileRef.current) {
-      fileRef.current.value = "";
-    }
+    if (fileRef.current) fileRef.current.value = "";
   };
 
   const handleFileSelect = (e) => {
@@ -2090,7 +2204,9 @@ export default function Teligram() {
     });
     setRemoveOldFile(false);
     setSelectedImage(null);
+    setSelectedImages([]);
     setPreviewImage("");
+    setPreviewImages([]);
     setRemoveOldImage(true);
 
     if (imageRef.current) {
@@ -2104,7 +2220,9 @@ export default function Teligram() {
     }
 
     setSelectedImage(null);
+    setSelectedImages([]);
     setPreviewImage("");
+    setPreviewImages([]);
     setRemoveOldImage(true);
 
     if (imageRef.current) {
@@ -2124,19 +2242,26 @@ export default function Teligram() {
 
   const resetForm = ({ keepPreviewImage = false } = {}) => {
     setComposerTextColor("#111111");
-    if (!keepPreviewImage && previewImage && previewImage.startsWith("blob:")) {
-      URL.revokeObjectURL(previewImage);
+    if (!keepPreviewImage) {
+      previewImages.forEach((url) => {
+        if (url.startsWith("blob:")) URL.revokeObjectURL(url);
+      });
+      if (previewImage && previewImage.startsWith("blob:") && !previewImages.includes(previewImage)) {
+        URL.revokeObjectURL(previewImage);
+      }
     }
 
     setSelectedImage(null);
+    setSelectedImages([]);
     setPreviewImage("");
+    setPreviewImages([]);
     setRemoveOldImage(false);
     setSelectedFile(null);
     setPreviewFile(null);
     setRemoveOldFile(false);
     setEditingNoteId(null);
     setComposerMode("message");
-    typingFormatsRef.current = { bold: false, underline: false };
+    typingFormatsRef.current = { bold: false, underline: false, color: "#111111" };
     setActiveFormats({ bold: false, underline: false });
     setActiveMenuId(null);
     savedRangeRef.current = null;
@@ -2172,64 +2297,28 @@ export default function Teligram() {
     event?.preventDefault?.();
     event?.stopPropagation?.();
 
-    if (
-      composerMode === "image-update" ||
-      composerMode === "image-caption" ||
-      composerMode === "file-update" ||
-      composerMode === "file-caption"
-    ) {
+    if (["image-update", "image-caption", "file-update", "file-caption"].includes(composerMode)) {
       showToast("Heading is for text messages", "error");
       return;
     }
 
-    const nextMode = composerMode === "title" ? "message" : "title";
+    const turningOff = composerMode === "title";
+    const currentHtml = getEditorHtml();
 
-    // Heading is a typing mode. Turning it OFF must NOT remove the title
-    // already created in the first line. The first line remains a title,
-    // while all text typed after the toggle stays normal.
-    if (nextMode === "message" && editorRef.current) {
-      const currentHtml = getEditorHtml();
-      const hasText = Boolean(stripHtml(currentHtml).trim());
-
-      if (hasText) {
-        const titledHtml = applyFirstLineHeadingHtml(currentHtml);
-        const wrapper = document.createElement("div");
-        wrapper.innerHTML = titledHtml;
-
-        // If the user has only typed the title line so far, create a clean
-        // normal typing line after it. This prevents the <strong> title
-        // wrapper from leaking its bold style into the next text.
-        const textValue = wrapper.textContent || "";
-        const hasLineBreak =
-          /(<br\s*\/?>|<div\b|<p\b|<li\b)/i.test(titledHtml) ||
-          /\r?\n/.test(textValue);
-
-        if (!hasLineBreak) {
-          const nextLine = document.createElement("div");
-          nextLine.innerHTML = "<br>";
-          wrapper.appendChild(nextLine);
-        }
-
-        editorRef.current.innerHTML = normalizeEditorHtml(wrapper.innerHTML);
-      }
+    if (turningOff && editorRef.current && currentHtml) {
+      // Remove only the title wrapper; do not leave the first line bold.
+      editorRef.current.innerHTML = removeFirstLineHeadingHtml(currentHtml);
     }
 
+    const nextMode = turningOff ? "message" : "title";
     setComposerMode(nextMode);
 
     setTimeout(() => {
       placeCaretAtEnd();
-      // Heading mode is independent from Bold/Underline typing state.
-      // Turning Heading OFF must not deactivate Bold/Underline.
-      if (nextMode === "message") {
-        typingFormatsRef.current = { ...typingFormatsRef.current };
-        setActiveFormats({ ...typingFormatsRef.current });
-        syncTypingMarker(typingFormatsRef.current);
-      } else {
-        setActiveFormats({ ...typingFormatsRef.current });
-      }
+      setActiveFormats({ ...typingFormatsRef.current });
+      syncTypingMarker(typingFormatsRef.current);
     }, 0);
   };
-
   const saveNote = async () => {
     if (!selectedChannel?.channel_id) {
       showToast("Please open channel first", "error");
@@ -2244,8 +2333,10 @@ export default function Teligram() {
       return;
     }
 
-    const currentImageFile = selectedImage;
-    const currentPreviewImage = previewImage;
+    const currentImageFiles = selectedImages.length ? selectedImages : (selectedImage ? [selectedImage] : []);
+    const currentImageFile = currentImageFiles[0] || null;
+    const currentPreviewImages = previewImages.length ? previewImages : (previewImage ? [previewImage] : []);
+    const currentPreviewImage = currentPreviewImages[0] || "";
     const currentRemoveImage = removeOldImage;
     const currentFile = selectedFile;
     const currentPreviewFile = previewFile;
@@ -2281,6 +2372,7 @@ export default function Teligram() {
       content_html: contentHtml,
       text_color: currentTextColor,
       image_url: currentRemoveImage ? null : currentPreviewImage || null,
+      image_urls: currentRemoveImage ? [] : currentPreviewImages,
       image_path: null,
       has_image: currentRemoveImage ? false : Boolean(currentPreviewImage),
       has_attachment: currentRemoveFile ? false : Boolean(currentPreviewFile),
@@ -2332,9 +2424,7 @@ export default function Teligram() {
       formData.append("remove_image", currentRemoveImage ? "true" : "false");
       formData.append("remove_attachment", currentRemoveFile ? "true" : "false");
 
-      if (currentImageFile) {
-        formData.append("image", currentImageFile);
-      }
+      currentImageFiles.forEach((file) => formData.append("image", file));
 
       if (currentFile) {
         formData.append("file", currentFile);
@@ -2393,6 +2483,11 @@ export default function Teligram() {
         image_url: currentRemoveImage
           ? null
           : backendNote.image_url || optimisticNote.image_url || null,
+        image_urls: currentRemoveImage
+          ? []
+          : Array.isArray(backendNote.image_urls) && backendNote.image_urls.length
+            ? backendNote.image_urls
+            : optimisticNote.image_urls || [],
         image_path: null,
         has_image: currentRemoveImage
           ? false
@@ -2520,8 +2615,11 @@ export default function Teligram() {
             : "message"
     );
     setComposerTextColor(getNoteTextColor(note));
-    setPreviewImage(noteHasImage ? getNoteImageUrl(note) : "");
+    const noteImageUrls = noteHasImage ? getNoteImageUrls(note) : [];
+    setPreviewImage(noteImageUrls[0] || "");
+    setPreviewImages(noteImageUrls);
     setSelectedImage(null);
+    setSelectedImages([]);
     setRemoveOldImage(false);
     setSelectedFile(null);
     setPreviewFile(
@@ -2553,8 +2651,11 @@ export default function Teligram() {
     setEditingNoteId(note.note_id);
     setComposerMode("image-update");
     setComposerTextColor(getNoteTextColor(note));
-    setPreviewImage(getNoteImageUrl(note));
+    const noteImageUrls = getNoteImageUrls(note);
+    setPreviewImage(noteImageUrls[0] || "");
+    setPreviewImages(noteImageUrls);
     setSelectedImage(null);
+    setSelectedImages([]);
     setRemoveOldImage(false);
     setSelectedFile(null);
     setPreviewFile(null);
@@ -2577,8 +2678,11 @@ export default function Teligram() {
     setEditingNoteId(note.note_id);
     setComposerMode("image-caption");
     setComposerTextColor(getNoteTextColor(note));
-    setPreviewImage(getNoteImageUrl(note));
+    const noteImageUrls = getNoteImageUrls(note);
+    setPreviewImage(noteImageUrls[0] || "");
+    setPreviewImages(noteImageUrls);
     setSelectedImage(null);
+    setSelectedImages([]);
     setRemoveOldImage(false);
     setSelectedFile(null);
     setPreviewFile(null);
@@ -2657,9 +2761,7 @@ export default function Teligram() {
     const oldNotes = notes;
     const noteWasTitle = isTitleNote(note);
     const nextTitle = noteWasTitle ? "" : "title";
-    const nextContentHtml = nextTitle === "title"
-      ? applyFirstLineHeadingHtml(note.content_html || "")
-      : removeFirstLineHeadingHtml(note.content_html || "");
+    const nextContentHtml = removeFirstLineHeadingHtml(note.content_html || "");
     const successMessage = noteWasTitle ? "Title style removed" : "Title style added";
 
     // Keep the optimistic title change visible until the API finishes.
@@ -2718,7 +2820,7 @@ export default function Teligram() {
       setNotes((prev) =>
         prev.map((item) =>
           String(item.note_id) === String(note.note_id)
-            ? { ...item, ...backendNote, title: nextTitle, content_html: backendNote.content_html || nextContentHtml }
+            ? { ...item, ...backendNote, title: nextTitle, content_html: nextContentHtml }
             : item
         )
       );
@@ -2734,35 +2836,34 @@ export default function Teligram() {
     }
   };
 
-  const markNoteAsLink = async (note) => {
+  const toggleNoteLink = async (note) => {
     if (note?.is_temp) return;
 
-    const currentHtml = normalizeEditorHtml(note?.content_html || "");
-    const nextContentHtml = linkifyNoteHtml(currentHtml);
+    const currentHtml = note?.content_html || "";
+    const isLinked = /<a\b[^>]*class=["\']message-link["\'][^>]*>/i.test(currentHtml);
+    const nextContentHtml = isLinked ? unlinkNoteHtml(currentHtml) : linkifyNoteHtml(currentHtml);
+
     if (!nextContentHtml || nextContentHtml === currentHtml) {
       setActiveMenuId(null);
-      showToast("No full URL found in this message", "error");
+      showToast(isLinked ? "No link to remove" : "No link found in this message", "error");
       return;
     }
+
+    setLinkedNoteState(selectedChannel?.channel_id, note.note_id, !isLinked);
 
     const oldNotes = notes;
     isSavingNoteRef.current = true;
     setActiveMenuId(null);
     preserveChatView(note.note_id);
-
-    // Optimistic UI: show the complete clickable link immediately.
-    setNotes((prev) =>
-      prev.map((item) =>
-        String(item.note_id) === String(note.note_id)
-          ? { ...item, content_html: nextContentHtml, updated_at: new Date().toISOString() }
-          : item
-      )
-    );
+    setNotes((prev) => prev.map((item) =>
+      String(item.note_id) === String(note.note_id)
+        ? { ...item, content_html: nextContentHtml, updated_at: new Date().toISOString() }
+        : item
+    ));
 
     try {
       const formData = new FormData();
       const noteDeviceId = getNoteSenderDeviceId(note) || getCurrentDeviceId();
-
       formData.append("user_id", PUBLIC_USER_ID);
       formData.append("channel_id", selectedChannel.channel_id);
       formData.append("device_id", noteDeviceId);
@@ -2782,27 +2883,27 @@ export default function Teligram() {
         headers: getAccessHeaders(),
         body: formData,
       });
-
       const data = await res.json();
+
       if (!res.ok) {
+        setLinkedNoteState(selectedChannel?.channel_id, note.note_id, isLinked);
         preserveChatView(note.note_id);
         setNotes(oldNotes);
-        showToast(data.message || "Link update failed", "error");
+        showToast(data.message || (isLinked ? "Unlink update failed" : "Link update failed"), "error");
         return;
       }
 
       const backendNote = data.note || {};
       preserveChatView(note.note_id);
-      setNotes((prev) =>
-        prev.map((item) =>
-          String(item.note_id) === String(note.note_id)
-            ? { ...item, ...backendNote, content_html: backendNote.content_html || nextContentHtml }
-            : item
-        )
-      );
-      showToast("Link enabled", "success");
+      setNotes((prev) => prev.map((item) =>
+        String(item.note_id) === String(note.note_id)
+          ? { ...item, ...backendNote, content_html: nextContentHtml }
+          : item
+      ));
+      showToast(isLinked ? "Link removed" : "Link enabled", "success");
     } catch (error) {
-      console.error("Link update error:", error);
+      console.error("Link toggle error:", error);
+      setLinkedNoteState(selectedChannel?.channel_id, note.note_id, isLinked);
       preserveChatView(note.note_id);
       setNotes(oldNotes);
       showToast("Server error", "error");
@@ -2810,7 +2911,6 @@ export default function Teligram() {
       isSavingNoteRef.current = false;
     }
   };
-
   const togglePinnedNote = (note) => {
     if (!selectedChannel?.channel_id || !note?.note_id) return;
     const noteId = String(note.note_id);
@@ -2958,12 +3058,10 @@ export default function Teligram() {
       showToast("Pinned message not found", "error");
       return;
     }
+    setActiveMenuId(null);
     target.scrollIntoView({ behavior: "smooth", block: "center" });
     if (pinnedScrollTimerRef.current) clearTimeout(pinnedScrollTimerRef.current);
-    setActiveMenuId(targetId);
-    pinnedScrollTimerRef.current = setTimeout(() => {
-      setActiveMenuId((current) => String(current) === targetId ? null : current);
-    }, 1400);
+    pinnedScrollTimerRef.current = null;
   };
   const deleteNote = async (noteId) => {
     const oldNotes = notes;
@@ -3273,9 +3371,8 @@ export default function Teligram() {
                   const hasImage = hasNoteImage(note);
                   const hasAttachment = hasNoteAttachment(note);
                   const titleMessage = isTitleNote(note);
-                  const linkMessage = /<a\b[^>]*href=["\'](?:https?:\/\/|mailto:|tel:)/i.test(
-                    String(note.content_html || "")
-                  );
+                  const rawNoteHtml = String(note.content_html || "");
+                  const linkMessage = /<a\b[^>]*class=["\']message-link["\'][^>]*>/i.test(rawNoteHtml);
                   const messageFromThisDevice = isMyDeviceNote(note);
                   const deviceTheme = getDeviceTheme(note);
                   const showDeviceChip =
@@ -3377,6 +3474,7 @@ export default function Teligram() {
                             className="message-dot-btn"
                             onClick={(e) => {
                               e.stopPropagation();
+                              setActiveImageMenu(null);
                               setActiveMenuId(
                                 String(activeMenuId) === String(note.note_id)
                                   ? null
@@ -3392,17 +3490,81 @@ export default function Teligram() {
                             <div className={`image-message-wrap ${hasText ? "with-description" : ""}`}>
                               {inlineImageStates[String(note.note_id)] === "loaded" ? (
                                 <div className="whatsapp-image-frame">
-                                  <img
-                                    src={getNoteImageUrl(note)}
-                                    alt="note"
-                                    className="message-image"
-                                    onError={() =>
-                                      setInlineImageStates((states) => ({
-                                        ...states,
-                                        [String(note.note_id)]: "error",
-                                      }))
-                                    }
-                                  />
+                                  <div className="message-image-grid">
+                                    {getNoteImageUrls(note).map((imageUrl, imageIndex) => (
+                                      <div
+                                        key={`${note.note_id}-${imageIndex}`}
+                                        className="message-image-item"
+                                      >
+                                        <img
+                                          src={imageUrl}
+                                          alt={`note ${imageIndex + 1}`}
+                                          className="message-image"
+                                          onError={() =>
+                                            setInlineImageStates((states) => ({
+                                              ...states,
+                                              [String(note.note_id)]: "error",
+                                            }))
+                                          }
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            openFullImagePreview(imageUrl);
+                                          }}
+                                        />
+                                        <button
+                                          type="button"
+                                          className="message-image-dot-btn"
+                                          title={`Image ${imageIndex + 1} options`}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setActiveMenuId(null);
+                                            setActiveImageMenu((current) =>
+                                              current &&
+                                              String(current.noteId) === String(note.note_id) &&
+                                              Number(current.imageIndex) === imageIndex
+                                                ? null
+                                                : { noteId: note.note_id, imageIndex }
+                                            );
+                                          }}
+                                        >
+                                          ⋮
+                                        </button>
+
+                                        {activeImageMenu &&
+                                          String(activeImageMenu.noteId) === String(note.note_id) &&
+                                          Number(activeImageMenu.imageIndex) === imageIndex && (
+                                            <div
+                                              className="message-image-mini-menu"
+                                              onClick={(e) => e.stopPropagation()}
+                                            >
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setActiveImageMenu(null);
+                                                  openFullImagePreview(imageUrl);
+                                                }}
+                                              >
+                                                View
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={async (e) => {
+                                                  await downloadBlobFromUrl(
+                                                    imageUrl,
+                                                    `note-image-${note.note_id}-${imageIndex + 1}.jpg`,
+                                                    note
+                                                  );
+                                                  setActiveImageMenu(null);
+                                                  e.currentTarget.blur();
+                                                }}
+                                              >
+                                                Download
+                                              </button>
+                                            </div>
+                                          )}
+                                      </div>
+                                    ))}
+                                  </div>
                                 </div>
                               ) : (
                                 <button
@@ -3410,6 +3572,7 @@ export default function Teligram() {
                                   className="image-view-card"
                                   onClick={(e) => {
                                     e.stopPropagation();
+                                    setActiveImageMenu(null);
                                     setInlineImageStates((states) => ({
                                       ...states,
                                       [String(note.note_id)]: "loading",
@@ -3596,12 +3759,12 @@ export default function Teligram() {
                                 className="square-action link-square"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  markNoteAsLink(note);
+                                  toggleNoteLink(note);
                                 }}
-                                title="Make full URL clickable"
-                                aria-label="Make full URL clickable"
+                                title={linkMessage ? "Remove link" : "Make full URL clickable"}
+                                aria-label={linkMessage ? "Remove link" : "Make full URL clickable"}
                               >
-                                🔗 Link
+                                🔗 {linkMessage ? "Unlink" : "Link"}
                               </button>
                             )}
 
@@ -3693,7 +3856,17 @@ export default function Teligram() {
               </div>
             )}
 
-            {previewImage && (
+            {previewImages.length > 0 ? (
+              <div className="preview-strip multi-image-preview-strip">
+                <div className="multi-image-preview-grid">
+                  {previewImages.map((url, index) => (
+                    <img key={`${url}-${index}`} src={normalizeApiImageUrl(url) || url} alt={`preview ${index + 1}`} />
+                  ))}
+                </div>
+                <span>{previewImages.length} image{previewImages.length > 1 ? "s" : ""} selected</span>
+                <button onClick={removeImage}>×</button>
+              </div>
+            ) : previewImage && (
               <div className="preview-strip">
                 <img src={normalizeApiImageUrl(previewImage) || previewImage} alt="preview" />
                 <span>{selectedImage ? selectedImage.name : composerMode === "image-update" ? "Current image - select new image" : "Current image"}</span>
@@ -3773,6 +3946,7 @@ export default function Teligram() {
                         ref={imageRef}
                         type="file"
                         accept="image/*"
+                        multiple
                         hidden
                         onChange={handleImageSelect}
                       />
@@ -3803,15 +3977,6 @@ export default function Teligram() {
                       >
                         <img src={FILE_ICON} alt="file" className="tool-icon file-icon-img" />
                       </button>
-                      <button
-                        type="button"
-                        className={`tool-btn heading-tool ${composerMode === "title" ? "active" : ""}`}
-                        onMouseDown={toggleComposerTitleMode}
-                        title={composerMode === "title" ? "Remove heading" : "Add heading"}
-                        aria-pressed={composerMode === "title"}
-                      >
-                        <span className="heading-tool-icon">H+</span>
-                      </button>
 
                       {!privateChannelLocked && (
                         <button
@@ -3832,15 +3997,19 @@ export default function Teligram() {
                 <div className="composer-input-row">
                   <div
                     ref={editorRef}
-                    className="text-input"
+                    className={`text-input ${composerMode === "title" ? "title-editor-mode" : ""}`}
                     contentEditable
                     data-placeholder={composerMode === "title" ? "Type title..." : composerMode === "image-update" ? "Select new image, then tap send" : composerMode === "image-caption" ? "Add image description..." : composerMode === "file-update" ? "Select new file, then tap send" : composerMode === "file-caption" ? "Add file description..." : "Enter text..."}
                     style={{ "--composerColor": textColor, caretColor: textColor }}
                     onFocus={saveSelection}
                     onMouseUp={saveSelection}
+                    onTouchEnd={saveSelection}
                     onKeyUp={saveSelection}
                     onKeyDown={() => {
-                      setTimeout(updateActiveFormats, 0);
+                      // Keep the explicit toolbar typing mode. Do not query the
+                      // browser selection state here, because mobile toolbar
+                      // taps can make queryCommandState() temporarily false.
+                      saveSelection();
                     }}
                     onInput={saveSelection}
                     onBlur={saveSelection}
@@ -4326,13 +4495,10 @@ export default function Teligram() {
           outline: none;
         }
 
-        .message-link,
-        .message-text a[href],
-        .image-description-text a[href],
-        .file-description-text a[href] {
+        .message-link {
           color: #2563eb !important;
           text-decoration: underline !important;
-          text-decoration-thickness: 1.6px !important;
+          text-decoration-thickness: 1.5px !important;
           text-underline-offset: 2px !important;
           cursor: pointer !important;
           display: inline !important;
@@ -4342,14 +4508,9 @@ export default function Teligram() {
           user-select: text !important;
           -webkit-user-select: text !important;
           pointer-events: auto !important;
-          position: relative !important;
-          z-index: 20 !important;
         }
 
-        .message-link:hover,
-        .message-text a[href]:hover,
-        .image-description-text a[href]:hover,
-        .file-description-text a[href]:hover {
+        .message-link:hover {
           color: #1d4ed8 !important;
         }
 
@@ -5296,7 +5457,7 @@ export default function Teligram() {
           font-family: "Playfair Display", Georgia, "Times New Roman", serif;
           font-size: 21px;
           line-height: 1.22;
-          font-weight: 900;
+          font-weight: 500;
           letter-spacing: 0.1px;
           color: #111827 !important;
           padding: 0;
@@ -7806,10 +7967,8 @@ export default function Teligram() {
         .text-input p,
         .text-input span,
         .text-input font {
-          color: inherit !important;
           font-size: inherit !important;
           line-height: inherit !important;
-          -webkit-text-fill-color: var(--composerColor, #111111) !important;
         }
 
         .text-input:empty::before {
@@ -9099,13 +9258,21 @@ export default function Teligram() {
           font-weight: 700 !important;
         }
 
-        .message-title-text,
-        .message-title-text * {
-          text-align: center !important;
+        .message-title-text {
+          text-align: left !important;
           font-family: "Times New Roman", Times, serif !important;
           font-size: 13px !important;
           line-height: 1.24 !important;
-          font-weight: 700 !important;
+          font-weight: 500 !important;
+        }
+
+        .message-title-text .note-heading-line {
+          display: inline !important;
+          font-weight: 900 !important;
+        }
+
+        .message-title-text .note-heading-line * {
+          font-weight: 900 !important;
         }
 
         .image-message-wrap,
@@ -9346,12 +9513,16 @@ export default function Teligram() {
           background: #ffffff !important;
         }
 
-        .message-bubble:has(.message-title-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-title-text,
-        .message-bubble:has(.message-title-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-title-text * {
+        .message-bubble:has(.message-title-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-title-text {
           font-size: clamp(17px, 4.7vw, 21px) !important;
           line-height: 1.35 !important;
-          font-weight: 900 !important;
+          font-weight: 500 !important;
           text-align: left !important;
+        }
+
+        .message-bubble:has(.message-title-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-title-text .note-heading-line,
+        .message-bubble:has(.message-title-text):not(:has(.image-message-wrap)):not(:has(.file-message-wrap)) .message-title-text .note-heading-line * {
+          font-weight: 900 !important;
         }
 
         @media (max-width: 480px) {
@@ -9869,8 +10040,6 @@ export default function Teligram() {
           margin: 0 !important;
           padding: 0 !important;
           white-space: inherit !important;
-          color: inherit !important;
-          -webkit-text-fill-color: var(--composerColor, #111111) !important;
           font-size: inherit !important;
           line-height: inherit !important;
         }
@@ -12387,76 +12556,356 @@ export default function Teligram() {
           outline: none !important;
         }
 
-        /* FINAL UX OVERRIDES: private PIN buttons + reliable full-link rendering */
-        .unlock-open-btn {
-          width: 100% !important;
-          min-height: 46px !important;
-          border: 1px solid #2563eb !important;
-          border-radius: 15px !important;
-          background: linear-gradient(135deg, #2563eb 0%, #0ea5e9 100%) !important;
-          color: #ffffff !important;
-          font-size: 14px !important;
+        /* Final exact inline-format rendering: preserve per-word color/bold/underline. */
+        .message-text span[style*="color"],
+        .message-text font[color],
+        .image-description-text span[style*="color"],
+        .image-description-text font[color],
+        .file-description-text span[style*="color"],
+        .file-description-text font[color],
+        .text-input span[style*="color"],
+        .text-input font[color] {
+          -webkit-text-fill-color: currentColor !important;
+        }
+        .message-text span[style*="font-weight"],
+        .message-text b,
+        .message-text strong,
+        .image-description-text span[style*="font-weight"],
+        .image-description-text b,
+        .image-description-text strong,
+        .file-description-text span[style*="font-weight"],
+        .file-description-text b,
+        .file-description-text strong,
+        .text-input span[style*="font-weight"],
+        .text-input b,
+        .text-input strong {
           font-weight: 900 !important;
-          letter-spacing: .1px !important;
-          cursor: pointer !important;
-          box-shadow: 0 12px 26px rgba(37,99,235,.25) !important;
-          opacity: 1 !important;
         }
-        .unlock-open-btn:hover:not(:disabled) {
-          background: linear-gradient(135deg, #1d4ed8 0%, #0284c7 100%) !important;
+        .message-text span[style*="text-decoration"],
+        .message-text u,
+        .image-description-text span[style*="text-decoration"],
+        .image-description-text u,
+        .file-description-text span[style*="text-decoration"],
+        .file-description-text u,
+        .text-input span[style*="text-decoration"],
+        .text-input u {
+          text-decoration: underline !important;
+          text-underline-offset: 3px;
         }
-        .unlock-open-btn:disabled {
-          opacity: .68 !important;
-          cursor: not-allowed !important;
+        .message-title-text {
+          font-weight: 400 !important;
         }
-        .unlock-back-btn {
-          width: 100% !important;
-          min-height: 42px !important;
-          margin-top: 9px !important;
-          border: 1px solid #ef4444 !important;
-          border-radius: 14px !important;
-          background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
-          color: #ffffff !important;
-          font-size: 13px !important;
+        .message-title-text .note-heading-line,
+        .message-title-text .note-heading-line * {
           font-weight: 900 !important;
-          cursor: pointer !important;
-          box-shadow: 0 10px 22px rgba(220,38,38,.2) !important;
-          opacity: 1 !important;
         }
-        .unlock-back-btn:hover {
-          background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
-        }
-        .message-link-badge {
-          position: absolute !important;
-          top: 7px !important;
-          left: 7px !important;
-          z-index: 30 !important;
-          min-width: 36px !important;
-          height: 18px !important;
-          padding: 0 7px !important;
-          border-radius: 999px !important;
-          display: inline-flex !important;
-          align-items: center !important;
-          justify-content: center !important;
-          background: #dbeafe !important;
-          border: 1px solid #60a5fa !important;
-          color: #1d4ed8 !important;
-          font-size: 8px !important;
-          line-height: 1 !important;
-          font-weight: 950 !important;
-          letter-spacing: .4px !important;
-          box-shadow: 0 4px 12px rgba(37,99,235,.16) !important;
-        }
-        .message-bubble:has(.message-link-badge) {
-          padding-top: 30px !important;
-        }
-        .message-text a[href],
-        .image-description-text a[href],
-        .file-description-text a[href] {
-          touch-action: manipulation !important;
+        .message-title-text > div:not(:first-child),
+        .message-title-text > p:not(:first-child) {
+          font-weight: 400 !important;
         }
 
+
+        /* FINAL FORMAT + TITLE OVERRIDES */
+        .composer-input-row .text-input,
+        .composer-input-row .text-input div,
+        .composer-input-row .text-input p,
+        .composer-input-row .text-input span {
+          font-weight: 400 !important;
+        }
+        .composer-input-row .text-input strong,
+        .composer-input-row .text-input b {
+          font-weight: 900 !important;
+        }
+        .composer-input-row .text-input u {
+          text-decoration: underline !important;
+          text-underline-offset: 3px;
+        }
+        .composer-input-row .text-input strong u,
+        .composer-input-row .text-input u strong {
+          font-weight: 900 !important;
+          text-decoration: underline !important;
+        }
+        .message-title-text {
+          font-weight: 400 !important;
+        }
+        .message-title-text .note-heading-line {
+          display: inline !important;
+          font-weight: 900 !important;
+        }
+        .message-title-text .note-heading-line * {
+          font-weight: 900 !important;
+        }
+        .message-title-text div,
+        .message-title-text p {
+          font-weight: 400 !important;
+        }
+        .message-title-text div:first-child,
+        .message-title-text p:first-child {
+          font-weight: 400 !important;
+        }
+        @media (max-height: 700px) and (max-width: 700px) {
+          .channel-header, .chat-header { padding-top: 6px !important; padding-bottom: 6px !important; }
+          .header-logo img, .header-logo { width: 38px !important; height: 38px !important; }
+          .header-title h2 { font-size: 14px !important; }
+          .header-title p { font-size: 9px !important; }
+          .composer-tools-top { gap: 4px !important; padding: 4px !important; }
+          .composer-tools-popover .tool-btn, .tool-btn { width: 34px !important; height: 34px !important; min-width: 34px !important; }
+          .composer-input-row { gap: 5px !important; }
+          .composer-input-row .text-input { min-height: 38px !important; max-height: 82px !important; padding: 8px 10px !important; }
+          .send-btn { width: 40px !important; height: 40px !important; }
+        }
+
+        .multi-image-preview-grid { display:flex; gap:6px; align-items:center; overflow-x:auto; }
+        .multi-image-preview-grid img { width:42px; height:42px; object-fit:cover; border-radius:8px; border:1px solid rgba(148,163,184,.45); }
+
+        .message-image-grid {
+          display:flex !important;
+          flex-direction:column !important;
+          flex-wrap:nowrap !important;
+          align-items:stretch !important;
+          gap:8px;
+          width:min(300px,72vw);
+        }
+        .message-image-item {
+          position:relative;
+          width:100%;
+          min-width:0;
+          flex:0 0 auto;
+        }
+        .message-image-grid .message-image { display:block; width:100%; max-width:none; max-height:220px; object-fit:cover; border-radius:10px; cursor:pointer; }
+        .message-image-dot-btn { position:absolute; top:7px; right:7px; width:26px; height:26px; border:0; border-radius:50%; display:grid; place-items:center; background:rgba(15,23,42,.72); color:#fff; font-size:17px; line-height:1; cursor:pointer; z-index:3; box-shadow:0 4px 12px rgba(15,23,42,.22); }
+        .message-image-dot-btn:hover { background:rgba(15,23,42,.9); }
+        .message-image-mini-menu { position:absolute; top:38px; right:7px; z-index:8; display:flex; flex-direction:column; min-width:110px; padding:5px; border:1px solid rgba(148,163,184,.28); border-radius:10px; background:#fff; box-shadow:0 10px 28px rgba(15,23,42,.18); }
+        .message-image-mini-menu button { border:0; background:transparent; text-align:left; padding:8px 10px; border-radius:7px; font-size:12px; cursor:pointer; color:#111827; }
+        .message-image-mini-menu button:hover { background:#f1f5f9; }
+
+        /* Multiple images: always one image per row on every screen size. */
+        .message-image-grid > .message-image-item {
+          display:block !important;
+          width:100% !important;
+        }
+        .message-image-grid > .message-image-item + .message-image-item {
+          margin-top:0;
+        }
+        .message-image-dot-btn:focus-visible,
+        .message-image-mini-menu button:focus-visible {
+          outline:2px solid #2563eb;
+          outline-offset:2px;
+        }
+
+        /* FINAL: independent, composable Bold + Underline + Color. */
+        .typing-format-marker {
+          display: inline !important;
+          font-family: inherit !important;
+          font-size: inherit !important;
+          line-height: inherit !important;
+        }
+        .composer-input-row .text-input span[data-typing-marker][data-bold="1"] {
+          font-weight: 900 !important;
+        }
+        .composer-input-row .text-input span[data-typing-marker][data-bold="0"] {
+          font-weight: 400 !important;
+        }
+        .composer-input-row .text-input span[data-typing-marker][data-underline="1"] {
+          text-decoration: underline !important;
+          text-underline-offset: 3px !important;
+        }
+        .composer-input-row .text-input span[data-typing-marker][data-underline="0"] {
+          text-decoration: none !important;
+        }
+        .composer-input-row .text-input span[data-typing-marker] {
+          color: var(--typing-color, #111111) !important;
+          -webkit-text-fill-color: var(--typing-color, #111111) !important;
+        }
+        .composer-input-row .text-input span[style*="color"]:not([data-typing-marker]) {
+          -webkit-text-fill-color: currentColor !important;
+        }
+        .composer-input-row .text-input font[color] {
+          -webkit-text-fill-color: currentColor !important;
+        }
+        .message-text span[style*="color"] {
+          -webkit-text-fill-color: currentColor !important;
+        }
+        .message-text font[color] {
+          -webkit-text-fill-color: currentColor !important;
+        }
+        .message-text span[style*="color"] *,
+        .message-text font[color] * {
+          color: inherit !important;
+          -webkit-text-fill-color: currentColor !important;
+        }
+        /* FINAL: color stays active while Bold/Underline are toggled. */
+        .composer-input-row .text-input {
+          color: var(--composerColor, #111111) !important;
+          -webkit-text-fill-color: var(--composerColor, #111111) !important;
+        }
+        .composer-input-row .text-input span[style*="color"],
+        .composer-input-row .text-input font[color] {
+          -webkit-text-fill-color: currentColor !important;
+        }
+        .composer-input-row .text-input strong,
+        .composer-input-row .text-input b {
+          font-weight: 900 !important;
+        }
+        .composer-input-row .text-input u {
+          text-decoration: underline !important;
+          text-decoration-thickness: 1.5px !important;
+          text-underline-offset: 3px !important;
+        }
+
+
+
+        /* FINAL AUTHORITATIVE CHAT FORMAT FIX:
+           child formatting must override the generic message font rule. */
+        .message-bubble .message-text strong,
+        .message-bubble .message-text b,
+        .message-bubble .message-text span[style*="font-weight"],
+        .message-bubble .image-description-text strong,
+        .message-bubble .image-description-text b,
+        .message-bubble .file-description-text strong,
+        .message-bubble .file-description-text b {
+          font-weight: 900 !important;
+        }
+
+        .message-bubble .message-text u,
+        .message-bubble .message-text span[style*="text-decoration"],
+        .message-bubble .image-description-text u,
+        .message-bubble .file-description-text u {
+          text-decoration-line: underline !important;
+          text-decoration-style: solid !important;
+          text-decoration-thickness: 1.5px !important;
+          text-underline-offset: 3px !important;
+        }
+
+        .message-bubble .message-text span[style*="color"],
+        .message-bubble .message-text font[color],
+        .message-bubble .image-description-text span[style*="color"],
+        .message-bubble .image-description-text font[color],
+        .message-bubble .file-description-text span[style*="color"],
+        .message-bubble .file-description-text font[color] {
+          color: inherit;
+          -webkit-text-fill-color: currentColor !important;
+        }
+
+        .message-bubble .message-text strong span[style*="color"],
+        .message-bubble .message-text b span[style*="color"],
+        .message-bubble .message-text strong[style*="color"],
+        .message-bubble .message-text b[style*="color"] {
+          font-weight: 900 !important;
+          -webkit-text-fill-color: currentColor !important;
+        }
+
+
+        /* FINAL INDEPENDENT FORMAT CONTRACT: child HTML wins on chat. */
+        .message-bubble .message-text strong,
+        .message-bubble .message-text b,
+        .message-bubble .message-text strong *,
+        .message-bubble .message-text b * {
+          font-weight: 900 !important;
+        }
+        .message-bubble .message-text u,
+        .message-bubble .message-text u * {
+          text-decoration-line: underline !important;
+          text-decoration-style: solid !important;
+        }
+        .message-bubble .message-text strong u,
+        .message-bubble .message-text b u,
+        .message-bubble .message-text u strong,
+        .message-bubble .message-text u b {
+          font-weight: 900 !important;
+          text-decoration-line: underline !important;
+        }
+        .message-bubble .message-text span[style*="font-weight: 400"],
+        .message-bubble .message-text span[style*="font-weight:400"] {
+          font-weight: 400 !important;
+        }
+
+        /* FINAL TITLE: only the first visual line is bold; all later lines normal. */
+        .text-input.title-editor-mode,
+        .text-input.title-editor-mode * {
+          font-weight: 400 !important;
+        }
+        .text-input.title-editor-mode::first-line {
+          font-weight: 900 !important;
+        }
+        .message-title-text,
+        .message-title-text * {
+          font-weight: 500 !important;
+        }
+        .message-title-text::first-line {
+          font-weight: 900 !important;
+        }
+        .message-title-text .message-link {
+          font-weight: inherit !important;
+        }
+        .message-link {
+          display: inline !important;
+          max-width: 100% !important;
+          color: #2563eb !important;
+          text-decoration: underline !important;
+          text-underline-offset: 2px !important;
+          cursor: pointer !important;
+          user-select: text !important;
+          -webkit-user-select: text !important;
+          pointer-events: auto !important;
+          overflow-wrap: anywhere !important;
+          word-break: break-word !important;
+        }
+        /* FINAL FORMAT RENDER FIX: chat must preserve the exact inline formatting */
+        .message-text strong,
+        .message-text b,
+        .message-text [style*="font-weight:bold"],
+        .message-text [style*="font-weight: bold"],
+        .message-text [style*="font-weight:700"],
+        .message-text [style*="font-weight: 700"],
+        .message-text [style*="font-weight:800"],
+        .message-text [style*="font-weight: 800"],
+        .message-text [style*="font-weight:900"],
+        .message-text [style*="font-weight: 900"] {
+          font-weight: 900 !important;
+        }
+        .message-text u,
+        .message-text [style*="text-decoration:underline"],
+        .message-text [style*="text-decoration: underline"],
+        .message-text [style*="text-decoration-line:underline"],
+        .message-text [style*="text-decoration-line: underline"] {
+          text-decoration-line: underline !important;
+          text-decoration-style: solid !important;
+          text-decoration-thickness: 1.5px !important;
+          text-underline-offset: 2px !important;
+        }
+        .message-text span[style*="color"],
+        .message-text font[color] {
+          -webkit-text-fill-color: currentColor !important;
+        }
+        .text-input strong,
+        .text-input b,
+        .text-input [style*="font-weight:bold"],
+        .text-input [style*="font-weight: bold"],
+        .text-input [style*="font-weight:700"],
+        .text-input [style*="font-weight: 700"],
+        .text-input [style*="font-weight:800"],
+        .text-input [style*="font-weight: 800"],
+        .text-input [style*="font-weight:900"],
+        .text-input [style*="font-weight: 900"] {
+          font-weight: 900 !important;
+        }
+        .text-input u,
+        .text-input [style*="text-decoration:underline"],
+        .text-input [style*="text-decoration: underline"],
+        .text-input [style*="text-decoration-line:underline"],
+        .text-input [style*="text-decoration-line: underline"] {
+          text-decoration-line: underline !important;
+          text-decoration-style: solid !important;
+          text-decoration-thickness: 1.5px !important;
+          text-underline-offset: 2px !important;
+        }
+        .text-input span[style*="color"],
+        .text-input font[color] {
+          -webkit-text-fill-color: currentColor !important;
+        }
       `}
+
 </style>
     </div>
   );
