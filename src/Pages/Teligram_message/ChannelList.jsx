@@ -1324,50 +1324,6 @@ export default function ChannelList() {
     });
   };
 
-  const verifyTrustedChannelAccess = async (channel) => {
-    if (!channel?.channel_id) return false;
-
-    try {
-      const deviceId = getCurrentDeviceId();
-
-      const res = await fetch(
-        `${API_URL}/api/telegram-channels/${channel.channel_id}/access-check`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-device-id": deviceId,
-          },
-          cache: "no-store",
-          body: JSON.stringify({
-            user_id: PUBLIC_USER_ID,
-            device_id: deviceId,
-          }),
-        }
-      );
-
-      const data = await res.json().catch(() => ({}));
-
-      // Silent background check:
-      // only a confirmed backend "allowed" result can skip the PIN popup.
-      if (
-        res.ok &&
-        data?.allowed === true &&
-        data?.needs_pin === false
-      ) {
-        return true;
-      }
-
-      // Trust mismatch, old PIN, missing trust, or normal backend denial:
-      // return false without showing any error/toast.
-      return false;
-    } catch (error) {
-      // Background failure also falls back silently to the normal PIN popup.
-      console.error("Trusted device background check:", error);
-      return false;
-    }
-  };
-
   const getChannelTrustKey = (channelId) =>
     `trusted_private_channel_device_${PUBLIC_USER_ID}_${channelId}`;
 
@@ -1402,40 +1358,28 @@ export default function ChannelList() {
       return;
     }
 
-    /*
-      PRIVATE CHANNEL OPEN FLOW
-
-      1. Read localStorage trust for this exact channel.
-      2. Silently verify that trust with the backend BEFORE navigation.
-      3. Matching localStorage + backend trust -> open immediately.
-      4. Any mismatch is silent -> show the existing PIN popup.
-      5. The popup keeps the existing Trust Device checkbox.
-    */
     const channelId = channel.channel_id;
     const localTrusted = getChannelTrustFlag(channelId);
     const savedPin = getTrustedPin(channelId);
 
-    openingChannelRef.current = true;
-    setIsOpeningChannel(true);
+    /*
+      TRUST DEVICE = NO REPEATED PIN
 
-    const backendTrusted = await verifyTrustedChannelAccess(channel);
+      After the first successful PIN verification with Trust Device checked:
+      - trust flag + PIN are stored in localStorage for this channel
+      - every later open on this same browser/device uses localStorage only
+      - no backend access-check request
+      - no verify-pin request
+      - no PIN popup
 
-    if (
-      backendTrusted &&
-      localTrusted &&
-      /^[0-9]{4}$/.test(savedPin)
-    ) {
+      If the channel is not trusted, the PIN popup is shown. The backend is
+      contacted only after the user manually submits the PIN.
+    */
+    if (localTrusted && /^[0-9]{4}$/.test(savedPin)) {
       goToChannel(channel, savedPin, true);
       return;
     }
 
-    // Stale/mismatched trust is cleared silently.
-    removeTrustedPin(channelId);
-    removeChannelTrustFlag(channelId);
-    localStorage.removeItem(SELECTED_CHANNEL_PIN_KEY);
-    clearSelectedChannelVerified(channelId);
-
-    // Show only the normal PIN popup; no mismatch/error toast.
     showPrivateChannelPinBox(channel);
   };
 

@@ -1138,40 +1138,112 @@ export default function Teligram() {
   // explicitly applies Bold/Underline to them.
   const applyFirstLineHeadingHtml = (html) => {
     if (typeof document === "undefined" || !html) return html || "";
+
     const wrapper = document.createElement("div");
     wrapper.innerHTML = html;
+
+    // Remove any previously generated title wrapper first. This prevents an
+    // older version of the title logic from keeping the second line bold.
     wrapper.querySelectorAll(".note-heading-line").forEach((heading) => {
       const parent = heading.parentNode;
       if (!parent) return;
-      while (heading.firstChild) parent.insertBefore(heading.firstChild, heading);
+      while (heading.firstChild) {
+        parent.insertBefore(heading.firstChild, heading);
+      }
       heading.remove();
     });
-    const blockTags = new Set(["DIV", "P", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "PRE"]);
-    const root = Array.from(wrapper.children).find((el) => blockTags.has(el.tagName) && String(el.textContent || "").trim()) || wrapper;
+
+    const blockTags = new Set([
+      "DIV",
+      "P",
+      "LI",
+      "H1",
+      "H2",
+      "H3",
+      "H4",
+      "H5",
+      "H6",
+      "PRE",
+    ]);
+
+    const hasVisibleText = (element) =>
+      Boolean(String(element?.textContent || "").trim());
+
+    // Pick the first leaf block that contains text. This handles both:
+    //   <div>First line</div><div>Second line</div>
+    // and:
+    //   <div><div>First line</div><div>Second line</div></div>
+    const allBlocks = Array.from(wrapper.querySelectorAll("*")).filter(
+      (element) => blockTags.has(element.tagName) && hasVisibleText(element)
+    );
+
+    const firstLeafBlock =
+      allBlocks.find(
+        (element) =>
+          !Array.from(element.children).some(
+            (child) => blockTags.has(child.tagName) && hasVisibleText(child)
+          )
+      ) || null;
+
+    const root = firstLeafBlock || wrapper;
     const heading = document.createElement("strong");
     heading.className = "note-heading-line";
+
     const range = document.createRange();
-    range.setStart(root, 0);
-    range.setEnd(root, root.childNodes.length);
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ALL);
+    range.selectNodeContents(root);
+
+    const walker = document.createTreeWalker(
+      root,
+      NodeFilter.SHOW_ALL
+    );
+
     let node = walker.nextNode();
     let stopped = false;
+
     while (node) {
       if (node.nodeType === Node.TEXT_NODE) {
         const value = node.nodeValue || "";
         const newline = value.search(/\r?\n/);
-        if (newline >= 0) { range.setEnd(node, newline); stopped = true; break; }
-      } else if (node.nodeType === Node.ELEMENT_NODE && node.tagName === "BR") {
-        range.setEndBefore(node); stopped = true; break;
+
+        if (newline >= 0) {
+          range.setEnd(node, newline);
+          stopped = true;
+          break;
+        }
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        if (node.tagName === "BR") {
+          range.setEndBefore(node);
+          stopped = true;
+          break;
+        }
+
+        // If the selected root is the wrapper itself, a block element is a
+        // line boundary. Stop before the first block after the first line.
+        if (
+          root === wrapper &&
+          blockTags.has(node.tagName) &&
+          hasVisibleText(node)
+        ) {
+          range.setEndBefore(node);
+          stopped = true;
+          break;
+        }
       }
+
       node = walker.nextNode();
     }
-    if (!stopped) range.setEnd(root, root.childNodes.length);
+
+    if (!stopped) {
+      range.setEnd(root, root.childNodes.length);
+    }
+
     const firstPart = range.extractContents();
+
     if (String(firstPart.textContent || "").trim()) {
       heading.appendChild(firstPart);
       root.insertBefore(heading, root.firstChild);
     }
+
     return normalizeEditorHtml(wrapper.innerHTML);
   };
 
