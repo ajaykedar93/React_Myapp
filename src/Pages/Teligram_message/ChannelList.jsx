@@ -1418,24 +1418,29 @@ export default function ChannelList() {
     openingChannelRef.current = true;
     setIsOpeningChannel(true);
 
-    const backendTrusted = await verifyTrustedChannelAccess(channel);
+    // Background verification:
+    // localStorage trust MUST exist AND backend trust MUST still be valid.
+    // Only then is the PIN popup skipped.
+    const backendTrusted = localTrusted
+      ? await verifyTrustedChannelAccess(channel)
+      : false;
 
     if (
-      backendTrusted &&
       localTrusted &&
+      backendTrusted &&
       /^[0-9]{4}$/.test(savedPin)
     ) {
       goToChannel(channel, savedPin, true);
       return;
     }
 
-    // Stale/mismatched trust is cleared silently.
+    // No trust / stale trust / PIN changed:
+    // silently clear old local trust and show the normal PIN popup.
     removeTrustedPin(channelId);
     removeChannelTrustFlag(channelId);
     localStorage.removeItem(SELECTED_CHANNEL_PIN_KEY);
     clearSelectedChannelVerified(channelId);
 
-    // Show only the normal PIN popup; no mismatch/error toast.
     showPrivateChannelPinBox(channel);
   };
 
@@ -1585,9 +1590,14 @@ export default function ChannelList() {
         requests, so stale mismatch responses cannot re-open it.
       */
       if (trustThisDevice) {
+        // Trust Device checked:
+        // remember this channel/device so the next open can skip the PIN,
+        // but the backend still validates that the PIN version is current.
         saveTrustedPin(selectedChannel.channel_id, typedPin);
         saveChannelTrustFlag(selectedChannel.channel_id);
       } else {
+        // Trust Device NOT checked:
+        // never remember the PIN/trust for the next channel open.
         removeTrustedPin(selectedChannel.channel_id);
         removeChannelTrustFlag(selectedChannel.channel_id);
       }
