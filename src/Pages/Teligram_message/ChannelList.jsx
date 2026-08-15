@@ -1298,6 +1298,7 @@ export default function ChannelList() {
     pinSuccessRef.current = false;
     openingChannelRef.current = false;
     setIsOpeningChannel(false);
+    setPinChecking(false);
 
     localStorage.setItem("selected_channel_id", channel.channel_id);
     localStorage.setItem("selected_channel_name", channel.channel_name || "");
@@ -1415,27 +1416,34 @@ export default function ChannelList() {
     const localTrusted = getChannelTrustFlag(channelId);
     const savedPin = getTrustedPin(channelId);
 
-    openingChannelRef.current = true;
-    setIsOpeningChannel(true);
+    // Do NOT set the permanent opening lock while the background trust check
+    // is running. If trust fails, the normal PIN popup must be allowed to open.
+    pinCheckingRef.current = true;
+    setPinChecking(true);
 
-    // Background verification:
-    // localStorage trust MUST exist AND backend trust MUST still be valid.
-    // Only then is the PIN popup skipped.
-    const backendTrusted = localTrusted
-      ? await verifyTrustedChannelAccess(channel)
-      : false;
+    let backendTrusted = false;
+    try {
+      // Backend verification is completely silent in the UI.
+      backendTrusted = localTrusted
+        ? await verifyTrustedChannelAccess(channel)
+        : false;
+    } finally {
+      pinCheckingRef.current = false;
+      setPinChecking(false);
+    }
 
     if (
       localTrusted &&
       backendTrusted &&
       /^[0-9]{4}$/.test(savedPin)
     ) {
+      // Trusted device: navigate directly, no PIN popup.
       goToChannel(channel, savedPin, true);
       return;
     }
 
-    // No trust / stale trust / PIN changed:
-    // silently clear old local trust and show the normal PIN popup.
+    // No trust / new device / PIN changed:
+    // silently remove stale local trust and show the normal PIN popup.
     removeTrustedPin(channelId);
     removeChannelTrustFlag(channelId);
     localStorage.removeItem(SELECTED_CHANNEL_PIN_KEY);
@@ -1590,14 +1598,9 @@ export default function ChannelList() {
         requests, so stale mismatch responses cannot re-open it.
       */
       if (trustThisDevice) {
-        // Trust Device checked:
-        // remember this channel/device so the next open can skip the PIN,
-        // but the backend still validates that the PIN version is current.
         saveTrustedPin(selectedChannel.channel_id, typedPin);
         saveChannelTrustFlag(selectedChannel.channel_id);
       } else {
-        // Trust Device NOT checked:
-        // never remember the PIN/trust for the next channel open.
         removeTrustedPin(selectedChannel.channel_id);
         removeChannelTrustFlag(selectedChannel.channel_id);
       }
