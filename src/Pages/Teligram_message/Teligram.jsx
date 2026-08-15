@@ -790,18 +790,6 @@ export default function Teligram() {
     return "";
   };
 
-  const getNoteDownloadUrl = (note) => {
-    const backendDownloadUrl = normalizeApiImageUrl(note?.download_url);
-
-    if (backendDownloadUrl) return backendDownloadUrl;
-
-    if (hasNoteImage(note) && note?.note_id) {
-      return joinApiUrl(`/api/telegram-notes/image/download/${note.note_id}`);
-    }
-
-    return "";
-  };
-
   const getImagePlaceholder = (folder = "telegram-notes") => {
     const label = folder === "telegram-channels" ? "Logo" : "Image";
     const svg = `
@@ -817,55 +805,40 @@ export default function Teligram() {
     return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
   };
 
-  const downloadBlobFromUrl = async (url, fileName, note = null) => {
-    if (!url) return false;
+  // IMAGE DOWNLOAD: always use the backend download endpoint with ONLY note_id.
+  // Do not use note.download_url/image_url and do not fetch the blob from React.
+  // This avoids browser CORS/credentials problems when the endpoint itself works.
+  const getNoteDownloadUrl = (note) => {
+    const noteId = String(note?.note_id || "").trim();
+    if (!noteId) return "";
+    return `${API_URL}/api/telegram-notes/image/download/${encodeURIComponent(noteId)}`;
+  };
 
-    const response = await fetch(url, {
-      method: "GET",
-      headers: getAccessHeaders(),
-      credentials: "include",
-    });
+  const downloadNoteImage = (event, note) => {
+    event.preventDefault();
+    event.stopPropagation();
 
-    if (!response.ok) {
-      throw new Error(`Download failed: ${response.status}`);
+    const noteId = String(note?.note_id || "").trim();
+    if (!noteId) {
+      showToast("Image download unavailable", "error");
+      return;
     }
 
-    const blob = await response.blob();
-    const objectUrl = URL.createObjectURL(blob);
+    const downloadUrl =
+      `${API_URL}/api/telegram-notes/image/download/${encodeURIComponent(noteId)}`;
+
+    // Direct browser navigation to the working backend endpoint.
+    // No fetch(), no blob(), no Authorization/CORS dependency.
     const link = document.createElement("a");
-    link.href = objectUrl;
-    link.download = fileName || `download-${note?.note_id || Date.now()}`;
+    link.href = downloadUrl;
+    link.target = "_blank";
+    link.rel = "noopener";
     link.style.display = "none";
     document.body.appendChild(link);
     link.click();
     link.remove();
 
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
-    return true;
-  };
-
-  const downloadNoteImage = async (event, note) => {
-    event.preventDefault();
-    event.stopPropagation();
-
-    const downloadUrl = getNoteDownloadUrl(note);
-    if (!downloadUrl) {
-      showToast("Image download unavailable", "error");
-      return;
-    }
-
-    const fileName =
-      getFileNameFromUrl(note?.download_url) ||
-      getFileNameFromUrl(note?.image_url) ||
-      `note-image-${note?.note_id || Date.now()}.jpg`;
-
-    try {
-      await downloadBlobFromUrl(downloadUrl, fileName, note);
-      showToast("Download started", "success");
-    } catch (error) {
-      console.error("Image download error:", error);
-      showToast("Download failed", "error");
-    }
+    showToast("Download started", "success");
   };
 
   const downloadNoteFile = async (event, note) => {
@@ -2148,8 +2121,12 @@ export default function Teligram() {
     }
     if (files.length > 3) {
       showToast("Maximum 3 images allowed", "error");
+      if (imageRef.current) imageRef.current.value = "";
       return;
     }
+
+    // Every selected item is uploaded separately by saveNote().
+    // Never send multiple "image" parts in one backend request.
 
     previewImages.forEach((url) => {
       if (url.startsWith("blob:")) URL.revokeObjectURL(url);
@@ -2366,6 +2343,123 @@ export default function Teligram() {
     try {
       setLoading(true);
 
+      // IMPORTANT:
+      // Backend accepts maxCount: 1 for the "image" field.
+      // Therefore, when 2-3 images are selected, upload them ONE BY ONE.
+      // Each image gets its own telegram_notes row / note_id.
+      if (!oldEditingId && currentImageFiles.length > 1) {
+        const uploadedNotes = [];
+
+        try {
+          for (let imageIndex = 0; imageIndex < currentImageFiles.length; imageIndex += 1) {
+            const imageFile = currentImageFiles[imageIndex];
+            const imageFormData = new FormData();
+
+            imageFormData.append("user_id", PUBLIC_USER_ID);
+            imageFormData.append("channel_id", selectedChannel.channel_id);
+            imageFormData.append("device_id", originalDeviceId);
+            imageFormData.append("sender_device_id", originalDeviceId);
+            imageFormData.append("created_device_id", originalDeviceId);
+
+            // Keep the text/description on the first image only.
+            imageFormData.append("title", imageIndex === 0 ? noteTitle : "");
+            imageFormData.append("content_html", imageIndex === 0 ? contentHtml : "");
+            imageFormData.append("text_color", currentTextColor);
+            imageFormData.append("remove_image", "false");
+            imageFormData.append("remove_attachment", "false");
+            imageFormData.append("image", imageFile);
+
+            const imageResponse = await fetch(
+              `${API_URL}/api/telegram-notes`,
+              {
+                method: "POST",
+                headers: getAccessHeaders(),
+                body: imageFormData,
+              }
+            );
+
+            const imageData = await imageResponse.json().catch(() => ({}));
+
+            if (!imageResponse.ok) {
+              throw new Error(
+                imageData.message ||
+                `Image ${imageIndex + 1} upload failed (${imageResponse.status})`
+              );
+            }
+
+            if (imageData.note) {
+              const backendNote = imageData.note;
+              uploadedNotes.push({
+                ...backendNote,
+                channel_id: backendNote.channel_id || selectedChannel.channel_id,
+                sender_device_id:
+                  backendNote.sender_device_id ||
+                  backendNote.device_id ||
+                  backendNote.created_device_id ||
+                  originalDeviceId,
+                device_id:
+                  backendNote.device_id ||
+                  backendNote.sender_device_id ||
+                  backendNote.created_device_id ||
+                  originalDeviceId,
+                created_device_id:
+                  backendNote.created_device_id ||
+                  backendNote.sender_device_id ||
+                  backendNote.device_id ||
+                  originalDeviceId,
+                image_path: null,
+                is_temp: false,
+              });
+            }
+          }
+
+          // Replace the single optimistic preview with the real individual DB notes.
+          setNotes((prev) => [
+            ...prev.filter((note) => String(note.note_id) !== String(tempId)),
+            ...uploadedNotes,
+          ]);
+
+          // Keep channel last-message behavior unchanged.
+          fetch(
+            `${API_URL}/api/telegram-channels/${selectedChannel.channel_id}/last-message`,
+            {
+              method: "PATCH",
+              headers: getJsonHeaders(),
+              body: JSON.stringify({
+                last_message:
+                  noteTitle === "title"
+                    ? `Title: ${plainText.slice(0, 70)}`
+                    : plainText.slice(0, 80) || "Image message",
+              }),
+            }
+          ).catch((error) => {
+            console.error("Last message update error:", error);
+          });
+
+          previewImages.forEach((url) => {
+            if (String(url).startsWith("blob:")) URL.revokeObjectURL(url);
+          });
+
+          showToast(
+            `${uploadedNotes.length} image${uploadedNotes.length > 1 ? "s" : ""} sent successfully`,
+            "success"
+          );
+
+          return;
+        } catch (error) {
+          console.error("Multiple image upload error:", error);
+
+          // Keep already-uploaded real notes and remove only the temporary preview.
+          setNotes((prev) => [
+            ...prev.filter((note) => String(note.note_id) !== String(tempId)),
+            ...uploadedNotes,
+          ]);
+
+          showToast(error.message || "Image upload failed", "error");
+          return;
+        }
+      }
+
       const formData = new FormData();
       formData.append("user_id", PUBLIC_USER_ID);
       formData.append("channel_id", selectedChannel.channel_id);
@@ -2378,7 +2472,9 @@ export default function Teligram() {
       formData.append("remove_image", currentRemoveImage ? "true" : "false");
       formData.append("remove_attachment", currentRemoveFile ? "true" : "false");
 
-      currentImageFiles.forEach((file) => formData.append("image", file));
+      if (currentImageFile) {
+        formData.append("image", currentImageFile);
+      }
 
       if (currentFile) {
         formData.append("file", currentFile);
@@ -12594,6 +12690,140 @@ export default function Teligram() {
         }
         .composer-refresh-tool.is-refreshing .refresh-icon {
           animation: noteRefreshSpin .55s linear infinite !important;
+        }
+
+        /* FINAL IMAGE CARD / SINGLE-IMAGE MESSAGE RULES */
+        .image-message-wrap {
+          width: fit-content !important;
+          max-width: min(88vw, 360px) !important;
+        }
+
+        .image-view-card {
+          position: relative !important;
+          width: min(82vw, 300px) !important;
+          height: 170px !important;
+          min-height: 170px !important;
+          max-height: 170px !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          overflow: hidden !important;
+          padding: 0 !important;
+          border: 1px solid #e2e8f0 !important;
+          border-radius: 14px !important;
+          background:
+            linear-gradient(145deg, #f8fafc 0%, #eef2ff 52%, #fef2f2 100%) !important;
+          color: #334155 !important;
+          box-shadow: 0 5px 18px rgba(15, 23, 42, 0.08) !important;
+          cursor: pointer !important;
+          font: 800 13px/1.2 "Poppins", "Inter", sans-serif !important;
+        }
+
+        .image-view-card::before {
+          content: "◉";
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -27px);
+          width: 44px;
+          height: 44px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 12px;
+          background: #ffffff;
+          color: #ef4444;
+          font-size: 22px;
+          box-shadow: 0 5px 16px rgba(15, 23, 42, 0.10);
+        }
+
+        .image-view-card > span:not(.image-spinner) {
+          margin-top: 62px !important;
+          padding: 5px 11px !important;
+          border-radius: 999px !important;
+          background: rgba(255,255,255,.86) !important;
+          color: #334155 !important;
+          font-size: 12px !important;
+        }
+
+        .image-view-card:hover,
+        .image-view-card:focus-visible {
+          border-color: #fca5a5 !important;
+          background: linear-gradient(145deg, #fff7f7, #f8fafc) !important;
+          outline: none !important;
+          transform: translateY(-1px);
+        }
+
+        .image-view-card .image-card-spinner {
+          position: absolute !important;
+          left: 50% !important;
+          top: 50% !important;
+          margin: -15px 0 0 -15px !important;
+          width: 30px !important;
+          height: 30px !important;
+          border: 3px solid rgba(239, 68, 68, .20) !important;
+          border-top-color: #dc2626 !important;
+          border-right-color: #ef4444 !important;
+          border-radius: 50% !important;
+          animation: imageCardSpin .7s linear infinite !important;
+          z-index: 4 !important;
+        }
+
+        .image-view-card .inline-image-preloader {
+          position: absolute !important;
+          inset: 0 !important;
+          width: 100% !important;
+          height: 100% !important;
+          opacity: 0 !important;
+          pointer-events: none !important;
+        }
+
+        .whatsapp-image-frame {
+          width: min(82vw, 360px) !important;
+          max-width: min(82vw, 360px) !important;
+          min-width: 0 !important;
+          border-radius: 12px !important;
+          overflow: hidden !important;
+          background: #f8fafc !important;
+          box-shadow: 0 4px 16px rgba(15, 23, 42, .08) !important;
+        }
+
+        .whatsapp-image-frame .message-image,
+        .message-image {
+          display: block !important;
+          width: 100% !important;
+          height: auto !important;
+          max-width: 100% !important;
+          max-height: min(58dvh, 520px) !important;
+          object-fit: contain !important;
+          border-radius: 12px !important;
+        }
+
+        .message-image-grid {
+          display: block !important;
+          width: 100% !important;
+        }
+
+        .message-image-grid .message-image + .message-image {
+          margin-top: 6px !important;
+        }
+
+        @keyframes imageCardSpin {
+          to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 480px) {
+          .image-view-card {
+            width: min(82vw, 300px) !important;
+            height: 155px !important;
+            min-height: 155px !important;
+            max-height: 155px !important;
+          }
+
+          .whatsapp-image-frame {
+            width: min(86vw, 350px) !important;
+            max-width: min(86vw, 350px) !important;
+          }
         }
 
       `}
