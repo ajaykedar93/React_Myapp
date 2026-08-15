@@ -1324,55 +1324,68 @@ export default function ChannelList() {
     });
   };
 
-  const verifyTrustedChannelPin = async (channel, trustedPin) => {
-    if (!channel?.channel_id || !/^[0-9]{4}$/.test(trustedPin)) return false;
+  const verifyTrustedChannelAccess = async (channel) => {
+    if (!channel?.channel_id) return false;
 
     try {
+      const deviceId = getCurrentDeviceId();
+
       const res = await fetch(
-        `${API_URL}/api/telegram-channels/${channel.channel_id}/verify-pin`,
+        `${API_URL}/api/telegram-channels/${channel.channel_id}/access-check`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            "x-device-id": deviceId,
           },
           cache: "no-store",
-          body: JSON.stringify({ pin: trustedPin }),
+          body: JSON.stringify({
+            user_id: PUBLIC_USER_ID,
+            device_id: deviceId,
+          }),
         }
       );
 
       const data = await res.json().catch(() => ({}));
-      const messageText = String(data?.message || "").toLowerCase();
 
-      const explicitFailure =
-        data?.success === false ||
-        data?.verified === false ||
-        data?.valid === false ||
-        data?.unlocked === false ||
-        isTrue(data?.mismatch) ||
-        isTrue(data?.invalid) ||
-        messageText.includes("mismatch") ||
-        messageText.includes("wrong") ||
-        messageText.includes("invalid") ||
-        messageText.includes("incorrect");
+      // Silent background check:
+      // only a confirmed backend "allowed" result can skip the PIN popup.
+      if (
+        res.ok &&
+        data?.allowed === true &&
+        data?.needs_pin === false
+      ) {
+        return true;
+      }
 
-      const explicitSuccess =
-        isTrue(data?.unlocked) ||
-        isTrue(data?.success) ||
-        isTrue(data?.verified) ||
-        isTrue(data?.valid) ||
-        isTrue(data?.matched) ||
-        messageText.includes("verified") ||
-        messageText.includes("success") ||
-        messageText.includes("matched") ||
-        messageText.includes("correct");
-
-      // A trusted PIN is valid only when the backend confirms it against the
-      // current database value. This catches a PIN changed manually in pgAdmin.
-      return Boolean(res.ok && !explicitFailure && (explicitSuccess || !explicitFailure));
+      // Trust mismatch, old PIN, missing trust, or normal backend denial:
+      // return false without showing any error/toast.
+      return false;
     } catch (error) {
-      console.error("Trusted PIN verification error:", error);
+      // Background failure also falls back silently to the normal PIN popup.
+      console.error("Trusted device background check:", error);
       return false;
     }
+  };
+
+  const getChannelTrustKey = (channelId) =>
+    `trusted_private_channel_device_${PUBLIC_USER_ID}_${channelId}`;
+
+  const getChannelTrustFlag = (channelId) => {
+    if (!channelId || typeof window === "undefined") return false;
+    return localStorage.getItem(getChannelTrustKey(channelId)) === "true";
+  };
+
+  const saveChannelTrustFlag = (channelId) => {
+    if (!channelId || typeof window === "undefined") return;
+    localStorage.setItem(getChannelTrustKey(channelId), "true");
+    localStorage.setItem(SELECTED_CHANNEL_TRUST_KEY, "true");
+  };
+
+  const removeChannelTrustFlag = (channelId) => {
+    if (!channelId || typeof window === "undefined") return;
+    localStorage.removeItem(getChannelTrustKey(channelId));
+    localStorage.removeItem(SELECTED_CHANNEL_TRUST_KEY);
   };
 
   const openChannel = async (channel) => {
@@ -1384,44 +1397,46 @@ export default function ChannelList() {
     setActiveMenuId(null);
     clearOwnerDeleteAlert();
 
-    if (isTrue(channel.is_private)) {
-      const trustedPin = getTrustedPin(channel.channel_id);
-
-      /*
-        Trusted-device rule:
-        1. A trusted device never blindly trusts its locally stored PIN.
-        2. Before direct opening, validate that stored PIN against the backend.
-        3. If the owner changed the PIN in pgAdmin, validation fails, the old
-           trusted PIN is erased, and the normal PIN popup is shown.
-        4. After the user enters the new correct PIN and chooses Trust Device,
-           the new PIN replaces the old trust and future opens skip the popup.
-      */
-      if (/^[0-9]{4}$/.test(trustedPin)) {
-        openingChannelRef.current = true;
-        setIsOpeningChannel(true);
-
-        const stillCurrentChannel = await verifyTrustedChannelPin(
-          channel,
-          trustedPin
-        );
-
-        if (stillCurrentChannel) {
-          goToChannel(channel, trustedPin, true);
-          return;
-        }
-
-        showPrivateChannelPinBox(
-          channel,
-          "Channel PIN changed. Enter the new 4 digit PIN."
-        );
-        return;
-      }
-
-      showPrivateChannelPinBox(channel);
+    if (!isTrue(channel?.is_private)) {
+      goToChannel(channel);
       return;
     }
 
-    goToChannel(channel);
+    /*
+      PRIVATE CHANNEL OPEN FLOW
+
+      1. Read localStorage trust for this exact channel.
+      2. Silently verify that trust with the backend BEFORE navigation.
+      3. Matching localStorage + backend trust -> open immediately.
+      4. Any mismatch is silent -> show the existing PIN popup.
+      5. The popup keeps the existing Trust Device checkbox.
+    */
+    const channelId = channel.channel_id;
+    const localTrusted = getChannelTrustFlag(channelId);
+    const savedPin = getTrustedPin(channelId);
+
+    openingChannelRef.current = true;
+    setIsOpeningChannel(true);
+
+    const backendTrusted = await verifyTrustedChannelAccess(channel);
+
+    if (
+      backendTrusted &&
+      localTrusted &&
+      /^[0-9]{4}$/.test(savedPin)
+    ) {
+      goToChannel(channel, savedPin, true);
+      return;
+    }
+
+    // Stale/mismatched trust is cleared silently.
+    removeTrustedPin(channelId);
+    removeChannelTrustFlag(channelId);
+    localStorage.removeItem(SELECTED_CHANNEL_PIN_KEY);
+    clearSelectedChannelVerified(channelId);
+
+    // Show only the normal PIN popup; no mismatch/error toast.
+    showPrivateChannelPinBox(channel);
   };
 
   const verifyChannelPin = async () => {
@@ -1474,6 +1489,10 @@ export default function ChannelList() {
           signal: controller.signal,
           body: JSON.stringify({
             pin: typedPin,
+            user_id: PUBLIC_USER_ID,
+            device_id: getCurrentDeviceId(),
+            trust_device: trustThisDevice,
+            remember_device: trustThisDevice,
           }),
         }
       );
@@ -1567,8 +1586,10 @@ export default function ChannelList() {
       */
       if (trustThisDevice) {
         saveTrustedPin(selectedChannel.channel_id, typedPin);
+        saveChannelTrustFlag(selectedChannel.channel_id);
       } else {
         removeTrustedPin(selectedChannel.channel_id);
+        removeChannelTrustFlag(selectedChannel.channel_id);
       }
 
       goToChannel(selectedChannel, typedPin, trustThisDevice);
