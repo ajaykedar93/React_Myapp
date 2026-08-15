@@ -1298,7 +1298,6 @@ export default function ChannelList() {
     pinSuccessRef.current = false;
     openingChannelRef.current = false;
     setIsOpeningChannel(false);
-    setPinChecking(false);
 
     localStorage.setItem("selected_channel_id", channel.channel_id);
     localStorage.setItem("selected_channel_name", channel.channel_name || "");
@@ -1416,39 +1415,27 @@ export default function ChannelList() {
     const localTrusted = getChannelTrustFlag(channelId);
     const savedPin = getTrustedPin(channelId);
 
-    // Do NOT set the permanent opening lock while the background trust check
-    // is running. If trust fails, the normal PIN popup must be allowed to open.
-    pinCheckingRef.current = true;
-    setPinChecking(true);
+    openingChannelRef.current = true;
+    setIsOpeningChannel(true);
 
-    let backendTrusted = false;
-    try {
-      // Backend verification is completely silent in the UI.
-      backendTrusted = localTrusted
-        ? await verifyTrustedChannelAccess(channel)
-        : false;
-    } finally {
-      pinCheckingRef.current = false;
-      setPinChecking(false);
-    }
+    const backendTrusted = await verifyTrustedChannelAccess(channel);
 
     if (
-      localTrusted &&
       backendTrusted &&
+      localTrusted &&
       /^[0-9]{4}$/.test(savedPin)
     ) {
-      // Trusted device: navigate directly, no PIN popup.
       goToChannel(channel, savedPin, true);
       return;
     }
 
-    // No trust / new device / PIN changed:
-    // silently remove stale local trust and show the normal PIN popup.
+    // Stale/mismatched trust is cleared silently.
     removeTrustedPin(channelId);
     removeChannelTrustFlag(channelId);
     localStorage.removeItem(SELECTED_CHANNEL_PIN_KEY);
     clearSelectedChannelVerified(channelId);
 
+    // Show only the normal PIN popup; no mismatch/error toast.
     showPrivateChannelPinBox(channel);
   };
 
