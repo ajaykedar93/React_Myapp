@@ -59,7 +59,7 @@ export default function Teligram() {
   const bottomRef = useRef(null);
   const chatBodyRef = useRef(null);
   const savedRangeRef = useRef(null);
-  const typingFormatsRef = useRef({ bold: false, underline: false, color: "#111111" });
+  const typingFormatsRef = useRef({ bold: false, underline: false });
   const verifiedPinRef = useRef("");
   const unlockCheckingRef = useRef(false);
   const unlockRequestIdRef = useRef(0);
@@ -87,6 +87,8 @@ export default function Teligram() {
   const [selectedChannel, setSelectedChannel] = useState(null);
   const [notes, setNotes] = useState([]);
   const [pinnedNoteIds, setPinnedNoteIds] = useState([]);
+  const [linkedNoteIds, setLinkedNoteIds] = useState([]);
+  const [unlinkedNoteIds, setUnlinkedNoteIds] = useState([]);
 
   const [channelUnlocked, setChannelUnlocked] = useState(false);
   const [unlockPin, setUnlockPin] = useState("");
@@ -121,11 +123,9 @@ export default function Teligram() {
   const [activeFormats, setActiveFormats] = useState({
     bold: false,
     underline: false,
-    color: "#111111",
   });
 
   const [activeMenuId, setActiveMenuId] = useState(null);
-  const [activeImageMenu, setActiveImageMenu] = useState(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [loading, setLoading] = useState(false);
@@ -171,23 +171,21 @@ export default function Teligram() {
   useEffect(() => {
     if (!selectedChannel?.channel_id || typeof window === "undefined") {
       setPinnedNoteIds([]);
+      setLinkedNoteIds([]);
+      setUnlinkedNoteIds([]);
       return;
     }
-
     try {
       const raw = localStorage.getItem(getPinnedNoteKey(selectedChannel.channel_id));
       const parsed = raw ? JSON.parse(raw) : [];
-      if (Array.isArray(parsed)) {
-        setPinnedNoteIds(parsed.map(String).slice(0, 5));
-      } else if (raw) {
-        setPinnedNoteIds([String(raw)]);
-      } else {
-        setPinnedNoteIds([]);
-      }
+      setPinnedNoteIds(Array.isArray(parsed) ? parsed.map(String).slice(0, 5) : raw ? [String(raw)] : []);
     } catch {
       const legacy = localStorage.getItem(getPinnedNoteKey(selectedChannel.channel_id));
       setPinnedNoteIds(legacy ? [String(legacy)] : []);
     }
+    const linkState = readLinkState(selectedChannel.channel_id);
+    setLinkedNoteIds(linkState.linked);
+    setUnlinkedNoteIds(linkState.unlinked);
   }, [selectedChannel?.channel_id]);
 
   useEffect(() => {
@@ -316,37 +314,33 @@ export default function Teligram() {
     return `pinned_note_${PUBLIC_USER_ID}_${channelId}`;
   };
 
-  const getLinkedNoteKey = (channelId) => {
-    return `linked_note_${PUBLIC_USER_ID}_${channelId}`;
-  };
-
-  const getLinkedNoteIds = (channelId) => {
-    if (!channelId || typeof window === "undefined") return [];
-    try {
-      const raw = localStorage.getItem(getLinkedNoteKey(channelId));
-      const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? parsed.map(String) : [];
-    } catch {
-      return [];
-    }
-  };
-
-  const setLinkedNoteState = (channelId, noteId, linked) => {
-    if (!channelId || !noteId || typeof window === "undefined") return;
-    const current = new Set(getLinkedNoteIds(channelId));
-    const id = String(noteId);
-    if (linked) current.add(id);
-    else current.delete(id);
-    const next = Array.from(current);
-    if (next.length) localStorage.setItem(getLinkedNoteKey(channelId), JSON.stringify(next));
-    else localStorage.removeItem(getLinkedNoteKey(channelId));
-  };
-
   const savePinnedNoteIds = (channelId, ids) => {
     if (!channelId || typeof window === "undefined") return;
     const cleanIds = Array.from(new Set((ids || []).map(String))).slice(0, 5);
     if (cleanIds.length) localStorage.setItem(getPinnedNoteKey(channelId), JSON.stringify(cleanIds));
     else localStorage.removeItem(getPinnedNoteKey(channelId));
+  };
+
+  const getLinkStateKey = (channelId) => `note_link_state_${PUBLIC_USER_ID}_${channelId}`;
+
+  const readLinkState = (channelId) => {
+    if (!channelId || typeof window === "undefined") return { linked: [], unlinked: [] };
+    try {
+      const raw = localStorage.getItem(getLinkStateKey(channelId));
+      const parsed = raw ? JSON.parse(raw) : {};
+      return {
+        linked: Array.isArray(parsed?.linked) ? parsed.linked.map(String) : [],
+        unlinked: Array.isArray(parsed?.unlinked) ? parsed.unlinked.map(String) : [],
+      };
+    } catch { return { linked: [], unlinked: [] }; }
+  };
+
+  const saveLinkState = (channelId, linked, unlinked) => {
+    if (!channelId || typeof window === "undefined") return;
+    localStorage.setItem(getLinkStateKey(channelId), JSON.stringify({
+      linked: Array.from(new Set((linked || []).map(String))),
+      unlinked: Array.from(new Set((unlinked || []).map(String))),
+    }));
   };
 
   const hasFrontendVerifiedAccess = (channelId, pin = "") => {
@@ -699,8 +693,11 @@ export default function Teligram() {
     selectedTextColorRef.current = finalColor;
     setTextColor(finalColor);
 
+    // IMPORTANT: never color the whole contentEditable.
+    // Existing characters must keep their own inline color.
+    // Only the caret / next-typing marker uses the selected color.
     if (editorRef.current) {
-      editorRef.current.style.setProperty("--composerColor", finalColor);
+      editorRef.current.style.setProperty("--composerColor", "#111111");
       editorRef.current.style.caretColor = finalColor;
     }
 
@@ -827,7 +824,6 @@ export default function Teligram() {
       method: "GET",
       headers: getAccessHeaders(),
       credentials: "include",
-      cache: "no-store",
     });
 
     if (!response.ok) {
@@ -835,50 +831,16 @@ export default function Teligram() {
     }
 
     const blob = await response.blob();
-    const safeName =
-      String(fileName || `download-${note?.note_id || Date.now()}`)
-        .replace(/[\\/:*?"<>|]+/g, "_")
-        .trim() || `download-${Date.now()}`;
-
     const objectUrl = URL.createObjectURL(blob);
-
-    // Primary path: browser and mobile WebView download using a local Blob.
-    // This avoids relying on the server opening the image in a new tab.
     const link = document.createElement("a");
     link.href = objectUrl;
-    link.download = safeName;
-    link.setAttribute("download", safeName);
-    link.style.position = "fixed";
-    link.style.left = "-9999px";
-    link.style.width = "1px";
-    link.style.height = "1px";
-    link.style.opacity = "0";
+    link.download = fileName || `download-${note?.note_id || Date.now()}`;
+    link.style.display = "none";
     document.body.appendChild(link);
+    link.click();
+    link.remove();
 
-    try {
-      link.click();
-    } finally {
-      link.remove();
-    }
-
-    // Some embedded mobile WebViews do not implement the download attribute.
-    // Give those environments a direct Blob URL fallback instead of failing.
-    const supportsDownload = "download" in HTMLAnchorElement.prototype;
-    if (!supportsDownload) {
-      const fallbackWindow = window.open(objectUrl, "_blank", "noopener,noreferrer");
-      if (!fallbackWindow) {
-        const fallbackLink = document.createElement("a");
-        fallbackLink.href = objectUrl;
-        fallbackLink.target = "_blank";
-        fallbackLink.rel = "noopener noreferrer";
-        fallbackLink.style.display = "none";
-        document.body.appendChild(fallbackLink);
-        fallbackLink.click();
-        fallbackLink.remove();
-      }
-    }
-
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
     return true;
   };
 
@@ -959,6 +921,12 @@ export default function Teligram() {
     const div = document.createElement("div");
     div.innerHTML = html || "";
     return div.textContent || div.innerText || "";
+  };
+
+  const hasInlineTextFormatting = (html) => {
+    return /<(?:strong|b|u)\b|font-weight\s*:|text-decoration(?:-line)?\s*:/i.test(
+      String(html || "")
+    );
   };
 
 
@@ -1141,10 +1109,40 @@ export default function Teligram() {
 
     wrapper.querySelectorAll("[style]").forEach((element) => {
       const colorValue = element.style.color;
+      const fontWeight = String(element.style.fontWeight || "").toLowerCase();
+      const textDecoration = String(element.style.textDecoration || element.style.textDecorationLine || "").toLowerCase();
 
       if (colorValue) {
         element.style.setProperty("color", colorValue, "important");
         element.style.setProperty("-webkit-text-fill-color", colorValue, "important");
+      }
+
+      const isBold = fontWeight === "bold" || Number.parseInt(fontWeight, 10) >= 600;
+      const isUnderlined = textDecoration.includes("underline");
+
+      if (isBold || isUnderlined) {
+        element.style.removeProperty("font-weight");
+        element.style.removeProperty("text-decoration");
+        element.style.removeProperty("text-decoration-line");
+
+        let formattedContent = document.createDocumentFragment();
+        while (element.firstChild) formattedContent.appendChild(element.firstChild);
+
+        if (isUnderlined) {
+          const underline = document.createElement("u");
+          underline.appendChild(formattedContent);
+          formattedContent = document.createDocumentFragment();
+          formattedContent.appendChild(underline);
+        }
+
+        if (isBold) {
+          const strong = document.createElement("strong");
+          strong.appendChild(formattedContent);
+          formattedContent = document.createDocumentFragment();
+          formattedContent.appendChild(strong);
+        }
+
+        element.appendChild(formattedContent);
       }
     });
 
@@ -1162,80 +1160,46 @@ export default function Teligram() {
     return normalizeEditorHtml(html.trim());
   };
 
-  // Render only the first visual line as a real heading wrapper.
-  // The stored HTML remains unchanged; this wrapper is display-only.
+  // Title mode affects only the first user-entered line.
+  // The remaining lines keep their normal formatting unless the user
+  // explicitly applies Bold/Underline to them.
   const applyFirstLineHeadingHtml = (html) => {
     if (typeof document === "undefined" || !html) return html || "";
-
     const wrapper = document.createElement("div");
-    wrapper.innerHTML = removeFirstLineHeadingHtml(normalizeEditorHtml(html));
-
+    wrapper.innerHTML = html;
+    wrapper.querySelectorAll(".note-heading-line").forEach((heading) => {
+      const parent = heading.parentNode;
+      if (!parent) return;
+      while (heading.firstChild) parent.insertBefore(heading.firstChild, heading);
+      heading.remove();
+    });
+    const blockTags = new Set(["DIV", "P", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "PRE"]);
+    const root = Array.from(wrapper.children).find((el) => blockTags.has(el.tagName) && String(el.textContent || "").trim()) || wrapper;
     const heading = document.createElement("strong");
     heading.className = "note-heading-line";
-
-    const isBlock = (node) =>
-      node?.nodeType === Node.ELEMENT_NODE &&
-      ["DIV", "P", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "PRE"].includes(node.tagName);
-
-    const firstBlock = Array.from(wrapper.childNodes).find((node) => {
-      if (node.nodeType === Node.TEXT_NODE) return Boolean((node.nodeValue || "").trim());
-      return isBlock(node) && Boolean((node.textContent || "").trim());
-    });
-
-    const source = firstBlock || Array.from(wrapper.childNodes).find((node) => (node.textContent || "").trim());
-    if (!source) return wrapper.innerHTML;
-
-    const host = isBlock(source) ? source : wrapper;
-    const children = Array.from(host.childNodes);
-    let moved = false;
-
-    for (const node of children) {
-      if (node.nodeType === Node.ELEMENT_NODE && node.tagName === "BR") break;
-
-      if (node.nodeType === Node.TEXT_NODE && /\r?\n/.test(node.nodeValue || "")) {
-        const parts = String(node.nodeValue || "").split(/\r?\n/);
-        const first = parts.shift() || "";
-        if (first) {
-          const firstNode = document.createTextNode(first);
-          host.replaceChild(firstNode, node);
-          heading.appendChild(firstNode);
-        }
-        break;
+    const range = document.createRange();
+    range.setStart(root, 0);
+    range.setEnd(root, root.childNodes.length);
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ALL);
+    let node = walker.nextNode();
+    let stopped = false;
+    while (node) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const value = node.nodeValue || "";
+        const newline = value.search(/\r?\n/);
+        if (newline >= 0) { range.setEnd(node, newline); stopped = true; break; }
+      } else if (node.nodeType === Node.ELEMENT_NODE && node.tagName === "BR") {
+        range.setEndBefore(node); stopped = true; break;
       }
-
-      host.removeChild(node);
-      heading.appendChild(node);
-      moved = true;
+      node = walker.nextNode();
     }
-
-    if (!moved && !heading.childNodes.length) return wrapper.innerHTML;
-    host.insertBefore(heading, host.firstChild);
+    if (!stopped) range.setEnd(root, root.childNodes.length);
+    const firstPart = range.extractContents();
+    if (String(firstPart.textContent || "").trim()) {
+      heading.appendChild(firstPart);
+      root.insertBefore(heading, root.firstChild);
+    }
     return normalizeEditorHtml(wrapper.innerHTML);
-  };
-
-  // Apply only color to the selected range without removing existing bold/underline
-  // markup. The new span carries an inline important color so chat and composer
-  // render the same color even when parent CSS has a base text color.
-  const applyInlineColorToRange = (range, color) => {
-    if (!range || range.collapsed) return false;
-    const finalColor = normalizeTextColor(color);
-    const fragment = range.extractContents();
-    const span = document.createElement("span");
-    span.style.setProperty("color", finalColor, "important");
-    span.style.setProperty("-webkit-text-fill-color", finalColor, "important");
-    span.appendChild(fragment);
-    range.insertNode(span);
-
-    const nextRange = document.createRange();
-    nextRange.selectNodeContents(span);
-    nextRange.collapse(false);
-    const selection = window.getSelection();
-    if (selection) {
-      selection.removeAllRanges();
-      selection.addRange(nextRange);
-    }
-    savedRangeRef.current = nextRange.cloneRange();
-    return true;
   };
 
   const removeFirstLineHeadingHtml = (html) => {
@@ -1257,18 +1221,44 @@ export default function Teligram() {
     return normalizeEditorHtml(wrapper.innerHTML);
   };
 
+  const hasLinkAnchor = (html) => /<a\b[^>]*class=["\']message-link["\'][^>]*>/i.test(String(html || ""));
+
+  const isLinkedNote = (note) => {
+    if (!note) return false;
+    const id = String(note.note_id);
+    const html = String(note.content_html || "");
+    if (unlinkedNoteIds.includes(id)) return false;
+    return linkedNoteIds.includes(id) || hasLinkAnchor(html);
+  };
+
+  const unlinkNoteHtml = (html) => {
+    if (typeof document === "undefined" || !html) return html || "";
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = html;
+    wrapper.querySelectorAll("a.message-link").forEach((anchor) => {
+      const parent = anchor.parentNode;
+      if (!parent) return;
+      while (anchor.firstChild) parent.insertBefore(anchor.firstChild, anchor);
+      anchor.remove();
+    });
+    return normalizeEditorHtml(wrapper.innerHTML);
+  };
+
   const getRenderedNoteHtml = (note) => {
-    // Title is display-only: only the first visual line is bold.
-    const html = note?.content_html || "";
-    return isTitleNote(note)
-      ? applyFirstLineHeadingHtml(html)
-      : removeFirstLineHeadingHtml(html);
+    let html = String(note?.content_html || "");
+    if (isLinkedNote(note)) {
+      if (!hasLinkAnchor(html)) html = linkifyNoteHtml(html);
+    } else if (hasLinkAnchor(html)) {
+      html = unlinkNoteHtml(html);
+    }
+    return isTitleNote(note) ? applyFirstLineHeadingHtml(html) : html;
   };
 
   const getComposerContentHtml = () => {
-    // Keep stored HTML normal. Title styling is applied only by the editor/card
-    // CSS and the title flag. Turning Title off therefore restores normal text.
-    return removeFirstLineHeadingHtml(getEditorHtml());
+    const html = getEditorHtml();
+    // If title mode is currently ON, ensure only the first line is marked.
+    // When Title is OFF, never retain the title wrapper.
+    return composerMode === "title" ? applyFirstLineHeadingHtml(html) : removeFirstLineHeadingHtml(html);
   };
 
   const placeCaretAtEnd = (element = editorRef.current) => {
@@ -1362,19 +1352,6 @@ export default function Teligram() {
       textNode.replaceWith(fragment);
     });
 
-    return normalizeEditorHtml(wrapper.innerHTML);
-  };
-
-  const unlinkNoteHtml = (html) => {
-    if (typeof document === "undefined" || !html) return html || "";
-    const wrapper = document.createElement("div");
-    wrapper.innerHTML = html;
-    wrapper.querySelectorAll("a.message-link").forEach((anchor) => {
-      const parent = anchor.parentNode;
-      if (!parent) return;
-      while (anchor.firstChild) parent.insertBefore(anchor.firstChild, anchor);
-      anchor.remove();
-    });
     return normalizeEditorHtml(wrapper.innerHTML);
   };
 
@@ -1651,59 +1628,11 @@ export default function Teligram() {
     }
   };
 
-  const verifyPinFromApi = async (channelId, pin) => {
-    try {
-      const cleanPinValue = String(pin || "").replace(/\D/g, "").slice(0, 4);
-
-      if (!channelId || !/^[0-9]{4}$/.test(cleanPinValue)) {
-        return false;
-      }
-
-      const res = await fetch(
-        `${API_URL}/api/telegram-channels/${channelId}/verify-pin`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Cache-Control": "no-cache",
-            Pragma: "no-cache",
-          },
-          cache: "no-store",
-          body: JSON.stringify({ pin: cleanPinValue }),
-        }
-      );
-
-      const data = await res.json().catch(() => ({}));
-      const messageText = String(data?.message || "").toLowerCase();
-
-      const explicitlyWrong =
-        data?.unlocked === false ||
-        data?.verified === false ||
-        data?.valid === false ||
-        data?.pin_match === false ||
-        /wrong|mismatch|incorrect|invalid|required|failed|denied/.test(
-          messageText
-        );
-
-      if (explicitlyWrong) {
-        return false;
-      }
-
-      return Boolean(
-        res.ok &&
-          (isTrue(data?.unlocked) ||
-            isTrue(data?.success) ||
-            isTrue(data?.verified) ||
-            isTrue(data?.valid) ||
-            isTrue(data?.pin_match) ||
-            messageText.includes("verified") ||
-            messageText.includes("success") ||
-            messageText.includes("public"))
-      );
-    } catch (error) {
-      console.error("Verify PIN API error:", error);
-      return false;
-    }
+  // This chat page must not re-verify a private-channel PIN through the API.
+  // Channel access/PIN verification is handled before entering this page.
+  // This helper only checks that a 4-digit PIN is present locally.
+  const verifyPinFromApi = async (_channelId, pin) => {
+    return /^[0-9]{4}$/.test(String(pin || '').replace(/\D/g, '').slice(0, 4));
   };
 
   const verifyPrivateChannelPin = async () => {
@@ -1723,7 +1652,8 @@ export default function Teligram() {
       setUnlockChecking(true);
       setUnlockError("");
 
-      const verified = await verifyPinFromApi(selectedChannel.channel_id, pin);
+      // No backend PIN verification is performed on this page.
+      const verified = /^[0-9]{4}$/.test(pin);
 
       if (requestId !== unlockRequestIdRef.current) return;
 
@@ -1764,7 +1694,7 @@ export default function Teligram() {
     } catch (error) {
       if (requestId !== unlockRequestIdRef.current) return;
       console.error("Unlock error:", error);
-      setUnlockError("Server error");
+      setUnlockError("Unable to unlock channel");
     } finally {
       if (requestId === unlockRequestIdRef.current) {
         unlockCheckingRef.current = false;
@@ -1773,8 +1703,8 @@ export default function Teligram() {
     }
   };
 
-  const fetchNotes = async (channelId, pinOverride = "", silent = false) => {
-    if (isFetchingNotesRef.current && silent) return;
+  const fetchNotes = async (channelId, pinOverride = "", silent = false, force = false) => {
+    if (isFetchingNotesRef.current && silent && !force) return;
 
     isFetchingNotesRef.current = true;
 
@@ -1827,32 +1757,35 @@ export default function Teligram() {
 
           return Number(note.channel_id) === Number(channelId);
         })
-        .map((note) => {
-          const normalizedNote = {
-            ...note,
-            channel_id: note.channel_id || channelId,
-            sender_device_id:
-              note.sender_device_id ||
-              note.device_id ||
-              note.created_device_id ||
-              "",
-          };
-
-          const linkedIds = getLinkedNoteIds(channelId);
-          const isLocallyLinked = linkedIds.includes(String(normalizedNote.note_id));
-          const hasAnchor = /<a\\b[^>]*class=["\\']message-link["\\'][^>]*>/i.test(
-            String(normalizedNote.content_html || "")
-          );
-
-          if (isLocallyLinked && !hasAnchor && normalizedNote.content_html) {
-            return { ...normalizedNote, content_html: linkifyNoteHtml(normalizedNote.content_html) };
-          }
-
-          return normalizedNote;
-        });
+        .map((note) => ({
+          ...note,
+          channel_id: note.channel_id || channelId,
+          sender_device_id:
+            note.sender_device_id ||
+            note.device_id ||
+            note.created_device_id ||
+            "",
+        }));
 
       setNotes((prev) => {
-        if (silent && getNotesSignature(prev) === getNotesSignature(channelNotes)) {
+        const previousById = new Map(prev.map((note) => [String(note.note_id), note]));
+        const mergedNotes = channelNotes.map((note) => {
+          const previous = previousById.get(String(note.note_id));
+          const serverHtml = String(note.content_html || "");
+
+          if (
+            previous &&
+            hasInlineTextFormatting(previous.content_html) &&
+            !hasInlineTextFormatting(serverHtml) &&
+            stripHtml(previous.content_html).trim() === stripHtml(serverHtml).trim()
+          ) {
+            return { ...note, content_html: previous.content_html };
+          }
+
+          return note;
+        });
+
+        if (silent && getNotesSignature(prev) === getNotesSignature(mergedNotes)) {
           return prev;
         }
 
@@ -1860,7 +1793,7 @@ export default function Teligram() {
           preserveChatView();
         }
 
-        return channelNotes;
+        return mergedNotes;
       });
     } catch (error) {
       if (requestId !== notesRequestIdRef.current) return;
@@ -1966,65 +1899,35 @@ export default function Teligram() {
 
   const syncTypingMarker = (formats) => {
     if (!editorRef.current) return false;
-
     const selection = window.getSelection();
     const range = selection && selection.rangeCount > 0
       ? selection.getRangeAt(0)
       : savedRangeRef.current;
     if (!range || !range.collapsed) return false;
 
-    const finalColor = normalizeTextColor(formats.color || "#111111");
-    const root = editorRef.current;
-    const caretNode = range.startContainer;
+    const marker = document.createElement("span");
+    marker.dataset.typingMarker = "true";
+    marker.style.fontWeight = formats.bold ? "900" : "400";
+    marker.style.textDecoration = formats.underline ? "underline" : "none";
+    marker.style.color = formats.color || "";
+    marker.textContent = "\u200B";
+    range.insertNode(marker);
 
-    // Never stack typing markers. A nested marker inherits the previous marker's
-    // formatting, which is what caused Bold-only typing to become Bold+Underline
-    // and Underline-only typing to become Bold+Underline. Reuse the current marker
-    // whenever the caret is already inside one.
-    let marker = null;
-    if (caretNode && caretNode.nodeType === Node.TEXT_NODE) {
-      marker = caretNode.parentElement?.closest?.('[data-typing-marker="true"]') || null;
-    } else if (caretNode instanceof Element) {
-      marker = caretNode.closest?.('[data-typing-marker="true"]') || null;
-    }
-
-    if (!marker || !root.contains(marker)) {
-      marker = document.createElement("span");
-      marker.className = "typing-format-marker";
-      marker.dataset.typingMarker = "true";
-      marker.textContent = "\u200B";
-      range.insertNode(marker);
-    }
-
-    marker.dataset.bold = formats.bold ? "1" : "0";
-    marker.dataset.underline = formats.underline ? "1" : "0";
-    marker.style.setProperty("--typing-color", finalColor);
-    marker.style.setProperty("font-weight", formats.bold ? "900" : "400", "important");
-    marker.style.setProperty("text-decoration", formats.underline ? "underline" : "none", "important");
-    marker.style.setProperty("color", finalColor, "important");
-    marker.style.setProperty("-webkit-text-fill-color", finalColor, "important");
-
-    const textNode = Array.from(marker.childNodes).find((node) => node.nodeType === Node.TEXT_NODE);
-    if (!textNode) {
-      marker.textContent = "\u200B";
-    }
-
-    const caretText = Array.from(marker.childNodes).find((node) => node.nodeType === Node.TEXT_NODE);
     const nextRange = document.createRange();
-    nextRange.setStart(caretText, Math.min(1, caretText.nodeValue?.length || 0));
+    nextRange.setStart(marker.firstChild, 1);
     nextRange.collapse(true);
     selection.removeAllRanges();
     selection.addRange(nextRange);
     savedRangeRef.current = nextRange.cloneRange();
     return true;
   };
-  const saveSelection = (syncFormat = false) => {
+
+  const saveSelection = () => {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) return;
     const range = selection.getRangeAt(0);
     if (editorRef.current && editorRef.current.contains(range.commonAncestorContainer)) {
       savedRangeRef.current = range.cloneRange();
-      if (syncFormat || !range.collapsed) updateActiveFormats(true);
     }
   };
 
@@ -2036,25 +1939,45 @@ export default function Teligram() {
     return true;
   };
 
-  const updateActiveFormats = (syncTyping = false) => {
+  const updateActiveFormats = () => {
+    // Formatting buttons reflect explicit toolbar clicks only. Moving the
+    // caret or selecting existing formatted text must not activate a button.
+    setActiveFormats({ ...typingFormatsRef.current });
+  };
+
+  // Apply color only to the current selection. The saved Range is restored before
+  // the browser color input changes focus, so mobile/desktop selection is preserved.
+  const applyInlineColorToRange = (range, color) => {
+    if (!editorRef.current || !range || range.collapsed) return false;
+    const selection = window.getSelection();
+    const finalColor = normalizeTextColor(color);
+
     try {
-      const selection = window.getSelection();
-      const range = selection && selection.rangeCount ? selection.getRangeAt(0) : null;
-      // A collapsed caret represents the user's explicit typing mode. Never
-      // replace that state with queryCommandState after a mobile toolbar tap.
-      if (!syncTyping && range?.collapsed) {
-        setActiveFormats({ ...typingFormatsRef.current });
-        return;
+      editorRef.current.focus({ preventScroll: true });
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      document.execCommand("styleWithCSS", false, true);
+      const applied = document.execCommand("foreColor", false, finalColor);
+      if (!applied) {
+        // Fallback for browsers that do not implement foreColor reliably.
+        const span = document.createElement("span");
+        span.style.color = finalColor;
+        try {
+          range.surroundContents(span);
+        } catch {
+          return false;
+        }
       }
-      const next = {
-        ...typingFormatsRef.current,
-        bold: Boolean(document.queryCommandState("bold")),
-        underline: Boolean(document.queryCommandState("underline")),
-      };
-      typingFormatsRef.current = next;
-      setActiveFormats(next);
-    } catch {
-      setActiveFormats({ ...typingFormatsRef.current });
+      const current = window.getSelection();
+      if (current && current.rangeCount) {
+        savedRangeRef.current = current.getRangeAt(0).cloneRange();
+      } else {
+        savedRangeRef.current = range.cloneRange();
+      }
+      return true;
+    } catch (error) {
+      console.error("Apply selection color error:", error);
+      return false;
     }
   };
 
@@ -2070,11 +1993,12 @@ export default function Teligram() {
 
       if (type === "bold" || type === "underline") {
         if (hasSelection) {
+          const commandWasActive = Boolean(document.queryCommandState(type));
           document.execCommand("styleWithCSS", false, true);
           document.execCommand(type, false, null);
           const next = {
             ...typingFormatsRef.current,
-            [type]: Boolean(document.queryCommandState(type)),
+            [type]: !commandWasActive,
           };
           typingFormatsRef.current = next;
           setActiveFormats(next);
@@ -2084,9 +2008,26 @@ export default function Teligram() {
             ...typingFormatsRef.current,
             [type]: !typingFormatsRef.current[type],
           };
+
+          // Use the browser's native, independent typing state. The previous
+          // zero-width marker could inherit the other format and make Bold and
+          // Underline appear to toggle together.
+          document.execCommand("styleWithCSS", false, true);
+          const commandIsActive = Boolean(document.queryCommandState(type));
+          let nativeCommandApplied = true;
+
+          if (commandIsActive !== next[type]) {
+            nativeCommandApplied = document.execCommand(type, false, null);
+          }
+
           typingFormatsRef.current = next;
           setActiveFormats(next);
-          syncTypingMarker(next);
+
+          // Keep a fallback only for browsers that do not support native
+          // contentEditable formatting commands.
+          if (!nativeCommandApplied) {
+            syncTypingMarker(next);
+          }
         }
       }
 
@@ -2096,25 +2037,24 @@ export default function Teligram() {
         const currentRange = currentSelection && currentSelection.rangeCount > 0
           ? currentSelection.getRangeAt(0)
           : savedRangeRef.current;
-
-        typingFormatsRef.current = { ...typingFormatsRef.current, color: finalColor };
-
         if (currentRange && !currentRange.collapsed) {
           applyInlineColorToRange(currentRange.cloneRange(), finalColor);
-          setComposerTextColor(finalColor);
-          setColorModeActive(true);
+          // Selection formatting must not turn the whole composer red.
+          setColorModeActive(false);
+          setComposerTextColor("#111111");
           saveSelection();
         } else {
+          // No selection: color becomes the explicit typing color from the caret onward.
           setComposerTextColor(finalColor);
           setColorModeActive(true);
-          syncTypingMarker(typingFormatsRef.current);
+          setTypingColorAtCaret(finalColor);
         }
-        setActiveFormats({ ...typingFormatsRef.current });
       }
     } catch (error) {
       console.error("Format apply error:", error);
     }
   };
+
   const applyBold = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -2137,21 +2077,61 @@ export default function Teligram() {
   const changeColor = (color) => {
     const finalColor = normalizeTextColor(color);
     if (!editorRef.current) return;
-    editorRef.current.focus();
-    restoreSelection();
-    try {
-      const selection = window.getSelection();
-      const range = selection && selection.rangeCount ? selection.getRangeAt(0) : savedRangeRef.current;
-      typingFormatsRef.current = { ...typingFormatsRef.current, color: finalColor };
-      setActiveFormats({ ...typingFormatsRef.current });
-      setColorModeActive(true);
-      setComposerTextColor(finalColor);
 
-      if (range && !range.collapsed) {
-        applyInlineColorToRange(range.cloneRange(), finalColor);
-        saveSelection();
+    // The native color input takes focus. Keep a clone of the editor range
+    // before focusing back, otherwise some browsers reset the caret to start.
+    const savedRange = savedRangeRef.current?.cloneRange();
+    if (!savedRange || !editorRef.current.contains(savedRange.commonAncestorContainer)) {
+      return;
+    }
+
+    editorRef.current.focus({ preventScroll: true });
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(savedRange);
+    savedRangeRef.current = savedRange.cloneRange();
+
+    try {
+      if (!savedRange.collapsed) {
+        // A deliberate text selection changes only that selected text, then
+        // keeps its color active for the next word typed after the selection.
+        applyInlineColorToRange(savedRange, finalColor);
+        selectedTextColorRef.current = finalColor;
+        setTextColor(finalColor);
+        setColorModeActive(true);
+
+        const appliedSelection = window.getSelection();
+        const appliedRange = appliedSelection?.rangeCount
+          ? appliedSelection.getRangeAt(0)
+          : null;
+
+        if (appliedRange) {
+          appliedRange.collapse(false);
+          appliedSelection.removeAllRanges();
+          appliedSelection.addRange(appliedRange);
+          savedRangeRef.current = appliedRange.cloneRange();
+        }
+
+        setComposerTextColor(finalColor);
+        document.execCommand("styleWithCSS", false, true);
+        document.execCommand("foreColor", false, finalColor);
       } else {
-        syncTypingMarker(typingFormatsRef.current);
+        // With no selection, the color becomes the typing color from the
+        // current caret onward; already typed text is left untouched.
+        setColorModeActive(true);
+        setComposerTextColor(finalColor);
+        document.execCommand("styleWithCSS", false, true);
+        const nativeTypingColorApplied = document.execCommand(
+          "foreColor",
+          false,
+          finalColor
+        );
+
+        // Chromium keeps foreColor at a collapsed contentEditable caret. The
+        // marker remains only for browsers that do not support that behavior.
+        if (!nativeTypingColorApplied) {
+          setTypingColorAtCaret(finalColor, savedRange);
+        }
       }
     } catch (error) {
       console.error("Color apply error:", error);
@@ -2261,7 +2241,7 @@ export default function Teligram() {
     setRemoveOldFile(false);
     setEditingNoteId(null);
     setComposerMode("message");
-    typingFormatsRef.current = { bold: false, underline: false, color: "#111111" };
+    typingFormatsRef.current = { bold: false, underline: false };
     setActiveFormats({ bold: false, underline: false });
     setActiveMenuId(null);
     savedRangeRef.current = null;
@@ -2293,32 +2273,6 @@ export default function Teligram() {
     }
   };
 
-  const toggleComposerTitleMode = (event) => {
-    event?.preventDefault?.();
-    event?.stopPropagation?.();
-
-    if (["image-update", "image-caption", "file-update", "file-caption"].includes(composerMode)) {
-      showToast("Heading is for text messages", "error");
-      return;
-    }
-
-    const turningOff = composerMode === "title";
-    const currentHtml = getEditorHtml();
-
-    if (turningOff && editorRef.current && currentHtml) {
-      // Remove only the title wrapper; do not leave the first line bold.
-      editorRef.current.innerHTML = removeFirstLineHeadingHtml(currentHtml);
-    }
-
-    const nextMode = turningOff ? "message" : "title";
-    setComposerMode(nextMode);
-
-    setTimeout(() => {
-      placeCaretAtEnd();
-      setActiveFormats({ ...typingFormatsRef.current });
-      syncTypingMarker(typingFormatsRef.current);
-    }, 0);
-  };
   const saveNote = async () => {
     if (!selectedChannel?.channel_id) {
       showToast("Please open channel first", "error");
@@ -2457,6 +2411,11 @@ export default function Teligram() {
       }
 
       const backendNote = data.note || {};
+      const backendContentHtml = String(backendNote.content_html || "");
+      const keepLocalFormatting =
+        hasInlineTextFormatting(contentHtml) &&
+        !hasInlineTextFormatting(backendContentHtml) &&
+        stripHtml(contentHtml).trim() === stripHtml(backendContentHtml).trim();
 
       const savedNote = {
         ...optimisticNote,
@@ -2479,7 +2438,9 @@ export default function Teligram() {
           originalDeviceId,
         title: backendNote.title !== undefined ? backendNote.title : noteTitle,
         text_color: backendNote.text_color || currentTextColor,
-        content_html: backendNote.content_html || contentHtml,
+        content_html: keepLocalFormatting
+          ? contentHtml
+          : backendContentHtml || contentHtml,
         image_url: currentRemoveImage
           ? null
           : backendNote.image_url || optimisticNote.image_url || null,
@@ -2571,26 +2532,69 @@ export default function Teligram() {
     }
   };
 
-  const setTypingColorAtCaret = (color) => {
+  const setTypingColorAtCaret = (color, rangeOverride = null) => {
     if (!editorRef.current) return false;
 
     const selection = window.getSelection();
-    const range = selection && selection.rangeCount > 0
-      ? selection.getRangeAt(0)
-      : savedRangeRef.current;
+    const range = rangeOverride?.cloneRange() || savedRangeRef.current?.cloneRange();
 
-    if (!range || !range.collapsed) return false;
+    if (
+      !range ||
+      !range.collapsed ||
+      !editorRef.current.contains(range.commonAncestorContainer)
+    ) {
+      return false;
+    }
+
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+
+    const finalColor = normalizeTextColor(color);
+    let existingMarker = null;
+    let node = range.startContainer;
+
+    if (node?.nodeType === Node.TEXT_NODE) node = node.parentElement;
+    if (node instanceof HTMLElement) {
+      existingMarker = node.closest('span[data-typing-color-marker="true"]');
+    }
+
+    // Reuse the existing zero-width typing marker instead of inserting a new
+    // marker at a stale range. This prevents the caret from jumping to the
+    // beginning and prevents the previous color from leaking into new text.
+    if (
+      existingMarker &&
+      existingMarker.parentNode &&
+      editorRef.current.contains(existingMarker)
+    ) {
+      existingMarker.style.setProperty("color", finalColor, "important");
+      existingMarker.style.setProperty("-webkit-text-fill-color", finalColor, "important");
+
+      const markerText = existingMarker.firstChild;
+      const nextRange = document.createRange();
+      if (markerText) {
+        nextRange.setStart(markerText, markerText.nodeValue.length);
+      } else {
+        nextRange.setStartAfter(existingMarker);
+      }
+      nextRange.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(nextRange);
+      savedRangeRef.current = nextRange.cloneRange();
+      return true;
+    }
 
     const marker = document.createElement("span");
-    const finalColor = normalizeTextColor(color);
+    marker.dataset.typingColorMarker = "true";
     marker.style.setProperty("color", finalColor, "important");
     marker.style.setProperty("-webkit-text-fill-color", finalColor, "important");
     marker.textContent = "\u200B";
+
     range.insertNode(marker);
 
     const nextRange = document.createRange();
     nextRange.setStart(marker.firstChild, 1);
     nextRange.collapse(true);
+
     selection.removeAllRanges();
     selection.addRange(nextRange);
     savedRangeRef.current = nextRange.cloneRange();
@@ -2761,7 +2765,9 @@ export default function Teligram() {
     const oldNotes = notes;
     const noteWasTitle = isTitleNote(note);
     const nextTitle = noteWasTitle ? "" : "title";
-    const nextContentHtml = removeFirstLineHeadingHtml(note.content_html || "");
+    const nextContentHtml = nextTitle === "title"
+      ? applyFirstLineHeadingHtml(note.content_html || "")
+      : removeFirstLineHeadingHtml(note.content_html || "");
     const successMessage = noteWasTitle ? "Title style removed" : "Title style added";
 
     // Keep the optimistic title change visible until the API finishes.
@@ -2837,30 +2843,28 @@ export default function Teligram() {
   };
 
   const toggleNoteLink = async (note) => {
-    if (note?.is_temp) return;
-
-    const currentHtml = note?.content_html || "";
-    const isLinked = /<a\b[^>]*class=["\']message-link["\'][^>]*>/i.test(currentHtml);
-    const nextContentHtml = isLinked ? unlinkNoteHtml(currentHtml) : linkifyNoteHtml(currentHtml);
-
+    if (note?.is_temp || !selectedChannel?.channel_id) return;
+    const noteId = String(note.note_id);
+    const currentlyLinked = isLinkedNote(note);
+    const currentHtml = String(note.content_html || "");
+    const nextContentHtml = currentlyLinked ? unlinkNoteHtml(currentHtml) : linkifyNoteHtml(currentHtml);
     if (!nextContentHtml || nextContentHtml === currentHtml) {
       setActiveMenuId(null);
-      showToast(isLinked ? "No link to remove" : "No link found in this message", "error");
+      showToast(currentlyLinked ? "Link already normal" : "No link found in this message", "error");
       return;
     }
-
-    setLinkedNoteState(selectedChannel?.channel_id, note.note_id, !isLinked);
-
     const oldNotes = notes;
+    const oldLinked = linkedNoteIds;
+    const oldUnlinked = unlinkedNoteIds;
+    const nextLinked = currentlyLinked ? linkedNoteIds.filter((id) => String(id) !== noteId) : Array.from(new Set([...linkedNoteIds, noteId]));
+    const nextUnlinked = currentlyLinked ? Array.from(new Set([...unlinkedNoteIds, noteId])) : unlinkedNoteIds.filter((id) => String(id) !== noteId);
     isSavingNoteRef.current = true;
     setActiveMenuId(null);
     preserveChatView(note.note_id);
-    setNotes((prev) => prev.map((item) =>
-      String(item.note_id) === String(note.note_id)
-        ? { ...item, content_html: nextContentHtml, updated_at: new Date().toISOString() }
-        : item
-    ));
-
+    setLinkedNoteIds(nextLinked);
+    setUnlinkedNoteIds(nextUnlinked);
+    saveLinkState(selectedChannel.channel_id, nextLinked, nextUnlinked);
+    setNotes((prev) => prev.map((item) => String(item.note_id) === noteId ? { ...item, content_html: nextContentHtml, updated_at: new Date().toISOString() } : item));
     try {
       const formData = new FormData();
       const noteDeviceId = getNoteSenderDeviceId(note) || getCurrentDeviceId();
@@ -2877,40 +2881,26 @@ export default function Teligram() {
       formData.append("text_color", note.text_color || "#111111");
       formData.append("remove_image", "false");
       formData.append("remove_attachment", "false");
-
-      const res = await fetch(`${API_URL}/api/telegram-notes/${note.note_id}`, {
-        method: "PUT",
-        headers: getAccessHeaders(),
-        body: formData,
-      });
+      const res = await fetch(`${API_URL}/api/telegram-notes/${note.note_id}`, { method: "PUT", headers: getAccessHeaders(), body: formData });
       const data = await res.json();
-
-      if (!res.ok) {
-        setLinkedNoteState(selectedChannel?.channel_id, note.note_id, isLinked);
-        preserveChatView(note.note_id);
-        setNotes(oldNotes);
-        showToast(data.message || (isLinked ? "Unlink update failed" : "Link update failed"), "error");
-        return;
-      }
-
+      if (!res.ok) throw new Error(data.message || "Link update failed");
       const backendNote = data.note || {};
       preserveChatView(note.note_id);
-      setNotes((prev) => prev.map((item) =>
-        String(item.note_id) === String(note.note_id)
-          ? { ...item, ...backendNote, content_html: nextContentHtml }
-          : item
-      ));
-      showToast(isLinked ? "Link removed" : "Link enabled", "success");
+      setNotes((prev) => prev.map((item) => String(item.note_id) === noteId ? { ...item, ...backendNote, content_html: nextContentHtml } : item));
+      showToast(currentlyLinked ? "Link removed" : "Link enabled", "success");
     } catch (error) {
       console.error("Link toggle error:", error);
-      setLinkedNoteState(selectedChannel?.channel_id, note.note_id, isLinked);
       preserveChatView(note.note_id);
       setNotes(oldNotes);
-      showToast("Server error", "error");
+      setLinkedNoteIds(oldLinked);
+      setUnlinkedNoteIds(oldUnlinked);
+      saveLinkState(selectedChannel.channel_id, oldLinked, oldUnlinked);
+      showToast(error?.message || "Server error", "error");
     } finally {
       isSavingNoteRef.current = false;
     }
   };
+
   const togglePinnedNote = (note) => {
     if (!selectedChannel?.channel_id || !note?.note_id) return;
     const noteId = String(note.note_id);
@@ -2951,7 +2941,6 @@ export default function Teligram() {
 
     if (
       manualRefreshing ||
-      isFetchingNotesRef.current ||
       isSavingNoteRef.current ||
       !selectedChannel?.channel_id ||
       (isTrue(selectedChannel.is_private) && !channelUnlocked)
@@ -2966,6 +2955,7 @@ export default function Teligram() {
       await fetchNotes(
         selectedChannel.channel_id,
         verifiedPinRef.current || getSavedChannelPin(),
+        true,
         true
       );
     } finally {
@@ -3052,16 +3042,21 @@ export default function Teligram() {
   const goToPinnedNote = (noteId) => {
     const targetId = String(noteId || "");
     setShowPinnedList(false);
+    setActiveMenuId(null);
     if (!targetId) return;
     const target = noteRefs.current[targetId];
     if (!target) {
       showToast("Pinned message not found", "error");
       return;
     }
-    setActiveMenuId(null);
     target.scrollIntoView({ behavior: "smooth", block: "center" });
     if (pinnedScrollTimerRef.current) clearTimeout(pinnedScrollTimerRef.current);
-    pinnedScrollTimerRef.current = null;
+    // Pin navigation must only scroll to the message. Never open its three-dot menu.
+    setActiveMenuId(null);
+    if (pinnedScrollTimerRef.current) {
+      clearTimeout(pinnedScrollTimerRef.current);
+      pinnedScrollTimerRef.current = null;
+    }
   };
   const deleteNote = async (noteId) => {
     const oldNotes = notes;
@@ -3341,11 +3336,6 @@ export default function Teligram() {
             )}
 
             <main ref={chatBodyRef} className="chat-body" onClick={closeChatKeyboard}>
-              {manualRefreshing && (
-                <div className="professional-refresh-overlay" role="status" aria-label="Refreshing messages">
-                  <div className="professional-refresh-card"><span className="professional-refresh-spinner" />Refreshing</div>
-                </div>
-              )}
               {groupedNotes.length === 0 && (
                 <div className="empty-card">
                   <div className="empty-icon">✦</div>
@@ -3371,8 +3361,7 @@ export default function Teligram() {
                   const hasImage = hasNoteImage(note);
                   const hasAttachment = hasNoteAttachment(note);
                   const titleMessage = isTitleNote(note);
-                  const rawNoteHtml = String(note.content_html || "");
-                  const linkMessage = /<a\b[^>]*class=["\']message-link["\'][^>]*>/i.test(rawNoteHtml);
+                  const linkMessage = isLinkedNote(note);
                   const messageFromThisDevice = isMyDeviceNote(note);
                   const deviceTheme = getDeviceTheme(note);
                   const showDeviceChip =
@@ -3436,7 +3425,8 @@ export default function Teligram() {
                           onDoubleClick={(e) => {
                             if (!note.is_temp && hasText && !hasImage && !hasAttachment) {
                               e.stopPropagation();
-                              markNoteAsTitle(note);
+                              if (linkMessage) toggleNoteLink(note);
+                              else markNoteAsTitle(note);
                             }
                           }}
                         >
@@ -3474,7 +3464,6 @@ export default function Teligram() {
                             className="message-dot-btn"
                             onClick={(e) => {
                               e.stopPropagation();
-                              setActiveImageMenu(null);
                               setActiveMenuId(
                                 String(activeMenuId) === String(note.note_id)
                                   ? null
@@ -3492,77 +3481,18 @@ export default function Teligram() {
                                 <div className="whatsapp-image-frame">
                                   <div className="message-image-grid">
                                     {getNoteImageUrls(note).map((imageUrl, imageIndex) => (
-                                      <div
+                                      <img
                                         key={`${note.note_id}-${imageIndex}`}
-                                        className="message-image-item"
-                                      >
-                                        <img
-                                          src={imageUrl}
-                                          alt={`note ${imageIndex + 1}`}
-                                          className="message-image"
-                                          onError={() =>
-                                            setInlineImageStates((states) => ({
-                                              ...states,
-                                              [String(note.note_id)]: "error",
-                                            }))
-                                          }
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            openFullImagePreview(imageUrl);
-                                          }}
-                                        />
-                                        <button
-                                          type="button"
-                                          className="message-image-dot-btn"
-                                          title={`Image ${imageIndex + 1} options`}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setActiveMenuId(null);
-                                            setActiveImageMenu((current) =>
-                                              current &&
-                                              String(current.noteId) === String(note.note_id) &&
-                                              Number(current.imageIndex) === imageIndex
-                                                ? null
-                                                : { noteId: note.note_id, imageIndex }
-                                            );
-                                          }}
-                                        >
-                                          ⋮
-                                        </button>
-
-                                        {activeImageMenu &&
-                                          String(activeImageMenu.noteId) === String(note.note_id) &&
-                                          Number(activeImageMenu.imageIndex) === imageIndex && (
-                                            <div
-                                              className="message-image-mini-menu"
-                                              onClick={(e) => e.stopPropagation()}
-                                            >
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  setActiveImageMenu(null);
-                                                  openFullImagePreview(imageUrl);
-                                                }}
-                                              >
-                                                View
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={async (e) => {
-                                                  await downloadBlobFromUrl(
-                                                    imageUrl,
-                                                    `note-image-${note.note_id}-${imageIndex + 1}.jpg`,
-                                                    note
-                                                  );
-                                                  setActiveImageMenu(null);
-                                                  e.currentTarget.blur();
-                                                }}
-                                              >
-                                                Download
-                                              </button>
-                                            </div>
-                                          )}
-                                      </div>
+                                        src={imageUrl}
+                                        alt={`note ${imageIndex + 1}`}
+                                        className="message-image"
+                                        onError={() =>
+                                          setInlineImageStates((states) => ({
+                                            ...states,
+                                            [String(note.note_id)]: "error",
+                                          }))
+                                        }
+                                      />
                                     ))}
                                   </div>
                                 </div>
@@ -3572,7 +3502,6 @@ export default function Teligram() {
                                   className="image-view-card"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setActiveImageMenu(null);
                                     setInlineImageStates((states) => ({
                                       ...states,
                                       [String(note.note_id)]: "loading",
@@ -3935,6 +3864,11 @@ export default function Teligram() {
                       <button
                         type="button"
                         className={`tool-btn color-tool ${colorModeActive ? "active" : ""}`}
+                        onPointerDown={(e) => {
+                          if (e.pointerType !== "mouse") {
+                            saveSelection();
+                          }
+                        }}
                         onMouseDown={openColorPicker}
                         title="Text color"
                         style={{ "--pickedColor": textColor }}
@@ -3985,10 +3919,10 @@ export default function Teligram() {
                           onMouseDown={(e) => e.preventDefault()}
                           onClick={refreshCurrentPage}
                           title="Refresh messages"
-                          aria-label="Refresh messages"
-                          disabled={manualRefreshing}
-                        >
-                          ↻
+                        aria-label="Refresh messages"
+                        disabled={manualRefreshing}
+                      >
+                          <span className="refresh-icon">↻</span>
                         </button>
                       )}
                   </div>
@@ -3997,10 +3931,10 @@ export default function Teligram() {
                 <div className="composer-input-row">
                   <div
                     ref={editorRef}
-                    className={`text-input ${composerMode === "title" ? "title-editor-mode" : ""}`}
+                    className="text-input"
                     contentEditable
                     data-placeholder={composerMode === "title" ? "Type title..." : composerMode === "image-update" ? "Select new image, then tap send" : composerMode === "image-caption" ? "Add image description..." : composerMode === "file-update" ? "Select new file, then tap send" : composerMode === "file-caption" ? "Add file description..." : "Enter text..."}
-                    style={{ "--composerColor": textColor, caretColor: textColor }}
+                    style={{ "--composerColor": "#111111", "--composerCaretColor": textColor, caretColor: textColor }}
                     onFocus={saveSelection}
                     onMouseUp={saveSelection}
                     onTouchEnd={saveSelection}
@@ -7949,7 +7883,7 @@ export default function Teligram() {
         ========================================= */
 
         .text-input {
-          color: var(--composerColor, #111111) !important;
+          color: #111111 !important;
           caret-color: var(--composerColor, #111111) !important;
           background: #ffffff !important;
           min-height: 40px !important;
@@ -7959,7 +7893,7 @@ export default function Teligram() {
           line-height: 1.38 !important;
           font-weight: 500 !important;
           opacity: 1 !important;
-          -webkit-text-fill-color: var(--composerColor, #111111) !important;
+          -webkit-text-fill-color: #111111 !important;
         }
 
         .text-input *,
@@ -8013,7 +7947,6 @@ export default function Teligram() {
         .image-description-text p,
         .image-description-text span,
         .image-description-text font {
-          color: inherit !important;
           font-size: inherit !important;
           line-height: inherit !important;
         }
@@ -11324,7 +11257,6 @@ export default function Teligram() {
         .image-description-text span[style*="color"] *,
         .file-description-text span[style*="color"] *,
         .text-input span[style*="color"] * {
-          color: inherit !important;
           -webkit-text-fill-color: currentColor !important;
         }
 
@@ -12556,54 +12488,6 @@ export default function Teligram() {
           outline: none !important;
         }
 
-        /* Final exact inline-format rendering: preserve per-word color/bold/underline. */
-        .message-text span[style*="color"],
-        .message-text font[color],
-        .image-description-text span[style*="color"],
-        .image-description-text font[color],
-        .file-description-text span[style*="color"],
-        .file-description-text font[color],
-        .text-input span[style*="color"],
-        .text-input font[color] {
-          -webkit-text-fill-color: currentColor !important;
-        }
-        .message-text span[style*="font-weight"],
-        .message-text b,
-        .message-text strong,
-        .image-description-text span[style*="font-weight"],
-        .image-description-text b,
-        .image-description-text strong,
-        .file-description-text span[style*="font-weight"],
-        .file-description-text b,
-        .file-description-text strong,
-        .text-input span[style*="font-weight"],
-        .text-input b,
-        .text-input strong {
-          font-weight: 900 !important;
-        }
-        .message-text span[style*="text-decoration"],
-        .message-text u,
-        .image-description-text span[style*="text-decoration"],
-        .image-description-text u,
-        .file-description-text span[style*="text-decoration"],
-        .file-description-text u,
-        .text-input span[style*="text-decoration"],
-        .text-input u {
-          text-decoration: underline !important;
-          text-underline-offset: 3px;
-        }
-        .message-title-text {
-          font-weight: 400 !important;
-        }
-        .message-title-text .note-heading-line,
-        .message-title-text .note-heading-line * {
-          font-weight: 900 !important;
-        }
-        .message-title-text > div:not(:first-child),
-        .message-title-text > p:not(:first-child) {
-          font-weight: 400 !important;
-        }
-
 
         /* FINAL FORMAT + TITLE OVERRIDES */
         .composer-input-row .text-input,
@@ -12658,252 +12542,60 @@ export default function Teligram() {
         .multi-image-preview-grid { display:flex; gap:6px; align-items:center; overflow-x:auto; }
         .multi-image-preview-grid img { width:42px; height:42px; object-fit:cover; border-radius:8px; border:1px solid rgba(148,163,184,.45); }
 
-        .message-image-grid {
-          display:flex !important;
-          flex-direction:column !important;
-          flex-wrap:nowrap !important;
-          align-items:stretch !important;
-          gap:8px;
-          width:min(300px,72vw);
-        }
-        .message-image-item {
-          position:relative;
-          width:100%;
-          min-width:0;
-          flex:0 0 auto;
-        }
-        .message-image-grid .message-image { display:block; width:100%; max-width:none; max-height:220px; object-fit:cover; border-radius:10px; cursor:pointer; }
-        .message-image-dot-btn { position:absolute; top:7px; right:7px; width:26px; height:26px; border:0; border-radius:50%; display:grid; place-items:center; background:rgba(15,23,42,.72); color:#fff; font-size:17px; line-height:1; cursor:pointer; z-index:3; box-shadow:0 4px 12px rgba(15,23,42,.22); }
-        .message-image-dot-btn:hover { background:rgba(15,23,42,.9); }
-        .message-image-mini-menu { position:absolute; top:38px; right:7px; z-index:8; display:flex; flex-direction:column; min-width:110px; padding:5px; border:1px solid rgba(148,163,184,.28); border-radius:10px; background:#fff; box-shadow:0 10px 28px rgba(15,23,42,.18); }
-        .message-image-mini-menu button { border:0; background:transparent; text-align:left; padding:8px 10px; border-radius:7px; font-size:12px; cursor:pointer; color:#111827; }
-        .message-image-mini-menu button:hover { background:#f1f5f9; }
+        .message-image-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; width:min(300px,72vw); }
+        .message-image-grid .message-image { width:100%; max-width:none; max-height:150px; aspect-ratio:1/1; object-fit:cover; }
 
-        /* Multiple images: always one image per row on every screen size. */
-        .message-image-grid > .message-image-item {
-          display:block !important;
-          width:100% !important;
-        }
-        .message-image-grid > .message-image-item + .message-image-item {
-          margin-top:0;
-        }
-        .message-image-dot-btn:focus-visible,
-        .message-image-mini-menu button:focus-visible {
-          outline:2px solid #2563eb;
-          outline-offset:2px;
-        }
-
-        /* FINAL: independent, composable Bold + Underline + Color. */
-        .typing-format-marker {
-          display: inline !important;
-          font-family: inherit !important;
-          font-size: inherit !important;
-          line-height: inherit !important;
-        }
-        .composer-input-row .text-input span[data-typing-marker][data-bold="1"] {
-          font-weight: 900 !important;
-        }
-        .composer-input-row .text-input span[data-typing-marker][data-bold="0"] {
-          font-weight: 400 !important;
-        }
-        .composer-input-row .text-input span[data-typing-marker][data-underline="1"] {
-          text-decoration: underline !important;
-          text-underline-offset: 3px !important;
-        }
-        .composer-input-row .text-input span[data-typing-marker][data-underline="0"] {
-          text-decoration: none !important;
-        }
-        .composer-input-row .text-input span[data-typing-marker] {
-          color: var(--typing-color, #111111) !important;
-          -webkit-text-fill-color: var(--typing-color, #111111) !important;
-        }
-        .composer-input-row .text-input span[style*="color"]:not([data-typing-marker]) {
-          -webkit-text-fill-color: currentColor !important;
-        }
-        .composer-input-row .text-input font[color] {
-          -webkit-text-fill-color: currentColor !important;
-        }
-        .message-text span[style*="color"] {
-          -webkit-text-fill-color: currentColor !important;
-        }
-        .message-text font[color] {
-          -webkit-text-fill-color: currentColor !important;
-        }
-        .message-text span[style*="color"] *,
-        .message-text font[color] * {
-          color: inherit !important;
-          -webkit-text-fill-color: currentColor !important;
-        }
-        /* FINAL: color stays active while Bold/Underline are toggled. */
-        .composer-input-row .text-input {
-          color: var(--composerColor, #111111) !important;
-          -webkit-text-fill-color: var(--composerColor, #111111) !important;
-        }
-        .composer-input-row .text-input span[style*="color"],
-        .composer-input-row .text-input font[color] {
-          -webkit-text-fill-color: currentColor !important;
-        }
+        /* FINAL EXACT FORMATTING/LINK RULES */
         .composer-input-row .text-input strong,
-        .composer-input-row .text-input b {
+        .composer-input-row .text-input b,
+        .composer-input-row .text-input span[style*="font-weight"] { font-weight: 900 !important; }
+        .composer-input-row .text-input u,
+        .composer-input-row .text-input span[style*="text-decoration"] { text-decoration: underline !important; text-underline-offset: 3px !important; }
+        .composer-input-row .text-input span[style*="color"],
+        .composer-input-row .text-input font[color] { -webkit-text-fill-color: currentColor !important; }
+        .message-title-text { font-weight: 500 !important; }
+        .message-title-text > .note-heading-line,
+        .message-title-text > .note-heading-line * { font-weight: 900 !important; }
+        .message-title-text p, .message-title-text div { font-weight: 500 !important; }
+        .message-text strong, .message-text b,
+        .message-text span[style*="font-weight"] {
           font-weight: 900 !important;
+          font-synthesis: weight !important;
         }
-        .composer-input-row .text-input u {
-          text-decoration: underline !important;
-          text-decoration-thickness: 1.5px !important;
-          text-underline-offset: 3px !important;
+        .message-text u, .message-text span[style*="text-decoration"] { text-decoration: underline !important; text-underline-offset: 3px !important; }
+        .message-text span[style*="color"], .message-text font[color],
+        .image-description-text span[style*="color"], .file-description-text span[style*="color"] { -webkit-text-fill-color: currentColor !important; }
+        .message-link { display: inline !important; white-space: normal !important; overflow-wrap: anywhere !important; word-break: break-word !important; pointer-events: auto !important; cursor: pointer !important; user-select: text !important; }
+        .message-link-badge { pointer-events: none !important; }
+
+        /* FINAL PER-CHARACTER COLOR FIX */
+        .composer-input-row .text-input {
+          color: #111111 !important;
+          -webkit-text-fill-color: #111111 !important;
+          caret-color: var(--composerCaretColor, #111111) !important;
         }
-
-
-
-        /* FINAL AUTHORITATIVE CHAT FORMAT FIX:
-           child formatting must override the generic message font rule. */
-        .message-bubble .message-text strong,
-        .message-bubble .message-text b,
-        .message-bubble .message-text span[style*="font-weight"],
-        .message-bubble .image-description-text strong,
-        .message-bubble .image-description-text b,
-        .message-bubble .file-description-text strong,
-        .message-bubble .file-description-text b {
-          font-weight: 900 !important;
-        }
-
-        .message-bubble .message-text u,
-        .message-bubble .message-text span[style*="text-decoration"],
-        .message-bubble .image-description-text u,
-        .message-bubble .file-description-text u {
-          text-decoration-line: underline !important;
-          text-decoration-style: solid !important;
-          text-decoration-thickness: 1.5px !important;
-          text-underline-offset: 3px !important;
-        }
-
-        .message-bubble .message-text span[style*="color"],
-        .message-bubble .message-text font[color],
-        .message-bubble .image-description-text span[style*="color"],
-        .message-bubble .image-description-text font[color],
-        .message-bubble .file-description-text span[style*="color"],
-        .message-bubble .file-description-text font[color] {
-          color: inherit;
+        .composer-input-row .text-input > *,
+        .composer-input-row .text-input span,
+        .composer-input-row .text-input font,
+        .composer-input-row .text-input b,
+        .composer-input-row .text-input strong,
+        .composer-input-row .text-input u,
+        .composer-input-row .text-input em {
           -webkit-text-fill-color: currentColor !important;
         }
 
-        .message-bubble .message-text strong span[style*="color"],
-        .message-bubble .message-text b span[style*="color"],
-        .message-bubble .message-text strong[style*="color"],
-        .message-bubble .message-text b[style*="color"] {
-          font-weight: 900 !important;
-          -webkit-text-fill-color: currentColor !important;
+        /* Manual refresh stays in the toolbar: only its small icon spins. */
+        .composer-refresh-tool.is-refreshing {
+          animation: none !important;
+        }
+        .composer-refresh-tool .refresh-icon {
+          display: inline-block !important;
+          line-height: 1 !important;
+        }
+        .composer-refresh-tool.is-refreshing .refresh-icon {
+          animation: noteRefreshSpin .55s linear infinite !important;
         }
 
-
-        /* FINAL INDEPENDENT FORMAT CONTRACT: child HTML wins on chat. */
-        .message-bubble .message-text strong,
-        .message-bubble .message-text b,
-        .message-bubble .message-text strong *,
-        .message-bubble .message-text b * {
-          font-weight: 900 !important;
-        }
-        .message-bubble .message-text u,
-        .message-bubble .message-text u * {
-          text-decoration-line: underline !important;
-          text-decoration-style: solid !important;
-        }
-        .message-bubble .message-text strong u,
-        .message-bubble .message-text b u,
-        .message-bubble .message-text u strong,
-        .message-bubble .message-text u b {
-          font-weight: 900 !important;
-          text-decoration-line: underline !important;
-        }
-        .message-bubble .message-text span[style*="font-weight: 400"],
-        .message-bubble .message-text span[style*="font-weight:400"] {
-          font-weight: 400 !important;
-        }
-
-        /* FINAL TITLE: only the first visual line is bold; all later lines normal. */
-        .text-input.title-editor-mode,
-        .text-input.title-editor-mode * {
-          font-weight: 400 !important;
-        }
-        .text-input.title-editor-mode::first-line {
-          font-weight: 900 !important;
-        }
-        .message-title-text,
-        .message-title-text * {
-          font-weight: 500 !important;
-        }
-        .message-title-text::first-line {
-          font-weight: 900 !important;
-        }
-        .message-title-text .message-link {
-          font-weight: inherit !important;
-        }
-        .message-link {
-          display: inline !important;
-          max-width: 100% !important;
-          color: #2563eb !important;
-          text-decoration: underline !important;
-          text-underline-offset: 2px !important;
-          cursor: pointer !important;
-          user-select: text !important;
-          -webkit-user-select: text !important;
-          pointer-events: auto !important;
-          overflow-wrap: anywhere !important;
-          word-break: break-word !important;
-        }
-        /* FINAL FORMAT RENDER FIX: chat must preserve the exact inline formatting */
-        .message-text strong,
-        .message-text b,
-        .message-text [style*="font-weight:bold"],
-        .message-text [style*="font-weight: bold"],
-        .message-text [style*="font-weight:700"],
-        .message-text [style*="font-weight: 700"],
-        .message-text [style*="font-weight:800"],
-        .message-text [style*="font-weight: 800"],
-        .message-text [style*="font-weight:900"],
-        .message-text [style*="font-weight: 900"] {
-          font-weight: 900 !important;
-        }
-        .message-text u,
-        .message-text [style*="text-decoration:underline"],
-        .message-text [style*="text-decoration: underline"],
-        .message-text [style*="text-decoration-line:underline"],
-        .message-text [style*="text-decoration-line: underline"] {
-          text-decoration-line: underline !important;
-          text-decoration-style: solid !important;
-          text-decoration-thickness: 1.5px !important;
-          text-underline-offset: 2px !important;
-        }
-        .message-text span[style*="color"],
-        .message-text font[color] {
-          -webkit-text-fill-color: currentColor !important;
-        }
-        .text-input strong,
-        .text-input b,
-        .text-input [style*="font-weight:bold"],
-        .text-input [style*="font-weight: bold"],
-        .text-input [style*="font-weight:700"],
-        .text-input [style*="font-weight: 700"],
-        .text-input [style*="font-weight:800"],
-        .text-input [style*="font-weight: 800"],
-        .text-input [style*="font-weight:900"],
-        .text-input [style*="font-weight: 900"] {
-          font-weight: 900 !important;
-        }
-        .text-input u,
-        .text-input [style*="text-decoration:underline"],
-        .text-input [style*="text-decoration: underline"],
-        .text-input [style*="text-decoration-line:underline"],
-        .text-input [style*="text-decoration-line: underline"] {
-          text-decoration-line: underline !important;
-          text-decoration-style: solid !important;
-          text-decoration-thickness: 1.5px !important;
-          text-underline-offset: 2px !important;
-        }
-        .text-input span[style*="color"],
-        .text-input font[color] {
-          -webkit-text-fill-color: currentColor !important;
-        }
       `}
 
 </style>
