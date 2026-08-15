@@ -1308,10 +1308,12 @@ export default function ChannelList() {
     );
     localStorage.setItem("selected_channel_is_private", "true");
 
-    // This popup is shown only when this channel is not trusted locally.
-    // Clear only the temporary selected-channel/session data.
+    // Any previously trusted PIN must be discarded before asking for the
+    // current database PIN again. This is important when the owner changes
+    // the PIN directly in PostgreSQL/pgAdmin.
+    removeTrustedPin(channel.channel_id);
     localStorage.removeItem(SELECTED_CHANNEL_PIN_KEY);
-    sessionStorage.removeItem(getSessionVerifiedKey(channel.channel_id));
+    clearSelectedChannelVerified(channel.channel_id);
 
     setPinChecking(false);
     setPinBox({
@@ -1323,117 +1325,68 @@ export default function ChannelList() {
     });
   };
 
-  /*
-    TRUST DEVICE
-    ------------------------------------------------------------------
-    After the user enters the correct PIN and checks "Trust Device",
-    this device is trusted for this private channel.
+  const verifyTrustedChannelAccess = async (channel) => {
+    if (!channel?.channel_id) return false;
 
-    Future opens:
-      - NO /access-check
-      - NO backend PIN verification
-      - NO PIN popup
-      - localStorage only
+    try {
+      const deviceId = getCurrentDeviceId();
 
-    Trust is per user + channel + browser/device.
-  */
+      const res = await fetch(
+        `${API_URL}/api/telegram-channels/${channel.channel_id}/access-check`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-device-id": deviceId,
+          },
+          cache: "no-store",
+          body: JSON.stringify({
+            user_id: PUBLIC_USER_ID,
+            device_id: deviceId,
+          }),
+        }
+      );
+
+      const data = await res.json().catch(() => ({}));
+
+      // Silent background check:
+      // only a confirmed backend "allowed" result can skip the PIN popup.
+      if (
+        res.ok &&
+        data?.allowed === true &&
+        data?.needs_pin === false
+      ) {
+        return true;
+      }
+
+      // Trust mismatch, old PIN, missing trust, or normal backend denial:
+      // return false without showing any error/toast.
+      return false;
+    } catch (error) {
+      // Background failure also falls back silently to the normal PIN popup.
+      console.error("Trusted device background check:", error);
+      return false;
+    }
+  };
+
   const getChannelTrustKey = (channelId) =>
     `trusted_private_channel_device_${PUBLIC_USER_ID}_${channelId}`;
 
-  const getChannelTrustDeviceKey = (channelId) =>
-    `trusted_private_channel_device_id_${PUBLIC_USER_ID}_${channelId}`;
-
   const getChannelTrustFlag = (channelId) => {
     if (!channelId || typeof window === "undefined") return false;
-
-    const trusted =
-      localStorage.getItem(getChannelTrustKey(channelId)) === "true";
-
-    if (!trusted) return false;
-
-    const savedDeviceId = localStorage.getItem(
-      getChannelTrustDeviceKey(channelId)
-    );
-
-    // Old trust entries created before device binding are still accepted.
-    // Bind them to the current device the next time they are opened.
-    if (!savedDeviceId) {
-      localStorage.setItem(
-        getChannelTrustDeviceKey(channelId),
-        getCurrentDeviceId()
-      );
-      return true;
-    }
-
-    return savedDeviceId === getCurrentDeviceId();
+    return localStorage.getItem(getChannelTrustKey(channelId)) === "true";
   };
 
   const saveChannelTrustFlag = (channelId) => {
     if (!channelId || typeof window === "undefined") return;
-
     localStorage.setItem(getChannelTrustKey(channelId), "true");
-    localStorage.setItem(
-      getChannelTrustDeviceKey(channelId),
-      getCurrentDeviceId()
-    );
     localStorage.setItem(SELECTED_CHANNEL_TRUST_KEY, "true");
-    localStorage.setItem(SELECTED_CHANNEL_DEVICE_KEY, getCurrentDeviceId());
   };
 
   const removeChannelTrustFlag = (channelId) => {
     if (!channelId || typeof window === "undefined") return;
-
     localStorage.removeItem(getChannelTrustKey(channelId));
-    localStorage.removeItem(getChannelTrustDeviceKey(channelId));
-
-    // Remove only the generic selected-channel trust markers.
     localStorage.removeItem(SELECTED_CHANNEL_TRUST_KEY);
-    localStorage.removeItem(SELECTED_CHANNEL_SKIP_VERIFY_KEY);
-    localStorage.removeItem(SELECTED_CHANNEL_VERIFIED_AT_KEY);
-    localStorage.removeItem(SELECTED_CHANNEL_DEVICE_KEY);
-  };
-
-  const openChannel = async (channel) => {
-    if (openingChannelRef.current || isOpeningChannel) return;
-
-    pinSuccessRef.current = false;
-    openingChannelRef.current = false;
-    setIsOpeningChannel(false);
-    setActiveMenuId(null);
-    clearOwnerDeleteAlert();
-
-    if (!isTrue(channel?.is_private)) {
-      goToChannel(channel);
-      return;
-    }
-
-    const channelId = channel.channel_id;
-    const localTrusted = getChannelTrustFlag(channelId);
-    const savedPin = getTrustedPin(channelId);
-
-    /*
-      TRUSTED DEVICE PATH
-
-      This is intentionally local-only.
-      There is NO backend request here.
-
-      Once Trust Device was checked after a successful PIN entry,
-      the saved 4-digit PIN + trust flag are enough to open the channel
-      again on this same browser/device.
-    */
-    if (localTrusted && /^[0-9]{4}$/.test(savedPin)) {
-      goToChannel(channel, savedPin, true);
-      return;
-    }
-
-    /*
-      NOT TRUSTED
-
-      Show the existing PIN popup.
-      The backend is contacted only when the user presses Verify/Enter
-      in verifyChannelPin().
-    */
-    showPrivateChannelPinBox(channel);
   };
 
   const openChannel = async (channel) => {
@@ -1645,12 +1598,9 @@ export default function ChannelList() {
         requests, so stale mismatch responses cannot re-open it.
       */
       if (trustThisDevice) {
-        // Save the PIN and the device trust BEFORE navigation.
-        // The next channel click will use these local values only.
         saveTrustedPin(selectedChannel.channel_id, typedPin);
         saveChannelTrustFlag(selectedChannel.channel_id);
       } else {
-        // Without Trust Device, the user must enter the PIN again next time.
         removeTrustedPin(selectedChannel.channel_id);
         removeChannelTrustFlag(selectedChannel.channel_id);
       }
