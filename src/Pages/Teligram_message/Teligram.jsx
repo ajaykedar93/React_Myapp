@@ -1136,20 +1136,26 @@ export default function Teligram() {
   // Title mode affects only the first user-entered line.
   // The remaining lines keep their normal formatting unless the user
   // explicitly applies Bold/Underline to them.
+  // TITLE: mark ONLY the first user-entered line.
+  // This intentionally starts from the first visible text node in the whole
+  // HTML tree. It does NOT choose a "first block", because contentEditable
+  // can sometimes leave the first lines as root text and later lines inside
+  // <div>/<p>. Choosing the first block can therefore highlight line 2, 4, etc.
   const applyFirstLineHeadingHtml = (html) => {
     if (typeof document === "undefined" || !html) return html || "";
 
     const wrapper = document.createElement("div");
     wrapper.innerHTML = html;
 
-    // Remove any previously generated title wrapper first. This prevents an
-    // older version of the title logic from keeping the second line bold.
+    // Remove any old generated title wrapper first.
     wrapper.querySelectorAll(".note-heading-line").forEach((heading) => {
       const parent = heading.parentNode;
       if (!parent) return;
+
       while (heading.firstChild) {
         parent.insertBefore(heading.firstChild, heading);
       }
+
       heading.remove();
     });
 
@@ -1164,89 +1170,109 @@ export default function Teligram() {
       "H5",
       "H6",
       "PRE",
+      "SECTION",
+      "ARTICLE",
     ]);
 
-    const hasVisibleText = (element) =>
-      Boolean(String(element?.textContent || "").trim());
-
-    // Pick the first leaf block that contains text. This handles both:
-    //   <div>First line</div><div>Second line</div>
-    // and:
-    //   <div><div>First line</div><div>Second line</div></div>
-    const allBlocks = Array.from(wrapper.querySelectorAll("*")).filter(
-      (element) => blockTags.has(element.tagName) && hasVisibleText(element)
+    // Find the FIRST visible text node in DOM order.
+    const textWalker = document.createTreeWalker(
+      wrapper,
+      NodeFilter.SHOW_TEXT
     );
 
-    const firstLeafBlock =
-      allBlocks.find(
-        (element) =>
-          !Array.from(element.children).some(
-            (child) => blockTags.has(child.tagName) && hasVisibleText(child)
-          )
-      ) || null;
+    let firstTextNode = null;
+    let firstTextOffset = 0;
+    let node = textWalker.nextNode();
 
-    const root = firstLeafBlock || wrapper;
+    while (node) {
+      const value = String(node.nodeValue || "");
+      const match = value.match(/\S/);
+
+      if (match) {
+        firstTextNode = node;
+        firstTextOffset = match.index || 0;
+        break;
+      }
+
+      node = textWalker.nextNode();
+    }
+
+    if (!firstTextNode) return normalizeEditorHtml(wrapper.innerHTML);
+
     const heading = document.createElement("strong");
     heading.className = "note-heading-line";
 
     const range = document.createRange();
-    range.selectNodeContents(root);
+    range.setStart(firstTextNode, firstTextOffset);
 
+    // Walk forward from the FIRST visible text node until the FIRST
+    // explicit line boundary: <br>, newline, or next block element.
     const walker = document.createTreeWalker(
-      root,
+      wrapper,
       NodeFilter.SHOW_ALL
     );
 
-    let node = walker.nextNode();
+    let current = walker.nextNode();
+    let foundStart = false;
     let stopped = false;
 
-    while (node) {
-      if (node.nodeType === Node.TEXT_NODE) {
-        const value = node.nodeValue || "";
+    while (current) {
+      if (current === firstTextNode) {
+        foundStart = true;
+        current = walker.nextNode();
+        continue;
+      }
+
+      if (!foundStart) {
+        current = walker.nextNode();
+        continue;
+      }
+
+      if (current.nodeType === Node.TEXT_NODE) {
+        const value = String(current.nodeValue || "");
         const newline = value.search(/\r?\n/);
 
         if (newline >= 0) {
-          range.setEnd(node, newline);
+          range.setEnd(current, newline);
           stopped = true;
           break;
         }
-      } else if (node.nodeType === Node.ELEMENT_NODE) {
-        if (node.tagName === "BR") {
-          range.setEndBefore(node);
+      } else if (current.nodeType === Node.ELEMENT_NODE) {
+        const tag = current.tagName;
+
+        if (tag === "BR") {
+          range.setEndBefore(current);
           stopped = true;
           break;
         }
 
-        // If the selected root is the wrapper itself, a block element is a
-        // line boundary. Stop before the first block after the first line.
-        if (
-          root === wrapper &&
-          blockTags.has(node.tagName) &&
-          hasVisibleText(node)
-        ) {
-          range.setEndBefore(node);
+        // A new block after the first visible text is a new user-entered line.
+        if (blockTags.has(tag) && current !== firstTextNode.parentElement) {
+          range.setEndBefore(current);
           stopped = true;
           break;
         }
       }
 
-      node = walker.nextNode();
+      current = walker.nextNode();
     }
 
     if (!stopped) {
-      range.setEnd(root, root.childNodes.length);
+      range.setEnd(wrapper, wrapper.childNodes.length);
     }
 
-    const firstPart = range.extractContents();
+    const firstLine = range.extractContents();
 
-    if (String(firstPart.textContent || "").trim()) {
-      heading.appendChild(firstPart);
-      root.insertBefore(heading, root.firstChild);
+    if (String(firstLine.textContent || "").trim()) {
+      heading.appendChild(firstLine);
+
+      // Put the generated first-line wrapper exactly where the first
+      // visible character originally started.
+      range.insertNode(heading);
     }
 
     return normalizeEditorHtml(wrapper.innerHTML);
   };
-
   const removeFirstLineHeadingHtml = (html) => {
     if (typeof document === "undefined" || !html) return html || "";
 
@@ -12898,9 +12924,27 @@ export default function Teligram() {
           }
         }
 
-      `}
 
-</style>
+
+        /* TITLE HIGHLIGHT: only the selected Title first line */
+        .message-title-text .note-heading-line {
+          background: rgba(255, 235, 59, 0.24) !important;
+          border-radius: 4px !important;
+          padding: 1px 3px !important;
+          -webkit-box-decoration-break: clone !important;
+          box-decoration-break: clone !important;
+        }
+
+        .message-title-text .note-heading-line * {
+          background: transparent !important;
+        }
+
+        .message-title-text .note-heading-line + * {
+          background: transparent !important;
+        }
+
+      `}
+    </style>
     </div>
   );
 }
