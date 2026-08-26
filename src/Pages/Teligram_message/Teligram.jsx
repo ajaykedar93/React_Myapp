@@ -705,6 +705,57 @@ export default function Teligram() {
   };
 
 
+  // AUTO-RESIZE COMPOSER
+  // Grows with wrapped text/new lines until it reaches 65% of the
+  // viewport height. Very long text then scrolls inside the composer.
+  const autoResizeEditor = () => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    // Reset first so deleting text also shrinks the composer.
+    editor.style.height = "auto";
+    editor.style.overflowY = "hidden";
+
+    const computed = window.getComputedStyle(editor);
+    const minHeight = parseFloat(computed.minHeight) || 45;
+
+    // Keep enough of the screen available for the chat itself.
+    const maxHeight = Math.max(
+      minHeight,
+      Math.floor(window.innerHeight * 0.65)
+    );
+
+    const contentHeight = editor.scrollHeight;
+    const nextHeight = Math.max(
+      minHeight,
+      Math.min(contentHeight, maxHeight)
+    );
+
+    editor.style.height = `${nextHeight}px`;
+
+    // Only very long content gets an internal scrollbar.
+    if (contentHeight > maxHeight) {
+      editor.style.overflowY = "auto";
+    }
+  };
+
+  const scheduleEditorResize = () => {
+    requestAnimationFrame(() => {
+      autoResizeEditor();
+    });
+  };
+
+  // Recalculate the maximum composer height when the browser/window size changes.
+  useEffect(() => {
+    const handleEditorViewportResize = () => scheduleEditorResize();
+
+    window.addEventListener("resize", handleEditorViewportResize);
+
+    return () => {
+      window.removeEventListener("resize", handleEditorViewportResize);
+    };
+  }, []);
+
   const getFileNameFromUrl = (url) => {
     const rawUrl = String(url || "").trim();
     if (!rawUrl) return "";
@@ -1976,11 +2027,16 @@ export default function Teligram() {
       : savedRangeRef.current;
     if (!range || !range.collapsed) return false;
 
+    const typingColor = normalizeTextColor(
+      formats.color || selectedTextColorRef.current || "#111111"
+    );
+
     const marker = document.createElement("span");
     marker.dataset.typingMarker = "true";
     marker.style.fontWeight = formats.bold ? "900" : "400";
     marker.style.textDecoration = formats.underline ? "underline" : "none";
-    marker.style.color = formats.color || "";
+    marker.style.setProperty("color", typingColor, "important");
+    marker.style.setProperty("-webkit-text-fill-color", typingColor, "important");
     marker.textContent = "\u200B";
     range.insertNode(marker);
 
@@ -2054,52 +2110,63 @@ export default function Teligram() {
 
   const applySelectedFormat = (type, value = null) => {
     if (!editorRef.current) return;
+
     editorRef.current.focus();
     restoreSelection();
 
     try {
       const selection = window.getSelection();
-      const range = selection && selection.rangeCount ? selection.getRangeAt(0) : null;
+      const range = selection && selection.rangeCount
+        ? selection.getRangeAt(0)
+        : null;
       const hasSelection = Boolean(range && !range.collapsed);
+      const currentTypingColor = normalizeTextColor(
+        selectedTextColorRef.current || "#111111"
+      );
 
       if (type === "bold" || type === "underline") {
-        if (hasSelection) {
-          const commandWasActive = Boolean(document.queryCommandState(type));
-          document.execCommand("styleWithCSS", false, true);
-          document.execCommand(type, false, null);
-          const next = {
-            ...typingFormatsRef.current,
-            [type]: !commandWasActive,
-          };
-          typingFormatsRef.current = next;
-          setActiveFormats(next);
-          saveSelection();
-        } else {
-          const next = {
-            ...typingFormatsRef.current,
-            [type]: !typingFormatsRef.current[type],
-          };
+        const next = {
+          ...typingFormatsRef.current,
+          [type]: hasSelection
+            ? !Boolean(document.queryCommandState(type))
+            : !typingFormatsRef.current[type],
+          color: currentTypingColor,
+        };
 
-          // Use the browser's native, independent typing state. The previous
-          // zero-width marker could inherit the other format and make Bold and
-          // Underline appear to toggle together.
-          document.execCommand("styleWithCSS", false, true);
-          const commandIsActive = Boolean(document.queryCommandState(type));
-          let nativeCommandApplied = true;
+        document.execCommand("styleWithCSS", false, true);
 
-          if (commandIsActive !== next[type]) {
-            nativeCommandApplied = document.execCommand(type, false, null);
-          }
+        const commandIsActive = Boolean(document.queryCommandState(type));
+        let nativeCommandApplied = true;
 
-          typingFormatsRef.current = next;
-          setActiveFormats(next);
+        if (commandIsActive !== next[type]) {
+          nativeCommandApplied = document.execCommand(type, false, null);
+        }
 
-          // Keep a fallback only for browsers that do not support native
-          // contentEditable formatting commands.
-          if (!nativeCommandApplied) {
+        typingFormatsRef.current = next;
+        setActiveFormats({
+          bold: Boolean(next.bold),
+          underline: Boolean(next.underline),
+        });
+
+        if (!hasSelection) {
+          // Preserve the user's current typing color after Bold/Underline changes.
+          const colorApplied = document.execCommand(
+            "foreColor",
+            false,
+            currentTypingColor
+          );
+
+          setComposerTextColor(currentTypingColor);
+
+          if (!nativeCommandApplied || !colorApplied) {
             syncTypingMarker(next);
           }
+        } else {
+          // Do not recolor the selected range. Existing inline color must stay.
+          saveSelection();
         }
+
+        return;
       }
 
       if (type === "color") {
@@ -2108,24 +2175,68 @@ export default function Teligram() {
         const currentRange = currentSelection && currentSelection.rangeCount > 0
           ? currentSelection.getRangeAt(0)
           : savedRangeRef.current;
+
         if (currentRange && !currentRange.collapsed) {
+          // Only the selected characters change color.
           applyInlineColorToRange(currentRange.cloneRange(), finalColor);
-          // Selection formatting must not turn the whole composer red.
-          setColorModeActive(false);
-          setComposerTextColor("#111111");
-          saveSelection();
-        } else {
-          // No selection: color becomes the explicit typing color from the caret onward.
-          setComposerTextColor(finalColor);
+
+          selectedTextColorRef.current = finalColor;
+          setTextColor(finalColor);
           setColorModeActive(true);
-          setTypingColorAtCaret(finalColor);
+
+          const appliedSelection = window.getSelection();
+          const appliedRange = appliedSelection?.rangeCount
+            ? appliedSelection.getRangeAt(0)
+            : null;
+
+          if (appliedRange) {
+            // Keep the caret after the selected text so future typing uses
+            // the newly selected color.
+            appliedRange.collapse(false);
+            appliedSelection.removeAllRanges();
+            appliedSelection.addRange(appliedRange);
+            savedRangeRef.current = appliedRange.cloneRange();
+          }
+
+          typingFormatsRef.current = {
+            ...typingFormatsRef.current,
+            color: finalColor,
+          };
+
+          setComposerTextColor(finalColor);
+          document.execCommand("styleWithCSS", false, true);
+          document.execCommand("foreColor", false, finalColor);
+        } else {
+          // No selection: only future typing changes color.
+          selectedTextColorRef.current = finalColor;
+          setTextColor(finalColor);
+          setColorModeActive(true);
+
+          typingFormatsRef.current = {
+            ...typingFormatsRef.current,
+            color: finalColor,
+          };
+
+          setComposerTextColor(finalColor);
+          document.execCommand("styleWithCSS", false, true);
+
+          const nativeTypingColorApplied = document.execCommand(
+            "foreColor",
+            false,
+            finalColor
+          );
+
+          if (!nativeTypingColorApplied) {
+            setTypingColorAtCaret(finalColor, savedRangeRef.current);
+          }
         }
+
+        saveSelection();
       }
     } catch (error) {
       console.error("Format apply error:", error);
     }
   };
-
   const applyBold = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -2296,7 +2407,10 @@ export default function Teligram() {
   };
 
   const resetForm = ({ keepPreviewImage = false } = {}) => {
+    selectedTextColorRef.current = "#111111";
+    typingFormatsRef.current = { bold: false, underline: false, color: "#111111" };
     setComposerTextColor("#111111");
+    setColorModeActive(false);
     if (!keepPreviewImage) {
       previewImages.forEach((url) => {
         if (url.startsWith("blob:")) URL.revokeObjectURL(url);
@@ -2316,13 +2430,14 @@ export default function Teligram() {
     setRemoveOldFile(false);
     setEditingNoteId(null);
     setComposerMode("message");
-    typingFormatsRef.current = { bold: false, underline: false };
+    typingFormatsRef.current = { bold: false, underline: false, color: "#111111" };
     setActiveFormats({ bold: false, underline: false });
     setActiveMenuId(null);
     savedRangeRef.current = null;
 
     if (editorRef.current) {
       editorRef.current.innerHTML = "";
+      scheduleEditorResize();
     }
 
     try {
@@ -2835,6 +2950,7 @@ export default function Teligram() {
 
     if (editorRef.current) {
       editorRef.current.innerHTML = normalizeEditorHtml(note.content_html || "");
+      scheduleEditorResize();
     }
 
     requestAnimationFrame(() => {
@@ -2862,6 +2978,7 @@ export default function Teligram() {
 
     if (editorRef.current) {
       editorRef.current.innerHTML = normalizeEditorHtml(note.content_html || "");
+      scheduleEditorResize();
       placeCaretAtEnd();
     }
 
@@ -2889,6 +3006,7 @@ export default function Teligram() {
 
     if (editorRef.current) {
       editorRef.current.innerHTML = normalizeEditorHtml(note.content_html || "");
+      scheduleEditorResize();
     }
 
     setTimeout(() => {
@@ -2917,6 +3035,7 @@ export default function Teligram() {
 
     if (editorRef.current) {
       editorRef.current.innerHTML = normalizeEditorHtml(note.content_html || "");
+      scheduleEditorResize();
       placeCaretAtEnd();
     }
 
@@ -2946,6 +3065,7 @@ export default function Teligram() {
 
     if (editorRef.current) {
       editorRef.current.innerHTML = normalizeEditorHtml(note.content_html || "");
+      scheduleEditorResize();
     }
 
     setTimeout(() => {
@@ -4067,6 +4187,11 @@ export default function Teligram() {
                         title="Text color"
                         style={{ "--pickedColor": textColor }}
                       >
+                        <span
+                          className="color-swatch"
+                          style={{ backgroundColor: textColor }}
+                          aria-hidden="true"
+                        />
                         <img src={COLOR_ICON} alt="color" className="tool-icon color-icon" />
                       </button>
 
@@ -4127,7 +4252,7 @@ export default function Teligram() {
                     ref={editorRef}
                     className="text-input"
                     contentEditable
-                    data-placeholder={composerMode === "title" ? "Type title..." : composerMode === "image-update" ? "Select new image, then tap send" : composerMode === "image-caption" ? "Add image description..." : composerMode === "file-update" ? "Select new file, then tap send" : composerMode === "file-caption" ? "Add file description..." : "Enter text..."}
+                    data-placeholder={composerMode === "title" ? "Type title..." : composerMode === "image-update" ? "Select new image, then tap send" : composerMode === "image-caption" ? "Add image description..." : composerMode === "file-update" ? "Select new file, then tap send" : composerMode === "file-caption" ? "Add file description..." : "Enter text here"}
                     style={{ "--composerColor": "#111111", "--composerCaretColor": textColor, caretColor: textColor }}
                     onFocus={saveSelection}
                     onMouseUp={saveSelection}
@@ -4138,16 +4263,20 @@ export default function Teligram() {
                       // browser selection state here, because mobile toolbar
                       // taps can make queryCommandState() temporarily false.
                       saveSelection();
-                    }}
-                    onInput={saveSelection}
-                    onBlur={saveSelection}
-                    onPaste={(e) => {
-                      e.preventDefault();
-                      const text = e.clipboardData.getData("text/plain");
-                      document.execCommand("insertText", false, text);
-                      saveSelection();
-                    }}
-                  ></div>
+                     }}
+                     onInput={() => {
+                       saveSelection();
+                       autoResizeEditor();
+                     }}
+                     onBlur={saveSelection}
+                     onPaste={(e) => {
+                       e.preventDefault();
+                       const text = e.clipboardData.getData("text/plain");
+                       document.execCommand("insertText", false, text);
+                       saveSelection();
+                       autoResizeEditor();
+                     }}
+                   ></div>
 
                   <button
                     className="send-btn"
@@ -4155,7 +4284,7 @@ export default function Teligram() {
                     disabled={loading}
                     title="Send"
                   >
-                    {loading ? "…" : editingNoteId ? "✓" : "➤"}
+                    {loading ? <span className="send-spinner" aria-label="Sending" /> : editingNoteId ? "✓" : "➤"}
                   </button>
                 </div>
               </div>
@@ -4891,10 +5020,26 @@ export default function Teligram() {
         }
 
         .color-tool {
+          position: relative;
           color: var(--pickedColor);
           border-bottom: 3px solid var(--pickedColor);
           font-family: Georgia, serif;
           font-size: 15px;
+          gap: 4px;
+        }
+
+        .color-tool:hover {
+          border-color: var(--pickedColor);
+          background: #f8fafc;
+        }
+
+        .color-swatch {
+          width: 10px;
+          height: 10px;
+          border-radius: 999px;
+          border: 2px solid #ffffff;
+          box-shadow: 0 0 0 1px rgba(15,23,42,0.16);
+          flex-shrink: 0;
         }
 
         .send-btn {
@@ -4912,6 +5057,30 @@ export default function Teligram() {
           cursor: pointer;
           flex-shrink: 0;
           box-shadow: 0 8px 18px rgba(14,165,233,0.28);
+          transition: transform 0.12s ease, box-shadow 0.18s ease, filter 0.18s ease;
+        }
+
+        .send-btn:hover:not(:disabled) {
+          filter: brightness(1.04);
+          box-shadow: 0 10px 22px rgba(14,165,233,0.34);
+        }
+
+        .send-btn:active:not(:disabled) {
+          transform: translateY(1px) scale(0.95);
+          box-shadow: 0 4px 10px rgba(14,165,233,0.24);
+        }
+
+        .send-spinner {
+          width: 15px;
+          height: 15px;
+          border: 2px solid rgba(255,255,255,0.45);
+          border-top-color: #ffffff;
+          border-radius: 50%;
+          animation: sendSpin 0.72s linear infinite;
+        }
+
+        @keyframes sendSpin {
+          to { transform: rotate(360deg); }
         }
 
         .send-btn:disabled {
@@ -4922,8 +5091,8 @@ export default function Teligram() {
         .text-input {
           width: 100%;
           min-height: 42px;
-          max-height: 108px;
-          overflow-y: auto;
+          max-height: none;
+          overflow-y: hidden;
           overflow-x: hidden;
           outline: none;
           border: 1px solid #dbe4f0;
@@ -4936,7 +5105,10 @@ export default function Teligram() {
           font-weight: 650;
           word-break: break-word;
           overflow-wrap: anywhere;
+          white-space: pre-wrap;
+          box-sizing: border-box;
           box-shadow: inset 0 1px 0 rgba(255,255,255,0.9);
+          transition: border-color 0.18s ease, box-shadow 0.18s ease, height 0.12s ease;
         }
 
         .text-input:focus {
@@ -12022,6 +12194,44 @@ export default function Teligram() {
           letter-spacing: -.2px !important;
         }
 
+        /* =========================================================
+           AUTO-GROW COMPOSER
+           - Starts compact
+           - Grows automatically as text wraps / new lines are added
+           - Shrinks automatically when text is deleted
+           - Scrolls only after the maximum height is reached
+        ========================================================= */
+        .composer-input-row {
+          align-items: flex-end !important;
+        }
+
+        .composer-input-row .text-input {
+          min-height: 45px !important;
+          max-height: none !important;
+          height: 45px;
+          overflow-y: hidden;
+          overflow-x: hidden;
+          box-sizing: border-box !important;
+          white-space: pre-wrap !important;
+          overflow-wrap: anywhere !important;
+          word-break: break-word !important;
+          resize: none !important;
+          transition: height 0.08s ease !important;
+        }
+
+        .composer-input-row .text-input::-webkit-scrollbar {
+          width: 5px;
+        }
+
+        .composer-input-row .text-input::-webkit-scrollbar-thumb {
+          background: rgba(100, 116, 139, 0.35);
+          border-radius: 999px;
+        }
+
+        .composer-input-row .text-input::-webkit-scrollbar-track {
+          background: transparent;
+        }
+
         .message-title-text {
           font-weight: 500 !important;
           color: var(--noteColor, #111111) !important;
@@ -12729,7 +12939,7 @@ export default function Teligram() {
           .composer-tools-top { gap: 4px !important; padding: 4px !important; }
           .composer-tools-popover .tool-btn, .tool-btn { width: 34px !important; height: 34px !important; min-width: 34px !important; }
           .composer-input-row { gap: 5px !important; }
-          .composer-input-row .text-input { min-height: 38px !important; max-height: 82px !important; padding: 8px 10px !important; }
+          .composer-input-row .text-input { min-height: 38px !important; max-height: none !important; padding: 8px 10px !important; }
           .send-btn { width: 40px !important; height: 40px !important; }
         }
 
@@ -12943,8 +13153,21 @@ export default function Teligram() {
           background: transparent !important;
         }
 
+        /* Composer: grow until 65vh, then scroll internally. */
+        .composer-input-row .text-input {
+          min-height: 45px !important;
+          max-height: none !important;
+          box-sizing: border-box !important;
+          padding: 12px 14px !important;
+          overflow-x: hidden !important;
+          white-space: pre-wrap !important;
+          overflow-wrap: anywhere !important;
+          word-break: break-word !important;
+        }
+
       `}
-    </style>
+    
+</style>
     </div>
   );
 }
