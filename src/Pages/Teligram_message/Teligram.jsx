@@ -135,6 +135,7 @@ export default function Teligram() {
   const [searchText, setSearchText] = useState("");
   const [loading, setLoading] = useState(false);
   const [manualRefreshing, setManualRefreshing] = useState(false);
+  const [mobileViewportHeight, setMobileViewportHeight] = useState(null);
 
   const [toast, setToast] = useState({
     show: false,
@@ -152,6 +153,30 @@ export default function Teligram() {
   useEffect(() => {
     currentDeviceIdRef.current = getCurrentDeviceId();
     loadSelectedChannel();
+  }, []);
+
+  // Mobile browsers do not always shrink 100vh when the system keyboard
+  // opens. Use the visual viewport so the composer remains above it.
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const updateMobileViewport = () => {
+      if (window.innerWidth > 767) {
+        setMobileViewportHeight(null);
+        return;
+      }
+      setMobileViewportHeight(Math.round(viewport?.height || window.innerHeight));
+    };
+
+    updateMobileViewport();
+    window.addEventListener("resize", updateMobileViewport);
+    viewport?.addEventListener("resize", updateMobileViewport);
+    viewport?.addEventListener("scroll", updateMobileViewport);
+
+    return () => {
+      window.removeEventListener("resize", updateMobileViewport);
+      viewport?.removeEventListener("resize", updateMobileViewport);
+      viewport?.removeEventListener("scroll", updateMobileViewport);
+    };
   }, []);
 
   useEffect(() => {
@@ -727,9 +752,11 @@ export default function Teligram() {
     const minHeight = parseFloat(computed.minHeight) || 45;
 
     // Keep enough of the screen available for the chat itself.
+    const visibleViewportHeight = window.visualViewport?.height || window.innerHeight;
+    const keyboardOpen = visibleViewportHeight < window.innerHeight * 0.82;
     const maxHeight = Math.max(
       minHeight,
-      Math.floor(window.innerHeight * 0.65)
+      Math.floor(visibleViewportHeight * (keyboardOpen ? 0.42 : 0.65))
     );
 
     const contentHeight = editor.scrollHeight;
@@ -13294,6 +13321,11 @@ export default function Teligram() {
           border-color:#ea580c !important;
           box-shadow:0 8px 24px rgba(236,72,153,.46),0 0 0 2px rgba(249,115,22,.25) !important;
           color:#fff !important;
+        }
+        /* The color tool's underline is the actual selected text color. */
+        .composer-tools-popover .color-tool.active::before {
+          background: var(--pickedColor, #111111) !important;
+          box-shadow: 0 2px 8px var(--pickedColor, #111111) !important;
         }
         .composer-tools-popover .image-tool.active {
           background: linear-gradient(135deg,#06b6d4,#22c55e) !important;
