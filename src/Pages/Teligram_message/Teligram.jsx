@@ -4192,11 +4192,6 @@ export default function Teligram() {
                         title="Text color"
                         style={{ "--pickedColor": textColor }}
                       >
-                        <span
-                          className="color-swatch"
-                          style={{ backgroundColor: textColor }}
-                          aria-hidden="true"
-                        />
                         <img src={COLOR_SELECT_ICON} alt="Text color" className="tool-icon color-icon color-select-icon" />
                       </button>
 
@@ -11710,6 +11705,18 @@ export default function Teligram() {
           transform: scale(0.94) !important;
         }
 
+        .composer-tools-popover .tool-btn.active::before {
+          content: "" !important;
+          position: absolute !important;
+          top: 4px !important;
+          right: 4px !important;
+          width: 6px !important;
+          height: 6px !important;
+          border-radius: 999px !important;
+          background: #0ea5e9 !important;
+          box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.14) !important;
+        }
+
         .header-brand-row {
           transform-origin: center center !important;
           transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease !important;
@@ -13159,251 +13166,86 @@ export default function Teligram() {
         }
 
 
-        /* ---------------------------------------------------------
-           Composer icon buttons: supplied PNG icons + professional
-           hover/active/press states. No application logic changed.
-        ---------------------------------------------------------- */
+        /* Final vibrant toolbar states - visual only */
+        .composer-tools-popover .tool-btn .tool-icon {
+          width: 23px !important;
+          height: 23px !important;
+          object-fit: contain !important;
+          display: block !important;
+          pointer-events: none !important;
+        }
         .composer-tools-popover .tool-btn {
-          position: relative !important;
-          display: inline-flex !important;
-          align-items: center !important;
-          justify-content: center !important;
-          overflow: visible !important;
-          transition:
-            transform .14s ease,
-            box-shadow .18s ease,
-            background .18s ease,
-            border-color .18s ease,
-            filter .18s ease !important;
+          transition: transform .12s ease, box-shadow .16s ease, background .16s ease, border-color .16s ease !important;
           -webkit-tap-highlight-color: transparent !important;
         }
-
-        .composer-tools-popover .tool-btn .tool-icon {
-          display: block !important;
-          width: 19px !important;
-          height: 19px !important;
-          object-fit: contain !important;
-          pointer-events: none !important;
-          transition: transform .14s ease, filter .18s ease !important;
-        }
-
         .composer-tools-popover .tool-btn:hover:not(:disabled) {
-          transform: translateY(-1px) !important;
-          filter: saturate(1.08) !important;
-          box-shadow: 0 8px 18px rgba(15, 23, 42, .12) !important;
+          transform: translateY(-2px) scale(1.04) !important;
+          box-shadow: 0 8px 20px rgba(15,23,42,.18) !important;
         }
-
         .composer-tools-popover .tool-btn:active:not(:disabled) {
           transform: translateY(1px) scale(.94) !important;
-          box-shadow: 0 3px 8px rgba(15, 23, 42, .12) !important;
         }
-
-        .composer-tools-popover .tool-btn:focus-visible {
-          outline: 2px solid rgba(14, 165, 233, .28) !important;
-          outline-offset: 2px !important;
-        }
-
-        /* Bold */
-        .composer-tools-popover .format-btn.active:has(.bold-select-icon) {
-          background: linear-gradient(145deg, #dbeafe, #bfdbfe) !important;
-          border-color: #60a5fa !important;
-          box-shadow:
-            0 8px 20px rgba(37, 99, 235, .22),
-            inset 0 1px 0 rgba(255,255,255,.9) !important;
-        }
-
-        /* Underline */
-        .composer-tools-popover .format-btn.active:has(.underline-select-icon) {
-          background: linear-gradient(145deg, #ede9fe, #ddd6fe) !important;
-          border-color: #a78bfa !important;
-          box-shadow:
-            0 8px 20px rgba(124, 58, 237, .20),
-            inset 0 1px 0 rgba(255,255,255,.9) !important;
-        }
-
-        /* Color */
-        .composer-tools-popover .color-tool.active {
-          background: linear-gradient(145deg, #ecfeff, #dbeafe) !important;
-          border-color: #38bdf8 !important;
-          box-shadow:
-            0 8px 20px rgba(14, 165, 233, .20),
-            inset 0 1px 0 rgba(255,255,255,.92) !important;
-        }
-
-        /* Image */
-        .composer-tools-popover .image-tool.active {
-          background: linear-gradient(145deg, #ecfeff, #d1fae5) !important;
-          border-color: #34d399 !important;
-          box-shadow:
-            0 8px 20px rgba(16, 185, 129, .20),
-            inset 0 1px 0 rgba(255,255,255,.92) !important;
-        }
-
-        /* File */
-        .composer-tools-popover .file-tool.active {
-          background: linear-gradient(145deg, #fff7ed, #ffedd5) !important;
-          border-color: #fb923c !important;
-          box-shadow:
-            0 8px 20px rgba(249, 115, 22, .20),
-            inset 0 1px 0 rgba(255,255,255,.92) !important;
-        }
-
-        /* Tiny active indicator without recoloring the PNG itself. */
         .composer-tools-popover .format-btn.active {
-          color: #2563eb !important;
+          background: linear-gradient(135deg,#2563eb,#38bdf8) !important;
+          border-color: #1d4ed8 !important;
+          box-shadow: 0 8px 24px rgba(37,99,235,.48), 0 0 0 2px rgba(56,189,248,.28) !important;
+          color:#fff !important;
         }
-
+        .composer-tools-popover .format-btn.active:nth-of-type(2) {
+          background: linear-gradient(135deg,#7c3aed,#ec4899) !important;
+          border-color:#7c3aed !important;
+          box-shadow:0 8px 24px rgba(124,58,237,.48),0 0 0 2px rgba(236,72,153,.24) !important;
+        }
         .composer-tools-popover .color-tool.active {
-          color: #0284c7 !important;
+          background: linear-gradient(135deg,#f97316,#ec4899) !important;
+          border-color:#ea580c !important;
+          box-shadow:0 8px 24px rgba(236,72,153,.46),0 0 0 2px rgba(249,115,22,.25) !important;
+          color:#fff !important;
         }
-
         .composer-tools-popover .image-tool.active {
-          color: #059669 !important;
+          background: linear-gradient(135deg,#06b6d4,#22c55e) !important;
+          border-color:#0891b2 !important;
+          box-shadow:0 8px 24px rgba(6,182,212,.44),0 0 0 2px rgba(34,197,94,.22) !important;
         }
-
         .composer-tools-popover .file-tool.active {
-          color: #ea580c !important;
+          background: linear-gradient(135deg,#f59e0b,#f97316) !important;
+          border-color:#ea580c !important;
+          box-shadow:0 8px 24px rgba(249,115,22,.46),0 0 0 2px rgba(245,158,11,.24) !important;
         }
-
-        /* Keep the supplied PNG colors visible in every state. */
-        .composer-tools-popover .format-icon,
-        .composer-tools-popover .color-select-icon,
-        .composer-tools-popover .image-select-icon,
-        .composer-tools-popover .file-select-icon {
-          opacity: 1 !important;
-          filter: none !important;
-        }
-
-        @media (max-width: 480px) {
-          .composer-tools-popover .tool-btn .tool-icon {
-            width: 18px !important;
-            height: 18px !important;
-          }
-        }
-
-      
-        /* FINAL PROFESSIONAL TOOLBAR STATE
-           No generic active dots. Active buttons use a vibrant focus surface
-           plus a bottom indicator line so users can clearly see the state. */
-        .composer-tools-popover .tool-btn {
-          position: relative !important;
-          isolation: isolate !important;
-          transform: translateZ(0);
-          transition:
-            transform .13s cubic-bezier(.2,.8,.2,1),
-            box-shadow .18s ease,
-            border-color .18s ease,
-            background .18s ease,
-            filter .18s ease !important;
-          -webkit-tap-highlight-color: transparent !important;
-          touch-action: manipulation !important;
-        }
-
-        .composer-tools-popover .tool-btn:hover:not(:disabled) {
-          transform: translateY(-1px) scale(1.02) !important;
-          filter: saturate(1.12) brightness(1.02) !important;
-        }
-
-        .composer-tools-popover .tool-btn:active:not(:disabled) {
-          transform: translateY(1px) scale(.92) !important;
-          transition-duration: .06s !important;
-        }
-
-        .composer-tools-popover .tool-btn:focus-visible {
-          outline: 3px solid rgba(14, 165, 233, .28) !important;
-          outline-offset: 2px !important;
-        }
-
-        .composer-tools-popover .tool-btn.active {
-          filter: saturate(1.14) brightness(1.02) !important;
-        }
-
         .composer-tools-popover .tool-btn.active::before {
-          content: "" !important;
-          position: absolute !important;
-          top: auto !important;
-          right: auto !important;
-          left: 50% !important;
-          bottom: -5px !important;
-          width: 22px !important;
-          height: 3px !important;
-          border: 0 !important;
-          border-radius: 999px !important;
-          transform: translateX(-50%) !important;
-          background: currentColor !important;
-          opacity: 1 !important;
-          box-shadow: 0 2px 8px rgba(15, 23, 42, .18) !important;
-          pointer-events: none !important;
-          z-index: 2 !important;
+          content:"" !important;
+          position:absolute !important;
+          left:7px !important; right:7px !important; bottom:-4px !important;
+          height:3px !important; border-radius:999px !important;
+          background:currentColor !important;
+          box-shadow:0 2px 8px currentColor !important;
+          opacity:1 !important; pointer-events:none !important;
         }
-
-        /* Bold — vibrant blue active state */
-        .composer-tools-popover .format-btn.active:has(.bold-select-icon) {
-          background: linear-gradient(145deg, #dbeafe 0%, #93c5fd 100%) !important;
-          border-color: #3b82f6 !important;
-          color: #1d4ed8 !important;
-          box-shadow:
-            0 9px 22px rgba(37, 99, 235, .28),
-            inset 0 1px 0 rgba(255,255,255,.96) !important;
+        .composer-tools-popover .color-tool.active::after { content:none !important; display:none !important; }
+        @media (max-width:480px) {
+          .composer-tools-popover .tool-btn .tool-icon { width:22px !important; height:22px !important; }
         }
-
-        /* Underline — vibrant violet active state */
-        .composer-tools-popover .format-btn.active:has(.underline-select-icon) {
-          background: linear-gradient(145deg, #ede9fe 0%, #c4b5fd 100%) !important;
-          border-color: #8b5cf6 !important;
-          color: #6d28d9 !important;
-          box-shadow:
-            0 9px 22px rgba(124, 58, 237, .26),
-            inset 0 1px 0 rgba(255,255,255,.96) !important;
+        .text-input:empty::before {
+          display:flex !important; align-items:center !important; justify-content:center !important;
+          width:100% !important; height:100% !important; text-align:center !important;
         }
-
-        /* Color — bright cyan/blue active state; NO round color dot */
-        .composer-tools-popover .color-tool.active {
-          background: linear-gradient(145deg, #cffafe 0%, #93c5fd 100%) !important;
-          border-color: #06b6d4 !important;
-          color: #0369a1 !important;
-          box-shadow:
-            0 9px 22px rgba(14, 165, 233, .28),
-            inset 0 1px 0 rgba(255,255,255,.96) !important;
+        /* Small toolbar spacing; does not alter any existing behavior. */
+        .composer-tools-popover {
+          gap: 6px !important;
         }
-
-        /* Image — vibrant emerald active state */
-        .composer-tools-popover .image-tool.active {
-          background: linear-gradient(145deg, #d1fae5 0%, #86efac 100%) !important;
-          border-color: #10b981 !important;
-          color: #047857 !important;
-          box-shadow:
-            0 9px 22px rgba(16, 185, 129, .25),
-            inset 0 1px 0 rgba(255,255,255,.96) !important;
+        .composer-tools-popover .tool-btn {
+          margin: 0 !important;
+          flex: 0 0 auto !important;
         }
-
-        /* File — vibrant amber/orange active state */
-        .composer-tools-popover .file-tool.active {
-          background: linear-gradient(145deg, #ffedd5 0%, #fdba74 100%) !important;
-          border-color: #f97316 !important;
-          color: #c2410c !important;
-          box-shadow:
-            0 9px 22px rgba(249, 115, 22, .26),
-            inset 0 1px 0 rgba(255,255,255,.96) !important;
-        }
-
-        /* Keep supplied PNG icon colors fully visible in all states. */
-        .composer-tools-popover .tool-icon {
-          opacity: 1 !important;
-          filter: none !important;
-          transition: transform .13s ease, filter .18s ease !important;
-        }
-
-        .composer-tools-popover .tool-btn:hover:not(:disabled) .tool-icon {
-          transform: scale(1.06) !important;
-        }
-
-        .composer-tools-popover .tool-btn:active:not(:disabled) .tool-icon {
-          transform: scale(.94) !important;
-        }
-
-        .composer-tools-popover .tool-btn.active .tool-icon {
-          transform: scale(1.03) !important;
+        @media (max-width: 480px) {
+          .composer-tools-popover {
+            gap: 5px !important;
+            overflow-x: auto !important;
+            scrollbar-width: none !important;
+          }
+          .composer-tools-popover::-webkit-scrollbar {
+            display: none !important;
+          }
         }
 
       `}
