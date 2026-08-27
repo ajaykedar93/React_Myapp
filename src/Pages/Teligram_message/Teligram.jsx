@@ -134,7 +134,6 @@ export default function Teligram() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [loading, setLoading] = useState(false);
-  const [sendingMessage, setSendingMessage] = useState(false);
   const [manualRefreshing, setManualRefreshing] = useState(false);
 
   const [toast, setToast] = useState({
@@ -716,6 +715,9 @@ export default function Teligram() {
   const autoResizeEditor = () => {
     const editor = editorRef.current;
     if (!editor) return;
+    // Changing height can reset a contentEditable's internal scroll position.
+    // Preserve it so a user editing line 3 (or any chosen word) is not moved.
+    const previousScrollTop = editor.scrollTop;
 
     // Reset first so deleting text also shrinks the composer.
     editor.style.height = "auto";
@@ -742,11 +744,41 @@ export default function Teligram() {
     if (contentHeight > maxHeight) {
       editor.style.overflowY = "auto";
     }
+
+    editor.scrollTop = previousScrollTop;
+  };
+
+  // Keep the caret (not the start/end of the document) in view while typing.
+  // This is important when editing a word in the middle of a long message.
+  const keepComposerCaretVisible = () => {
+    const editor = editorRef.current;
+    const selection = window.getSelection();
+    if (!editor || !selection?.rangeCount) return;
+
+    const range = selection.getRangeAt(0);
+    if (!editor.contains(range.commonAncestorContainer)) return;
+    const caret = range.cloneRange();
+    caret.collapse(false);
+    // Some browsers return a zero-sized bounding box for a collapsed range;
+    // client rects still contain the real line position in that case.
+    const caretBox = caret.getClientRects()[0] || caret.getBoundingClientRect();
+    const editorBox = editor.getBoundingClientRect();
+    const lineHeight = parseFloat(window.getComputedStyle(editor).lineHeight) || 20;
+    const caretTop = caretBox.top;
+    const caretBottom = caretBox.height ? caretBox.bottom : caretTop + lineHeight;
+    if (!Number.isFinite(caretTop) || !Number.isFinite(caretBottom)) return;
+
+    if (caretBottom > editorBox.bottom - 8) {
+      editor.scrollTop += caretBottom - editorBox.bottom + 12;
+    } else if (caretTop < editorBox.top + 8) {
+      editor.scrollTop -= editorBox.top + 8 - caretTop;
+    }
   };
 
   const scheduleEditorResize = () => {
     requestAnimationFrame(() => {
       autoResizeEditor();
+      keepComposerCaretVisible();
     });
   };
 
@@ -2468,6 +2500,41 @@ export default function Teligram() {
     }
   };
 
+  const markDeliveryFailed = (tempId, message, previousNote = null) => {
+    setNotes((prev) =>
+      prev.map((note) =>
+        String(note.note_id) === String(tempId)
+          ? {
+              ...note,
+              delivery_status: "failed",
+              delivery_error: message || "Unable to send. Try again.",
+              previous_note: previousNote,
+              is_temp: true,
+            }
+          : note
+      )
+    );
+  };
+
+  const restoreFailedNote = (note) => {
+    if (note?.previous_note) {
+      setNotes((prev) => prev.map((item) =>
+        String(item.note_id) === String(note.note_id) ? note.previous_note : item
+      ));
+    } else {
+      setNotes((prev) => prev.filter((item) => String(item.note_id) !== String(note?.note_id)));
+    }
+  };
+
+  const revealLatestMessage = () => {
+    // This scrolls only the chat list, never the page/composer.  The local
+    // optimistic card is therefore visible before the network request ends.
+    requestAnimationFrame(() => {
+      const chatBody = chatBodyRef.current;
+      if (chatBody) chatBody.scrollTop = chatBody.scrollHeight;
+    });
+  };
+
   const saveNote = async () => {
     if (!selectedChannel?.channel_id) {
       showToast("Please open channel first", "error");
@@ -2495,7 +2562,6 @@ export default function Teligram() {
     const currentTextColor = "#111111";
     const currentDeviceId = getCurrentDeviceId();
     const oldEditingId = editingNoteId;
-    const oldNotes = notes;
     const now = new Date().toISOString();
     const tempId = oldEditingId || `temp-${Date.now()}`;
 
@@ -2538,6 +2604,8 @@ export default function Teligram() {
       created_at: oldEditingId ? oldNote?.created_at || now : now,
       updated_at: now,
       is_temp: true,
+      delivery_status: "uploading",
+      delivery_error: "",
     };
 
     if (oldEditingId) {
@@ -2551,9 +2619,9 @@ export default function Teligram() {
       );
     } else {
       setNotes((prev) => [...prev, optimisticNote]);
+      revealLatestMessage();
     }
 
-    setSendingMessage(true);
     // Keep the local image URL alive so its optimistic View button works while
     // the upload continues in the background.
     resetForm({ keepPreviewImage: Boolean(currentPreviewImage) });
@@ -2667,10 +2735,17 @@ export default function Teligram() {
         } catch (error) {
           console.error("Multiple image upload error:", error);
 
-          // Keep already-uploaded real notes and remove only the temporary preview.
+          // Keep the same optimistic card available for recovery instead of
+          // silently dropping the images/text that did not upload.
           setNotes((prev) => [
             ...prev.filter((note) => String(note.note_id) !== String(tempId)),
             ...uploadedNotes,
+            {
+              ...optimisticNote,
+              delivery_status: "failed",
+              delivery_error: error.message || "Image upload failed",
+              previous_note: null,
+            },
           ]);
 
           showToast(error.message || "Image upload failed", "error");
@@ -2713,8 +2788,9 @@ export default function Teligram() {
       const data = await res.json();
 
       if (!res.ok) {
-        showToast(data.message || "Action failed", "error");
-        setNotes(oldNotes);
+        const errorMessage = data.message || "Action failed";
+        showToast(errorMessage, "error");
+        markDeliveryFailed(tempId, errorMessage, oldNote);
 
         if (res.status === 403 && !channelAccessGrantedRef.current) {
           setChannelUnlocked(false);
@@ -2794,6 +2870,8 @@ export default function Teligram() {
         created_at: backendNote.created_at || optimisticNote.created_at,
         updated_at: backendNote.updated_at || new Date().toISOString(),
         is_temp: false,
+        delivery_status: "sent",
+        delivery_error: "",
       };
 
       if (oldEditingId) {
@@ -2834,15 +2912,13 @@ export default function Teligram() {
       showToast(oldEditingId ? "Message updated" : "Message sent", "success");
     } catch (error) {
       console.error("Save note error:", error);
-      showToast("Server error", "error");
-      setNotes(oldNotes);
-      if (currentPreviewImage?.startsWith("blob:")) {
-        URL.revokeObjectURL(currentPreviewImage);
-      }
+      const errorMessage = error.message || "Server error";
+      showToast(errorMessage, "error");
+      markDeliveryFailed(tempId, errorMessage, oldNote);
+      // Keep the local preview alive so the failed card is not blank.
     } finally {
       isSavingNoteRef.current = false;
       setLoading(false);
-      setSendingMessage(false);
     }
   };
 
@@ -3796,7 +3872,12 @@ export default function Teligram() {
 
                           {hasImage && (
                             <div className={`image-message-wrap ${hasText ? "with-description" : ""}`}>
-                              {inlineImageStates[String(note.note_id)] === "loaded" ? (
+                              {note.delivery_status === "uploading" ? (
+                                <div className="upload-image-preview">
+                                  <img src={getNoteImageUrl(note)} alt="Uploading preview" className="message-image" />
+                                  <span className="image-spinner" aria-label="Uploading image" />
+                                </div>
+                              ) : inlineImageStates[String(note.note_id)] === "loaded" ? (
                                 <div className="whatsapp-image-frame">
                                   <div className="message-image-grid">
                                     {getNoteImageUrls(note).map((imageUrl, imageIndex) => (
@@ -3916,6 +3997,21 @@ export default function Teligram() {
                           <div className={`message-time ${note.is_temp ? "message-time-temp" : ""}`}>
                             {formatIndiaTimeOnly(messageDate)}
                           </div>
+
+                          {note.delivery_status === "uploading" && (
+                            <div className="delivery-state delivery-uploading" role="status">
+                              <span className="delivery-spinner" /> Uploading…
+                            </div>
+                          )}
+
+                          {note.delivery_status === "failed" && (
+                            <div className="delivery-state delivery-failed" role="alert">
+                              <span>{note.delivery_error || "Message was not sent"}</span>
+                              <button type="button" onClick={() => restoreFailedNote(note)}>
+                                {note.previous_note ? "Restore" : "Remove"}
+                              </button>
+                            </div>
+                          )}
                         </div>
 
                         {String(activeMenuId) === String(note.note_id) && !note.is_temp && (
@@ -4098,12 +4194,6 @@ export default function Teligram() {
               </div>
             )}
 
-            {sendingMessage && (
-              <div className="sending-message-indicator" role="status">
-                <span className="sending-message-dot" /> Sending message
-              </div>
-            )}
-
             {previewImages.length > 0 ? (
               <div className="preview-strip multi-image-preview-strip">
                 <div className="multi-image-preview-grid">
@@ -4267,6 +4357,9 @@ export default function Teligram() {
                      onInput={() => {
                        saveSelection();
                        autoResizeEditor();
+                       // Do not move the caret to the end: only scroll the
+                       // composer enough to reveal the line being edited.
+                       keepComposerCaretVisible();
                      }}
                      onBlur={saveSelection}
                      onPaste={(e) => {
@@ -13222,6 +13315,65 @@ export default function Teligram() {
           opacity:1 !important; pointer-events:none !important;
         }
         .composer-tools-popover .color-tool.active::after { content:none !important; display:none !important; }
+        .delivery-state {
+          display: inline-flex !important;
+          align-items: center !important;
+          gap: 6px !important;
+          margin-top: 7px !important;
+          padding: 5px 8px !important;
+          border-radius: 8px !important;
+          font: 700 11px/1.2 "Poppins", "Inter", sans-serif !important;
+        }
+        .delivery-uploading { color: #1d4ed8 !important; background: #dbeafe !important; }
+        .delivery-failed { color: #b91c1c !important; background: #fee2e2 !important; }
+        .delivery-failed button {
+          border: 0 !important;
+          border-radius: 5px !important;
+          padding: 3px 6px !important;
+          background: #b91c1c !important;
+          color: #fff !important;
+          font: inherit !important;
+          cursor: pointer !important;
+        }
+        .delivery-spinner {
+          width: 11px !important;
+          height: 11px !important;
+          border: 2px solid rgba(29,78,216,.25) !important;
+          border-top-color: #2563eb !important;
+          border-radius: 50% !important;
+          animation: imageViewerSpin .7s linear infinite !important;
+        }
+        /* Delivery confirmation is intentionally compact: the chat card is
+           already visible, so the toast must not cover the conversation. */
+        .toast.success {
+          width: auto !important;
+          min-width: 0 !important;
+          max-width: calc(100vw - 32px) !important;
+          padding: 8px 11px !important;
+          border: 1px solid #86efac !important;
+          border-radius: 10px !important;
+          background: #f0fdf4 !important;
+          box-shadow: 0 7px 20px rgba(22,163,74,.18) !important;
+        }
+        .toast.success .toast-icon { display: none !important; }
+        .toast.success p { color: #15803d !important; font-size: 11px !important; }
+        .upload-image-preview {
+          position: relative !important;
+          overflow: hidden !important;
+          border-radius: 14px !important;
+          opacity: .78 !important;
+        }
+        .upload-image-preview .message-image { display: block !important; }
+        .upload-image-preview .image-spinner {
+          position: absolute !important;
+          top: 50% !important;
+          left: 50% !important;
+          width: 30px !important;
+          height: 30px !important;
+          margin: -15px 0 0 -15px !important;
+          border-color: rgba(255,255,255,.55) !important;
+          border-top-color: #2563eb !important;
+        }
         @media (max-width:480px) {
           .composer-tools-popover .tool-btn .tool-icon { width:22px !important; height:22px !important; }
         }
