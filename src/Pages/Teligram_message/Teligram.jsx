@@ -734,6 +734,21 @@ export default function Teligram() {
   };
 
 
+  const syncMobileViewport = () => {
+    if (typeof window === "undefined") return;
+
+    const vv = window.visualViewport;
+    const height = Math.max(1, Math.round(vv?.height || window.innerHeight));
+
+    document.documentElement.style.setProperty("--nm-visual-height", `${height}px`);
+
+    const phone = document.querySelector(".nm-phone");
+    if (phone) {
+      phone.style.height = `${height}px`;
+      phone.style.maxHeight = `${height}px`;
+    }
+  };
+
   // MOBILE-SAFE COMPOSER RESIZE
   // The keyboard changes visualViewport asynchronously.  The editor must be
   // measured only after that viewport has settled, otherwise the first edit
@@ -767,11 +782,20 @@ export default function Teligram() {
 
     // The keyboard-open limit is deliberately based on the visual viewport,
     // not 100vh/dvh. This prevents the last line/border from being clipped.
-    const maxHeight = keyboardOpen
-      ? Math.max(minHeight, Math.min(420, Math.floor(visualHeight * 0.40)))
+    const editorRect = editor.getBoundingClientRect();
+    const availableFromEditor = visualHeight - editorRect.top - 10;
+
+    const viewportBasedMax = keyboardOpen
+      ? Math.max(minHeight, Math.floor(availableFromEditor))
       : Math.max(minHeight, Math.min(420, Math.floor(visualHeight * 0.52)));
 
+    const maxHeight = Math.max(minHeight, Math.min(420, viewportBasedMax));
     const nextHeight = Math.max(minHeight, Math.min(contentHeight, maxHeight));
+
+    document.documentElement.style.setProperty(
+      "--composer-editor-max-height",
+      `${maxHeight}px`
+    );
     editor.style.height = `${nextHeight}px`;
     editor.style.maxHeight = `${maxHeight}px`;
 
@@ -846,6 +870,7 @@ export default function Teligram() {
         const phone = document.querySelector(".nm-phone");
         root?.style.setProperty("--app-viewport-height", `${height}px`);
         phone?.style.setProperty("--app-viewport-height", `${height}px`);
+        syncMobileViewport();
       }
 
       if (settleTimer) clearTimeout(settleTimer);
@@ -3147,6 +3172,8 @@ export default function Teligram() {
     editor.style.overflowY = "hidden";
     editor.scrollTop = 0;
     editor.innerHTML = normalizeEditorHtml(note.content_html || "");
+
+    syncMobileViewport();
 
     // Measure before focus, then focus without browser auto-scroll. The
     // keyboard viewport will trigger the final resize through visualViewport.
@@ -13668,7 +13695,99 @@ export default function Teligram() {
         .composer-input-row .text-input {
           contain: none !important;
         }
-      `}
+      
+        /* FINAL UI + MOBILE KEYBOARD + CARD + BUTTON FIX */
+
+        .nm-phone {
+          height: var(--nm-visual-height, 100dvh) !important;
+          max-height: var(--nm-visual-height, 100dvh) !important;
+          min-height: 0 !important;
+        }
+
+        .composer {
+          flex: 0 0 auto !important;
+          min-height: 0 !important;
+          padding-bottom: max(8px, env(safe-area-inset-bottom)) !important;
+        }
+
+        .composer-card {
+          max-height: none !important;
+          overflow: visible !important;
+          min-height: 0 !important;
+        }
+
+        /* Toolbar buttons: one row, equal full-width cells, small gaps. */
+        .composer-tools-top {
+          width: 100% !important;
+          min-width: 0 !important;
+        }
+
+        .composer-tools-popover.composer-tools-always-visible {
+          width: 100% !important;
+          max-width: 100% !important;
+          display: grid !important;
+          grid-template-columns: repeat(auto-fit, minmax(42px, 1fr)) !important;
+          gap: 6px !important;
+          padding: 3px !important;
+          overflow: hidden !important;
+          box-sizing: border-box !important;
+        }
+
+        .composer-tools-popover.composer-tools-always-visible .tool-btn {
+          width: 100% !important;
+          min-width: 0 !important;
+          height: 44px !important;
+          min-height: 44px !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          border-radius: 12px !important;
+        }
+
+        /* Larger input + send button, with a small space between them. */
+        .composer-input-row {
+          width: 100% !important;
+          gap: 8px !important;
+          min-height: 0 !important;
+          align-items: flex-end !important;
+        }
+
+        .composer-input-row .text-input {
+          min-height: 46px !important;
+          max-height: var(--composer-editor-max-height, 240px) !important;
+          overflow-y: auto !important;
+          overflow-x: hidden !important;
+          box-sizing: border-box !important;
+        }
+
+        .composer-input-row .send-btn {
+          width: 46px !important;
+          height: 46px !important;
+          min-width: 46px !important;
+          min-height: 46px !important;
+          flex: 0 0 46px !important;
+          margin: 0 !important;
+        }
+
+        /* Message cards stay tight around short text. */
+        .message-bubble {
+          width: fit-content !important;
+          max-width: min(82%, 342px) !important;
+          min-width: 54px !important;
+          box-sizing: border-box !important;
+          overflow-wrap: anywhere !important;
+          word-break: break-word !important;
+        }
+
+        .message-text,
+        .message-title-text,
+        .image-description-text,
+        .file-description-text {
+          width: fit-content !important;
+          max-width: 100% !important;
+          overflow-wrap: anywhere !important;
+          word-break: break-word !important;
+        }
+`}
     
 </style>
     </div>
