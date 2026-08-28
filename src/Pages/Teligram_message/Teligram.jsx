@@ -1564,30 +1564,59 @@ export default function Teligram() {
   const restoreChatView = () => {
     const snapshot = scrollSnapshotRef.current;
 
-    window.requestAnimationFrame(() => {
+    if (!snapshot) {
+      skipNextAutoScrollRef.current = false;
+      return;
+    }
+
+    // Restore the user's visual position after React updates the note.
+    // The edited/deleted note is used as an anchor, so changes in message
+    // height do not move the user above or below their current place.
+    const restore = () => {
       const chatBody = chatBodyRef.current;
 
-      if (!chatBody || !snapshot) {
+      if (!chatBody || !scrollSnapshotRef.current) {
         skipNextAutoScrollRef.current = false;
         scrollSnapshotRef.current = null;
         return;
       }
 
-      const noteElement = snapshot.noteId
-        ? noteRefs.current[String(snapshot.noteId)]
+      const currentSnapshot = scrollSnapshotRef.current;
+      const noteElement = currentSnapshot.noteId
+        ? noteRefs.current[String(currentSnapshot.noteId)]
         : null;
 
-      if (noteElement && snapshot.noteOffset !== null) {
+      if (noteElement && currentSnapshot.noteOffset !== null) {
         const chatRect = chatBody.getBoundingClientRect();
         const noteRect = noteElement.getBoundingClientRect();
-        chatBody.scrollTop += noteRect.top - chatRect.top - snapshot.noteOffset;
+
+        chatBody.scrollTop +=
+          noteRect.top - chatRect.top - currentSnapshot.noteOffset;
       } else {
-        chatBody.scrollTop = snapshot.top;
+        // If the edited/deleted anchor no longer exists, keep the old
+        // scrollTop, clamped to the new scrollable range.
+        chatBody.scrollTop = Math.max(
+          0,
+          Math.min(
+            currentSnapshot.top,
+            Math.max(0, chatBody.scrollHeight - chatBody.clientHeight)
+          )
+        );
       }
+    };
+
+    // Multiple frames handle React's DOM commit and image/content reflow.
+    window.requestAnimationFrame(() => {
+      restore();
 
       window.requestAnimationFrame(() => {
-        skipNextAutoScrollRef.current = false;
-        scrollSnapshotRef.current = null;
+        restore();
+
+        window.requestAnimationFrame(() => {
+          restore();
+          skipNextAutoScrollRef.current = false;
+          scrollSnapshotRef.current = null;
+        });
       });
     });
   };
