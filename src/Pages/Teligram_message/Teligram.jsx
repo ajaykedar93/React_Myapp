@@ -734,49 +734,66 @@ export default function Teligram() {
   };
 
 
-  // AUTO-RESIZE COMPOSER
-  // Grows with wrapped text/new lines until it reaches 65% of the
-  // viewport height. Very long text then scrolls inside the composer.
-  const autoResizeEditor = () => {
-    const editor = editorRef.current;
-    if (!editor) return;
-    // Changing height can reset a contentEditable's internal scroll position.
-    // Preserve it so a user editing line 3 (or any chosen word) is not moved.
-    const previousScrollTop = editor.scrollTop;
+  // MOBILE-SAFE COMPOSER RESIZE
+  // The keyboard changes visualViewport asynchronously.  The editor must be
+  // measured only after that viewport has settled, otherwise the first edit
+  // can be clipped and the second edit appears correct.
+  const getEditorViewport = () => {
+    const vv = typeof window !== "undefined" ? window.visualViewport : null;
+    const layoutHeight = Number(window.innerHeight) || 0;
+    const visualHeight = Number(vv?.height) || layoutHeight;
+    const keyboardOpen = layoutHeight > 0 && visualHeight < layoutHeight * 0.88;
+    return {
+      layoutHeight,
+      visualHeight,
+      keyboardOpen,
+    };
+  };
 
-    // Reset first so deleting text also shrinks the composer.
+  const autoResizeEditor = ({ revealCaret = true } = {}) => {
+    const editor = editorRef.current;
+    if (!editor || typeof window === "undefined") return;
+
+    const previousScrollTop = editor.scrollTop;
+    const { visualHeight, keyboardOpen } = getEditorViewport();
+    const computed = window.getComputedStyle(editor);
+    const minHeight = Math.max(44, parseFloat(computed.minHeight) || 44);
+
+    // Measure without the previous fixed height.
     editor.style.height = "auto";
     editor.style.overflowY = "hidden";
 
-    const computed = window.getComputedStyle(editor);
-    const minHeight = parseFloat(computed.minHeight) || 45;
+    const contentHeight = Math.max(editor.scrollHeight, minHeight);
 
-    // Keep enough of the screen available for the chat itself.
-    const visibleViewportHeight = window.visualViewport?.height || window.innerHeight;
-    const keyboardOpen = visibleViewportHeight < window.innerHeight * 0.82;
-    const maxHeight = Math.max(
-      minHeight,
-      Math.floor(visibleViewportHeight * (keyboardOpen ? 0.42 : 0.65))
-    );
+    // The keyboard-open limit is deliberately based on the visual viewport,
+    // not 100vh/dvh. This prevents the last line/border from being clipped.
+    const maxHeight = keyboardOpen
+      ? Math.max(minHeight, Math.min(420, Math.floor(visualHeight * 0.40)))
+      : Math.max(minHeight, Math.min(420, Math.floor(visualHeight * 0.52)));
 
-    const contentHeight = editor.scrollHeight;
-    const nextHeight = Math.max(
-      minHeight,
-      Math.min(contentHeight, maxHeight)
-    );
-
+    const nextHeight = Math.max(minHeight, Math.min(contentHeight, maxHeight));
     editor.style.height = `${nextHeight}px`;
+    editor.style.maxHeight = `${maxHeight}px`;
 
-    // Only very long content gets an internal scrollbar.
     if (contentHeight > maxHeight) {
       editor.style.overflowY = "auto";
     }
 
-    editor.scrollTop = previousScrollTop;
+    // Keep the existing editing position where possible. If the caret is at
+    // the end (normal old-message editing), reveal that final line explicitly.
+    const selection = window.getSelection();
+    const caretInside = !!(
+      selection?.rangeCount &&
+      editor.contains(selection.getRangeAt(0).commonAncestorContainer)
+    );
+
+    if (revealCaret && caretInside) {
+      requestAnimationFrame(() => keepComposerCaretVisible());
+    } else {
+      editor.scrollTop = Math.min(previousScrollTop, editor.scrollHeight);
+    }
   };
 
-  // Keep the caret (not the start/end of the document) in view while typing.
-  // This is important when editing a word in the middle of a long message.
   const keepComposerCaretVisible = () => {
     const editor = editorRef.current;
     const selection = window.getSelection();
@@ -784,43 +801,58 @@ export default function Teligram() {
 
     const range = selection.getRangeAt(0);
     if (!editor.contains(range.commonAncestorContainer)) return;
+
     const caret = range.cloneRange();
     caret.collapse(false);
-    // Some browsers return a zero-sized bounding box for a collapsed range;
-    // client rects still contain the real line position in that case.
     const caretBox = caret.getClientRects()[0] || caret.getBoundingClientRect();
     const editorBox = editor.getBoundingClientRect();
     const lineHeight = parseFloat(window.getComputedStyle(editor).lineHeight) || 20;
     const caretTop = caretBox.top;
     const caretBottom = caretBox.height ? caretBox.bottom : caretTop + lineHeight;
+
     if (!Number.isFinite(caretTop) || !Number.isFinite(caretBottom)) return;
 
-    if (caretBottom > editorBox.bottom - 8) {
-      editor.scrollTop += caretBottom - editorBox.bottom + 12;
-    } else if (caretTop < editorBox.top + 8) {
-      editor.scrollTop -= editorBox.top + 8 - caretTop;
+    if (caretBottom > editorBox.bottom - 10) {
+      editor.scrollTop += caretBottom - editorBox.bottom + 14;
+    } else if (caretTop < editorBox.top + 10) {
+      editor.scrollTop = Math.max(
+        0,
+        editor.scrollTop - (editorBox.top + 10 - caretTop)
+      );
     }
   };
 
-  const scheduleEditorResize = () => {
+  const scheduleEditorResize = ({ revealCaret = true } = {}) => {
+    // Two animation frames are important on mobile: frame 1 lets React/layout
+    // update, frame 2 runs after the browser has applied the keyboard viewport.
     requestAnimationFrame(() => {
-      autoResizeEditor();
-      keepComposerCaretVisible();
+      requestAnimationFrame(() => {
+        autoResizeEditor({ revealCaret });
+      });
     });
   };
 
-  // Recalculate the maximum composer height when the browser/window size changes.
+  // Recalculate after keyboard/window viewport changes. Do not use
+  // editor.scrollIntoView() here because it can move the whole page while the
+  // keyboard is animating and temporarily hide the composer border.
   useEffect(() => {
-    const handleEditorViewportResize = () => {
-      // Recalculate immediately when the Android/iOS keyboard changes the
-      // visual viewport. The editor must never remain behind the keyboard.
-      scheduleEditorResize();
+    let settleTimer = null;
 
-      // Give the browser one layout pass after the viewport settles.
-      setTimeout(() => {
-        autoResizeEditor();
-        keepComposerCaretVisible();
-      }, 80);
+    const handleEditorViewportResize = () => {
+      if (typeof window !== "undefined") {
+        const vv = window.visualViewport;
+        const height = Math.round(vv?.height || window.innerHeight);
+        const root = document.querySelector(".nm-screen");
+        const phone = document.querySelector(".nm-phone");
+        root?.style.setProperty("--app-viewport-height", `${height}px`);
+        phone?.style.setProperty("--app-viewport-height", `${height}px`);
+      }
+
+      if (settleTimer) clearTimeout(settleTimer);
+      scheduleEditorResize();
+      settleTimer = setTimeout(() => {
+        scheduleEditorResize();
+      }, 140);
     };
 
     window.addEventListener("resize", handleEditorViewportResize);
@@ -828,6 +860,7 @@ export default function Teligram() {
     window.visualViewport?.addEventListener("scroll", handleEditorViewportResize);
 
     return () => {
+      if (settleTimer) clearTimeout(settleTimer);
       window.removeEventListener("resize", handleEditorViewportResize);
       window.visualViewport?.removeEventListener("resize", handleEditorViewportResize);
       window.visualViewport?.removeEventListener("scroll", handleEditorViewportResize);
@@ -1464,7 +1497,11 @@ export default function Teligram() {
   const placeCaretAtEnd = (element = editorRef.current) => {
     if (!element || typeof window === "undefined") return;
 
-    element.focus();
+    try {
+      element.focus({ preventScroll: true });
+    } catch {
+      element.focus();
+    }
 
     const range = document.createRange();
     range.selectNodeContents(element);
@@ -3099,37 +3136,38 @@ export default function Teligram() {
     setRemoveOldFile(false);
     setActiveMenuId(null);
 
-    if (editorRef.current) {
-      // Load the complete existing HTML into the same contentEditable.
-      // Do not replace it with plain text, because formatting/colors must
-      // remain editable exactly as they were saved.
-      editorRef.current.innerHTML = normalizeEditorHtml(note.content_html || "");
-      editorRef.current.scrollTop = 0;
-      scheduleEditorResize();
-    }
+    const editor = editorRef.current;
+    if (!editor) return;
 
-    // Focus after the old content is mounted. On mobile this opens the
-    // keyboard, while the visual-viewport handler below resizes the whole
-    // phone and keeps the last edited line above the keyboard.
+    // Reset the stale height before inserting a potentially huge old message.
+    // This prevents the first keyboard frame from inheriting the previous
+    // composer's dimensions.
+    editor.style.height = "44px";
+    editor.style.maxHeight = "420px";
+    editor.style.overflowY = "hidden";
+    editor.scrollTop = 0;
+    editor.innerHTML = normalizeEditorHtml(note.content_html || "");
+
+    // Measure before focus, then focus without browser auto-scroll. The
+    // keyboard viewport will trigger the final resize through visualViewport.
+    autoResizeEditor({ revealCaret: false });
+
     requestAnimationFrame(() => {
-      placeCaretAtEnd();
+      placeCaretAtEnd(editor);
       scheduleEditorResize();
 
-      requestAnimationFrame(() => {
-        editorRef.current?.scrollIntoView({ block: "nearest", behavior: "auto" });
+      // Keyboard animation commonly takes more than one frame. A final pass
+      // after it settles fixes the first-open-only clipping issue.
+      setTimeout(() => {
+        autoResizeEditor();
         keepComposerCaretVisible();
-      });
+      }, 120);
+
+      setTimeout(() => {
+        autoResizeEditor();
+        keepComposerCaretVisible();
+      }, 300);
     });
-
-    setTimeout(() => {
-      autoResizeEditor();
-      keepComposerCaretVisible();
-    }, 180);
-
-    setTimeout(() => {
-      autoResizeEditor();
-      keepComposerCaretVisible();
-    }, 420);
   };
 
   const startImageUpdate = (note) => {
@@ -13566,6 +13604,70 @@ export default function Teligram() {
           }
         }
 
+
+
+        /* FINAL STABLE MOBILE EDITOR FIX
+           Keep the composer itself unclipped. Only the contentEditable may
+           scroll. Height is controlled by visualViewport-aware JavaScript. */
+        .nm-screen,
+        .nm-phone {
+          height: var(--app-viewport-height, 100dvh) !important;
+          min-height: var(--app-viewport-height, 100dvh) !important;
+          max-height: var(--app-viewport-height, 100dvh) !important;
+          overflow: hidden !important;
+        }
+
+        .composer {
+          flex: 0 0 auto !important;
+          min-height: 0 !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          overflow: visible !important;
+          position: relative !important;
+          z-index: 60 !important;
+        }
+
+        .composer-card {
+          min-height: 0 !important;
+          max-height: none !important;
+          overflow: visible !important;
+          width: 100% !important;
+          box-sizing: border-box !important;
+        }
+
+        .composer-input-row {
+          min-height: 0 !important;
+          width: 100% !important;
+          overflow: visible !important;
+          align-items: flex-end !important;
+        }
+
+        .composer-input-row .text-input {
+          flex: 1 1 auto !important;
+          min-width: 0 !important;
+          min-height: 44px !important;
+          max-height: 420px !important;
+          box-sizing: border-box !important;
+          overflow-x: hidden !important;
+          overflow-y: auto !important;
+          -webkit-overflow-scrolling: touch !important;
+          overscroll-behavior: contain !important;
+          scroll-padding-top: 12px !important;
+          scroll-padding-bottom: 18px !important;
+        }
+
+        @media (max-width: 767px) {
+          .composer-input-row .text-input {
+            max-height: 40vh !important;
+          }
+        }
+
+        /* Never let an old fixed composer height clip the editor border. */
+        .composer-card,
+        .composer-input-row,
+        .composer-input-row .text-input {
+          contain: none !important;
+        }
       `}
     
 </style>
