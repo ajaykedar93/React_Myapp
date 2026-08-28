@@ -60,13 +60,11 @@ import Telegram_Dashboard from "./Pages/Teligram_message/Telegram_Dashboard.jsx"
 import TelegramLoading from "./Pages/Teligram_message/TelegramLoading.jsx";
 import ChannelList from "./Pages/Teligram_message/ChannelList.jsx";
 import Teligram from "./Pages/Teligram_message/Teligram.jsx";
-
+import Teligram_Notes from "./Pages/Teligram_message/Telegram_Dashboard/Telegram_sep/Teligram_Notes.jsx";
 
 // Channel Pages Imports
 import ChannelChatScreen from "./Pages/Teligram_message/Telegram_Dashboard/ChannelChatScreen.jsx";
 import ChannelInfo from "./Pages/Teligram_message/Telegram_Dashboard/ChannelInfo.jsx";
-import { io } from "socket.io-client"; // socket sathi lagel - npm install socket.io-client
-
 
 // ✅ Private Route Wrapper
 function PrivateRoute({ children }) {
@@ -112,7 +110,7 @@ function AppRoutes() {
 
 
         {/* Notes page */}
-        <Route path="/teligram-notes" element={<Teligram />} />
+        <Route path="/teligram-notes" element={<Teligram_Notes />} />
 
         {/* Wakeup Page */}
         <Route path="/wakeup-api" element={<Wakeup />} />

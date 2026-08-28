@@ -811,12 +811,26 @@ export default function Teligram() {
 
   // Recalculate the maximum composer height when the browser/window size changes.
   useEffect(() => {
-    const handleEditorViewportResize = () => scheduleEditorResize();
+    const handleEditorViewportResize = () => {
+      // Recalculate immediately when the Android/iOS keyboard changes the
+      // visual viewport. The editor must never remain behind the keyboard.
+      scheduleEditorResize();
+
+      // Give the browser one layout pass after the viewport settles.
+      setTimeout(() => {
+        autoResizeEditor();
+        keepComposerCaretVisible();
+      }, 80);
+    };
 
     window.addEventListener("resize", handleEditorViewportResize);
+    window.visualViewport?.addEventListener("resize", handleEditorViewportResize);
+    window.visualViewport?.addEventListener("scroll", handleEditorViewportResize);
 
     return () => {
       window.removeEventListener("resize", handleEditorViewportResize);
+      window.visualViewport?.removeEventListener("resize", handleEditorViewportResize);
+      window.visualViewport?.removeEventListener("scroll", handleEditorViewportResize);
     };
   }, []);
 
@@ -3086,14 +3100,36 @@ export default function Teligram() {
     setActiveMenuId(null);
 
     if (editorRef.current) {
+      // Load the complete existing HTML into the same contentEditable.
+      // Do not replace it with plain text, because formatting/colors must
+      // remain editable exactly as they were saved.
       editorRef.current.innerHTML = normalizeEditorHtml(note.content_html || "");
+      editorRef.current.scrollTop = 0;
       scheduleEditorResize();
     }
 
+    // Focus after the old content is mounted. On mobile this opens the
+    // keyboard, while the visual-viewport handler below resizes the whole
+    // phone and keeps the last edited line above the keyboard.
     requestAnimationFrame(() => {
       placeCaretAtEnd();
-      editorRef.current?.scrollIntoView({ block: "nearest", behavior: "auto" });
+      scheduleEditorResize();
+
+      requestAnimationFrame(() => {
+        editorRef.current?.scrollIntoView({ block: "nearest", behavior: "auto" });
+        keepComposerCaretVisible();
+      });
     });
+
+    setTimeout(() => {
+      autoResizeEditor();
+      keepComposerCaretVisible();
+    }, 180);
+
+    setTimeout(() => {
+      autoResizeEditor();
+      keepComposerCaretVisible();
+    }, 420);
   };
 
   const startImageUpdate = (note) => {
@@ -3576,8 +3612,23 @@ export default function Teligram() {
     !channelAccessGrantedRef.current;
 
   return (
-    <div className="nm-screen" onClick={() => setActiveMenuId(null)}>
-      <div className="nm-phone">
+    <div
+      className="nm-screen"
+      onClick={() => setActiveMenuId(null)}
+      style={
+        mobileViewportHeight
+          ? { "--app-viewport-height": `${mobileViewportHeight}px` }
+          : undefined
+      }
+    >
+      <div
+        className="nm-phone"
+        style={
+          mobileViewportHeight
+            ? { "--app-viewport-height": `${mobileViewportHeight}px` }
+            : undefined
+        }
+      >
         <header className="nm-header">
           <button className="header-icon-btn back-btn" onClick={backToChannels}>
             ‹
@@ -13442,6 +13493,60 @@ export default function Teligram() {
           display:flex !important; align-items:center !important; justify-content:center !important;
           width:100% !important; height:100% !important; text-align:center !important;
         }
+        /* FINAL MOBILE KEYBOARD / EDIT-OLD-TEXT FIX
+           - The React visualViewport height controls the phone when the
+             Android/iOS keyboard opens.
+           - The editor may scroll internally, but the composer itself stays
+             completely above the keyboard.
+           - Existing edited content remains fully available. */
+        .nm-screen,
+        .nm-phone {
+          height: var(--app-viewport-height, 100dvh) !important;
+          min-height: var(--app-viewport-height, 100dvh) !important;
+          max-height: var(--app-viewport-height, 100dvh) !important;
+          overflow: hidden !important;
+        }
+
+        .composer {
+          flex: 0 0 auto !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          min-height: 0 !important;
+          overflow: visible !important;
+        }
+
+        .composer-card {
+          min-height: 0 !important;
+          max-height: none !important;
+          overflow: visible !important;
+        }
+
+        .composer-input-row {
+          min-height: 0 !important;
+          width: 100% !important;
+          align-items: flex-end !important;
+        }
+
+        .composer-input-row .text-input {
+          min-height: 45px !important;
+          max-height: min(42vh, 430px) !important;
+          overflow-x: hidden !important;
+          overflow-y: auto !important;
+          -webkit-overflow-scrolling: touch !important;
+          overscroll-behavior: contain !important;
+          scroll-padding-bottom: 18px !important;
+        }
+
+        @media (max-width: 767px) {
+          .composer {
+            padding-bottom: max(6px, env(safe-area-inset-bottom)) !important;
+          }
+
+          .composer-input-row .text-input {
+            max-height: 42vh !important;
+          }
+        }
+
         /* Small toolbar spacing; does not alter any existing behavior. */
         .composer-tools-popover {
           gap: 6px !important;

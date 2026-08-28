@@ -1,6 +1,7 @@
-@import url("https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap");
 
-* {
+        @import url("https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap");
+
+        * {
           box-sizing: border-box;
           -webkit-tap-highlight-color: transparent;
         }
@@ -687,10 +688,26 @@
         }
 
         .color-tool {
+          position: relative;
           color: var(--pickedColor);
           border-bottom: 3px solid var(--pickedColor);
           font-family: Georgia, serif;
           font-size: 15px;
+          gap: 4px;
+        }
+
+        .color-tool:hover {
+          border-color: var(--pickedColor);
+          background: #f8fafc;
+        }
+
+        .color-swatch {
+          width: 10px;
+          height: 10px;
+          border-radius: 999px;
+          border: 2px solid #ffffff;
+          box-shadow: 0 0 0 1px rgba(15,23,42,0.16);
+          flex-shrink: 0;
         }
 
         .send-btn {
@@ -708,6 +725,30 @@
           cursor: pointer;
           flex-shrink: 0;
           box-shadow: 0 8px 18px rgba(14,165,233,0.28);
+          transition: transform 0.12s ease, box-shadow 0.18s ease, filter 0.18s ease;
+        }
+
+        .send-btn:hover:not(:disabled) {
+          filter: brightness(1.04);
+          box-shadow: 0 10px 22px rgba(14,165,233,0.34);
+        }
+
+        .send-btn:active:not(:disabled) {
+          transform: translateY(1px) scale(0.95);
+          box-shadow: 0 4px 10px rgba(14,165,233,0.24);
+        }
+
+        .send-spinner {
+          width: 15px;
+          height: 15px;
+          border: 2px solid rgba(255,255,255,0.45);
+          border-top-color: #ffffff;
+          border-radius: 50%;
+          animation: sendSpin 0.72s linear infinite;
+        }
+
+        @keyframes sendSpin {
+          to { transform: rotate(360deg); }
         }
 
         .send-btn:disabled {
@@ -718,8 +759,8 @@
         .text-input {
           width: 100%;
           min-height: 42px;
-          max-height: 108px;
-          overflow-y: auto;
+          max-height: none;
+          overflow-y: hidden;
           overflow-x: hidden;
           outline: none;
           border: 1px solid #dbe4f0;
@@ -732,7 +773,10 @@
           font-weight: 650;
           word-break: break-word;
           overflow-wrap: anywhere;
+          white-space: pre-wrap;
+          box-sizing: border-box;
           box-shadow: inset 0 1px 0 rgba(255,255,255,0.9);
+          transition: border-color 0.18s ease, box-shadow 0.18s ease, height 0.12s ease;
         }
 
         .text-input:focus {
@@ -7818,6 +7862,44 @@
           letter-spacing: -.2px !important;
         }
 
+        /* =========================================================
+           AUTO-GROW COMPOSER
+           - Starts compact
+           - Grows automatically as text wraps / new lines are added
+           - Shrinks automatically when text is deleted
+           - Scrolls only after the maximum height is reached
+        ========================================================= */
+        .composer-input-row {
+          align-items: flex-end !important;
+        }
+
+        .composer-input-row .text-input {
+          min-height: 45px !important;
+          max-height: none !important;
+          height: 45px;
+          overflow-y: hidden;
+          overflow-x: hidden;
+          box-sizing: border-box !important;
+          white-space: pre-wrap !important;
+          overflow-wrap: anywhere !important;
+          word-break: break-word !important;
+          resize: none !important;
+          transition: height 0.08s ease !important;
+        }
+
+        .composer-input-row .text-input::-webkit-scrollbar {
+          width: 5px;
+        }
+
+        .composer-input-row .text-input::-webkit-scrollbar-thumb {
+          background: rgba(100, 116, 139, 0.35);
+          border-radius: 999px;
+        }
+
+        .composer-input-row .text-input::-webkit-scrollbar-track {
+          background: transparent;
+        }
+
         .message-title-text {
           font-weight: 500 !important;
           color: var(--noteColor, #111111) !important;
@@ -8525,7 +8607,7 @@
           .composer-tools-top { gap: 4px !important; padding: 4px !important; }
           .composer-tools-popover .tool-btn, .tool-btn { width: 34px !important; height: 34px !important; min-width: 34px !important; }
           .composer-input-row { gap: 5px !important; }
-          .composer-input-row .text-input { min-height: 38px !important; max-height: 82px !important; padding: 8px 10px !important; }
+          .composer-input-row .text-input { min-height: 38px !important; max-height: none !important; padding: 8px 10px !important; }
           .send-btn { width: 40px !important; height: 40px !important; }
         }
 
@@ -8738,3 +8820,164 @@
         .message-title-text .note-heading-line + * {
           background: transparent !important;
         }
+
+        /* Composer: grow until 65vh, then scroll internally. */
+        .composer-input-row .text-input {
+          min-height: 45px !important;
+          max-height: none !important;
+          box-sizing: border-box !important;
+          padding: 12px 14px !important;
+          overflow-x: hidden !important;
+          white-space: pre-wrap !important;
+          overflow-wrap: anywhere !important;
+          word-break: break-word !important;
+        }
+
+
+        /* Final vibrant toolbar states - visual only */
+        .composer-tools-popover .tool-btn .tool-icon {
+          width: 23px !important;
+          height: 23px !important;
+          object-fit: contain !important;
+          display: block !important;
+          pointer-events: none !important;
+        }
+        .composer-tools-popover .tool-btn {
+          transition: transform .12s ease, box-shadow .16s ease, background .16s ease, border-color .16s ease !important;
+          -webkit-tap-highlight-color: transparent !important;
+        }
+        .composer-tools-popover .tool-btn:hover:not(:disabled) {
+          transform: translateY(-2px) scale(1.04) !important;
+          box-shadow: 0 8px 20px rgba(15,23,42,.18) !important;
+        }
+        .composer-tools-popover .tool-btn:active:not(:disabled) {
+          transform: translateY(1px) scale(.94) !important;
+        }
+        .composer-tools-popover .format-btn.active {
+          background: linear-gradient(135deg,#2563eb,#38bdf8) !important;
+          border-color: #1d4ed8 !important;
+          box-shadow: 0 8px 24px rgba(37,99,235,.48), 0 0 0 2px rgba(56,189,248,.28) !important;
+          color:#fff !important;
+        }
+        .composer-tools-popover .format-btn.active:nth-of-type(2) {
+          background: linear-gradient(135deg,#7c3aed,#ec4899) !important;
+          border-color:#7c3aed !important;
+          box-shadow:0 8px 24px rgba(124,58,237,.48),0 0 0 2px rgba(236,72,153,.24) !important;
+        }
+        .composer-tools-popover .color-tool.active {
+          background: linear-gradient(135deg,#f97316,#ec4899) !important;
+          border-color:#ea580c !important;
+          box-shadow:0 8px 24px rgba(236,72,153,.46),0 0 0 2px rgba(249,115,22,.25) !important;
+          color:#fff !important;
+        }
+        /* The color tool's underline is the actual selected text color. */
+        .composer-tools-popover .color-tool.active::before {
+          background: var(--pickedColor, #111111) !important;
+          box-shadow: 0 2px 8px var(--pickedColor, #111111) !important;
+        }
+        .composer-tools-popover .image-tool.active {
+          background: linear-gradient(135deg,#06b6d4,#22c55e) !important;
+          border-color:#0891b2 !important;
+          box-shadow:0 8px 24px rgba(6,182,212,.44),0 0 0 2px rgba(34,197,94,.22) !important;
+        }
+        .composer-tools-popover .file-tool.active {
+          background: linear-gradient(135deg,#f59e0b,#f97316) !important;
+          border-color:#ea580c !important;
+          box-shadow:0 8px 24px rgba(249,115,22,.46),0 0 0 2px rgba(245,158,11,.24) !important;
+        }
+        .composer-tools-popover .tool-btn.active::before {
+          content:"" !important;
+          position:absolute !important;
+          left:7px !important; right:7px !important; bottom:-4px !important;
+          height:3px !important; border-radius:999px !important;
+          background:currentColor !important;
+          box-shadow:0 2px 8px currentColor !important;
+          opacity:1 !important; pointer-events:none !important;
+        }
+        .composer-tools-popover .color-tool.active::after { content:none !important; display:none !important; }
+        .delivery-state {
+          display: inline-flex !important;
+          align-items: center !important;
+          gap: 6px !important;
+          margin-top: 7px !important;
+          padding: 5px 8px !important;
+          border-radius: 8px !important;
+          font: 700 11px/1.2 "Poppins", "Inter", sans-serif !important;
+        }
+        .delivery-uploading { color: #1d4ed8 !important; background: #dbeafe !important; }
+        .delivery-failed { color: #b91c1c !important; background: #fee2e2 !important; }
+        .delivery-failed button {
+          border: 0 !important;
+          border-radius: 5px !important;
+          padding: 3px 6px !important;
+          background: #b91c1c !important;
+          color: #fff !important;
+          font: inherit !important;
+          cursor: pointer !important;
+        }
+        .delivery-spinner {
+          width: 11px !important;
+          height: 11px !important;
+          border: 2px solid rgba(29,78,216,.25) !important;
+          border-top-color: #2563eb !important;
+          border-radius: 50% !important;
+          animation: imageViewerSpin .7s linear infinite !important;
+        }
+        /* Delivery confirmation is intentionally compact: the chat card is
+           already visible, so the toast must not cover the conversation. */
+        .toast.success {
+          width: auto !important;
+          min-width: 0 !important;
+          max-width: calc(100vw - 32px) !important;
+          padding: 8px 11px !important;
+          border: 1px solid #86efac !important;
+          border-radius: 10px !important;
+          background: #f0fdf4 !important;
+          box-shadow: 0 7px 20px rgba(22,163,74,.18) !important;
+        }
+        .toast.success .toast-icon { display: none !important; }
+        .toast.success p { color: #15803d !important; font-size: 11px !important; }
+        .upload-image-preview {
+          position: relative !important;
+          overflow: hidden !important;
+          border-radius: 14px !important;
+          opacity: .78 !important;
+        }
+        .upload-image-preview .message-image { display: block !important; }
+        .upload-image-preview .image-spinner {
+          position: absolute !important;
+          top: 50% !important;
+          left: 50% !important;
+          width: 30px !important;
+          height: 30px !important;
+          margin: -15px 0 0 -15px !important;
+          border-color: rgba(255,255,255,.55) !important;
+          border-top-color: #2563eb !important;
+        }
+        @media (max-width:480px) {
+          .composer-tools-popover .tool-btn .tool-icon { width:22px !important; height:22px !important; }
+        }
+        .text-input:empty::before {
+          display:flex !important; align-items:center !important; justify-content:center !important;
+          width:100% !important; height:100% !important; text-align:center !important;
+        }
+        /* Small toolbar spacing; does not alter any existing behavior. */
+        .composer-tools-popover {
+          gap: 6px !important;
+        }
+        .composer-tools-popover .tool-btn {
+          margin: 0 !important;
+          flex: 0 0 auto !important;
+        }
+        @media (max-width: 480px) {
+          .composer-tools-popover {
+            gap: 5px !important;
+            overflow-x: auto !important;
+            scrollbar-width: none !important;
+          }
+          .composer-tools-popover::-webkit-scrollbar {
+            display: none !important;
+          }
+        }
+
+      
