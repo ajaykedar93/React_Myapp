@@ -718,17 +718,57 @@ export default function Teligram() {
     return normalizeTextColor(note?.text_color || note?.textColor || "#111111");
   };
 
+  const ensureExplicitEditorTextColors = (fallbackColor = "#111111") => {
+    const editor = editorRef.current;
+    if (!editor || typeof document === "undefined") return;
+
+    const fallback = normalizeTextColor(fallbackColor);
+    const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+    const textNodes = [];
+    let node;
+
+    while ((node = walker.nextNode())) {
+      if (!node.nodeValue || !node.nodeValue.length) continue;
+      if (node.parentElement?.closest("[data-typing-color-marker='true']")) continue;
+
+      let hasExplicitColor = false;
+      let parent = node.parentElement;
+      while (parent && parent !== editor) {
+        if (parent.style?.color) {
+          hasExplicitColor = true;
+          break;
+        }
+        parent = parent.parentElement;
+      }
+
+      if (!hasExplicitColor) textNodes.push(node);
+    }
+
+    textNodes.forEach((textNode) => {
+      const span = document.createElement("span");
+      span.style.setProperty("color", fallback, "important");
+      span.style.setProperty("-webkit-text-fill-color", fallback, "important");
+      textNode.parentNode?.insertBefore(span, textNode);
+      span.appendChild(textNode);
+    });
+  };
+
   const setComposerTextColor = (color) => {
     const finalColor = normalizeTextColor(color);
     selectedTextColorRef.current = finalColor;
     setTextColor(finalColor);
 
-    // IMPORTANT: never color the whole contentEditable.
-    // Existing characters must keep their own inline color.
-    // Only the caret / next-typing marker uses the selected color.
-    if (editorRef.current) {
-      editorRef.current.style.setProperty("--composerColor", "#111111");
-      editorRef.current.style.caretColor = finalColor;
+    const editor = editorRef.current;
+    if (editor) {
+      // Make existing unformatted text explicit before changing the editor's
+      // default color. This prevents old black text from changing color while
+      // allowing browser/mobile-keyboard typing to inherit the selected color.
+      ensureExplicitEditorTextColors("#111111");
+
+      editor.style.setProperty("--composerColor", finalColor);
+      editor.style.setProperty("color", finalColor, "important");
+      editor.style.setProperty("-webkit-text-fill-color", finalColor, "important");
+      editor.style.caretColor = finalColor;
     }
 
     return finalColor;
@@ -2469,6 +2509,10 @@ export default function Teligram() {
       return;
     }
 
+    // Freeze all existing unformatted text to its current/default color before
+    // changing the editor's inherited color for future typing.
+    ensureExplicitEditorTextColors("#111111");
+
     editorRef.current.focus({ preventScroll: true });
     const selection = window.getSelection();
     selection?.removeAllRanges();
@@ -3129,6 +3173,10 @@ export default function Teligram() {
     selection?.addRange(nextRange);
     savedRangeRef.current = nextRange.cloneRange();
 
+    editor.style.setProperty("--composerColor", finalColor);
+    editor.style.setProperty("color", finalColor, "important");
+    editor.style.setProperty("-webkit-text-fill-color", finalColor, "important");
+    editor.style.caretColor = finalColor;
     editor.focus({ preventScroll: true });
     return true;
   };
