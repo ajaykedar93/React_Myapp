@@ -134,6 +134,7 @@ export default function Teligram() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [loading, setLoading] = useState(false);
+  const [initialChatLoading, setInitialChatLoading] = useState(true);
   const [manualRefreshing, setManualRefreshing] = useState(false);
   const [mobileViewportHeight, setMobileViewportHeight] = useState(null);
 
@@ -798,7 +799,7 @@ export default function Teligram() {
     if (!composer) return;
 
     const { visualBottom, keyboardOpen } = getEditorViewport();
-    const safeGap = keyboardOpen ? 18 : 0;
+    const safeGap = keyboardOpen ? 20 : 0;
     const rect = composer.getBoundingClientRect();
     const overlap = rect.bottom - (visualBottom - safeGap);
     const shift = overlap > 0 ? -Math.ceil(overlap) : 0;
@@ -811,47 +812,56 @@ export default function Teligram() {
     if (!editor || typeof window === "undefined") return;
 
     const previousScrollTop = editor.scrollTop;
-    const { visualHeight, visualBottom, keyboardOpen } = getEditorViewport();
+    const { visualBottom, keyboardOpen } = getEditorViewport();
     const computed = window.getComputedStyle(editor);
-    const minHeight = Math.max(44, parseFloat(computed.minHeight) || 44);
+    const minHeight = Math.max(46, parseFloat(computed.minHeight) || 46);
 
+    // First measure natural content height. The editor can grow until the
+    // available visual viewport is exhausted; after that it scrolls internally.
     editor.style.height = "auto";
+    editor.style.maxHeight = "none";
     editor.style.overflowY = "hidden";
 
     const contentHeight = Math.max(editor.scrollHeight, minHeight);
     const editorRect = editor.getBoundingClientRect();
 
-    // Keep the entire editor border safely above the Android keyboard.
-    const keyboardGap = keyboardOpen ? 30 : 12;
-    const availableFromEditor = Math.max(
+    // Reserve room for the send button, toolbar and a real keyboard-safe gap.
+    // This is the important difference: the editor is limited by the actual
+    // visual viewport, not the layout viewport/100vh.
+    const safeGap = keyboardOpen ? 28 : 14;
+    const availableHeight = Math.max(
       minHeight,
-      Math.floor((visualBottom || visualHeight) - editorRect.top - keyboardGap)
+      Math.floor(visualBottom - editorRect.top - safeGap)
     );
 
     const maxHeight = Math.max(
       minHeight,
-      Math.min(420, availableFromEditor)
+      Math.min(
+        520,
+        keyboardOpen ? availableHeight : Math.max(180, Math.floor(window.innerHeight * 0.60))
+      )
     );
-    const nextHeight = Math.max(minHeight, Math.min(contentHeight, maxHeight));
+
+    const nextHeight = Math.min(contentHeight, maxHeight);
 
     document.documentElement.style.setProperty(
       "--composer-editor-max-height",
       `${maxHeight}px`
     );
 
-    editor.style.height = `${nextHeight}px`;
+    editor.style.height = `${Math.max(minHeight, nextHeight)}px`;
     editor.style.maxHeight = `${maxHeight}px`;
     editor.style.overflowY = contentHeight > maxHeight ? "auto" : "hidden";
 
-    if (revealCaret) {
-      requestAnimationFrame(() => {
-        keepComposerAboveKeyboard();
-        keepComposerCaretVisible();
-      });
-    } else {
+    if (!revealCaret) {
       editor.scrollTop = Math.min(previousScrollTop, editor.scrollHeight);
-      requestAnimationFrame(() => keepComposerAboveKeyboard());
+      return;
     }
+
+    requestAnimationFrame(() => {
+      keepComposerCaretVisible();
+      keepComposerAboveKeyboard();
+    });
   };
 
   const keepComposerCaretVisible = () => {
@@ -1866,6 +1876,7 @@ export default function Teligram() {
     const channelId = localStorage.getItem("selected_channel_id");
 
     if (!channelId) {
+      setInitialChatLoading(false);
       window.location.hash = "/teligram-channels";
       return;
     }
@@ -1883,6 +1894,7 @@ export default function Teligram() {
       if (loadId !== channelLoadIdRef.current) return;
 
       if (!res.ok) {
+        setInitialChatLoading(false);
         showToast("Channel not found", "error");
 
         setTimeout(() => {
@@ -1916,6 +1928,7 @@ export default function Teligram() {
           setUnlockPin("");
           setUnlockError("");
           setUnlockTrustDevice(false);
+          setInitialChatLoading(false);
           return;
         } else if (/^[0-9]{4}$/.test(savedPin)) {
           // The channel list already verified this PIN in the current flow.
@@ -1927,6 +1940,7 @@ export default function Teligram() {
           setUnlockPin("");
           setUnlockError("");
           setUnlockTrustDevice(false);
+          setInitialChatLoading(false);
           return;
         }
 
@@ -1939,6 +1953,7 @@ export default function Teligram() {
         setUnlockError("");
         setUnlockTrustDevice(false);
         setNotes([]);
+        setInitialChatLoading(false);
         return;
       }
 
@@ -1950,8 +1965,10 @@ export default function Teligram() {
       setUnlockPin("");
       setUnlockError("");
       setUnlockTrustDevice(false);
+      setInitialChatLoading(false);
     } catch (error) {
       if (loadId !== channelLoadIdRef.current) return;
+      setInitialChatLoading(false);
       console.error("Channel load error:", error);
       showToast("Server error while opening channel", "error");
     }
@@ -2124,10 +2141,12 @@ export default function Teligram() {
 
         return mergedNotes;
       });
+      if (!silent) setInitialChatLoading(false);
     } catch (error) {
       if (requestId !== notesRequestIdRef.current) return;
       console.error("Fetch notes error:", error);
       if (!silent) {
+        setInitialChatLoading(false);
         showToast("Unable to load messages", "error");
       }
     } finally {
@@ -3156,14 +3175,12 @@ export default function Teligram() {
       keepComposerAboveKeyboard();
 
       setTimeout(() => {
-        placeCaretAtEnd(editor);
         autoResizeEditor();
         keepComposerAboveKeyboard();
         keepComposerCaretVisible();
       }, 120);
 
       setTimeout(() => {
-        placeCaretAtEnd(editor);
         autoResizeEditor();
         keepComposerAboveKeyboard();
         keepComposerCaretVisible();
@@ -3649,6 +3666,14 @@ export default function Teligram() {
     isTrue(selectedChannel.is_private) &&
     !channelUnlocked &&
     !channelAccessGrantedRef.current;
+
+  if (initialChatLoading) {
+    return (
+      <div className="nm-initial-loading-screen" role="status" aria-live="polite" aria-label="Loading chats">
+        <div className="nm-initial-loading-spinner" aria-hidden="true" />
+      </div>
+    );
+  }
 
   return (
     <div
@@ -13947,8 +13972,128 @@ export default function Teligram() {
         }
 
 
+
+        /* FINAL OVERRIDE: keyboard-safe expanding editor + initial chat loader */
+        .nm-initial-loading-screen {
+          position: fixed !important;
+          inset: 0 !important;
+          width: 100vw !important;
+          height: 100dvh !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          background: #e7f2df !important;
+          z-index: 99999 !important;
+        }
+
+        .nm-initial-loading-spinner {
+          width: 42px !important;
+          height: 42px !important;
+          border: 4px solid rgba(37, 99, 235, 0.18) !important;
+          border-top-color: #2563eb !important;
+          border-right-color: #14b8a6 !important;
+          border-radius: 50% !important;
+          animation: nmInitialSpin 0.8s linear infinite !important;
+        }
+
+        @keyframes nmInitialSpin {
+          to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 767px) {
+          .nm-screen {
+            position: fixed !important;
+            inset: 0 !important;
+            width: 100vw !important;
+            height: var(--nm-visual-height, 100dvh) !important;
+            min-height: 0 !important;
+            max-height: var(--nm-visual-height, 100dvh) !important;
+            overflow: hidden !important;
+          }
+
+          .nm-phone {
+            width: 100% !important;
+            max-width: none !important;
+            height: var(--nm-visual-height, 100dvh) !important;
+            min-height: 0 !important;
+            max-height: var(--nm-visual-height, 100dvh) !important;
+            display: flex !important;
+            flex-direction: column !important;
+            overflow: hidden !important;
+          }
+
+          .chat-body {
+            flex: 1 1 auto !important;
+            min-height: 0 !important;
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+          }
+
+          .composer {
+            flex: 0 0 auto !important;
+            width: 100% !important;
+            margin: 0 !important;
+            transform: translate3d(0, var(--nm-composer-shift, 0px), 0) !important;
+            box-sizing: border-box !important;
+            padding-bottom: max(10px, env(safe-area-inset-bottom)) !important;
+            max-height: calc(var(--nm-visual-height, 100dvh) - 60px) !important;
+            overflow: hidden !important;
+          }
+
+          .composer-card {
+            width: 100% !important;
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+            overflow: hidden !important;
+          }
+
+          .composer-input-row {
+            width: 100% !important;
+            min-height: 46px !important;
+            align-items: flex-end !important;
+            box-sizing: border-box !important;
+          }
+
+          .composer-input-row .text-input {
+            flex: 1 1 auto !important;
+            min-width: 0 !important;
+            min-height: 46px !important;
+            max-height: var(--composer-editor-max-height, 240px) !important;
+            box-sizing: border-box !important;
+            overflow-x: hidden !important;
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+            overscroll-behavior: contain !important;
+            scroll-padding-top: 10px !important;
+            scroll-padding-bottom: 14px !important;
+          }
+
+          .composer-input-row .send-btn {
+            width: 46px !important;
+            height: 46px !important;
+            min-width: 46px !important;
+            min-height: 46px !important;
+            max-width: 46px !important;
+            max-height: 46px !important;
+            flex: 0 0 46px !important;
+            aspect-ratio: 1 / 1 !important;
+            box-sizing: border-box !important;
+          }
+
+          .composer-tools-popover.composer-tools-always-visible .tool-btn {
+            width: 44px !important;
+            height: 44px !important;
+            min-width: 44px !important;
+            min-height: 44px !important;
+            max-width: 44px !important;
+            max-height: 44px !important;
+            flex: 0 0 44px !important;
+            aspect-ratio: 1 / 1 !important;
+          }
+        }
 `}
     
+
 </style>
     </div>
   );
