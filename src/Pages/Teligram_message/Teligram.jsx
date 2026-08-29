@@ -3104,6 +3104,22 @@ export default function Teligram() {
       underline: Boolean(typingFormatsRef.current.underline),
     };
 
+    // Prevent the browser from inheriting Bold/Underline from adjacent old
+    // text when the user chose a color without enabling those tools.
+    try {
+      const browserBold = Boolean(document.queryCommandState("bold"));
+      const browserUnderline = Boolean(document.queryCommandState("underline"));
+
+      if (browserBold !== formats.bold) {
+        document.execCommand("bold", false, null);
+      }
+      if (browserUnderline !== formats.underline) {
+        document.execCommand("underline", false, null);
+      }
+    } catch (error) {
+      // Mobile browsers may not reliably expose command state.
+    }
+
     // This marker is the formatting boundary for FUTURE typing only.
     // Explicitly set every relevant property so a color choice never
     // accidentally inherits bold/underline from surrounding old text.
@@ -14130,6 +14146,22 @@ export default function Teligram() {
             aspect-ratio: 1 / 1 !important;
           }
         }
+
+        /* FINAL COLOR-TYPING SAFETY */
+        .text-input span[data-typing-color-marker="true"] {
+          display: inline !important;
+          font-style: normal !important;
+        }
+
+        .message-text span[style*="color"],
+        .message-text font[color],
+        .image-description-text span[style*="color"],
+        .image-description-text font[color],
+        .file-description-text span[style*="color"],
+        .file-description-text font[color] {
+          -webkit-text-fill-color: currentColor !important;
+        }
+
 `}
     
 
