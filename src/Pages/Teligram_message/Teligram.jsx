@@ -4558,7 +4558,14 @@ export default function Teligram() {
                        // Insert typed characters into an explicit formatting span
                        // so the selected color is visible in the editor on Android.
                        // Bold/underline are applied only when their buttons are active.
-                       if (e.inputType !== "insertText" || !colorModeActive) return;
+                       if (!["insertText", "insertCompositionText"].includes(e.inputType)) return;
+                       // A selected color is the source of truth for future typing.
+                       // Do not depend only on React colorModeActive because mobile
+                       // color-input focus can briefly leave that state stale.
+                       const activeColor = normalizeTextColor(
+                         selectedTextColorRef.current || textColor || "#111111"
+                       );
+                       if (!colorModeActive && activeColor === "#111111") return;
                        const editor = editorRef.current;
                        const sel = window.getSelection();
                        if (!editor || !sel || !sel.rangeCount) return;
@@ -4576,8 +4583,9 @@ export default function Teligram() {
                        range.deleteContents();
 
                        const span = document.createElement("span");
-                       span.style.color = color;
-                       span.style.webkitTextFillColor = color;
+                       span.style.setProperty("color", color, "important");
+                       span.style.setProperty("-webkit-text-fill-color", color, "important");
+                       // Color alone NEVER turns on bold or underline.
                        span.style.fontWeight = formats.bold ? "900" : "400";
                        span.style.textDecorationLine = formats.underline ? "underline" : "none";
                        span.textContent = text;
