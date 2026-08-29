@@ -3104,22 +3104,6 @@ export default function Teligram() {
       underline: Boolean(typingFormatsRef.current.underline),
     };
 
-    // Prevent the browser from inheriting Bold/Underline from adjacent old
-    // text when the user chose a color without enabling those tools.
-    try {
-      const browserBold = Boolean(document.queryCommandState("bold"));
-      const browserUnderline = Boolean(document.queryCommandState("underline"));
-
-      if (browserBold !== formats.bold) {
-        document.execCommand("bold", false, null);
-      }
-      if (browserUnderline !== formats.underline) {
-        document.execCommand("underline", false, null);
-      }
-    } catch (error) {
-      // Mobile browsers may not reliably expose command state.
-    }
-
     // This marker is the formatting boundary for FUTURE typing only.
     // Explicitly set every relevant property so a color choice never
     // accidentally inherits bold/underline from surrounding old text.
@@ -4570,11 +4554,47 @@ export default function Teligram() {
                       // taps can make queryCommandState() temporarily false.
                       saveSelection();
                      }}
+                     onBeforeInput={(e) => {
+                       // Insert typed characters into an explicit formatting span
+                       // so the selected color is visible in the editor on Android.
+                       // Bold/underline are applied only when their buttons are active.
+                       if (e.inputType !== "insertText" || !colorModeActive) return;
+                       const editor = editorRef.current;
+                       const sel = window.getSelection();
+                       if (!editor || !sel || !sel.rangeCount) return;
+                       const range = sel.getRangeAt(0);
+                       if (!editor.contains(range.commonAncestorContainer)) return;
+
+                       const text = e.data ?? "";
+                       if (!text) return;
+                       e.preventDefault();
+
+                       const color = normalizeTextColor(
+                         selectedTextColorRef.current || textColor || "#111111"
+                       );
+                       const formats = typingFormatsRef.current || {};
+                       range.deleteContents();
+
+                       const span = document.createElement("span");
+                       span.style.color = color;
+                       span.style.webkitTextFillColor = color;
+                       span.style.fontWeight = formats.bold ? "900" : "400";
+                       span.style.textDecorationLine = formats.underline ? "underline" : "none";
+                       span.textContent = text;
+                       range.insertNode(span);
+
+                       const next = document.createRange();
+                       next.setStart(span.firstChild, span.firstChild.nodeValue.length);
+                       next.collapse(true);
+                       sel.removeAllRanges();
+                       sel.addRange(next);
+                       savedRangeRef.current = next.cloneRange();
+                       saveSelection();
+                       autoResizeEditor();
+                     }}
                      onInput={() => {
                        saveSelection();
                        autoResizeEditor();
-                       // Never move the user's caret while typing. Only resize/scroll
-                       // the editor and lift the composer above the keyboard.
                        requestAnimationFrame(() => {
                          keepComposerAboveKeyboard();
                          keepComposerCaretVisible();
@@ -14146,22 +14166,6 @@ export default function Teligram() {
             aspect-ratio: 1 / 1 !important;
           }
         }
-
-        /* FINAL COLOR-TYPING SAFETY */
-        .text-input span[data-typing-color-marker="true"] {
-          display: inline !important;
-          font-style: normal !important;
-        }
-
-        .message-text span[style*="color"],
-        .message-text font[color],
-        .image-description-text span[style*="color"],
-        .image-description-text font[color],
-        .file-description-text span[style*="color"],
-        .file-description-text font[color] {
-          -webkit-text-fill-color: currentColor !important;
-        }
-
 `}
     
 
