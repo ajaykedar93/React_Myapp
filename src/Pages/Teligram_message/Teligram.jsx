@@ -833,11 +833,14 @@ export default function Teligram() {
 
       const vv = window.visualViewport;
       const height = Math.max(1, Math.round(vv?.height || window.innerHeight));
+      const offsetTop = Math.max(0, Math.round(vv?.offsetTop || 0));
       const root = document.querySelector(".nm-screen");
       const phone = document.querySelector(".nm-phone");
 
       root?.style.setProperty("--app-viewport-height", `${height}px`);
+      root?.style.setProperty("--app-viewport-top", `${offsetTop}px`);
       phone?.style.setProperty("--app-viewport-height", `${height}px`);
+      phone?.style.setProperty("--app-viewport-top", `${offsetTop}px`);
 
       if (settleTimer) clearTimeout(settleTimer);
       scheduleEditorResize();
@@ -13656,13 +13659,34 @@ export default function Teligram() {
           display:flex !important; align-items:center !important; justify-content:center !important;
           width:100% !important; height:100% !important; text-align:center !important;
         }
-        /* FINAL CLEAN MOBILE KEYBOARD RULES — single source of truth */
+        /* FINAL MOBILE LAYOUT
+           - The app follows the visual viewport when the system keyboard opens.
+           - Only .chat-body scrolls; the page itself is never locked globally.
+           - Composer stays completely above the keyboard.
+        */
         .nm-screen,
         .nm-phone {
           height: var(--app-viewport-height, 100dvh) !important;
           min-height: 0 !important;
           max-height: var(--app-viewport-height, 100dvh) !important;
+        }
+
+        .nm-screen {
           overflow: hidden !important;
+        }
+
+        .nm-phone {
+          overflow: hidden !important;
+          box-sizing: border-box !important;
+        }
+
+        .chat-body {
+          flex: 1 1 auto !important;
+          min-height: 0 !important;
+          overflow-x: hidden !important;
+          overflow-y: auto !important;
+          -webkit-overflow-scrolling: touch !important;
+          overscroll-behavior: contain !important;
         }
 
         .composer {
@@ -13672,6 +13696,7 @@ export default function Teligram() {
           min-height: 0 !important;
           overflow: visible !important;
           box-sizing: border-box !important;
+          padding-bottom: max(8px, env(safe-area-inset-bottom)) !important;
         }
 
         .composer-card {
@@ -13685,8 +13710,9 @@ export default function Teligram() {
         .composer-input-row {
           width: 100% !important;
           min-height: 0 !important;
-          gap: 8px !important;
+          display: flex !important;
           align-items: flex-end !important;
+          gap: 8px !important;
           overflow: visible !important;
         }
 
@@ -13704,42 +13730,56 @@ export default function Teligram() {
           scroll-padding-bottom: 18px !important;
         }
 
-        /* Keep the whole composer above the keyboard on small screens. */
-        @media (max-width: 767px) {
-          .nm-screen,
-          .nm-phone {
-            height: var(--app-viewport-height, 100dvh) !important;
-            min-height: 0 !important;
-            max-height: var(--app-viewport-height, 100dvh) !important;
-          }
-
-          .composer-input-row .text-input {
-            max-height: min(
-              var(--composer-editor-max-height, 240px),
-              calc(var(--app-viewport-height, 100dvh) - 150px)
-            ) !important;
-          }
-        }
-
-        /* Existing requested button/card sizing — not keyboard logic. */
+        /* All composer toolbar buttons are true squares. */
         .composer-tools-popover.composer-tools-always-visible {
           width: 100% !important;
           max-width: 100% !important;
-          display: grid !important;
-          grid-template-columns: repeat(auto-fit, minmax(42px, 1fr)) !important;
+          display: flex !important;
+          flex-wrap: nowrap !important;
+          align-items: center !important;
+          justify-content: flex-start !important;
           gap: 6px !important;
           padding: 3px !important;
           box-sizing: border-box !important;
+          overflow-x: auto !important;
+          overflow-y: hidden !important;
+          scrollbar-width: none !important;
+        }
+
+        .composer-tools-popover.composer-tools-always-visible::-webkit-scrollbar {
+          display: none !important;
         }
 
         .composer-tools-popover.composer-tools-always-visible .tool-btn {
-          width: 100% !important;
-          min-width: 0 !important;
+          width: 44px !important;
           height: 44px !important;
+          min-width: 44px !important;
+          max-width: 44px !important;
           min-height: 44px !important;
+          max-height: 44px !important;
+          flex: 0 0 44px !important;
+          aspect-ratio: 1 / 1 !important;
           margin: 0 !important;
           padding: 0 !important;
           border-radius: 12px !important;
+          box-sizing: border-box !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+        }
+
+        .composer-tools-popover .tool-icon {
+          width: 24px !important;
+          height: 24px !important;
+          max-width: 24px !important;
+          max-height: 24px !important;
+          object-fit: contain !important;
+          flex: 0 0 auto !important;
+        }
+
+        .composer-tools-popover .refresh-icon {
+          font-size: 24px !important;
+          line-height: 1 !important;
         }
 
         .composer-input-row .send-btn {
@@ -13747,61 +13787,59 @@ export default function Teligram() {
           height: 46px !important;
           min-width: 46px !important;
           min-height: 46px !important;
+          max-width: 46px !important;
+          max-height: 46px !important;
           flex: 0 0 46px !important;
+          aspect-ratio: 1 / 1 !important;
           margin: 0 !important;
-        }
-
-        .message-bubble {
-          width: fit-content !important;
-          max-width: min(82%, 342px) !important;
-          min-width: 54px !important;
           box-sizing: border-box !important;
-          overflow-wrap: anywhere !important;
-          word-break: break-word !important;
         }
 
-        .message-text,
-        .message-title-text,
-        .image-description-text,
-        .file-description-text {
-          width: fit-content !important;
-          max-width: 100% !important;
-          overflow-wrap: anywhere !important;
-          word-break: break-word !important;
-        }
-        /* Larger composer buttons, equal spacing, one row. */
-        .composer-tools-top {
-          width: 100% !important;
-        }
+        @media (max-width: 767px) {
+          /* Lock only this app shell to the visual viewport.
+             Other React pages are unaffected because this rule is scoped
+             to .nm-screen/.nm-phone. */
+          .nm-screen {
+            position: fixed !important;
+            top: var(--app-viewport-top, 0px) !important;
+            left: 0 !important;
+            right: 0 !important;
+            width: 100vw !important;
+            height: var(--app-viewport-height, 100dvh) !important;
+            max-height: var(--app-viewport-height, 100dvh) !important;
+            min-height: 0 !important;
+          }
 
-        .composer-tools-popover.composer-tools-always-visible {
-          width: 100% !important;
-          display: flex !important;
-          flex-wrap: nowrap !important;
-          align-items: center !important;
-          gap: 8px !important;
-        }
+          .nm-phone {
+            width: 100% !important;
+            height: var(--app-viewport-height, 100dvh) !important;
+            max-height: var(--app-viewport-height, 100dvh) !important;
+            min-height: 0 !important;
+          }
 
-        .composer-tools-popover .tool-btn {
-          width: 46px !important;
-          height: 46px !important;
-          min-width: 46px !important;
-          min-height: 46px !important;
-          flex: 1 1 0 !important;
-          max-width: 64px !important;
-          padding: 7px !important;
-          border-radius: 13px !important;
-        }
+          .composer-input-row .text-input {
+            max-height: min(
+              var(--composer-editor-max-height, 240px),
+              max(46px, calc(var(--app-viewport-height, 100dvh) - 150px))
+            ) !important;
+          }
 
-        .composer-tools-popover .tool-icon {
-          width: 28px !important;
-          height: 28px !important;
-          object-fit: contain !important;
-        }
+          .composer-tools-popover.composer-tools-always-visible .tool-btn {
+            width: 42px !important;
+            height: 42px !important;
+            min-width: 42px !important;
+            max-width: 42px !important;
+            min-height: 42px !important;
+            max-height: 42px !important;
+            flex-basis: 42px !important;
+          }
 
-        .composer-tools-popover .refresh-icon {
-          font-size: 25px !important;
-          line-height: 1 !important;
+          .composer-tools-popover .tool-icon {
+            width: 23px !important;
+            height: 23px !important;
+            max-width: 23px !important;
+            max-height: 23px !important;
+          }
         }
 
         .channel-loading-screen {
