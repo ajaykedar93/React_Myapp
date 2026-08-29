@@ -3153,6 +3153,7 @@ export default function Teligram() {
     // accidentally inherits bold/underline from surrounding old text.
     const marker = document.createElement("span");
     marker.dataset.typingColorMarker = "true";
+    marker.style.setProperty("--typing-color", finalColor);
     marker.style.setProperty("color", finalColor, "important");
     marker.style.setProperty("-webkit-text-fill-color", finalColor, "important");
     marker.style.setProperty("font-weight", formats.bold ? "900" : "400", "important");
@@ -4631,11 +4632,17 @@ export default function Teligram() {
                        range.deleteContents();
 
                        const span = document.createElement("span");
+                       span.dataset.composerTypedColor = "true";
                        span.style.setProperty("color", color, "important");
                        span.style.setProperty("-webkit-text-fill-color", color, "important");
-                       // Color alone NEVER turns on bold or underline.
-                       span.style.fontWeight = formats.bold ? "900" : "400";
-                       span.style.textDecorationLine = formats.underline ? "underline" : "none";
+                       // Color is independent. Bold/underline are copied only
+                       // when those toolbar states are explicitly active.
+                       span.style.setProperty("font-weight", formats.bold ? "900" : "400", "important");
+                       span.style.setProperty(
+                         "text-decoration-line",
+                         formats.underline ? "underline" : "none",
+                         "important"
+                       );
                        span.textContent = text;
                        range.insertNode(span);
 
@@ -8657,6 +8664,23 @@ export default function Teligram() {
         .text-input font {
           font-size: inherit !important;
           line-height: inherit !important;
+        }
+
+        /* Never let the editor's default black color override an inline
+           color chosen for a typing span. */
+        .text-input span[style*="color"],
+        .text-input font[color] {
+          color: inherit;
+        }
+
+        .text-input span[data-typing-color-marker="true"] {
+          color: var(--typing-color, #111111) !important;
+          -webkit-text-fill-color: var(--typing-color, #111111) !important;
+        }
+
+        .text-input span[data-composer-typed-color="true"] {
+          color: inherit !important;
+          -webkit-text-fill-color: inherit !important;
         }
 
         .text-input:empty::before {
