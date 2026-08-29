@@ -135,7 +135,6 @@ export default function Teligram() {
   const [searchText, setSearchText] = useState("");
   const [loading, setLoading] = useState(false);
   const [manualRefreshing, setManualRefreshing] = useState(false);
-  const [mobileViewportHeight, setMobileViewportHeight] = useState(null);
 
   const [toast, setToast] = useState({
     show: false,
@@ -153,30 +152,6 @@ export default function Teligram() {
   useEffect(() => {
     currentDeviceIdRef.current = getCurrentDeviceId();
     loadSelectedChannel();
-  }, []);
-
-  // Mobile browsers do not always shrink 100vh when the system keyboard
-  // opens. Use the visual viewport so the composer remains above it.
-  useEffect(() => {
-    const viewport = window.visualViewport;
-    const updateMobileViewport = () => {
-      if (window.innerWidth > 767) {
-        setMobileViewportHeight(null);
-        return;
-      }
-      setMobileViewportHeight(Math.round(viewport?.height || window.innerHeight));
-    };
-
-    updateMobileViewport();
-    window.addEventListener("resize", updateMobileViewport);
-    viewport?.addEventListener("resize", updateMobileViewport);
-    viewport?.addEventListener("scroll", updateMobileViewport);
-
-    return () => {
-      window.removeEventListener("resize", updateMobileViewport);
-      viewport?.removeEventListener("resize", updateMobileViewport);
-      viewport?.removeEventListener("scroll", updateMobileViewport);
-    };
   }, []);
 
   useEffect(() => {
@@ -734,21 +709,6 @@ export default function Teligram() {
   };
 
 
-  const syncMobileViewport = () => {
-    if (typeof window === "undefined") return;
-
-    const vv = window.visualViewport;
-    const height = Math.max(1, Math.round(vv?.height || window.innerHeight));
-
-    document.documentElement.style.setProperty("--nm-visual-height", `${height}px`);
-
-    const phone = document.querySelector(".nm-phone");
-    if (phone) {
-      phone.style.height = `${height}px`;
-      phone.style.maxHeight = `${height}px`;
-    }
-  };
-
   // MOBILE-SAFE COMPOSER RESIZE
   // The keyboard changes visualViewport asynchronously.  The editor must be
   // measured only after that viewport has settled, otherwise the first edit
@@ -856,39 +816,43 @@ export default function Teligram() {
     });
   };
 
-  // Recalculate after keyboard/window viewport changes. Do not use
-  // editor.scrollIntoView() here because it can move the whole page while the
-  // keyboard is animating and temporarily hide the composer border.
+  // SINGLE MOBILE KEYBOARD / VIEWPORT HANDLER
+  // One source of truth: visualViewport controls the phone height and the
+  // editor is resized after the keyboard viewport has settled.
   useEffect(() => {
     let settleTimer = null;
 
-    const handleEditorViewportResize = () => {
-      if (typeof window !== "undefined") {
-        const vv = window.visualViewport;
-        const height = Math.round(vv?.height || window.innerHeight);
-        const root = document.querySelector(".nm-screen");
-        const phone = document.querySelector(".nm-phone");
-        root?.style.setProperty("--app-viewport-height", `${height}px`);
-        phone?.style.setProperty("--app-viewport-height", `${height}px`);
-        syncMobileViewport();
+    const updateMobileViewport = () => {
+      if (typeof window === "undefined") return;
+
+      if (window.innerWidth > 767) {
+        document.documentElement.style.removeProperty("--app-viewport-height");
+        return;
       }
+
+      const vv = window.visualViewport;
+      const height = Math.max(1, Math.round(vv?.height || window.innerHeight));
+      const root = document.querySelector(".nm-screen");
+      const phone = document.querySelector(".nm-phone");
+
+      root?.style.setProperty("--app-viewport-height", `${height}px`);
+      phone?.style.setProperty("--app-viewport-height", `${height}px`);
 
       if (settleTimer) clearTimeout(settleTimer);
       scheduleEditorResize();
-      settleTimer = setTimeout(() => {
-        scheduleEditorResize();
-      }, 140);
+      settleTimer = setTimeout(() => scheduleEditorResize(), 120);
     };
 
-    window.addEventListener("resize", handleEditorViewportResize);
-    window.visualViewport?.addEventListener("resize", handleEditorViewportResize);
-    window.visualViewport?.addEventListener("scroll", handleEditorViewportResize);
+    updateMobileViewport();
+    window.addEventListener("resize", updateMobileViewport);
+    window.visualViewport?.addEventListener("resize", updateMobileViewport);
+    window.visualViewport?.addEventListener("scroll", updateMobileViewport);
 
     return () => {
       if (settleTimer) clearTimeout(settleTimer);
-      window.removeEventListener("resize", handleEditorViewportResize);
-      window.visualViewport?.removeEventListener("resize", handleEditorViewportResize);
-      window.visualViewport?.removeEventListener("scroll", handleEditorViewportResize);
+      window.removeEventListener("resize", updateMobileViewport);
+      window.visualViewport?.removeEventListener("resize", updateMobileViewport);
+      window.visualViewport?.removeEventListener("scroll", updateMobileViewport);
     };
   }, []);
 
@@ -3173,7 +3137,6 @@ export default function Teligram() {
     editor.scrollTop = 0;
     editor.innerHTML = normalizeEditorHtml(note.content_html || "");
 
-    syncMobileViewport();
 
     // Measure before focus, then focus without browser auto-scroll. The
     // keyboard viewport will trigger the final resize through visualViewport.
@@ -3680,19 +3643,9 @@ export default function Teligram() {
     <div
       className="nm-screen"
       onClick={() => setActiveMenuId(null)}
-      style={
-        mobileViewportHeight
-          ? { "--app-viewport-height": `${mobileViewportHeight}px` }
-          : undefined
-      }
     >
       <div
         className="nm-phone"
-        style={
-          mobileViewportHeight
-            ? { "--app-viewport-height": `${mobileViewportHeight}px` }
-            : undefined
-        }
       >
         <header className="nm-header">
           <button className="header-icon-btn back-btn" onClick={backToChannels}>
@@ -13558,16 +13511,11 @@ export default function Teligram() {
           display:flex !important; align-items:center !important; justify-content:center !important;
           width:100% !important; height:100% !important; text-align:center !important;
         }
-        /* FINAL MOBILE KEYBOARD / EDIT-OLD-TEXT FIX
-           - The React visualViewport height controls the phone when the
-             Android/iOS keyboard opens.
-           - The editor may scroll internally, but the composer itself stays
-             completely above the keyboard.
-           - Existing edited content remains fully available. */
+        /* FINAL CLEAN MOBILE KEYBOARD RULES — single source of truth */
         .nm-screen,
         .nm-phone {
           height: var(--app-viewport-height, 100dvh) !important;
-          min-height: var(--app-viewport-height, 100dvh) !important;
+          min-height: 0 !important;
           max-height: var(--app-viewport-height, 100dvh) !important;
           overflow: hidden !important;
         }
@@ -13578,150 +13526,57 @@ export default function Teligram() {
           max-width: 100% !important;
           min-height: 0 !important;
           overflow: visible !important;
+          box-sizing: border-box !important;
         }
 
         .composer-card {
+          width: 100% !important;
           min-height: 0 !important;
           max-height: none !important;
           overflow: visible !important;
-        }
-
-        .composer-input-row {
-          min-height: 0 !important;
-          width: 100% !important;
-          align-items: flex-end !important;
-        }
-
-        .composer-input-row .text-input {
-          min-height: 45px !important;
-          max-height: min(42vh, 430px) !important;
-          overflow-x: hidden !important;
-          overflow-y: auto !important;
-          -webkit-overflow-scrolling: touch !important;
-          overscroll-behavior: contain !important;
-          scroll-padding-bottom: 18px !important;
-        }
-
-        @media (max-width: 767px) {
-          .composer {
-            padding-bottom: max(6px, env(safe-area-inset-bottom)) !important;
-          }
-
-          .composer-input-row .text-input {
-            max-height: 42vh !important;
-          }
-        }
-
-        /* Small toolbar spacing; does not alter any existing behavior. */
-        .composer-tools-popover {
-          gap: 6px !important;
-        }
-        .composer-tools-popover .tool-btn {
-          margin: 0 !important;
-          flex: 0 0 auto !important;
-        }
-        @media (max-width: 480px) {
-          .composer-tools-popover {
-            gap: 5px !important;
-            overflow-x: auto !important;
-            scrollbar-width: none !important;
-          }
-          .composer-tools-popover::-webkit-scrollbar {
-            display: none !important;
-          }
-        }
-
-
-
-        /* FINAL STABLE MOBILE EDITOR FIX
-           Keep the composer itself unclipped. Only the contentEditable may
-           scroll. Height is controlled by visualViewport-aware JavaScript. */
-        .nm-screen,
-        .nm-phone {
-          height: var(--app-viewport-height, 100dvh) !important;
-          min-height: var(--app-viewport-height, 100dvh) !important;
-          max-height: var(--app-viewport-height, 100dvh) !important;
-          overflow: hidden !important;
-        }
-
-        .composer {
-          flex: 0 0 auto !important;
-          min-height: 0 !important;
-          width: 100% !important;
-          max-width: 100% !important;
-          overflow: visible !important;
-          position: relative !important;
-          z-index: 60 !important;
-        }
-
-        .composer-card {
-          min-height: 0 !important;
-          max-height: none !important;
-          overflow: visible !important;
-          width: 100% !important;
           box-sizing: border-box !important;
         }
 
         .composer-input-row {
-          min-height: 0 !important;
           width: 100% !important;
-          overflow: visible !important;
+          min-height: 0 !important;
+          gap: 8px !important;
           align-items: flex-end !important;
+          overflow: visible !important;
         }
 
         .composer-input-row .text-input {
           flex: 1 1 auto !important;
           min-width: 0 !important;
-          min-height: 44px !important;
-          max-height: 420px !important;
-          box-sizing: border-box !important;
+          min-height: 46px !important;
+          max-height: var(--composer-editor-max-height, 240px) !important;
           overflow-x: hidden !important;
           overflow-y: auto !important;
+          box-sizing: border-box !important;
           -webkit-overflow-scrolling: touch !important;
           overscroll-behavior: contain !important;
-          scroll-padding-top: 12px !important;
+          scroll-padding-top: 8px !important;
           scroll-padding-bottom: 18px !important;
         }
 
+        /* Keep the whole composer above the keyboard on small screens. */
         @media (max-width: 767px) {
+          .nm-screen,
+          .nm-phone {
+            height: var(--app-viewport-height, 100dvh) !important;
+            min-height: 0 !important;
+            max-height: var(--app-viewport-height, 100dvh) !important;
+          }
+
           .composer-input-row .text-input {
-            max-height: 40vh !important;
+            max-height: min(
+              var(--composer-editor-max-height, 240px),
+              calc(var(--app-viewport-height, 100dvh) - 150px)
+            ) !important;
           }
         }
 
-        /* Never let an old fixed composer height clip the editor border. */
-        .composer-card,
-        .composer-input-row,
-        .composer-input-row .text-input {
-          contain: none !important;
-        }
-      
-        /* FINAL UI + MOBILE KEYBOARD + CARD + BUTTON FIX */
-
-        .nm-phone {
-          height: var(--nm-visual-height, 100dvh) !important;
-          max-height: var(--nm-visual-height, 100dvh) !important;
-          min-height: 0 !important;
-        }
-
-        .composer {
-          flex: 0 0 auto !important;
-          min-height: 0 !important;
-          padding-bottom: max(8px, env(safe-area-inset-bottom)) !important;
-        }
-
-        .composer-card {
-          max-height: none !important;
-          overflow: visible !important;
-          min-height: 0 !important;
-        }
-
-        /* Toolbar buttons: one row, equal full-width cells, small gaps. */
-        .composer-tools-top {
-          width: 100% !important;
-          min-width: 0 !important;
-        }
-
+        /* Existing requested button/card sizing — not keyboard logic. */
         .composer-tools-popover.composer-tools-always-visible {
           width: 100% !important;
           max-width: 100% !important;
@@ -13729,7 +13584,6 @@ export default function Teligram() {
           grid-template-columns: repeat(auto-fit, minmax(42px, 1fr)) !important;
           gap: 6px !important;
           padding: 3px !important;
-          overflow: hidden !important;
           box-sizing: border-box !important;
         }
 
@@ -13743,22 +13597,6 @@ export default function Teligram() {
           border-radius: 12px !important;
         }
 
-        /* Larger input + send button, with a small space between them. */
-        .composer-input-row {
-          width: 100% !important;
-          gap: 8px !important;
-          min-height: 0 !important;
-          align-items: flex-end !important;
-        }
-
-        .composer-input-row .text-input {
-          min-height: 46px !important;
-          max-height: var(--composer-editor-max-height, 240px) !important;
-          overflow-y: auto !important;
-          overflow-x: hidden !important;
-          box-sizing: border-box !important;
-        }
-
         .composer-input-row .send-btn {
           width: 46px !important;
           height: 46px !important;
@@ -13768,7 +13606,6 @@ export default function Teligram() {
           margin: 0 !important;
         }
 
-        /* Message cards stay tight around short text. */
         .message-bubble {
           width: fit-content !important;
           max-width: min(82%, 342px) !important;
@@ -13787,7 +13624,7 @@ export default function Teligram() {
           overflow-wrap: anywhere !important;
           word-break: break-word !important;
         }
-`}
+      `}
     
 </style>
     </div>
