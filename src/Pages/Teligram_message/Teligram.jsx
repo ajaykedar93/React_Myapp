@@ -710,20 +710,62 @@ export default function Teligram() {
   };
 
 
-  // MOBILE-SAFE COMPOSER RESIZE
-  // The keyboard changes visualViewport asynchronously.  The editor must be
-  // measured only after that viewport has settled, otherwise the first edit
-  // can be clipped and the second edit appears correct.
+  // MOBILE KEYBOARD-SAFE COMPOSER
+  // The composer is measured against the REAL visual viewport. This keeps the
+  // complete input border visible above the Android/iOS system keyboard.
   const getEditorViewport = () => {
-    const vv = typeof window !== "undefined" ? window.visualViewport : null;
-    const layoutHeight = Number(window.innerHeight) || 0;
-    const visualHeight = Number(vv?.height) || layoutHeight;
-    const keyboardOpen = layoutHeight > 0 && visualHeight < layoutHeight * 0.88;
+    if (typeof window === "undefined") {
+      return {
+        layoutHeight: 0,
+        visualHeight: 0,
+        offsetTop: 0,
+        visualBottom: 0,
+        keyboardOpen: false,
+        keyboardInset: 0,
+      };
+    }
+
+    const vv = window.visualViewport;
+    const layoutHeight = Math.max(1, Number(window.innerHeight) || 1);
+    const visualHeight = Math.max(1, Number(vv?.height) || layoutHeight);
+    const offsetTop = Math.max(0, Number(vv?.offsetTop) || 0);
+    const visualBottom = offsetTop + visualHeight;
+    const keyboardInset = Math.max(0, layoutHeight - visualHeight - offsetTop);
+    const keyboardOpen = keyboardInset > 40 || visualHeight < layoutHeight * 0.90;
+
     return {
       layoutHeight,
       visualHeight,
+      offsetTop,
+      visualBottom,
       keyboardOpen,
+      keyboardInset,
     };
+  };
+
+  const keepComposerAboveKeyboard = () => {
+    const editor = editorRef.current;
+    if (!editor || typeof window === "undefined") return;
+
+    const { visualBottom, keyboardOpen } = getEditorViewport();
+    const gap = keyboardOpen ? 18 : 8;
+    const rect = editor.getBoundingClientRect();
+    const overflow = rect.bottom - (visualBottom - gap);
+
+    if (overflow > 0) {
+      // Do not scroll the page. Scroll only the editor itself when its
+      // content is taller than the available keyboard-safe area.
+      if (editor.scrollHeight > editor.clientHeight + 1) {
+        editor.scrollTop += overflow;
+      }
+    }
+
+    // When the browser has moved the visual viewport during keyboard opening,
+    // keep the caret visible without using scrollIntoView() (which can scroll
+    // the whole page and hide the composer again).
+    requestAnimationFrame(() => {
+      keepComposerCaretVisible();
+    });
   };
 
   const autoResizeEditor = ({ revealCaret = true } = {}) => {
@@ -731,57 +773,66 @@ export default function Teligram() {
     if (!editor || typeof window === "undefined") return;
 
     const previousScrollTop = editor.scrollTop;
-    const { visualHeight, keyboardOpen } = getEditorViewport();
-    const computed = window.getComputedStyle(editor);
-    const minHeight = Math.max(44, parseFloat(computed.minHeight) || 44);
+    const {
+      visualHeight,
+      visualBottom,
+      keyboardOpen,
+    } = getEditorViewport();
 
-    // Measure without the previous fixed height.
+    const computed = window.getComputedStyle(editor);
+    const minHeight = Math.max(46, parseFloat(computed.minHeight) || 46);
+
+    // Remove the old fixed height before measuring the actual content.
     editor.style.height = "auto";
+    editor.style.maxHeight = "none";
     editor.style.overflowY = "hidden";
 
     const contentHeight = Math.max(editor.scrollHeight, minHeight);
-
-    // The keyboard-open limit is deliberately based on the visual viewport,
-    // not 100vh/dvh. This prevents the last line/border from being clipped.
     const editorRect = editor.getBoundingClientRect();
 
-    // Leave a real safety gap between the editor border and the Android
-    // keyboard.  The old 10px allowance was too small on some browsers, so
-    // the keyboard could paint over the bottom border.
-    const keyboardBottomGap = keyboardOpen ? 24 : 12;
-    const availableFromEditor = Math.max(
+    // Leave enough physical space above the system keyboard so the complete
+    // border, including its shadow/focus ring, remains visible.
+    const keyboardGap = keyboardOpen ? 22 : 10;
+    const availableHeight = Math.max(
       minHeight,
-      visualHeight - editorRect.top - keyboardBottomGap
+      visualBottom - editorRect.top - keyboardGap
     );
 
-    const viewportBasedMax = keyboardOpen
-      ? Math.max(minHeight, Math.floor(availableFromEditor))
-      : Math.max(minHeight, Math.min(420, Math.floor(visualHeight * 0.52)));
+    const normalMax = Math.min(420, Math.max(180, Math.floor(visualHeight * 0.52)));
+    const maxHeight = Math.max(
+      minHeight,
+      Math.min(420, keyboardOpen ? availableHeight : normalMax)
+    );
 
-    const maxHeight = Math.max(minHeight, Math.min(420, viewportBasedMax));
-    const nextHeight = Math.max(minHeight, Math.min(contentHeight, maxHeight));
+    const nextHeight = Math.max(
+      minHeight,
+      Math.min(contentHeight, maxHeight)
+    );
 
     document.documentElement.style.setProperty(
       "--composer-editor-max-height",
-      `${maxHeight}px`
-    );
-    editor.style.height = `${nextHeight}px`;
-    editor.style.maxHeight = `${maxHeight}px`;
-
-    if (contentHeight > maxHeight) {
-      editor.style.overflowY = "auto";
-    }
-
-    // Keep the existing editing position where possible. If the caret is at
-    // the end (normal old-message editing), reveal that final line explicitly.
-    const selection = window.getSelection();
-    const caretInside = !!(
-      selection?.rangeCount &&
-      editor.contains(selection.getRangeAt(0).commonAncestorContainer)
+      `${Math.floor(maxHeight)}px`
     );
 
-    if (revealCaret && caretInside) {
-      requestAnimationFrame(() => keepComposerCaretVisible());
+    editor.style.height = `${Math.floor(nextHeight)}px`;
+    editor.style.maxHeight = `${Math.floor(maxHeight)}px`;
+    editor.style.overflowY = contentHeight > maxHeight ? "auto" : "hidden";
+
+    if (revealCaret) {
+      const selection = window.getSelection();
+      const caretInside = !!(
+        selection?.rangeCount &&
+        editor.contains(selection.getRangeAt(0).commonAncestorContainer)
+      );
+
+      if (caretInside) {
+        requestAnimationFrame(() => {
+          keepComposerCaretVisible();
+          keepComposerAboveKeyboard();
+        });
+      } else {
+        editor.scrollTop = Math.min(previousScrollTop, editor.scrollHeight);
+      }
     } else {
       editor.scrollTop = Math.min(previousScrollTop, editor.scrollHeight);
     }
@@ -797,6 +848,7 @@ export default function Teligram() {
 
     const caret = range.cloneRange();
     caret.collapse(false);
+
     const caretBox = caret.getClientRects()[0] || caret.getBoundingClientRect();
     const editorBox = editor.getBoundingClientRect();
     const lineHeight = parseFloat(window.getComputedStyle(editor).lineHeight) || 20;
@@ -805,58 +857,87 @@ export default function Teligram() {
 
     if (!Number.isFinite(caretTop) || !Number.isFinite(caretBottom)) return;
 
-    if (caretBottom > editorBox.bottom - 10) {
-      editor.scrollTop += caretBottom - editorBox.bottom + 14;
-    } else if (caretTop < editorBox.top + 10) {
+    const topGap = 8;
+    const bottomGap = 12;
+
+    if (caretBottom > editorBox.bottom - bottomGap) {
+      editor.scrollTop += caretBottom - editorBox.bottom + bottomGap;
+    } else if (caretTop < editorBox.top + topGap) {
       editor.scrollTop = Math.max(
         0,
-        editor.scrollTop - (editorBox.top + 10 - caretTop)
+        editor.scrollTop - (editorBox.top + topGap - caretTop)
       );
     }
   };
 
-  const scheduleEditorResize = ({ revealCaret = true } = {}) => {
-    // Two animation frames are important on mobile: frame 1 lets React/layout
-    // update, frame 2 runs after the browser has applied the keyboard viewport.
-    requestAnimationFrame(() => {
+  const scheduleEditorResize = ({ revealCaret = true, delay = 0 } = {}) => {
+    const run = () => {
       requestAnimationFrame(() => {
-        autoResizeEditor({ revealCaret });
+        requestAnimationFrame(() => {
+          autoResizeEditor({ revealCaret });
+          keepComposerAboveKeyboard();
+        });
       });
-    });
+    };
+
+    if (delay > 0) {
+      window.setTimeout(run, delay);
+    } else {
+      run();
+    }
   };
 
-  // SINGLE MOBILE KEYBOARD / VIEWPORT HANDLER
-  // One source of truth: visualViewport controls the phone height and the
-  // editor is resized after the keyboard viewport has settled.
+  // SINGLE KEYBOARD / VISUAL-VIEWPORT HANDLER
   useEffect(() => {
     let settleTimer = null;
+    let lateTimer = null;
 
     const updateMobileViewport = () => {
       if (typeof window === "undefined") return;
 
       if (window.innerWidth > 767) {
         document.documentElement.style.removeProperty("--app-viewport-height");
+        document.documentElement.style.removeProperty("--app-viewport-top");
+        document.documentElement.style.removeProperty("--keyboard-inset");
+        document.documentElement.style.removeProperty("--keyboard-safe-bottom");
         return;
       }
 
-      const vv = window.visualViewport;
-      const layoutHeight = Math.max(1, Math.round(window.innerHeight || 0));
-      const height = Math.max(1, Math.round(vv?.height || layoutHeight));
-      const offsetTop = Math.max(0, Math.round(vv?.offsetTop || 0));
-      const keyboardInset = Math.max(0, layoutHeight - height - offsetTop);
+      const {
+        visualHeight,
+        offsetTop,
+        keyboardInset,
+      } = getEditorViewport();
+
       const root = document.querySelector(".nm-screen");
       const phone = document.querySelector(".nm-phone");
+      const height = `${Math.round(visualHeight)}px`;
+      const top = `${Math.round(offsetTop)}px`;
+      const inset = `${Math.round(keyboardInset)}px`;
+      const safeBottom = `${Math.max(14, Math.round(keyboardInset > 0 ? 22 : 14))}px`;
 
-      root?.style.setProperty("--app-viewport-height", `${height}px`);
-      root?.style.setProperty("--app-viewport-top", `${offsetTop}px`);
-      root?.style.setProperty("--keyboard-inset", `${keyboardInset}px`);
-      phone?.style.setProperty("--app-viewport-height", `${height}px`);
-      phone?.style.setProperty("--app-viewport-top", `${offsetTop}px`);
-      phone?.style.setProperty("--keyboard-inset", `${keyboardInset}px`);
+      root?.style.setProperty("--app-viewport-height", height);
+      root?.style.setProperty("--app-viewport-top", top);
+      root?.style.setProperty("--keyboard-inset", inset);
+      root?.style.setProperty("--keyboard-safe-bottom", safeBottom);
+      phone?.style.setProperty("--app-viewport-height", height);
+      phone?.style.setProperty("--app-viewport-top", top);
+      phone?.style.setProperty("--keyboard-inset", inset);
+      phone?.style.setProperty("--keyboard-safe-bottom", safeBottom);
 
       if (settleTimer) clearTimeout(settleTimer);
-      scheduleEditorResize();
-      settleTimer = setTimeout(() => scheduleEditorResize(), 120);
+      if (lateTimer) clearTimeout(lateTimer);
+
+      scheduleEditorResize({ revealCaret: true });
+      settleTimer = window.setTimeout(() => {
+        scheduleEditorResize({ revealCaret: true });
+      }, 120);
+
+      // Android keyboard animations can finish after visualViewport's first
+      // resize event. A third pass fixes the first-open-only clipping case.
+      lateTimer = window.setTimeout(() => {
+        scheduleEditorResize({ revealCaret: true });
+      }, 320);
     };
 
     updateMobileViewport();
@@ -866,6 +947,7 @@ export default function Teligram() {
 
     return () => {
       if (settleTimer) clearTimeout(settleTimer);
+      if (lateTimer) clearTimeout(lateTimer);
       window.removeEventListener("resize", updateMobileViewport);
       window.visualViewport?.removeEventListener("resize", updateMobileViewport);
       window.visualViewport?.removeEventListener("scroll", updateMobileViewport);
@@ -1513,14 +1595,29 @@ export default function Teligram() {
     range.collapse(false);
 
     const selection = window.getSelection();
-
     if (!selection) return;
 
     selection.removeAllRanges();
     selection.addRange(range);
     savedRangeRef.current = range.cloneRange();
 
-    setTimeout(updateActiveFormats, 0);
+    // Always show the end of an old message immediately. Do not use
+    // scrollIntoView(), because that can move the whole page behind the keyboard.
+    element.scrollTop = element.scrollHeight;
+
+    requestAnimationFrame(() => {
+      autoResizeEditor({ revealCaret: true });
+      keepComposerCaretVisible();
+      keepComposerAboveKeyboard();
+    });
+
+    setTimeout(() => {
+      element.scrollTop = element.scrollHeight;
+      autoResizeEditor({ revealCaret: true });
+      keepComposerCaretVisible();
+      keepComposerAboveKeyboard();
+      updateActiveFormats();
+    }, 80);
   };
 
   const sanitizeNoteHtml = (html) => {
@@ -3286,26 +3383,25 @@ export default function Teligram() {
     editor.innerHTML = normalizeEditorHtml(note.content_html || "");
 
 
-    // Measure before focus, then focus without browser auto-scroll. The
-    // keyboard viewport will trigger the final resize through visualViewport.
+    // Measure the old message first, then place the caret at the END.
+    // Multiple passes handle Android/iOS keyboard viewport animation.
     autoResizeEditor({ revealCaret: false });
 
     requestAnimationFrame(() => {
       placeCaretAtEnd(editor);
-      scheduleEditorResize();
-
-      // Keyboard animation commonly takes more than one frame. A final pass
-      // after it settles fixes the first-open-only clipping issue.
-      setTimeout(() => {
-        autoResizeEditor();
-        keepComposerCaretVisible();
-      }, 120);
-
-      setTimeout(() => {
-        autoResizeEditor();
-        keepComposerCaretVisible();
-      }, 300);
+      scheduleEditorResize({ revealCaret: true });
     });
+
+    setTimeout(() => {
+      if (editorRef.current) placeCaretAtEnd(editorRef.current);
+      scheduleEditorResize({ revealCaret: true });
+    }, 140);
+
+    setTimeout(() => {
+      autoResizeEditor({ revealCaret: true });
+      keepComposerCaretVisible();
+      keepComposerAboveKeyboard();
+    }, 360);
   };
 
   const startImageUpdate = (note) => {
@@ -3327,8 +3423,8 @@ export default function Teligram() {
 
     if (editorRef.current) {
       editorRef.current.innerHTML = normalizeEditorHtml(note.content_html || "");
-      scheduleEditorResize();
       placeCaretAtEnd();
+      scheduleEditorResize({ revealCaret: true });
     }
 
     setTimeout(() => {
@@ -3384,8 +3480,8 @@ export default function Teligram() {
 
     if (editorRef.current) {
       editorRef.current.innerHTML = normalizeEditorHtml(note.content_html || "");
-      scheduleEditorResize();
       placeCaretAtEnd();
+      scheduleEditorResize({ revealCaret: true });
     }
 
     setTimeout(() => {
@@ -4622,7 +4718,15 @@ export default function Teligram() {
                     contentEditable
                     data-placeholder={composerMode === "title" ? "Type title..." : composerMode === "image-update" ? "Select new image, then tap send" : composerMode === "image-caption" ? "Add image description..." : composerMode === "file-update" ? "Select new file, then tap send" : composerMode === "file-caption" ? "Add file description..." : "Enter text here"}
                     style={{ "--composerColor": "#111111", "--composerCaretColor": textColor, caretColor: textColor }}
-                    onFocus={saveSelection}
+                    onFocus={() => {
+                      saveSelection();
+                      scheduleEditorResize({ revealCaret: true });
+                      setTimeout(() => {
+                        autoResizeEditor({ revealCaret: true });
+                        keepComposerCaretVisible();
+                        keepComposerAboveKeyboard();
+                      }, 160);
+                    }}
                     onMouseUp={saveSelection}
                     onTouchEnd={saveSelection}
                     onKeyUp={saveSelection}
@@ -4633,11 +4737,13 @@ export default function Teligram() {
                       saveSelection();
                      }}
                      onInput={() => {
+                       // Normal typing NEVER moves the caret to the end.
+                       // Only resize/scroll the editor itself.
                        saveSelection();
-                       autoResizeEditor();
-                       // Do not move the caret to the end: only scroll the
-                       // composer enough to reveal the line being edited.
+                       autoResizeEditor({ revealCaret: true });
                        keepComposerCaretVisible();
+                       keepComposerAboveKeyboard();
+                       scheduleEditorResize({ revealCaret: true });
                      }}
                      onBlur={saveSelection}
                      onPaste={(e) => {
@@ -4645,7 +4751,10 @@ export default function Teligram() {
                        const text = e.clipboardData.getData("text/plain");
                        document.execCommand("insertText", false, text);
                        saveSelection();
-                       autoResizeEditor();
+                       autoResizeEditor({ revealCaret: true });
+                       keepComposerCaretVisible();
+                       keepComposerAboveKeyboard();
+                       scheduleEditorResize({ revealCaret: true });
                      }}
                    ></div>
 
@@ -13882,6 +13991,182 @@ export default function Teligram() {
 
         @keyframes channelLoadingSpin {
           to { transform: rotate(360deg); }
+        }
+
+        /* KEYBOARD-SAFE COMPOSER OVERRIDES */
+        .composer {
+          box-sizing: border-box !important;
+        }
+
+        .composer-card,
+        .composer-input-row,
+        .text-input {
+          box-sizing: border-box !important;
+        }
+
+        .text-input {
+          min-height: 46px !important;
+          line-height: 1.38 !important;
+          padding: 10px 13px !important;
+          -webkit-user-select: text !important;
+          user-select: text !important;
+          touch-action: manipulation !important;
+        }
+
+        @media (max-width: 767px) {
+          .nm-screen {
+            position: fixed !important;
+            top: var(--app-viewport-top, 0px) !important;
+            left: 0 !important;
+            right: 0 !important;
+            width: 100vw !important;
+            height: var(--app-viewport-height, 100dvh) !important;
+            min-height: 0 !important;
+            max-height: var(--app-viewport-height, 100dvh) !important;
+            overflow: hidden !important;
+          }
+
+          .nm-phone {
+            width: 100% !important;
+            height: var(--app-viewport-height, 100dvh) !important;
+            min-height: 0 !important;
+            max-height: var(--app-viewport-height, 100dvh) !important;
+            overflow: hidden !important;
+            display: flex !important;
+            flex-direction: column !important;
+          }
+
+          .chat-body {
+            flex: 1 1 auto !important;
+            min-height: 0 !important;
+            overflow-x: hidden !important;
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+          }
+
+          .composer {
+            flex: 0 1 auto !important;
+            width: 100% !important;
+            min-height: 0 !important;
+            max-height: calc(var(--app-viewport-height, 100dvh) - 70px) !important;
+            overflow-x: hidden !important;
+            overflow-y: auto !important;
+            padding-bottom: max(14px, env(safe-area-inset-bottom), var(--keyboard-safe-bottom, 14px)) !important;
+          }
+
+          .composer-card {
+            width: 100% !important;
+            min-height: 0 !important;
+            max-height: none !important;
+            overflow: visible !important;
+          }
+
+          .composer-input-row {
+            align-items: flex-end !important;
+            min-height: 46px !important;
+          }
+
+          .composer-input-row .text-input {
+            min-height: 46px !important;
+            max-height: min(
+              var(--composer-editor-max-height, 240px),
+              max(46px, calc(var(--app-viewport-height, 100dvh) - 170px))
+            ) !important;
+            overflow-x: hidden !important;
+            overflow-y: auto !important;
+            scroll-padding-top: 10px !important;
+            scroll-padding-bottom: 24px !important;
+            -webkit-overflow-scrolling: touch !important;
+          }
+
+          .composer-tools-popover.composer-tools-always-visible {
+            max-width: 100% !important;
+            overflow-x: auto !important;
+            overflow-y: hidden !important;
+            flex-wrap: nowrap !important;
+          }
+        }
+
+        /* FINAL KEYBOARD-SAFE OVERRIDES */
+        .text-input {
+          min-height: 46px !important;
+          box-sizing: border-box !important;
+          -webkit-user-select: text !important;
+          user-select: text !important;
+        }
+
+        @media (max-width: 767px) {
+          .nm-screen {
+            position: fixed !important;
+            inset: var(--app-viewport-top, 0px) 0 0 0 !important;
+            width: 100vw !important;
+            height: var(--app-viewport-height, 100dvh) !important;
+            max-height: var(--app-viewport-height, 100dvh) !important;
+            min-height: 0 !important;
+            overflow: hidden !important;
+          }
+
+          .nm-phone {
+            width: 100% !important;
+            height: var(--app-viewport-height, 100dvh) !important;
+            max-height: var(--app-viewport-height, 100dvh) !important;
+            min-height: 0 !important;
+            overflow: hidden !important;
+            display: flex !important;
+            flex-direction: column !important;
+          }
+
+          .chat-body {
+            flex: 1 1 auto !important;
+            min-height: 0 !important;
+            overflow-x: hidden !important;
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+          }
+
+          .composer {
+            flex: 0 1 auto !important;
+            width: 100% !important;
+            min-height: 0 !important;
+            max-height: calc(var(--app-viewport-height, 100dvh) - 70px) !important;
+            overflow-x: hidden !important;
+            overflow-y: auto !important;
+            padding-bottom: max(14px, env(safe-area-inset-bottom), var(--keyboard-safe-bottom, 14px)) !important;
+          }
+
+          .composer-card {
+            min-height: 0 !important;
+            max-height: none !important;
+            overflow: visible !important;
+            box-sizing: border-box !important;
+          }
+
+          .composer-input-row {
+            min-height: 46px !important;
+            align-items: flex-end !important;
+            overflow: visible !important;
+          }
+
+          .composer-input-row .text-input {
+            min-height: 46px !important;
+            max-height: min(
+              var(--composer-editor-max-height, 240px),
+              max(46px, calc(var(--app-viewport-height, 100dvh) - 170px))
+            ) !important;
+            overflow-x: hidden !important;
+            overflow-y: auto !important;
+            scroll-padding-top: 10px !important;
+            scroll-padding-bottom: 24px !important;
+            -webkit-overflow-scrolling: touch !important;
+          }
+
+          .composer-tools-popover.composer-tools-always-visible {
+            width: 100% !important;
+            max-width: 100% !important;
+            flex-wrap: nowrap !important;
+            overflow-x: auto !important;
+            overflow-y: hidden !important;
+          }
         }
 
         @media (max-width: 767px) {
