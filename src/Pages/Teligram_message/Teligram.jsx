@@ -134,6 +134,7 @@ export default function Teligram() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [loading, setLoading] = useState(false);
+  const [channelLoading, setChannelLoading] = useState(true);
   const [manualRefreshing, setManualRefreshing] = useState(false);
 
   const [toast, setToast] = useState({
@@ -1791,7 +1792,11 @@ export default function Teligram() {
     const loadId = ++channelLoadIdRef.current;
     const channelId = localStorage.getItem("selected_channel_id");
 
+    setChannelLoading(true);
+    setNotes([]);
+
     if (!channelId) {
+      setChannelLoading(false);
       window.location.hash = "/teligram-channels";
       return;
     }
@@ -1809,6 +1814,7 @@ export default function Teligram() {
       if (loadId !== channelLoadIdRef.current) return;
 
       if (!res.ok) {
+        setChannelLoading(false);
         showToast("Channel not found", "error");
 
         setTimeout(() => {
@@ -1865,6 +1871,7 @@ export default function Teligram() {
         setUnlockError("");
         setUnlockTrustDevice(false);
         setNotes([]);
+        setChannelLoading(false);
         return;
       }
 
@@ -2058,6 +2065,7 @@ export default function Teligram() {
       }
     } finally {
       isFetchingNotesRef.current = false;
+      if (!silent) setChannelLoading(false);
     }
   };
 
@@ -3832,7 +3840,12 @@ export default function Teligram() {
           )}
         </header>
 
-        {privateChannelLocked ? (
+        {channelLoading ? (
+          <main className="channel-loading-screen" aria-live="polite" aria-busy="true">
+            <div className="channel-loading-spinner" aria-hidden="true"></div>
+            <div className="channel-loading-text">Loading chat...</div>
+          </main>
+        ) : privateChannelLocked ? (
           <main className="unlock-screen">
             <div className="unlock-card">
               <div className="unlock-logo">
@@ -13756,9 +13769,89 @@ export default function Teligram() {
           overflow-wrap: anywhere !important;
           word-break: break-word !important;
         }
-      `}
-    
-</style>
+        /* Larger composer buttons, equal spacing, one row. */
+        .composer-tools-top {
+          width: 100% !important;
+        }
+
+        .composer-tools-popover.composer-tools-always-visible {
+          width: 100% !important;
+          display: flex !important;
+          flex-wrap: nowrap !important;
+          align-items: center !important;
+          gap: 8px !important;
+        }
+
+        .composer-tools-popover .tool-btn {
+          width: 46px !important;
+          height: 46px !important;
+          min-width: 46px !important;
+          min-height: 46px !important;
+          flex: 1 1 0 !important;
+          max-width: 64px !important;
+          padding: 7px !important;
+          border-radius: 13px !important;
+        }
+
+        .composer-tools-popover .tool-icon {
+          width: 28px !important;
+          height: 28px !important;
+          object-fit: contain !important;
+        }
+
+        .composer-tools-popover .refresh-icon {
+          font-size: 25px !important;
+          line-height: 1 !important;
+        }
+
+        .channel-loading-screen {
+          flex: 1 !important;
+          min-height: 0 !important;
+          display: flex !important;
+          flex-direction: column !important;
+          align-items: center !important;
+          justify-content: center !important;
+          gap: 12px !important;
+          background: #f8fafc !important;
+        }
+
+        .channel-loading-spinner {
+          width: 38px !important;
+          height: 38px !important;
+          border: 4px solid rgba(37, 99, 235, 0.18) !important;
+          border-top-color: #2563eb !important;
+          border-radius: 50% !important;
+          animation: channelLoadingSpin 0.8s linear infinite !important;
+        }
+
+        .channel-loading-text {
+          font-size: 13px !important;
+          font-weight: 700 !important;
+          color: #64748b !important;
+        }
+
+        @keyframes channelLoadingSpin {
+          to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 767px) {
+          .composer-tools-popover.composer-tools-always-visible {
+            gap: 6px !important;
+          }
+
+          .composer-tools-popover .tool-btn {
+            width: 42px !important;
+            height: 42px !important;
+            min-width: 42px !important;
+            min-height: 42px !important;
+          }
+
+          .composer-tools-popover .tool-icon {
+            width: 25px !important;
+            height: 25px !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
