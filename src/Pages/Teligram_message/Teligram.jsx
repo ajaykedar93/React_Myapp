@@ -134,8 +134,8 @@ export default function Teligram() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [loading, setLoading] = useState(false);
-  const [channelLoading, setChannelLoading] = useState(true);
   const [manualRefreshing, setManualRefreshing] = useState(false);
+  const [mobileViewportHeight, setMobileViewportHeight] = useState(null);
 
   const [toast, setToast] = useState({
     show: false,
@@ -153,6 +153,30 @@ export default function Teligram() {
   useEffect(() => {
     currentDeviceIdRef.current = getCurrentDeviceId();
     loadSelectedChannel();
+  }, []);
+
+  // Mobile browsers do not always shrink 100vh when the system keyboard
+  // opens. Use the visual viewport so the composer remains above it.
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const updateMobileViewport = () => {
+      if (window.innerWidth > 767) {
+        setMobileViewportHeight(null);
+        return;
+      }
+      setMobileViewportHeight(Math.round(viewport?.height || window.innerHeight));
+    };
+
+    updateMobileViewport();
+    window.addEventListener("resize", updateMobileViewport);
+    viewport?.addEventListener("resize", updateMobileViewport);
+    viewport?.addEventListener("scroll", updateMobileViewport);
+
+    return () => {
+      window.removeEventListener("resize", updateMobileViewport);
+      viewport?.removeEventListener("resize", updateMobileViewport);
+      viewport?.removeEventListener("scroll", updateMobileViewport);
+    };
   }, []);
 
   useEffect(() => {
@@ -710,131 +734,80 @@ export default function Teligram() {
   };
 
 
-  // MOBILE KEYBOARD-SAFE COMPOSER
-  // The composer is measured against the REAL visual viewport. This keeps the
-  // complete input border visible above the Android/iOS system keyboard.
-  const getEditorViewport = () => {
-    if (typeof window === "undefined") {
-      return {
-        layoutHeight: 0,
-        visualHeight: 0,
-        offsetTop: 0,
-        visualBottom: 0,
-        keyboardOpen: false,
-        keyboardInset: 0,
-      };
-    }
+  const syncMobileViewport = () => {
+    if (typeof window === "undefined") return;
 
     const vv = window.visualViewport;
-    const layoutHeight = Math.max(1, Number(window.innerHeight) || 1);
-    const visualHeight = Math.max(1, Number(vv?.height) || layoutHeight);
-    const offsetTop = Math.max(0, Number(vv?.offsetTop) || 0);
-    const visualBottom = offsetTop + visualHeight;
-    const keyboardInset = Math.max(0, layoutHeight - visualHeight - offsetTop);
-    const keyboardOpen = keyboardInset > 40 || visualHeight < layoutHeight * 0.90;
+    const height = Math.max(1, Math.round(vv?.height || window.innerHeight));
 
+    document.documentElement.style.setProperty("--nm-visual-height", `${height}px`);
+
+    const phone = document.querySelector(".nm-phone");
+    if (phone) {
+      phone.style.height = `${height}px`;
+      phone.style.maxHeight = `${height}px`;
+    }
+  };
+
+  // MOBILE-SAFE COMPOSER RESIZE
+  // The keyboard changes visualViewport asynchronously.  The editor must be
+  // measured only after that viewport has settled, otherwise the first edit
+  // can be clipped and the second edit appears correct.
+  const getEditorViewport = () => {
+    const vv = typeof window !== "undefined" ? window.visualViewport : null;
+    const layoutHeight = Number(window.innerHeight) || 0;
+    const visualHeight = Number(vv?.height) || layoutHeight;
+    const keyboardOpen = layoutHeight > 0 && visualHeight < layoutHeight * 0.88;
     return {
       layoutHeight,
       visualHeight,
-      offsetTop,
-      visualBottom,
       keyboardOpen,
-      keyboardInset,
     };
-  };
-
-  const keepComposerAboveKeyboard = () => {
-    const editor = editorRef.current;
-    if (!editor || typeof window === "undefined") return;
-
-    const { visualBottom, keyboardOpen } = getEditorViewport();
-    const gap = keyboardOpen ? 18 : 8;
-    const rect = editor.getBoundingClientRect();
-    const overflow = rect.bottom - (visualBottom - gap);
-
-    if (overflow > 0) {
-      // Do not scroll the page. Scroll only the editor itself when its
-      // content is taller than the available keyboard-safe area.
-      if (editor.scrollHeight > editor.clientHeight + 1) {
-        editor.scrollTop += overflow;
-      }
-    }
-
-    // When the browser has moved the visual viewport during keyboard opening,
-    // keep the caret visible without using scrollIntoView() (which can scroll
-    // the whole page and hide the composer again).
-    requestAnimationFrame(() => {
-      keepComposerCaretVisible();
-    });
   };
 
   const autoResizeEditor = ({ revealCaret = true } = {}) => {
     const editor = editorRef.current;
     if (!editor || typeof window === "undefined") return;
 
-    const previousScrollTop = editor.scrollTop;
-    const {
-      visualHeight,
-      visualBottom,
-      keyboardOpen,
-    } = getEditorViewport();
-
+    const { visualHeight, keyboardOpen } = getEditorViewport();
     const computed = window.getComputedStyle(editor);
-    const minHeight = Math.max(46, parseFloat(computed.minHeight) || 46);
+    const minHeight = Math.max(44, parseFloat(computed.minHeight) || 44);
 
-    // Remove the old fixed height before measuring the actual content.
+    // Measure natural content height first.
     editor.style.height = "auto";
-    editor.style.maxHeight = "none";
     editor.style.overflowY = "hidden";
 
     const contentHeight = Math.max(editor.scrollHeight, minHeight);
     const editorRect = editor.getBoundingClientRect();
 
-    // Leave enough physical space above the system keyboard so the complete
-    // border, including its shadow/focus ring, remains visible.
-    const keyboardGap = keyboardOpen ? 22 : 10;
+    // The editor must stay completely inside the visual viewport. Reserve
+    // enough space for the composer bottom padding and border so the input
+    // border can never extend underneath the system keyboard.
+    const bottomSafety = keyboardOpen ? 18 : 12;
     const availableHeight = Math.max(
       minHeight,
-      visualBottom - editorRect.top - keyboardGap
+      visualHeight - editorRect.top - bottomSafety
     );
 
-    const normalMax = Math.min(420, Math.max(180, Math.floor(visualHeight * 0.52)));
-    const maxHeight = Math.max(
-      minHeight,
-      Math.min(420, keyboardOpen ? availableHeight : normalMax)
-    );
+    // On desktop keep the original comfortable limit. On mobile the visual
+    // viewport is the hard limit while the editor itself can scroll.
+    const maxHeight = keyboardOpen
+      ? Math.max(minHeight, Math.min(420, Math.floor(availableHeight)))
+      : Math.max(minHeight, Math.min(420, Math.floor(visualHeight * 0.52)));
 
-    const nextHeight = Math.max(
-      minHeight,
-      Math.min(contentHeight, maxHeight)
-    );
+    const nextHeight = Math.max(minHeight, Math.min(contentHeight, maxHeight));
 
     document.documentElement.style.setProperty(
       "--composer-editor-max-height",
-      `${Math.floor(maxHeight)}px`
+      `${maxHeight}px`
     );
 
-    editor.style.height = `${Math.floor(nextHeight)}px`;
-    editor.style.maxHeight = `${Math.floor(maxHeight)}px`;
+    editor.style.height = `${nextHeight}px`;
+    editor.style.maxHeight = `${maxHeight}px`;
     editor.style.overflowY = contentHeight > maxHeight ? "auto" : "hidden";
 
     if (revealCaret) {
-      const selection = window.getSelection();
-      const caretInside = !!(
-        selection?.rangeCount &&
-        editor.contains(selection.getRangeAt(0).commonAncestorContainer)
-      );
-
-      if (caretInside) {
-        requestAnimationFrame(() => {
-          keepComposerCaretVisible();
-          keepComposerAboveKeyboard();
-        });
-      } else {
-        editor.scrollTop = Math.min(previousScrollTop, editor.scrollHeight);
-      }
-    } else {
-      editor.scrollTop = Math.min(previousScrollTop, editor.scrollHeight);
+      requestAnimationFrame(() => keepComposerCaretVisible());
     }
   };
 
@@ -848,7 +821,6 @@ export default function Teligram() {
 
     const caret = range.cloneRange();
     caret.collapse(false);
-
     const caretBox = caret.getClientRects()[0] || caret.getBoundingClientRect();
     const editorBox = editor.getBoundingClientRect();
     const lineHeight = parseFloat(window.getComputedStyle(editor).lineHeight) || 20;
@@ -857,100 +829,91 @@ export default function Teligram() {
 
     if (!Number.isFinite(caretTop) || !Number.isFinite(caretBottom)) return;
 
-    const topGap = 8;
-    const bottomGap = 12;
-
-    if (caretBottom > editorBox.bottom - bottomGap) {
-      editor.scrollTop += caretBottom - editorBox.bottom + bottomGap;
-    } else if (caretTop < editorBox.top + topGap) {
+    if (caretBottom > editorBox.bottom - 10) {
+      editor.scrollTop += caretBottom - editorBox.bottom + 14;
+    } else if (caretTop < editorBox.top + 10) {
       editor.scrollTop = Math.max(
         0,
-        editor.scrollTop - (editorBox.top + topGap - caretTop)
+        editor.scrollTop - (editorBox.top + 10 - caretTop)
       );
     }
   };
 
-  const scheduleEditorResize = ({ revealCaret = true, delay = 0 } = {}) => {
-    const run = () => {
+  const scheduleEditorResize = ({ revealCaret = true } = {}) => {
+    // Two animation frames are important on mobile: frame 1 lets React/layout
+    // update, frame 2 runs after the browser has applied the keyboard viewport.
+    requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          autoResizeEditor({ revealCaret });
-          keepComposerAboveKeyboard();
-        });
+        autoResizeEditor({ revealCaret });
       });
-    };
-
-    if (delay > 0) {
-      window.setTimeout(run, delay);
-    } else {
-      run();
-    }
+    });
   };
 
-  // SINGLE KEYBOARD / VISUAL-VIEWPORT HANDLER
+  // Recalculate after keyboard/window viewport changes. Do not use
+  // editor.scrollIntoView() here because it can move the whole page while the
+  // keyboard is animating and temporarily hide the composer border.
   useEffect(() => {
     let settleTimer = null;
-    let lateTimer = null;
 
-    const updateMobileViewport = () => {
-      if (typeof window === "undefined") return;
+    const handleEditorViewportResize = () => {
+      if (typeof window !== "undefined") {
+        const vv = window.visualViewport;
+        const height = Math.max(1, Math.round(vv?.height || window.innerHeight));
+        const offsetTop = Math.max(0, Math.round(vv?.offsetTop || 0));
+        const root = document.querySelector(".nm-screen");
+        const phone = document.querySelector(".nm-phone");
 
-      if (window.innerWidth > 767) {
-        document.documentElement.style.removeProperty("--app-viewport-height");
-        document.documentElement.style.removeProperty("--app-viewport-top");
-        document.documentElement.style.removeProperty("--keyboard-inset");
-        document.documentElement.style.removeProperty("--keyboard-safe-bottom");
-        return;
+        root?.style.setProperty("--app-viewport-height", `${height}px`);
+        phone?.style.setProperty("--app-viewport-height", `${height}px`);
+        document.documentElement.style.setProperty("--nm-visual-height", `${height}px`);
+        document.documentElement.style.setProperty("--nm-visual-offset-top", `${offsetTop}px`);
+
+        if (phone) {
+          phone.style.height = `${height}px`;
+          phone.style.maxHeight = `${height}px`;
+          phone.style.transform = `translateY(${offsetTop}px)`;
+        }
+
+        syncMobileViewport();
       }
 
-      const {
-        visualHeight,
-        offsetTop,
-        keyboardInset,
-      } = getEditorViewport();
-
-      const root = document.querySelector(".nm-screen");
-      const phone = document.querySelector(".nm-phone");
-      const height = `${Math.round(visualHeight)}px`;
-      const top = `${Math.round(offsetTop)}px`;
-      const inset = `${Math.round(keyboardInset)}px`;
-      const safeBottom = `${Math.max(14, Math.round(keyboardInset > 0 ? 22 : 14))}px`;
-
-      root?.style.setProperty("--app-viewport-height", height);
-      root?.style.setProperty("--app-viewport-top", top);
-      root?.style.setProperty("--keyboard-inset", inset);
-      root?.style.setProperty("--keyboard-safe-bottom", safeBottom);
-      phone?.style.setProperty("--app-viewport-height", height);
-      phone?.style.setProperty("--app-viewport-top", top);
-      phone?.style.setProperty("--keyboard-inset", inset);
-      phone?.style.setProperty("--keyboard-safe-bottom", safeBottom);
-
       if (settleTimer) clearTimeout(settleTimer);
-      if (lateTimer) clearTimeout(lateTimer);
-
-      scheduleEditorResize({ revealCaret: true });
-      settleTimer = window.setTimeout(() => {
-        scheduleEditorResize({ revealCaret: true });
-      }, 120);
-
-      // Android keyboard animations can finish after visualViewport's first
-      // resize event. A third pass fixes the first-open-only clipping case.
-      lateTimer = window.setTimeout(() => {
-        scheduleEditorResize({ revealCaret: true });
-      }, 320);
+      scheduleEditorResize();
+      settleTimer = setTimeout(() => {
+        scheduleEditorResize();
+      }, 140);
     };
 
-    updateMobileViewport();
-    window.addEventListener("resize", updateMobileViewport);
-    window.visualViewport?.addEventListener("resize", updateMobileViewport);
-    window.visualViewport?.addEventListener("scroll", updateMobileViewport);
+    window.addEventListener("resize", handleEditorViewportResize);
+    window.visualViewport?.addEventListener("resize", handleEditorViewportResize);
+    window.visualViewport?.addEventListener("scroll", handleEditorViewportResize);
 
     return () => {
       if (settleTimer) clearTimeout(settleTimer);
-      if (lateTimer) clearTimeout(lateTimer);
-      window.removeEventListener("resize", updateMobileViewport);
-      window.visualViewport?.removeEventListener("resize", updateMobileViewport);
-      window.visualViewport?.removeEventListener("scroll", updateMobileViewport);
+      window.removeEventListener("resize", handleEditorViewportResize);
+      window.visualViewport?.removeEventListener("resize", handleEditorViewportResize);
+      window.visualViewport?.removeEventListener("scroll", handleEditorViewportResize);
+    };
+  }, []);
+
+  // Keep the latest native text selection alive while the user selects a
+  // word/line and then opens the color picker. This is especially important
+  // on mobile because the native color dialog temporarily takes focus.
+  useEffect(() => {
+    const rememberSelection = () => {
+      const editor = editorRef.current;
+      const selection = window.getSelection();
+      if (!editor || !selection?.rangeCount) return;
+
+      const range = selection.getRangeAt(0);
+      if (editor.contains(range.commonAncestorContainer)) {
+        savedRangeRef.current = range.cloneRange();
+      }
+    };
+
+    document.addEventListener("selectionchange", rememberSelection);
+    return () => {
+      document.removeEventListener("selectionchange", rememberSelection);
     };
   }, []);
 
@@ -1595,29 +1558,14 @@ export default function Teligram() {
     range.collapse(false);
 
     const selection = window.getSelection();
+
     if (!selection) return;
 
     selection.removeAllRanges();
     selection.addRange(range);
     savedRangeRef.current = range.cloneRange();
 
-    // Always show the end of an old message immediately. Do not use
-    // scrollIntoView(), because that can move the whole page behind the keyboard.
-    element.scrollTop = element.scrollHeight;
-
-    requestAnimationFrame(() => {
-      autoResizeEditor({ revealCaret: true });
-      keepComposerCaretVisible();
-      keepComposerAboveKeyboard();
-    });
-
-    setTimeout(() => {
-      element.scrollTop = element.scrollHeight;
-      autoResizeEditor({ revealCaret: true });
-      keepComposerCaretVisible();
-      keepComposerAboveKeyboard();
-      updateActiveFormats();
-    }, 80);
+    setTimeout(updateActiveFormats, 0);
   };
 
   const sanitizeNoteHtml = (html) => {
@@ -1904,11 +1852,7 @@ export default function Teligram() {
     const loadId = ++channelLoadIdRef.current;
     const channelId = localStorage.getItem("selected_channel_id");
 
-    setChannelLoading(true);
-    setNotes([]);
-
     if (!channelId) {
-      setChannelLoading(false);
       window.location.hash = "/teligram-channels";
       return;
     }
@@ -1926,7 +1870,6 @@ export default function Teligram() {
       if (loadId !== channelLoadIdRef.current) return;
 
       if (!res.ok) {
-        setChannelLoading(false);
         showToast("Channel not found", "error");
 
         setTimeout(() => {
@@ -1983,7 +1926,6 @@ export default function Teligram() {
         setUnlockError("");
         setUnlockTrustDevice(false);
         setNotes([]);
-        setChannelLoading(false);
         return;
       }
 
@@ -2177,7 +2119,6 @@ export default function Teligram() {
       }
     } finally {
       isFetchingNotesRef.current = false;
-      if (!silent) setChannelLoading(false);
     }
   };
 
@@ -2272,241 +2213,88 @@ export default function Teligram() {
     return pinnedNoteIds.map((id) => byId.get(String(id))).filter(Boolean);
   }, [notes, pinnedNoteIds]);
 
-  // ============================================================
-  // RICH TEXT FORMAT LOGIC
-  // Supports independently and together:
-  //   color + bold + underline
-  //
-  // Rules:
-  // 1. Selected text -> only the selection is changed.
-  // 2. No selection/caret -> formatting applies to future typing.
-  // 3. Existing colors are never overwritten by bold/underline.
-  // 4. Color remains active for the next typed characters.
-  // 5. Bold + underline + color can all be active together.
-  // ============================================================
-
-  const getCurrentEditorRange = () => {
-    const selection = window.getSelection();
-    if (selection?.rangeCount) {
-      const range = selection.getRangeAt(0);
-      if (editorRef.current?.contains(range.commonAncestorContainer)) {
-        return range.cloneRange();
-      }
-    }
-
-    return savedRangeRef.current?.cloneRange() || null;
-  };
-
-  const isRangeInsideEditor = (range) =>
-    Boolean(
-      editorRef.current &&
-      range &&
-      editorRef.current.contains(range.commonAncestorContainer)
-    );
-
-  const setCaretRange = (range) => {
-    if (!range || !isRangeInsideEditor(range)) return false;
-
-    const selection = window.getSelection();
-    if (!selection) return false;
-
-    selection.removeAllRanges();
-    selection.addRange(range);
-    savedRangeRef.current = range.cloneRange();
-    return true;
-  };
-
-  const saveSelection = () => {
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) return;
-
-    const range = selection.getRangeAt(0);
-
-    if (isRangeInsideEditor(range)) {
-      savedRangeRef.current = range.cloneRange();
-    }
-  };
-
-  const restoreSelection = () => {
-    if (!savedRangeRef.current) return false;
-    return setCaretRange(savedRangeRef.current.cloneRange());
-  };
-
-  const getSelectionHasText = () => {
-    const range = getCurrentEditorRange();
-    return Boolean(range && !range.collapsed && String(range.toString() || ""));
-  };
-
-  const updateActiveFormatsFromSelection = () => {
-    const range = getCurrentEditorRange();
-
-    if (!range) {
-      setActiveFormats({
-        bold: Boolean(typingFormatsRef.current.bold),
-        underline: Boolean(typingFormatsRef.current.underline),
-      });
-      return;
-    }
-
-    if (range.collapsed) {
-      setActiveFormats({
-        bold: Boolean(typingFormatsRef.current.bold),
-        underline: Boolean(typingFormatsRef.current.underline),
-      });
-      return;
-    }
-
-    // For a selected range, reflect the browser's actual formatting state.
-    // This lets selecting existing bold/underline text show the correct button.
-    try {
-      setActiveFormats({
-        bold: Boolean(document.queryCommandState("bold")),
-        underline: Boolean(document.queryCommandState("underline")),
-      });
-    } catch {
-      setActiveFormats({
-        bold: false,
-        underline: false,
-      });
-    }
-  };
-
-  const syncTypingMarker = (formats = typingFormatsRef.current) => {
+  const syncTypingMarker = (formats) => {
     if (!editorRef.current) return false;
-
-    const range = getCurrentEditorRange();
+    const selection = window.getSelection();
+    const range = selection && selection.rangeCount > 0
+      ? selection.getRangeAt(0)
+      : savedRangeRef.current;
     if (!range || !range.collapsed) return false;
 
     const typingColor = normalizeTextColor(
       formats.color || selectedTextColorRef.current || "#111111"
     );
 
-    // Reuse a marker at the current caret when possible.
-    let marker = null;
-    let node = range.startContainer;
-
-    if (node?.nodeType === Node.TEXT_NODE) {
-      node = node.parentElement;
-    }
-
-    if (node instanceof HTMLElement) {
-      marker = node.closest('[data-typing-format-marker="true"]');
-    }
-
-    if (marker && editorRef.current.contains(marker)) {
-      marker.style.setProperty(
-        "color",
-        typingColor,
-        "important"
-      );
-      marker.style.setProperty(
-        "-webkit-text-fill-color",
-        typingColor,
-        "important"
-      );
-      marker.style.fontWeight = formats.bold ? "900" : "400";
-      marker.style.textDecoration = formats.underline ? "underline" : "none";
-
-      const markerText = marker.firstChild;
-      const nextRange = document.createRange();
-
-      if (markerText) {
-        nextRange.setStart(markerText, markerText.nodeValue.length);
-      } else {
-        nextRange.setStartAfter(marker);
-      }
-
-      nextRange.collapse(true);
-      return setCaretRange(nextRange);
-    }
-
-    const markerElement = document.createElement("span");
-    markerElement.dataset.typingFormatMarker = "true";
-    markerElement.style.setProperty("color", typingColor, "important");
-    markerElement.style.setProperty(
-      "-webkit-text-fill-color",
-      typingColor,
-      "important"
-    );
-    markerElement.style.fontWeight = formats.bold ? "900" : "400";
-    markerElement.style.textDecoration = formats.underline
-      ? "underline"
-      : "none";
-    markerElement.textContent = "\u200B";
-
-    range.insertNode(markerElement);
+    const marker = document.createElement("span");
+    marker.dataset.typingMarker = "true";
+    marker.style.fontWeight = formats.bold ? "900" : "400";
+    marker.style.textDecoration = formats.underline ? "underline" : "none";
+    marker.style.setProperty("color", typingColor, "important");
+    marker.style.setProperty("-webkit-text-fill-color", typingColor, "important");
+    marker.textContent = "\u200B";
+    range.insertNode(marker);
 
     const nextRange = document.createRange();
-    nextRange.setStart(markerElement.firstChild, 1);
+    nextRange.setStart(marker.firstChild, 1);
     nextRange.collapse(true);
-
-    return setCaretRange(nextRange);
+    selection.removeAllRanges();
+    selection.addRange(nextRange);
+    savedRangeRef.current = nextRange.cloneRange();
+    return true;
   };
 
+  const saveSelection = () => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
+    const range = selection.getRangeAt(0);
+    if (editorRef.current && editorRef.current.contains(range.commonAncestorContainer)) {
+      savedRangeRef.current = range.cloneRange();
+    }
+  };
+
+  const restoreSelection = () => {
+    const selection = window.getSelection();
+    if (!selection || !savedRangeRef.current) return false;
+    selection.removeAllRanges();
+    selection.addRange(savedRangeRef.current);
+    return true;
+  };
+
+  const updateActiveFormats = () => {
+    // Formatting buttons reflect explicit toolbar clicks only. Moving the
+    // caret or selecting existing formatted text must not activate a button.
+    setActiveFormats({ ...typingFormatsRef.current });
+  };
+
+  // Apply color only to the current selection. The saved Range is restored before
+  // the browser color input changes focus, so mobile/desktop selection is preserved.
   const applyInlineColorToRange = (range, color) => {
     if (!editorRef.current || !range || range.collapsed) return false;
-    if (!isRangeInsideEditor(range)) return false;
-
-    const finalColor = normalizeTextColor(color);
     const selection = window.getSelection();
+    const finalColor = normalizeTextColor(color);
 
     try {
       editorRef.current.focus({ preventScroll: true });
       selection?.removeAllRanges();
-      selection?.addRange(range.cloneRange());
-
+      selection?.addRange(range);
       document.execCommand("styleWithCSS", false, true);
       const applied = document.execCommand("foreColor", false, finalColor);
-
-      // Make sure WebKit/Chromium also paints the inline range correctly.
-      const walker = document.createTreeWalker(
-        editorRef.current,
-        NodeFilter.SHOW_ELEMENT
-      );
-
-      let node = walker.nextNode();
-
-      while (node) {
-        if (
-          node instanceof HTMLElement &&
-          node !== editorRef.current &&
-          node.matches("span, font") &&
-          range.intersectsNode(node)
-        ) {
-          node.style.setProperty("color", finalColor, "important");
-          node.style.setProperty(
-            "-webkit-text-fill-color",
-            finalColor,
-            "important"
-          );
-        }
-        node = walker.nextNode();
-      }
-
       if (!applied) {
-        const fallback = document.createElement("span");
-        fallback.style.setProperty("color", finalColor, "important");
-        fallback.style.setProperty(
-          "-webkit-text-fill-color",
-          finalColor,
-          "important"
-        );
-
+        // Fallback for browsers that do not implement foreColor reliably.
+        const span = document.createElement("span");
+        span.style.color = finalColor;
         try {
-          range.surroundContents(fallback);
+          range.surroundContents(span);
         } catch {
           return false;
         }
       }
-
       const current = window.getSelection();
-
-      if (current?.rangeCount) {
+      if (current && current.rangeCount) {
         savedRangeRef.current = current.getRangeAt(0).cloneRange();
       } else {
         savedRangeRef.current = range.cloneRange();
       }
-
       return true;
     } catch (error) {
       console.error("Apply selection color error:", error);
@@ -2517,148 +2305,132 @@ export default function Teligram() {
   const applySelectedFormat = (type, value = null) => {
     if (!editorRef.current) return;
 
-    const range = getCurrentEditorRange();
-    if (!range) return;
-
-    const hasSelection = !range.collapsed && Boolean(String(range.toString() || ""));
-    const currentColor = normalizeTextColor(
-      selectedTextColorRef.current || typingFormatsRef.current.color || "#111111"
-    );
+    editorRef.current.focus();
+    restoreSelection();
 
     try {
-      editorRef.current.focus({ preventScroll: true });
-      setCaretRange(range);
+      const selection = window.getSelection();
+      const range = selection && selection.rangeCount
+        ? selection.getRangeAt(0)
+        : null;
+      const hasSelection = Boolean(range && !range.collapsed);
+      const currentTypingColor = normalizeTextColor(
+        selectedTextColorRef.current || "#111111"
+      );
 
-      // ------------------------------------------------------------
-      // COLOR
-      // ------------------------------------------------------------
-      if (type === "color") {
-        const finalColor = normalizeTextColor(value);
-
-        if (hasSelection) {
-          // Only selected characters change color.
-          const selectedRange = getCurrentEditorRange();
-          if (selectedRange) {
-            applyInlineColorToRange(selectedRange, finalColor);
-
-            // Put caret after the changed selection.
-            const selection = window.getSelection();
-            const afterRange = selection?.rangeCount
-              ? selection.getRangeAt(0).cloneRange()
-              : selectedRange.cloneRange();
-
-            afterRange.collapse(false);
-            setCaretRange(afterRange);
-          }
-        }
-
-        // Color is also the new typing color from this caret onward.
-        selectedTextColorRef.current = finalColor;
-        typingFormatsRef.current = {
-          ...typingFormatsRef.current,
-          color: finalColor,
-        };
-
-        setTextColor(finalColor);
-        setColorModeActive(true);
-        setComposerTextColor(finalColor);
-
-        // Apply all currently active typing formats together.
-        const nextFormats = {
-          ...typingFormatsRef.current,
-          color: finalColor,
-        };
-
-        const caretRange = getCurrentEditorRange();
-
-        if (caretRange?.collapsed) {
-          editorRef.current.focus({ preventScroll: true });
-          setCaretRange(caretRange);
-
-          document.execCommand("styleWithCSS", false, true);
-
-          const colorApplied = document.execCommand(
-            "foreColor",
-            false,
-            finalColor
-          );
-
-          if (!colorApplied) {
-            syncTypingMarker(nextFormats);
-          }
-
-          // Restore bold/underline state after changing color.
-          if (nextFormats.bold) {
-            document.execCommand("bold", false, null);
-          }
-
-          if (nextFormats.underline) {
-            document.execCommand("underline", false, null);
-          }
-        }
-
-        saveSelection();
-        return;
-      }
-
-      // ------------------------------------------------------------
-      // BOLD / UNDERLINE
-      // ------------------------------------------------------------
       if (type === "bold" || type === "underline") {
-        const nextValue = hasSelection
-          ? !Boolean(document.queryCommandState(type))
-          : !Boolean(typingFormatsRef.current[type]);
-
-        const nextFormats = {
+        const next = {
           ...typingFormatsRef.current,
-          [type]: nextValue,
-          color: currentColor,
+          [type]: hasSelection
+            ? !Boolean(document.queryCommandState(type))
+            : !typingFormatsRef.current[type],
+          color: currentTypingColor,
         };
 
         document.execCommand("styleWithCSS", false, true);
 
-        const browserState = Boolean(document.queryCommandState(type));
+        const commandIsActive = Boolean(document.queryCommandState(type));
+        let nativeCommandApplied = true;
 
-        if (browserState !== nextValue) {
-          document.execCommand(type, false, null);
+        if (commandIsActive !== next[type]) {
+          nativeCommandApplied = document.execCommand(type, false, null);
         }
 
-        typingFormatsRef.current = nextFormats;
-
+        typingFormatsRef.current = next;
         setActiveFormats({
-          bold: Boolean(nextFormats.bold),
-          underline: Boolean(nextFormats.underline),
+          bold: Boolean(next.bold),
+          underline: Boolean(next.underline),
         });
 
-        // If there is no selected text, the new format applies to future
-        // typing while preserving the selected color.
         if (!hasSelection) {
-          const caret = getCurrentEditorRange();
+          // Preserve the user's current typing color after Bold/Underline changes.
+          const colorApplied = document.execCommand(
+            "foreColor",
+            false,
+            currentTypingColor
+          );
 
-          if (caret?.collapsed) {
-            setCaretRange(caret);
+          setComposerTextColor(currentTypingColor);
 
-            // Color must remain active together with bold/underline.
-            document.execCommand("styleWithCSS", false, true);
-            document.execCommand("foreColor", false, currentColor);
-
-            if (!document.execCommand(type, false, null)) {
-              syncTypingMarker(nextFormats);
-            }
+          if (!nativeCommandApplied || !colorApplied) {
+            syncTypingMarker(next);
           }
         } else {
-          // Selection formatting changes only selected characters.
-          // Existing inline colors are deliberately untouched.
+          // Do not recolor the selected range. Existing inline color must stay.
           saveSelection();
         }
 
         return;
       }
+
+      if (type === "color") {
+        const finalColor = normalizeTextColor(value);
+        const currentSelection = window.getSelection();
+        const currentRange = currentSelection && currentSelection.rangeCount > 0
+          ? currentSelection.getRangeAt(0)
+          : savedRangeRef.current;
+
+        if (currentRange && !currentRange.collapsed) {
+          // Only the selected characters change color.
+          applyInlineColorToRange(currentRange.cloneRange(), finalColor);
+
+          selectedTextColorRef.current = finalColor;
+          setTextColor(finalColor);
+          setColorModeActive(true);
+
+          const appliedSelection = window.getSelection();
+          const appliedRange = appliedSelection?.rangeCount
+            ? appliedSelection.getRangeAt(0)
+            : null;
+
+          if (appliedRange) {
+            // Keep the caret after the selected text so future typing uses
+            // the newly selected color.
+            appliedRange.collapse(false);
+            appliedSelection.removeAllRanges();
+            appliedSelection.addRange(appliedRange);
+            savedRangeRef.current = appliedRange.cloneRange();
+          }
+
+          typingFormatsRef.current = {
+            ...typingFormatsRef.current,
+            color: finalColor,
+          };
+
+          setComposerTextColor(finalColor);
+          document.execCommand("styleWithCSS", false, true);
+          document.execCommand("foreColor", false, finalColor);
+        } else {
+          // No selection: only future typing changes color.
+          selectedTextColorRef.current = finalColor;
+          setTextColor(finalColor);
+          setColorModeActive(true);
+
+          typingFormatsRef.current = {
+            ...typingFormatsRef.current,
+            color: finalColor,
+          };
+
+          setComposerTextColor(finalColor);
+          document.execCommand("styleWithCSS", false, true);
+
+          const nativeTypingColorApplied = document.execCommand(
+            "foreColor",
+            false,
+            finalColor
+          );
+
+          if (!nativeTypingColorApplied) {
+            setTypingColorAtCaret(finalColor, savedRangeRef.current);
+          }
+        }
+
+        saveSelection();
+      }
     } catch (error) {
       console.error("Format apply error:", error);
     }
   };
-
   const applyBold = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -2672,34 +2444,96 @@ export default function Teligram() {
   };
 
   const openColorPicker = (e) => {
-    // IMPORTANT:
-    // Do not allow the toolbar's parent onMouseDown to cancel the
-    // browser's native color-picker user gesture.
     e.preventDefault();
     e.stopPropagation();
-
     saveSelection();
-
-    const input = colorRef.current;
-    if (!input) return;
-
-    try {
-      if (typeof input.showPicker === "function") {
-        input.showPicker();
-      } else {
-        input.click();
-      }
-    } catch {
-      input.click();
-    }
+    colorRef.current?.click();
   };
 
   const changeColor = (color) => {
-    applySelectedFormat("color", color);
+    const finalColor = normalizeTextColor(color);
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    const savedRange = savedRangeRef.current?.cloneRange();
+    if (!savedRange || !editor.contains(savedRange.commonAncestorContainer)) {
+      return;
+    }
+
+    try {
+      editor.focus({ preventScroll: true });
+
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(savedRange);
+
+      const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+      if (!range) return;
+
+      document.execCommand("styleWithCSS", false, true);
+
+      if (!range.collapsed) {
+        // Selected word/line: recolor ONLY the selected characters.
+        const selectedRange = range.cloneRange();
+        const applied = document.execCommand("foreColor", false, finalColor);
+
+        if (!applied) {
+          applyInlineColorToRange(selectedRange, finalColor);
+        }
+
+        // Keep the caret at the end of the selected text and make this color
+        // the color for the NEXT characters typed.
+        const afterSelection = window.getSelection();
+        const appliedRange =
+          afterSelection?.rangeCount
+            ? afterSelection.getRangeAt(0).cloneRange()
+            : selectedRange.cloneRange();
+
+        appliedRange.collapse(false);
+        afterSelection?.removeAllRanges();
+        afterSelection?.addRange(appliedRange);
+
+        selectedTextColorRef.current = finalColor;
+        setTextColor(finalColor);
+        setColorModeActive(true);
+        typingFormatsRef.current = {
+          ...typingFormatsRef.current,
+          color: finalColor,
+        };
+        setComposerTextColor(finalColor);
+
+        // Use a separate zero-width run for future typing. This prevents a
+        // later color choice from recoloring the selected/previous word.
+        setTypingColorAtCaret(finalColor, appliedRange);
+      } else {
+        // No selection: ONLY future typing gets the new color.
+        // Existing text is never recolored.
+        selectedTextColorRef.current = finalColor;
+        setTextColor(finalColor);
+        setColorModeActive(true);
+        typingFormatsRef.current = {
+          ...typingFormatsRef.current,
+          color: finalColor,
+        };
+        setComposerTextColor(finalColor);
+
+        // Marker is intentionally used here instead of relying only on
+        // Chromium's collapsed foreColor state. It keeps each typing run
+        // independent across repeated color changes.
+        setTypingColorAtCaret(finalColor, range);
+      }
+
+      saveSelection();
+      requestAnimationFrame(() => {
+        autoResizeEditor();
+        keepComposerCaretVisible();
+      });
+    } catch (error) {
+      console.error("Color apply error:", error);
+    }
   };
 
   const handleImageSelect = (e) => {
-
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
     if (files.some((file) => !file.type.startsWith("image/"))) {
@@ -3277,60 +3111,74 @@ export default function Teligram() {
       return false;
     }
 
-    selection?.removeAllRanges();
-    selection?.addRange(range);
-
     const finalColor = normalizeTextColor(color);
-    let existingMarker = null;
-    let node = range.startContainer;
 
-    if (node?.nodeType === Node.TEXT_NODE) node = node.parentElement;
-    if (node instanceof HTMLElement) {
-      existingMarker = node.closest('span[data-typing-color-marker="true"]');
-    }
+    try {
+      selection?.removeAllRanges();
+      selection?.addRange(range);
 
-    // Reuse the existing zero-width typing marker instead of inserting a new
-    // marker at a stale range. This prevents the caret from jumping to the
-    // beginning and prevents the previous color from leaking into new text.
-    if (
-      existingMarker &&
-      existingMarker.parentNode &&
-      editorRef.current.contains(existingMarker)
-    ) {
-      existingMarker.style.setProperty("color", finalColor, "important");
-      existingMarker.style.setProperty("-webkit-text-fill-color", finalColor, "important");
+      // Remove only an empty typing marker at this exact caret. Never reuse
+      // a marker that already contains typed text, otherwise changing color
+      // would recolor the previously typed word.
+      const startNode = range.startContainer;
+      const parent =
+        startNode?.nodeType === Node.TEXT_NODE
+          ? startNode.parentElement
+          : startNode instanceof Element
+            ? startNode
+            : null;
 
-      const markerText = existingMarker.firstChild;
-      const nextRange = document.createRange();
-      if (markerText) {
-        nextRange.setStart(markerText, markerText.nodeValue.length);
-      } else {
-        nextRange.setStartAfter(existingMarker);
+      const emptyMarker = parent?.closest?.('span[data-typing-color-marker="true"]');
+      if (
+        emptyMarker &&
+        editorRef.current.contains(emptyMarker) &&
+        emptyMarker.textContent === "\u200B"
+      ) {
+        // An empty marker contains no user text, so it is safe to reuse.
+        // Reusing only EMPTY markers prevents duplicate markers without ever
+        // recoloring an already typed word.
+        emptyMarker.style.setProperty("color", finalColor, "important");
+        emptyMarker.style.setProperty("-webkit-text-fill-color", finalColor, "important");
+
+        const markerText = emptyMarker.firstChild;
+        const markerRange = document.createRange();
+        if (markerText) {
+          markerRange.setStart(markerText, markerText.nodeValue.length);
+        } else {
+          markerRange.setStartAfter(emptyMarker);
+        }
+        markerRange.collapse(true);
+
+        selection.removeAllRanges();
+        selection.addRange(markerRange);
+        savedRangeRef.current = markerRange.cloneRange();
+        return true;
       }
+
+      // Always insert a NEW zero-width marker at the current caret.
+      // This creates a separate formatting run for future typing and leaves
+      // every previously typed character untouched.
+      const activeRange = selection.getRangeAt(0);
+      const marker = document.createElement("span");
+      marker.dataset.typingColorMarker = "true";
+      marker.style.setProperty("color", finalColor, "important");
+      marker.style.setProperty("-webkit-text-fill-color", finalColor, "important");
+      marker.textContent = "\u200B";
+
+      activeRange.insertNode(marker);
+
+      const nextRange = document.createRange();
+      nextRange.setStart(marker.firstChild, 1);
       nextRange.collapse(true);
+
       selection.removeAllRanges();
       selection.addRange(nextRange);
       savedRangeRef.current = nextRange.cloneRange();
       return true;
+    } catch (error) {
+      console.error("Typing color marker error:", error);
+      return false;
     }
-
-    const marker = document.createElement("span");
-    marker.dataset.typingColorMarker = "true";
-    marker.style.setProperty("color", finalColor, "important");
-    marker.style.setProperty("-webkit-text-fill-color", finalColor, "important");
-    marker.textContent = "\u200B";
-
-    range.insertNode(marker);
-
-    const nextRange = document.createRange();
-    nextRange.setStart(marker.firstChild, 1);
-    nextRange.collapse(true);
-
-    selection.removeAllRanges();
-    selection.addRange(nextRange);
-    savedRangeRef.current = nextRange.cloneRange();
-
-    return true;
   };
 
   const startEdit = (note) => {
@@ -3382,26 +3230,32 @@ export default function Teligram() {
     editor.scrollTop = 0;
     editor.innerHTML = normalizeEditorHtml(note.content_html || "");
 
+    syncMobileViewport();
 
-    // Measure the old message first, then place the caret at the END.
-    // Multiple passes handle Android/iOS keyboard viewport animation.
+    // Measure before focus, then focus without browser auto-scroll. The
+    // keyboard viewport will trigger the final resize through visualViewport.
     autoResizeEditor({ revealCaret: false });
 
     requestAnimationFrame(() => {
       placeCaretAtEnd(editor);
-      scheduleEditorResize({ revealCaret: true });
+      editor.scrollTop = editor.scrollHeight;
+      scheduleEditorResize();
+
+      // Let the mobile keyboard finish its first layout pass, then restore
+      // the end caret and resize again. This prevents the old message from
+      // opening with the first line visible while the caret is hidden.
+      setTimeout(() => {
+        placeCaretAtEnd(editor);
+        autoResizeEditor();
+        keepComposerCaretVisible();
+      }, 120);
+
+      setTimeout(() => {
+        placeCaretAtEnd(editor);
+        autoResizeEditor();
+        keepComposerCaretVisible();
+      }, 300);
     });
-
-    setTimeout(() => {
-      if (editorRef.current) placeCaretAtEnd(editorRef.current);
-      scheduleEditorResize({ revealCaret: true });
-    }, 140);
-
-    setTimeout(() => {
-      autoResizeEditor({ revealCaret: true });
-      keepComposerCaretVisible();
-      keepComposerAboveKeyboard();
-    }, 360);
   };
 
   const startImageUpdate = (note) => {
@@ -3423,8 +3277,8 @@ export default function Teligram() {
 
     if (editorRef.current) {
       editorRef.current.innerHTML = normalizeEditorHtml(note.content_html || "");
+      scheduleEditorResize();
       placeCaretAtEnd();
-      scheduleEditorResize({ revealCaret: true });
     }
 
     setTimeout(() => {
@@ -3480,8 +3334,8 @@ export default function Teligram() {
 
     if (editorRef.current) {
       editorRef.current.innerHTML = normalizeEditorHtml(note.content_html || "");
+      scheduleEditorResize();
       placeCaretAtEnd();
-      scheduleEditorResize({ revealCaret: true });
     }
 
     setTimeout(() => {
@@ -3887,9 +3741,19 @@ export default function Teligram() {
     <div
       className="nm-screen"
       onClick={() => setActiveMenuId(null)}
+      style={
+        mobileViewportHeight
+          ? { "--app-viewport-height": `${mobileViewportHeight}px` }
+          : undefined
+      }
     >
       <div
         className="nm-phone"
+        style={
+          mobileViewportHeight
+            ? { "--app-viewport-height": `${mobileViewportHeight}px` }
+            : undefined
+        }
       >
         <header className="nm-header">
           <button className="header-icon-btn back-btn" onClick={backToChannels}>
@@ -3951,12 +3815,7 @@ export default function Teligram() {
           )}
         </header>
 
-        {channelLoading ? (
-          <main className="channel-loading-screen" aria-live="polite" aria-busy="true">
-            <div className="channel-loading-spinner" aria-hidden="true"></div>
-            <div className="channel-loading-text">Loading chat...</div>
-          </main>
-        ) : privateChannelLocked ? (
+        {privateChannelLocked ? (
           <main className="unlock-screen">
             <div className="unlock-card">
               <div className="unlock-logo">
@@ -4720,42 +4579,31 @@ export default function Teligram() {
                     style={{ "--composerColor": "#111111", "--composerCaretColor": textColor, caretColor: textColor }}
                     onFocus={() => {
                       saveSelection();
-                      scheduleEditorResize({ revealCaret: true });
-                      setTimeout(() => {
-                        autoResizeEditor({ revealCaret: true });
-                        keepComposerCaretVisible();
-                        keepComposerAboveKeyboard();
-                      }, 160);
+                      requestAnimationFrame(() => keepComposerCaretVisible());
                     }}
                     onMouseUp={saveSelection}
                     onTouchEnd={saveSelection}
                     onKeyUp={saveSelection}
                     onKeyDown={() => {
-                      // Keep the explicit toolbar typing mode. Do not query the
-                      // browser selection state here, because mobile toolbar
-                      // taps can make queryCommandState() temporarily false.
+                      // Save the exact caret/selection before the browser changes it.
+                      // Never force the caret to the end while the user is typing.
                       saveSelection();
-                     }}
-                     onInput={() => {
-                       // Normal typing NEVER moves the caret to the end.
-                       // Only resize/scroll the editor itself.
-                       saveSelection();
-                       autoResizeEditor({ revealCaret: true });
-                       keepComposerCaretVisible();
-                       keepComposerAboveKeyboard();
-                       scheduleEditorResize({ revealCaret: true });
-                     }}
-                     onBlur={saveSelection}
-                     onPaste={(e) => {
-                       e.preventDefault();
-                       const text = e.clipboardData.getData("text/plain");
-                       document.execCommand("insertText", false, text);
-                       saveSelection();
-                       autoResizeEditor({ revealCaret: true });
-                       keepComposerCaretVisible();
-                       keepComposerAboveKeyboard();
-                       scheduleEditorResize({ revealCaret: true });
-                     }}
+                    }}
+                    onInput={() => {
+                      // Keep the real caret position. Only resize/reveal it.
+                      saveSelection();
+                      autoResizeEditor();
+                      requestAnimationFrame(() => keepComposerCaretVisible());
+                    }}
+                    onBlur={saveSelection}
+                    onPaste={(e) => {
+                      e.preventDefault();
+                      const pasteText = e.clipboardData.getData("text/plain");
+                      document.execCommand("insertText", false, pasteText);
+                      saveSelection();
+                      autoResizeEditor();
+                      requestAnimationFrame(() => keepComposerCaretVisible());
+                    }}
                    ></div>
 
                   <button
@@ -8724,13 +8572,13 @@ export default function Teligram() {
 
         /* =========================================
            FINAL COLOR + INPUT + TIME FIX
-           Each typed/selected range keeps its own color.
-           The editor default is black only for unformatted text.
+           Selected color must show while typing and after send.
+           Inner HTML colors are overridden, but bold/underline stay.
         ========================================= */
 
         .text-input {
           color: #111111 !important;
-          caret-color: var(--composerCaretColor, #111111) !important;
+          caret-color: var(--composerColor, #111111) !important;
           background: #ffffff !important;
           min-height: 40px !important;
           max-height: 96px !important;
@@ -8739,7 +8587,7 @@ export default function Teligram() {
           line-height: 1.38 !important;
           font-weight: 500 !important;
           opacity: 1 !important;
-          -webkit-text-fill-color: currentColor !important;
+          -webkit-text-fill-color: #111111 !important;
         }
 
         .text-input *,
@@ -8749,13 +8597,6 @@ export default function Teligram() {
         .text-input font {
           font-size: inherit !important;
           line-height: inherit !important;
-        }
-
-        /* Never force black onto existing inline-colored text. */
-        .text-input span[style*="color"],
-        .text-input font[color],
-        .text-input [data-typing-color-marker="true"] {
-          -webkit-text-fill-color: currentColor !important;
         }
 
         .text-input:empty::before {
@@ -9799,7 +9640,7 @@ export default function Teligram() {
           font-weight: 550 !important;
           outline: none !important;
           overflow-y: auto !important;
-          caret-color: var(--composerCaretColor, #111111) !important;
+          caret-color: var(--composerColor, #111111) !important;
           -webkit-user-select: text !important;
           user-select: text !important;
           touch-action: manipulation !important;
@@ -10801,7 +10642,7 @@ export default function Teligram() {
           background: #ffffff !important;
           color: var(--composerColor, #111111) !important;
           -webkit-text-fill-color: var(--composerColor, #111111) !important;
-          caret-color: var(--composerCaretColor, #111111) !important;
+          caret-color: var(--composerColor, #111111) !important;
           font-family: Inter, Arial, sans-serif !important;
           font-size: 14px !important;
           line-height: 1.38 !important;
@@ -13780,34 +13621,18 @@ export default function Teligram() {
           display:flex !important; align-items:center !important; justify-content:center !important;
           width:100% !important; height:100% !important; text-align:center !important;
         }
-        /* FINAL MOBILE LAYOUT
-           - The app follows the visual viewport when the system keyboard opens.
-           - Only .chat-body scrolls; the page itself is never locked globally.
-           - Composer stays completely above the keyboard.
-        */
+        /* FINAL MOBILE KEYBOARD / EDIT-OLD-TEXT FIX
+           - The React visualViewport height controls the phone when the
+             Android/iOS keyboard opens.
+           - The editor may scroll internally, but the composer itself stays
+             completely above the keyboard.
+           - Existing edited content remains fully available. */
         .nm-screen,
         .nm-phone {
           height: var(--app-viewport-height, 100dvh) !important;
-          min-height: 0 !important;
+          min-height: var(--app-viewport-height, 100dvh) !important;
           max-height: var(--app-viewport-height, 100dvh) !important;
-        }
-
-        .nm-screen {
           overflow: hidden !important;
-        }
-
-        .nm-phone {
-          overflow: hidden !important;
-          box-sizing: border-box !important;
-        }
-
-        .chat-body {
-          flex: 1 1 auto !important;
-          min-height: 0 !important;
-          overflow-x: hidden !important;
-          overflow-y: auto !important;
-          -webkit-overflow-scrolling: touch !important;
-          overscroll-behavior: contain !important;
         }
 
         .composer {
@@ -13816,91 +13641,185 @@ export default function Teligram() {
           max-width: 100% !important;
           min-height: 0 !important;
           overflow: visible !important;
-          box-sizing: border-box !important;
-          padding-bottom: max(8px, env(safe-area-inset-bottom)) !important;
         }
 
         .composer-card {
-          width: 100% !important;
           min-height: 0 !important;
           max-height: none !important;
           overflow: visible !important;
+        }
+
+        .composer-input-row {
+          min-height: 0 !important;
+          width: 100% !important;
+          align-items: flex-end !important;
+        }
+
+        .composer-input-row .text-input {
+          min-height: 45px !important;
+          max-height: min(42vh, 430px) !important;
+          overflow-x: hidden !important;
+          overflow-y: auto !important;
+          -webkit-overflow-scrolling: touch !important;
+          overscroll-behavior: contain !important;
+          scroll-padding-bottom: 18px !important;
+        }
+
+        @media (max-width: 767px) {
+          .composer {
+            padding-bottom: max(6px, env(safe-area-inset-bottom)) !important;
+          }
+
+          .composer-input-row .text-input {
+            max-height: 42vh !important;
+          }
+        }
+
+        /* Small toolbar spacing; does not alter any existing behavior. */
+        .composer-tools-popover {
+          gap: 6px !important;
+        }
+        .composer-tools-popover .tool-btn {
+          margin: 0 !important;
+          flex: 0 0 auto !important;
+        }
+        @media (max-width: 480px) {
+          .composer-tools-popover {
+            gap: 5px !important;
+            overflow-x: auto !important;
+            scrollbar-width: none !important;
+          }
+          .composer-tools-popover::-webkit-scrollbar {
+            display: none !important;
+          }
+        }
+
+
+
+        /* FINAL STABLE MOBILE EDITOR FIX
+           Keep the composer itself unclipped. Only the contentEditable may
+           scroll. Height is controlled by visualViewport-aware JavaScript. */
+        .nm-screen,
+        .nm-phone {
+          height: var(--app-viewport-height, 100dvh) !important;
+          min-height: var(--app-viewport-height, 100dvh) !important;
+          max-height: var(--app-viewport-height, 100dvh) !important;
+          overflow: hidden !important;
+        }
+
+        .composer {
+          flex: 0 0 auto !important;
+          min-height: 0 !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          overflow: visible !important;
+          position: relative !important;
+          z-index: 60 !important;
+        }
+
+        .composer-card {
+          min-height: 0 !important;
+          max-height: none !important;
+          overflow: visible !important;
+          width: 100% !important;
           box-sizing: border-box !important;
         }
 
         .composer-input-row {
-          width: 100% !important;
           min-height: 0 !important;
-          display: flex !important;
-          align-items: flex-end !important;
-          gap: 8px !important;
+          width: 100% !important;
           overflow: visible !important;
+          align-items: flex-end !important;
         }
 
         .composer-input-row .text-input {
           flex: 1 1 auto !important;
           min-width: 0 !important;
-          min-height: 46px !important;
-          max-height: var(--composer-editor-max-height, 240px) !important;
+          min-height: 44px !important;
+          max-height: 420px !important;
+          box-sizing: border-box !important;
           overflow-x: hidden !important;
           overflow-y: auto !important;
-          box-sizing: border-box !important;
           -webkit-overflow-scrolling: touch !important;
           overscroll-behavior: contain !important;
-          scroll-padding-top: 8px !important;
+          scroll-padding-top: 12px !important;
           scroll-padding-bottom: 18px !important;
         }
 
-        /* All composer toolbar buttons are true squares. */
+        @media (max-width: 767px) {
+          .composer-input-row .text-input {
+            max-height: 40vh !important;
+          }
+        }
+
+        /* Never let an old fixed composer height clip the editor border. */
+        .composer-card,
+        .composer-input-row,
+        .composer-input-row .text-input {
+          contain: none !important;
+        }
+      
+        /* FINAL UI + MOBILE KEYBOARD + CARD + BUTTON FIX */
+
+        .nm-phone {
+          height: var(--nm-visual-height, 100dvh) !important;
+          max-height: var(--nm-visual-height, 100dvh) !important;
+          min-height: 0 !important;
+        }
+
+        .composer {
+          flex: 0 0 auto !important;
+          min-height: 0 !important;
+          padding-bottom: max(8px, env(safe-area-inset-bottom)) !important;
+        }
+
+        .composer-card {
+          max-height: none !important;
+          overflow: visible !important;
+          min-height: 0 !important;
+        }
+
+        /* Toolbar buttons: one row, equal full-width cells, small gaps. */
+        .composer-tools-top {
+          width: 100% !important;
+          min-width: 0 !important;
+        }
+
         .composer-tools-popover.composer-tools-always-visible {
           width: 100% !important;
           max-width: 100% !important;
-          display: flex !important;
-          flex-wrap: nowrap !important;
-          align-items: center !important;
-          justify-content: flex-start !important;
+          display: grid !important;
+          grid-template-columns: repeat(auto-fit, minmax(42px, 1fr)) !important;
           gap: 6px !important;
           padding: 3px !important;
+          overflow: hidden !important;
           box-sizing: border-box !important;
-          overflow-x: auto !important;
-          overflow-y: hidden !important;
-          scrollbar-width: none !important;
-        }
-
-        .composer-tools-popover.composer-tools-always-visible::-webkit-scrollbar {
-          display: none !important;
         }
 
         .composer-tools-popover.composer-tools-always-visible .tool-btn {
-          width: 44px !important;
+          width: 100% !important;
+          min-width: 0 !important;
           height: 44px !important;
-          min-width: 44px !important;
-          max-width: 44px !important;
           min-height: 44px !important;
-          max-height: 44px !important;
-          flex: 0 0 44px !important;
-          aspect-ratio: 1 / 1 !important;
           margin: 0 !important;
           padding: 0 !important;
           border-radius: 12px !important;
+        }
+
+        /* Larger input + send button, with a small space between them. */
+        .composer-input-row {
+          width: 100% !important;
+          gap: 8px !important;
+          min-height: 0 !important;
+          align-items: flex-end !important;
+        }
+
+        .composer-input-row .text-input {
+          min-height: 46px !important;
+          max-height: var(--composer-editor-max-height, 240px) !important;
+          overflow-y: auto !important;
+          overflow-x: hidden !important;
           box-sizing: border-box !important;
-          display: inline-flex !important;
-          align-items: center !important;
-          justify-content: center !important;
-        }
-
-        .composer-tools-popover .tool-icon {
-          width: 24px !important;
-          height: 24px !important;
-          max-width: 24px !important;
-          max-height: 24px !important;
-          object-fit: contain !important;
-          flex: 0 0 auto !important;
-        }
-
-        .composer-tools-popover .refresh-icon {
-          font-size: 24px !important;
-          line-height: 1 !important;
         }
 
         .composer-input-row .send-btn {
@@ -13908,331 +13827,180 @@ export default function Teligram() {
           height: 46px !important;
           min-width: 46px !important;
           min-height: 46px !important;
-          max-width: 46px !important;
-          max-height: 46px !important;
           flex: 0 0 46px !important;
-          aspect-ratio: 1 / 1 !important;
           margin: 0 !important;
+        }
+
+        /* Message cards stay tight around short text. */
+        .message-bubble {
+          width: fit-content !important;
+          max-width: min(82%, 342px) !important;
+          min-width: 54px !important;
           box-sizing: border-box !important;
+          overflow-wrap: anywhere !important;
+          word-break: break-word !important;
         }
 
-        @media (max-width: 767px) {
-          /* Lock only this app shell to the visual viewport.
-             Other React pages are unaffected because this rule is scoped
-             to .nm-screen/.nm-phone. */
-          .nm-screen {
-            position: fixed !important;
-            top: var(--app-viewport-top, 0px) !important;
-            left: 0 !important;
-            right: 0 !important;
-            width: 100vw !important;
-            height: var(--app-viewport-height, 100dvh) !important;
-            max-height: var(--app-viewport-height, 100dvh) !important;
-            min-height: 0 !important;
-          }
-
-          .nm-phone {
-            width: 100% !important;
-            height: var(--app-viewport-height, 100dvh) !important;
-            max-height: var(--app-viewport-height, 100dvh) !important;
-            min-height: 0 !important;
-          }
-
-          .composer-input-row .text-input {
-            max-height: min(
-              var(--composer-editor-max-height, 240px),
-              max(46px, calc(var(--app-viewport-height, 100dvh) - 174px))
-            ) !important;
-          }
-
-          .composer-tools-popover.composer-tools-always-visible .tool-btn {
-            width: 42px !important;
-            height: 42px !important;
-            min-width: 42px !important;
-            max-width: 42px !important;
-            min-height: 42px !important;
-            max-height: 42px !important;
-            flex-basis: 42px !important;
-          }
-
-          .composer-tools-popover .tool-icon {
-            width: 23px !important;
-            height: 23px !important;
-            max-width: 23px !important;
-            max-height: 23px !important;
-          }
+        .message-text,
+        .message-title-text,
+        .image-description-text,
+        .file-description-text {
+          width: fit-content !important;
+          max-width: 100% !important;
+          overflow-wrap: anywhere !important;
+          word-break: break-word !important;
         }
 
-        .channel-loading-screen {
-          flex: 1 !important;
+        /* =========================================================
+           FINAL MOBILE KEYBOARD + EDITOR + COLOR-RUN FIX
+           ========================================================= */
+
+        html,
+        body,
+        #root {
+          width: 100% !important;
+          max-width: 100% !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          overflow-x: hidden !important;
+        }
+
+        .nm-screen {
+          width: 100vw !important;
+          height: var(--app-viewport-height, 100dvh) !important;
           min-height: 0 !important;
+          max-height: var(--app-viewport-height, 100dvh) !important;
+          overflow: hidden !important;
+          position: relative !important;
+        }
+
+        .nm-phone {
+          width: 100vw !important;
+          max-width: 460px !important;
+          height: var(--app-viewport-height, 100dvh) !important;
+          min-height: 0 !important;
+          max-height: var(--app-viewport-height, 100dvh) !important;
           display: flex !important;
           flex-direction: column !important;
-          align-items: center !important;
-          justify-content: center !important;
-          gap: 12px !important;
-          background: #f8fafc !important;
+          overflow: hidden !important;
+          position: relative !important;
+          box-sizing: border-box !important;
+          transform: translateY(var(--nm-visual-offset-top, 0px));
         }
 
-        .channel-loading-spinner {
-          width: 38px !important;
-          height: 38px !important;
-          border: 4px solid rgba(37, 99, 235, 0.18) !important;
-          border-top-color: #2563eb !important;
-          border-radius: 50% !important;
-          animation: channelLoadingSpin 0.8s linear infinite !important;
+        .chat-body {
+          flex: 1 1 0 !important;
+          min-height: 0 !important;
+          height: auto !important;
+          overflow-x: hidden !important;
+          overflow-y: auto !important;
+          -webkit-overflow-scrolling: touch !important;
+          overscroll-behavior: contain !important;
         }
 
-        .channel-loading-text {
-          font-size: 13px !important;
-          font-weight: 700 !important;
-          color: #64748b !important;
-        }
-
-        @keyframes channelLoadingSpin {
-          to { transform: rotate(360deg); }
-        }
-
-        /* KEYBOARD-SAFE COMPOSER OVERRIDES */
         .composer {
+          flex: 0 0 auto !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          min-height: 0 !important;
           box-sizing: border-box !important;
+          overflow: visible !important;
+          position: relative !important;
+          z-index: 100 !important;
+          padding-bottom: max(8px, env(safe-area-inset-bottom)) !important;
         }
 
-        .composer-card,
-        .composer-input-row,
-        .text-input {
+        .composer-card {
+          width: 100% !important;
+          max-width: 100% !important;
+          min-height: 0 !important;
           box-sizing: border-box !important;
+          overflow: visible !important;
         }
 
-        .text-input {
+        .composer-input-row {
+          width: 100% !important;
+          min-width: 0 !important;
+          min-height: 0 !important;
+          display: flex !important;
+          align-items: flex-end !important;
+          gap: 8px !important;
+          box-sizing: border-box !important;
+          overflow: visible !important;
+        }
+
+        .composer-input-row .text-input {
+          flex: 1 1 auto !important;
+          width: 0 !important;
+          min-width: 0 !important;
           min-height: 46px !important;
-          line-height: 1.38 !important;
-          padding: 10px 13px !important;
-          -webkit-user-select: text !important;
-          user-select: text !important;
-          touch-action: manipulation !important;
+          max-height: var(--composer-editor-max-height, 240px) !important;
+          box-sizing: border-box !important;
+          overflow-x: hidden !important;
+          overflow-y: auto !important;
+          white-space: pre-wrap !important;
+          overflow-wrap: anywhere !important;
+          word-break: break-word !important;
+          padding: 11px 13px !important;
+          margin: 0 !important;
+          outline: none !important;
+          -webkit-overflow-scrolling: touch !important;
+          overscroll-behavior: contain !important;
+          scroll-padding-top: 10px !important;
+          scroll-padding-bottom: 18px !important;
+          contain: none !important;
+        }
+
+        .composer-input-row .send-btn {
+          flex: 0 0 46px !important;
+          width: 46px !important;
+          min-width: 46px !important;
+          height: 46px !important;
+          min-height: 46px !important;
+          align-self: flex-end !important;
+          margin: 0 !important;
+        }
+
+        /* Existing inline colors always win over the editor's default color. */
+        .text-input span[style*="color"],
+        .text-input font[color],
+        .text-input span[style*="color"] *,
+        .text-input font[color] * {
+          -webkit-text-fill-color: currentColor !important;
+        }
+
+        .text-input [data-typing-color-marker="true"] {
+          -webkit-text-fill-color: currentColor !important;
         }
 
         @media (max-width: 767px) {
-          .nm-screen {
-            position: fixed !important;
-            top: var(--app-viewport-top, 0px) !important;
-            left: 0 !important;
-            right: 0 !important;
+          .nm-screen,
+          .nm-phone {
             width: 100vw !important;
             height: var(--app-viewport-height, 100dvh) !important;
             min-height: 0 !important;
             max-height: var(--app-viewport-height, 100dvh) !important;
-            overflow: hidden !important;
           }
 
+          .composer {
+            padding-left: max(6px, env(safe-area-inset-left)) !important;
+            padding-right: max(6px, env(safe-area-inset-right)) !important;
+            padding-bottom: max(8px, env(safe-area-inset-bottom)) !important;
+          }
+
+          .composer-input-row .text-input {
+            max-height: var(--composer-editor-max-height, 240px) !important;
+          }
+        }
+
+        @media (min-width: 768px) {
           .nm-phone {
-            width: 100% !important;
-            height: var(--app-viewport-height, 100dvh) !important;
-            min-height: 0 !important;
-            max-height: var(--app-viewport-height, 100dvh) !important;
-            overflow: hidden !important;
-            display: flex !important;
-            flex-direction: column !important;
-          }
-
-          .chat-body {
-            flex: 1 1 auto !important;
-            min-height: 0 !important;
-            overflow-x: hidden !important;
-            overflow-y: auto !important;
-            -webkit-overflow-scrolling: touch !important;
-          }
-
-          .composer {
-            flex: 0 1 auto !important;
-            width: 100% !important;
-            min-height: 0 !important;
-            max-height: calc(var(--app-viewport-height, 100dvh) - 70px) !important;
-            overflow-x: hidden !important;
-            overflow-y: auto !important;
-            padding-bottom: max(14px, env(safe-area-inset-bottom), var(--keyboard-safe-bottom, 14px)) !important;
-          }
-
-          .composer-card {
-            width: 100% !important;
-            min-height: 0 !important;
-            max-height: none !important;
-            overflow: visible !important;
-          }
-
-          .composer-input-row {
-            align-items: flex-end !important;
-            min-height: 46px !important;
-          }
-
-          .composer-input-row .text-input {
-            min-height: 46px !important;
-            max-height: min(
-              var(--composer-editor-max-height, 240px),
-              max(46px, calc(var(--app-viewport-height, 100dvh) - 170px))
-            ) !important;
-            overflow-x: hidden !important;
-            overflow-y: auto !important;
-            scroll-padding-top: 10px !important;
-            scroll-padding-bottom: 24px !important;
-            -webkit-overflow-scrolling: touch !important;
-          }
-
-          .composer-tools-popover.composer-tools-always-visible {
-            max-width: 100% !important;
-            overflow-x: auto !important;
-            overflow-y: hidden !important;
-            flex-wrap: nowrap !important;
+            transform: none !important;
           }
         }
-
-        /* FINAL KEYBOARD-SAFE OVERRIDES */
-        .text-input {
-          min-height: 46px !important;
-          box-sizing: border-box !important;
-          -webkit-user-select: text !important;
-          user-select: text !important;
-        }
-
-        @media (max-width: 767px) {
-          .nm-screen {
-            position: fixed !important;
-            inset: var(--app-viewport-top, 0px) 0 0 0 !important;
-            width: 100vw !important;
-            height: var(--app-viewport-height, 100dvh) !important;
-            max-height: var(--app-viewport-height, 100dvh) !important;
-            min-height: 0 !important;
-            overflow: hidden !important;
-          }
-
-          .nm-phone {
-            width: 100% !important;
-            height: var(--app-viewport-height, 100dvh) !important;
-            max-height: var(--app-viewport-height, 100dvh) !important;
-            min-height: 0 !important;
-            overflow: hidden !important;
-            display: flex !important;
-            flex-direction: column !important;
-          }
-
-          .chat-body {
-            flex: 1 1 auto !important;
-            min-height: 0 !important;
-            overflow-x: hidden !important;
-            overflow-y: auto !important;
-            -webkit-overflow-scrolling: touch !important;
-          }
-
-          .composer {
-            flex: 0 1 auto !important;
-            width: 100% !important;
-            min-height: 0 !important;
-            max-height: calc(var(--app-viewport-height, 100dvh) - 70px) !important;
-            overflow-x: hidden !important;
-            overflow-y: auto !important;
-            padding-bottom: max(14px, env(safe-area-inset-bottom), var(--keyboard-safe-bottom, 14px)) !important;
-          }
-
-          .composer-card {
-            min-height: 0 !important;
-            max-height: none !important;
-            overflow: visible !important;
-            box-sizing: border-box !important;
-          }
-
-          .composer-input-row {
-            min-height: 46px !important;
-            align-items: flex-end !important;
-            overflow: visible !important;
-          }
-
-          .composer-input-row .text-input {
-            min-height: 46px !important;
-            max-height: min(
-              var(--composer-editor-max-height, 240px),
-              max(46px, calc(var(--app-viewport-height, 100dvh) - 170px))
-            ) !important;
-            overflow-x: hidden !important;
-            overflow-y: auto !important;
-            scroll-padding-top: 10px !important;
-            scroll-padding-bottom: 24px !important;
-            -webkit-overflow-scrolling: touch !important;
-          }
-
-          .composer-tools-popover.composer-tools-always-visible {
-            width: 100% !important;
-            max-width: 100% !important;
-            flex-wrap: nowrap !important;
-            overflow-x: auto !important;
-            overflow-y: hidden !important;
-          }
-        }
-
-        @media (max-width: 767px) {
-          /* Final authoritative mobile toolbar sizing: every tool is a true square. */
-          .composer-tools-popover.composer-tools-always-visible .tool-btn,
-          .composer-tools-popover .tool-btn {
-            width: 44px !important;
-            height: 44px !important;
-            min-width: 44px !important;
-            max-width: 44px !important;
-            min-height: 44px !important;
-            max-height: 44px !important;
-            flex: 0 0 44px !important;
-            aspect-ratio: 1 / 1 !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            box-sizing: border-box !important;
-            display: inline-flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-          }
-
-          .composer-tools-popover .tool-icon {
-            width: 24px !important;
-            height: 24px !important;
-            max-width: 24px !important;
-            max-height: 24px !important;
-            object-fit: contain !important;
-          }
-
-          .composer-input-row .send-btn {
-            width: 46px !important;
-            height: 46px !important;
-            min-width: 46px !important;
-            max-width: 46px !important;
-            min-height: 46px !important;
-            max-height: 46px !important;
-            flex: 0 0 46px !important;
-            aspect-ratio: 1 / 1 !important;
-            box-sizing: border-box !important;
-          }
-
-          /* Keep the entire editor border inside the visual viewport. */
-          .composer {
-            flex-shrink: 0 !important;
-            padding-bottom: max(8px, env(safe-area-inset-bottom), var(--keyboard-safe-bottom, 8px)) !important;
-          }
-
-          .composer-card,
-          .composer-input-row {
-            min-height: 0 !important;
-            box-sizing: border-box !important;
-          }
-
-          .composer-input-row .text-input {
-            box-sizing: border-box !important;
-            max-height: min(
-              var(--composer-editor-max-height, 240px),
-              max(46px, calc(var(--app-viewport-height, 100dvh) - 174px))
-            ) !important;
-            overflow-x: hidden !important;
-            overflow-y: auto !important;
-            scroll-padding-bottom: 24px !important;
-          }
-        }
-      `}</style>
+`}
+    
+</style>
     </div>
   );
 }
