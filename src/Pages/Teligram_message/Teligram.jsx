@@ -744,7 +744,15 @@ export default function Teligram() {
     // The keyboard-open limit is deliberately based on the visual viewport,
     // not 100vh/dvh. This prevents the last line/border from being clipped.
     const editorRect = editor.getBoundingClientRect();
-    const availableFromEditor = visualHeight - editorRect.top - 10;
+
+    // Leave a real safety gap between the editor border and the Android
+    // keyboard.  The old 10px allowance was too small on some browsers, so
+    // the keyboard could paint over the bottom border.
+    const keyboardBottomGap = keyboardOpen ? 24 : 12;
+    const availableFromEditor = Math.max(
+      minHeight,
+      visualHeight - editorRect.top - keyboardBottomGap
+    );
 
     const viewportBasedMax = keyboardOpen
       ? Math.max(minHeight, Math.floor(availableFromEditor))
@@ -832,15 +840,19 @@ export default function Teligram() {
       }
 
       const vv = window.visualViewport;
-      const height = Math.max(1, Math.round(vv?.height || window.innerHeight));
+      const layoutHeight = Math.max(1, Math.round(window.innerHeight || 0));
+      const height = Math.max(1, Math.round(vv?.height || layoutHeight));
       const offsetTop = Math.max(0, Math.round(vv?.offsetTop || 0));
+      const keyboardInset = Math.max(0, layoutHeight - height - offsetTop);
       const root = document.querySelector(".nm-screen");
       const phone = document.querySelector(".nm-phone");
 
       root?.style.setProperty("--app-viewport-height", `${height}px`);
       root?.style.setProperty("--app-viewport-top", `${offsetTop}px`);
+      root?.style.setProperty("--keyboard-inset", `${keyboardInset}px`);
       phone?.style.setProperty("--app-viewport-height", `${height}px`);
       phone?.style.setProperty("--app-viewport-top", `${offsetTop}px`);
+      phone?.style.setProperty("--keyboard-inset", `${keyboardInset}px`);
 
       if (settleTimer) clearTimeout(settleTimer);
       scheduleEditorResize();
@@ -13820,7 +13832,7 @@ export default function Teligram() {
           .composer-input-row .text-input {
             max-height: min(
               var(--composer-editor-max-height, 240px),
-              max(46px, calc(var(--app-viewport-height, 100dvh) - 150px))
+              max(46px, calc(var(--app-viewport-height, 100dvh) - 174px))
             ) !important;
           }
 
@@ -13873,20 +13885,66 @@ export default function Teligram() {
         }
 
         @media (max-width: 767px) {
-          .composer-tools-popover.composer-tools-always-visible {
-            gap: 6px !important;
-          }
-
+          /* Final authoritative mobile toolbar sizing: every tool is a true square. */
+          .composer-tools-popover.composer-tools-always-visible .tool-btn,
           .composer-tools-popover .tool-btn {
-            width: 42px !important;
-            height: 42px !important;
-            min-width: 42px !important;
-            min-height: 42px !important;
+            width: 44px !important;
+            height: 44px !important;
+            min-width: 44px !important;
+            max-width: 44px !important;
+            min-height: 44px !important;
+            max-height: 44px !important;
+            flex: 0 0 44px !important;
+            aspect-ratio: 1 / 1 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            box-sizing: border-box !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
           }
 
           .composer-tools-popover .tool-icon {
-            width: 25px !important;
-            height: 25px !important;
+            width: 24px !important;
+            height: 24px !important;
+            max-width: 24px !important;
+            max-height: 24px !important;
+            object-fit: contain !important;
+          }
+
+          .composer-input-row .send-btn {
+            width: 46px !important;
+            height: 46px !important;
+            min-width: 46px !important;
+            max-width: 46px !important;
+            min-height: 46px !important;
+            max-height: 46px !important;
+            flex: 0 0 46px !important;
+            aspect-ratio: 1 / 1 !important;
+            box-sizing: border-box !important;
+          }
+
+          /* Keep the entire editor border inside the visual viewport. */
+          .composer {
+            flex-shrink: 0 !important;
+            padding-bottom: max(8px, env(safe-area-inset-bottom), var(--keyboard-safe-bottom, 8px)) !important;
+          }
+
+          .composer-card,
+          .composer-input-row {
+            min-height: 0 !important;
+            box-sizing: border-box !important;
+          }
+
+          .composer-input-row .text-input {
+            box-sizing: border-box !important;
+            max-height: min(
+              var(--composer-editor-max-height, 240px),
+              max(46px, calc(var(--app-viewport-height, 100dvh) - 174px))
+            ) !important;
+            overflow-x: hidden !important;
+            overflow-y: auto !important;
+            scroll-padding-bottom: 24px !important;
           }
         }
       `}</style>
