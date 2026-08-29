@@ -2410,7 +2410,7 @@ export default function Teligram() {
         setComposerTextColor(finalColor);
 
         if (!currentRange.collapsed) {
-          // Apply the chosen color to ONLY the selected characters.
+          // Apply color ONLY to the selected characters.
           applyInlineColorToRange(currentRange, finalColor);
 
           const after = window.getSelection();
@@ -2419,12 +2419,14 @@ export default function Teligram() {
           after?.removeAllRanges();
           after?.addRange(afterRange);
 
-          // New typing after the selected word/line uses the new color while
-          // previously colored text remains unchanged.
+          // Future typing gets the new color, while the existing selection keeps
+          // only the color change requested by the user.
           savedRangeRef.current = afterRange.cloneRange();
           setTypingColorAtCaret(finalColor, afterRange);
         } else {
-          // No selection: future typing only. Existing text is untouched.
+          // No selection: ONLY future typing changes color.
+          // Do NOT call execCommand("foreColor") here because Chromium can
+          // inherit bold/underline from the surrounding old text.
           setTypingColorAtCaret(finalColor, currentRange);
         }
 
@@ -2483,7 +2485,9 @@ export default function Teligram() {
       setComposerTextColor(finalColor);
 
       if (!savedRange.collapsed) {
+        // Change only the selected range.
         applyInlineColorToRange(savedRange, finalColor);
+
         const appliedSelection = window.getSelection();
         const appliedRange = appliedSelection?.rangeCount
           ? appliedSelection.getRangeAt(0)
@@ -2493,8 +2497,12 @@ export default function Teligram() {
         appliedSelection?.removeAllRanges();
         appliedSelection?.addRange(appliedRange);
         savedRangeRef.current = appliedRange.cloneRange();
+
+        // Create a formatting boundary for future typing without changing
+        // the formatting state of the already-selected text.
         setTypingColorAtCaret(finalColor, appliedRange);
       } else {
+        // No selection: future typing only. Never inherit old bold/underline.
         setTypingColorAtCaret(finalColor, savedRange);
       }
 
@@ -3084,21 +3092,33 @@ export default function Teligram() {
     selection?.removeAllRanges();
     selection?.addRange(range);
 
-    // Remove only EMPTY old typing markers. Never reuse a marker that already
-    // contains typed text, otherwise changing the next color can recolor words
-    // typed previously.
+    // Remove only EMPTY typing markers. Never reuse a marker that contains
+    // real text, so changing color cannot recolor previous words.
     editor.querySelectorAll('span[data-typing-color-marker="true"]').forEach((marker) => {
-      const text = (marker.textContent || "").replace(/\u200B/g, "");
-      if (!text.trim()) marker.remove();
+      const markerText = (marker.textContent || "").replace(/\u200B/g, "");
+      if (!markerText.trim()) marker.remove();
     });
 
+    const formats = {
+      bold: Boolean(typingFormatsRef.current.bold),
+      underline: Boolean(typingFormatsRef.current.underline),
+    };
+
+    // This marker is the formatting boundary for FUTURE typing only.
+    // Explicitly set every relevant property so a color choice never
+    // accidentally inherits bold/underline from surrounding old text.
     const marker = document.createElement("span");
     marker.dataset.typingColorMarker = "true";
     marker.style.setProperty("color", finalColor, "important");
     marker.style.setProperty("-webkit-text-fill-color", finalColor, "important");
-    marker.style.fontWeight = typingFormatsRef.current.bold ? "900" : "400";
-    marker.style.textDecoration = typingFormatsRef.current.underline ? "underline" : "none";
-    marker.textContent = "\u200B";
+    marker.style.setProperty("font-weight", formats.bold ? "900" : "400", "important");
+    marker.style.setProperty(
+      "text-decoration-line",
+      formats.underline ? "underline" : "none",
+      "important"
+    );
+    marker.style.setProperty("font-style", "normal", "important");
+    marker.style.textContent = "\u200B";
 
     range.insertNode(marker);
 
@@ -3129,7 +3149,16 @@ export default function Teligram() {
             ? "file-caption"
             : "message"
     );
-    setComposerTextColor(getNoteTextColor(note));
+    const noteTextColor = getNoteTextColor(note);
+    setComposerTextColor(noteTextColor);
+    typingFormatsRef.current = {
+      bold: false,
+      underline: false,
+      color: noteTextColor,
+    };
+    setActiveFormats({ bold: false, underline: false });
+    setColorModeActive(false);
+
     const noteImageUrls = noteHasImage ? getNoteImageUrls(note) : [];
     setPreviewImage(noteImageUrls[0] || "");
     setPreviewImages(noteImageUrls);
@@ -14035,16 +14064,19 @@ export default function Teligram() {
             margin: 0 !important;
             transform: translate3d(0, var(--nm-composer-shift, 0px), 0) !important;
             box-sizing: border-box !important;
-            padding-bottom: max(10px, env(safe-area-inset-bottom)) !important;
-            max-height: calc(var(--nm-visual-height, 100dvh) - 60px) !important;
-            overflow: hidden !important;
+            padding: 6px 8px max(10px, env(safe-area-inset-bottom)) !important;
+            max-height: calc(var(--nm-visual-height, 100dvh) - 54px) !important;
+            overflow: visible !important;
+            position: relative !important;
+            z-index: 50 !important;
           }
 
           .composer-card {
             width: 100% !important;
             max-width: 100% !important;
             box-sizing: border-box !important;
-            overflow: hidden !important;
+            overflow: visible !important;
+            max-height: 100% !important;
           }
 
           .composer-input-row {
@@ -14059,6 +14091,13 @@ export default function Teligram() {
             min-width: 0 !important;
             min-height: 46px !important;
             max-height: var(--composer-editor-max-height, 240px) !important;
+            height: auto !important;
+            padding: 8px 10px !important;
+            margin: 0 !important;
+            border: 2px solid rgba(59, 130, 246, 0.34) !important;
+            border-radius: 12px !important;
+            background: rgba(255,255,255,0.92) !important;
+            line-height: 1.45 !important;
             box-sizing: border-box !important;
             overflow-x: hidden !important;
             overflow-y: auto !important;
