@@ -64,7 +64,7 @@ export default function Teligram() {
   const bottomRef = useRef(null);
   const chatBodyRef = useRef(null);
   const savedRangeRef = useRef(null);
-  const typingFormatsRef = useRef({ bold: false, underline: false });
+  const typingFormatsRef = useRef({ bold: false, underline: false, color: "#111111" });
   const verifiedPinRef = useRef("");
   const unlockCheckingRef = useRef(false);
   const unlockRequestIdRef = useRef(0);
@@ -2152,88 +2152,241 @@ export default function Teligram() {
     return pinnedNoteIds.map((id) => byId.get(String(id))).filter(Boolean);
   }, [notes, pinnedNoteIds]);
 
-  const syncTypingMarker = (formats) => {
-    if (!editorRef.current) return false;
-    const selection = window.getSelection();
-    const range = selection && selection.rangeCount > 0
-      ? selection.getRangeAt(0)
-      : savedRangeRef.current;
-    if (!range || !range.collapsed) return false;
+  // ============================================================
+  // RICH TEXT FORMAT LOGIC
+  // Supports independently and together:
+  //   color + bold + underline
+  //
+  // Rules:
+  // 1. Selected text -> only the selection is changed.
+  // 2. No selection/caret -> formatting applies to future typing.
+  // 3. Existing colors are never overwritten by bold/underline.
+  // 4. Color remains active for the next typed characters.
+  // 5. Bold + underline + color can all be active together.
+  // ============================================================
 
-    const typingColor = normalizeTextColor(
-      formats.color || selectedTextColorRef.current || "#111111"
+  const getCurrentEditorRange = () => {
+    const selection = window.getSelection();
+    if (selection?.rangeCount) {
+      const range = selection.getRangeAt(0);
+      if (editorRef.current?.contains(range.commonAncestorContainer)) {
+        return range.cloneRange();
+      }
+    }
+
+    return savedRangeRef.current?.cloneRange() || null;
+  };
+
+  const isRangeInsideEditor = (range) =>
+    Boolean(
+      editorRef.current &&
+      range &&
+      editorRef.current.contains(range.commonAncestorContainer)
     );
 
-    const marker = document.createElement("span");
-    marker.dataset.typingMarker = "true";
-    marker.style.fontWeight = formats.bold ? "900" : "400";
-    marker.style.textDecoration = formats.underline ? "underline" : "none";
-    marker.style.setProperty("color", typingColor, "important");
-    marker.style.setProperty("-webkit-text-fill-color", typingColor, "important");
-    marker.textContent = "\u200B";
-    range.insertNode(marker);
+  const setCaretRange = (range) => {
+    if (!range || !isRangeInsideEditor(range)) return false;
 
-    const nextRange = document.createRange();
-    nextRange.setStart(marker.firstChild, 1);
-    nextRange.collapse(true);
+    const selection = window.getSelection();
+    if (!selection) return false;
+
     selection.removeAllRanges();
-    selection.addRange(nextRange);
-    savedRangeRef.current = nextRange.cloneRange();
+    selection.addRange(range);
+    savedRangeRef.current = range.cloneRange();
     return true;
   };
 
   const saveSelection = () => {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) return;
+
     const range = selection.getRangeAt(0);
-    if (editorRef.current && editorRef.current.contains(range.commonAncestorContainer)) {
+
+    if (isRangeInsideEditor(range)) {
       savedRangeRef.current = range.cloneRange();
     }
   };
 
   const restoreSelection = () => {
-    const selection = window.getSelection();
-    if (!selection || !savedRangeRef.current) return false;
-    selection.removeAllRanges();
-    selection.addRange(savedRangeRef.current);
-    return true;
+    if (!savedRangeRef.current) return false;
+    return setCaretRange(savedRangeRef.current.cloneRange());
   };
 
-  const updateActiveFormats = () => {
-    // Formatting buttons reflect explicit toolbar clicks only. Moving the
-    // caret or selecting existing formatted text must not activate a button.
-    setActiveFormats({ ...typingFormatsRef.current });
+  const getSelectionHasText = () => {
+    const range = getCurrentEditorRange();
+    return Boolean(range && !range.collapsed && String(range.toString() || ""));
   };
 
-  // Apply color only to the current selection. The saved Range is restored before
-  // the browser color input changes focus, so mobile/desktop selection is preserved.
+  const updateActiveFormatsFromSelection = () => {
+    const range = getCurrentEditorRange();
+
+    if (!range) {
+      setActiveFormats({
+        bold: Boolean(typingFormatsRef.current.bold),
+        underline: Boolean(typingFormatsRef.current.underline),
+      });
+      return;
+    }
+
+    if (range.collapsed) {
+      setActiveFormats({
+        bold: Boolean(typingFormatsRef.current.bold),
+        underline: Boolean(typingFormatsRef.current.underline),
+      });
+      return;
+    }
+
+    // For a selected range, reflect the browser's actual formatting state.
+    // This lets selecting existing bold/underline text show the correct button.
+    try {
+      setActiveFormats({
+        bold: Boolean(document.queryCommandState("bold")),
+        underline: Boolean(document.queryCommandState("underline")),
+      });
+    } catch {
+      setActiveFormats({
+        bold: false,
+        underline: false,
+      });
+    }
+  };
+
+  const syncTypingMarker = (formats = typingFormatsRef.current) => {
+    if (!editorRef.current) return false;
+
+    const range = getCurrentEditorRange();
+    if (!range || !range.collapsed) return false;
+
+    const typingColor = normalizeTextColor(
+      formats.color || selectedTextColorRef.current || "#111111"
+    );
+
+    // Reuse a marker at the current caret when possible.
+    let marker = null;
+    let node = range.startContainer;
+
+    if (node?.nodeType === Node.TEXT_NODE) {
+      node = node.parentElement;
+    }
+
+    if (node instanceof HTMLElement) {
+      marker = node.closest('[data-typing-format-marker="true"]');
+    }
+
+    if (marker && editorRef.current.contains(marker)) {
+      marker.style.setProperty(
+        "color",
+        typingColor,
+        "important"
+      );
+      marker.style.setProperty(
+        "-webkit-text-fill-color",
+        typingColor,
+        "important"
+      );
+      marker.style.fontWeight = formats.bold ? "900" : "400";
+      marker.style.textDecoration = formats.underline ? "underline" : "none";
+
+      const markerText = marker.firstChild;
+      const nextRange = document.createRange();
+
+      if (markerText) {
+        nextRange.setStart(markerText, markerText.nodeValue.length);
+      } else {
+        nextRange.setStartAfter(marker);
+      }
+
+      nextRange.collapse(true);
+      return setCaretRange(nextRange);
+    }
+
+    const markerElement = document.createElement("span");
+    markerElement.dataset.typingFormatMarker = "true";
+    markerElement.style.setProperty("color", typingColor, "important");
+    markerElement.style.setProperty(
+      "-webkit-text-fill-color",
+      typingColor,
+      "important"
+    );
+    markerElement.style.fontWeight = formats.bold ? "900" : "400";
+    markerElement.style.textDecoration = formats.underline
+      ? "underline"
+      : "none";
+    markerElement.textContent = "\u200B";
+
+    range.insertNode(markerElement);
+
+    const nextRange = document.createRange();
+    nextRange.setStart(markerElement.firstChild, 1);
+    nextRange.collapse(true);
+
+    return setCaretRange(nextRange);
+  };
+
   const applyInlineColorToRange = (range, color) => {
     if (!editorRef.current || !range || range.collapsed) return false;
-    const selection = window.getSelection();
+    if (!isRangeInsideEditor(range)) return false;
+
     const finalColor = normalizeTextColor(color);
+    const selection = window.getSelection();
 
     try {
       editorRef.current.focus({ preventScroll: true });
       selection?.removeAllRanges();
-      selection?.addRange(range);
+      selection?.addRange(range.cloneRange());
+
       document.execCommand("styleWithCSS", false, true);
       const applied = document.execCommand("foreColor", false, finalColor);
+
+      // Make sure WebKit/Chromium also paints the inline range correctly.
+      const walker = document.createTreeWalker(
+        editorRef.current,
+        NodeFilter.SHOW_ELEMENT
+      );
+
+      let node = walker.nextNode();
+
+      while (node) {
+        if (
+          node instanceof HTMLElement &&
+          node !== editorRef.current &&
+          node.matches("span, font") &&
+          range.intersectsNode(node)
+        ) {
+          node.style.setProperty("color", finalColor, "important");
+          node.style.setProperty(
+            "-webkit-text-fill-color",
+            finalColor,
+            "important"
+          );
+        }
+        node = walker.nextNode();
+      }
+
       if (!applied) {
-        // Fallback for browsers that do not implement foreColor reliably.
-        const span = document.createElement("span");
-        span.style.color = finalColor;
+        const fallback = document.createElement("span");
+        fallback.style.setProperty("color", finalColor, "important");
+        fallback.style.setProperty(
+          "-webkit-text-fill-color",
+          finalColor,
+          "important"
+        );
+
         try {
-          range.surroundContents(span);
+          range.surroundContents(fallback);
         } catch {
           return false;
         }
       }
+
       const current = window.getSelection();
-      if (current && current.rangeCount) {
+
+      if (current?.rangeCount) {
         savedRangeRef.current = current.getRangeAt(0).cloneRange();
       } else {
         savedRangeRef.current = range.cloneRange();
       }
+
       return true;
     } catch (error) {
       console.error("Apply selection color error:", error);
@@ -2244,132 +2397,148 @@ export default function Teligram() {
   const applySelectedFormat = (type, value = null) => {
     if (!editorRef.current) return;
 
-    editorRef.current.focus();
-    restoreSelection();
+    const range = getCurrentEditorRange();
+    if (!range) return;
+
+    const hasSelection = !range.collapsed && Boolean(String(range.toString() || ""));
+    const currentColor = normalizeTextColor(
+      selectedTextColorRef.current || typingFormatsRef.current.color || "#111111"
+    );
 
     try {
-      const selection = window.getSelection();
-      const range = selection && selection.rangeCount
-        ? selection.getRangeAt(0)
-        : null;
-      const hasSelection = Boolean(range && !range.collapsed);
-      const currentTypingColor = normalizeTextColor(
-        selectedTextColorRef.current || "#111111"
-      );
+      editorRef.current.focus({ preventScroll: true });
+      setCaretRange(range);
 
-      if (type === "bold" || type === "underline") {
-        const next = {
-          ...typingFormatsRef.current,
-          [type]: hasSelection
-            ? !Boolean(document.queryCommandState(type))
-            : !typingFormatsRef.current[type],
-          color: currentTypingColor,
-        };
-
-        document.execCommand("styleWithCSS", false, true);
-
-        const commandIsActive = Boolean(document.queryCommandState(type));
-        let nativeCommandApplied = true;
-
-        if (commandIsActive !== next[type]) {
-          nativeCommandApplied = document.execCommand(type, false, null);
-        }
-
-        typingFormatsRef.current = next;
-        setActiveFormats({
-          bold: Boolean(next.bold),
-          underline: Boolean(next.underline),
-        });
-
-        if (!hasSelection) {
-          // Preserve the user's current typing color after Bold/Underline changes.
-          const colorApplied = document.execCommand(
-            "foreColor",
-            false,
-            currentTypingColor
-          );
-
-          setComposerTextColor(currentTypingColor);
-
-          if (!nativeCommandApplied || !colorApplied) {
-            syncTypingMarker(next);
-          }
-        } else {
-          // Do not recolor the selected range. Existing inline color must stay.
-          saveSelection();
-        }
-
-        return;
-      }
-
+      // ------------------------------------------------------------
+      // COLOR
+      // ------------------------------------------------------------
       if (type === "color") {
         const finalColor = normalizeTextColor(value);
-        const currentSelection = window.getSelection();
-        const currentRange = currentSelection && currentSelection.rangeCount > 0
-          ? currentSelection.getRangeAt(0)
-          : savedRangeRef.current;
 
-        if (currentRange && !currentRange.collapsed) {
-          // Only the selected characters change color.
-          applyInlineColorToRange(currentRange.cloneRange(), finalColor);
+        if (hasSelection) {
+          // Only selected characters change color.
+          const selectedRange = getCurrentEditorRange();
+          if (selectedRange) {
+            applyInlineColorToRange(selectedRange, finalColor);
 
-          selectedTextColorRef.current = finalColor;
-          setTextColor(finalColor);
-          setColorModeActive(true);
+            // Put caret after the changed selection.
+            const selection = window.getSelection();
+            const afterRange = selection?.rangeCount
+              ? selection.getRangeAt(0).cloneRange()
+              : selectedRange.cloneRange();
 
-          const appliedSelection = window.getSelection();
-          const appliedRange = appliedSelection?.rangeCount
-            ? appliedSelection.getRangeAt(0)
-            : null;
-
-          if (appliedRange) {
-            // Keep the caret after the selected text so future typing uses
-            // the newly selected color.
-            appliedRange.collapse(false);
-            appliedSelection.removeAllRanges();
-            appliedSelection.addRange(appliedRange);
-            savedRangeRef.current = appliedRange.cloneRange();
+            afterRange.collapse(false);
+            setCaretRange(afterRange);
           }
+        }
 
-          typingFormatsRef.current = {
-            ...typingFormatsRef.current,
-            color: finalColor,
-          };
+        // Color is also the new typing color from this caret onward.
+        selectedTextColorRef.current = finalColor;
+        typingFormatsRef.current = {
+          ...typingFormatsRef.current,
+          color: finalColor,
+        };
 
-          setComposerTextColor(finalColor);
+        setTextColor(finalColor);
+        setColorModeActive(true);
+        setComposerTextColor(finalColor);
+
+        // Apply all currently active typing formats together.
+        const nextFormats = {
+          ...typingFormatsRef.current,
+          color: finalColor,
+        };
+
+        const caretRange = getCurrentEditorRange();
+
+        if (caretRange?.collapsed) {
+          editorRef.current.focus({ preventScroll: true });
+          setCaretRange(caretRange);
+
           document.execCommand("styleWithCSS", false, true);
-          document.execCommand("foreColor", false, finalColor);
-        } else {
-          // No selection: only future typing changes color.
-          selectedTextColorRef.current = finalColor;
-          setTextColor(finalColor);
-          setColorModeActive(true);
 
-          typingFormatsRef.current = {
-            ...typingFormatsRef.current,
-            color: finalColor,
-          };
-
-          setComposerTextColor(finalColor);
-          document.execCommand("styleWithCSS", false, true);
-
-          const nativeTypingColorApplied = document.execCommand(
+          const colorApplied = document.execCommand(
             "foreColor",
             false,
             finalColor
           );
 
-          if (!nativeTypingColorApplied) {
-            setTypingColorAtCaret(finalColor, savedRangeRef.current);
+          if (!colorApplied) {
+            syncTypingMarker(nextFormats);
+          }
+
+          // Restore bold/underline state after changing color.
+          if (nextFormats.bold) {
+            document.execCommand("bold", false, null);
+          }
+
+          if (nextFormats.underline) {
+            document.execCommand("underline", false, null);
           }
         }
 
         saveSelection();
+        return;
+      }
+
+      // ------------------------------------------------------------
+      // BOLD / UNDERLINE
+      // ------------------------------------------------------------
+      if (type === "bold" || type === "underline") {
+        const nextValue = hasSelection
+          ? !Boolean(document.queryCommandState(type))
+          : !Boolean(typingFormatsRef.current[type]);
+
+        const nextFormats = {
+          ...typingFormatsRef.current,
+          [type]: nextValue,
+          color: currentColor,
+        };
+
+        document.execCommand("styleWithCSS", false, true);
+
+        const browserState = Boolean(document.queryCommandState(type));
+
+        if (browserState !== nextValue) {
+          document.execCommand(type, false, null);
+        }
+
+        typingFormatsRef.current = nextFormats;
+
+        setActiveFormats({
+          bold: Boolean(nextFormats.bold),
+          underline: Boolean(nextFormats.underline),
+        });
+
+        // If there is no selected text, the new format applies to future
+        // typing while preserving the selected color.
+        if (!hasSelection) {
+          const caret = getCurrentEditorRange();
+
+          if (caret?.collapsed) {
+            setCaretRange(caret);
+
+            // Color must remain active together with bold/underline.
+            document.execCommand("styleWithCSS", false, true);
+            document.execCommand("foreColor", false, currentColor);
+
+            if (!document.execCommand(type, false, null)) {
+              syncTypingMarker(nextFormats);
+            }
+          }
+        } else {
+          // Selection formatting changes only selected characters.
+          // Existing inline colors are deliberately untouched.
+          saveSelection();
+        }
+
+        return;
       }
     } catch (error) {
       console.error("Format apply error:", error);
     }
   };
+
   const applyBold = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -2383,78 +2552,34 @@ export default function Teligram() {
   };
 
   const openColorPicker = (e) => {
+    // IMPORTANT:
+    // Do not allow the toolbar's parent onMouseDown to cancel the
+    // browser's native color-picker user gesture.
     e.preventDefault();
     e.stopPropagation();
+
     saveSelection();
-    colorRef.current?.click();
+
+    const input = colorRef.current;
+    if (!input) return;
+
+    try {
+      if (typeof input.showPicker === "function") {
+        input.showPicker();
+      } else {
+        input.click();
+      }
+    } catch {
+      input.click();
+    }
   };
 
   const changeColor = (color) => {
-    const finalColor = normalizeTextColor(color);
-    if (!editorRef.current) return;
-
-    // The native color input takes focus. Keep a clone of the editor range
-    // before focusing back, otherwise some browsers reset the caret to start.
-    const savedRange = savedRangeRef.current?.cloneRange();
-    if (!savedRange || !editorRef.current.contains(savedRange.commonAncestorContainer)) {
-      return;
-    }
-
-    editorRef.current.focus({ preventScroll: true });
-    const selection = window.getSelection();
-    selection?.removeAllRanges();
-    selection?.addRange(savedRange);
-    savedRangeRef.current = savedRange.cloneRange();
-
-    try {
-      if (!savedRange.collapsed) {
-        // A deliberate text selection changes only that selected text, then
-        // keeps its color active for the next word typed after the selection.
-        applyInlineColorToRange(savedRange, finalColor);
-        selectedTextColorRef.current = finalColor;
-        setTextColor(finalColor);
-        setColorModeActive(true);
-
-        const appliedSelection = window.getSelection();
-        const appliedRange = appliedSelection?.rangeCount
-          ? appliedSelection.getRangeAt(0)
-          : null;
-
-        if (appliedRange) {
-          appliedRange.collapse(false);
-          appliedSelection.removeAllRanges();
-          appliedSelection.addRange(appliedRange);
-          savedRangeRef.current = appliedRange.cloneRange();
-        }
-
-        setComposerTextColor(finalColor);
-        document.execCommand("styleWithCSS", false, true);
-        document.execCommand("foreColor", false, finalColor);
-      } else {
-        // With no selection, the color becomes the typing color from the
-        // current caret onward; already typed text is left untouched.
-        setColorModeActive(true);
-        setComposerTextColor(finalColor);
-        document.execCommand("styleWithCSS", false, true);
-        const nativeTypingColorApplied = document.execCommand(
-          "foreColor",
-          false,
-          finalColor
-        );
-
-        // Chromium keeps foreColor at a collapsed contentEditable caret. The
-        // marker remains only for browsers that do not support that behavior.
-        if (!nativeTypingColorApplied) {
-          setTypingColorAtCaret(finalColor, savedRange);
-        }
-      }
-    } catch (error) {
-      console.error("Color apply error:", error);
-    }
-    saveSelection();
+    applySelectedFormat("color", color);
   };
 
   const handleImageSelect = (e) => {
+
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
     if (files.some((file) => !file.type.startsWith("image/"))) {
@@ -8462,13 +8587,13 @@ export default function Teligram() {
 
         /* =========================================
            FINAL COLOR + INPUT + TIME FIX
-           Selected color must show while typing and after send.
-           Inner HTML colors are overridden, but bold/underline stay.
+           Each typed/selected range keeps its own color.
+           The editor default is black only for unformatted text.
         ========================================= */
 
         .text-input {
           color: #111111 !important;
-          caret-color: var(--composerColor, #111111) !important;
+          caret-color: var(--composerCaretColor, #111111) !important;
           background: #ffffff !important;
           min-height: 40px !important;
           max-height: 96px !important;
@@ -8477,7 +8602,7 @@ export default function Teligram() {
           line-height: 1.38 !important;
           font-weight: 500 !important;
           opacity: 1 !important;
-          -webkit-text-fill-color: #111111 !important;
+          -webkit-text-fill-color: currentColor !important;
         }
 
         .text-input *,
@@ -8487,6 +8612,13 @@ export default function Teligram() {
         .text-input font {
           font-size: inherit !important;
           line-height: inherit !important;
+        }
+
+        /* Never force black onto existing inline-colored text. */
+        .text-input span[style*="color"],
+        .text-input font[color],
+        .text-input [data-typing-color-marker="true"] {
+          -webkit-text-fill-color: currentColor !important;
         }
 
         .text-input:empty::before {
@@ -9530,7 +9662,7 @@ export default function Teligram() {
           font-weight: 550 !important;
           outline: none !important;
           overflow-y: auto !important;
-          caret-color: var(--composerColor, #111111) !important;
+          caret-color: var(--composerCaretColor, #111111) !important;
           -webkit-user-select: text !important;
           user-select: text !important;
           touch-action: manipulation !important;
@@ -10532,7 +10664,7 @@ export default function Teligram() {
           background: #ffffff !important;
           color: var(--composerColor, #111111) !important;
           -webkit-text-fill-color: var(--composerColor, #111111) !important;
-          caret-color: var(--composerColor, #111111) !important;
+          caret-color: var(--composerCaretColor, #111111) !important;
           font-family: Inter, Arial, sans-serif !important;
           font-size: 14px !important;
           line-height: 1.38 !important;
