@@ -6,19 +6,6 @@
           -webkit-tap-highlight-color: transparent;
         }
 
-        html,
-        body,
-        #root {
-          width: 100%;
-          min-height: 100%;
-          margin: 0;
-          padding: 0;
-          overflow-x: hidden;
-        }
-
-        body {
-          background: #07111f;
-        }
 
         .nm-screen {
           width: 100vw;
@@ -1863,24 +1850,15 @@
         }
 
         /* ===== Full screen Telegram/WhatsApp style fixed responsive page ===== */
-        html,
-        body,
-        #root {
-          width: 100%;
-          min-height: 100%;
-          margin: 0;
-          padding: 0;
-          overflow-x: hidden;
-          overflow-y: auto;
-        }
+
 
         .nm-screen {
           width: 100vw;
+          height: 100dvh;
           min-height: 100dvh;
-          height: auto;
           display: block;
           background: #efeae2;
-          overflow: visible;
+          overflow: hidden;
         }
 
         .nm-phone {
@@ -2298,32 +2276,18 @@
            Only .chat-body scrolls.
            Laptop/tablet/mobile use full available page width.
         */
-        html,
-        body,
-        #root {
-          width: 100% !important;
-          min-height: 100% !important;
-          margin: 0 !important;
-          padding: 0 !important;
-          overflow-x: hidden !important;
-          overflow-y: auto !important;
-        }
 
-        body {
-          overscroll-behavior: none;
-          background: #e7f2df !important;
-        }
 
         .nm-screen {
           width: 100vw !important;
+          height: 100dvh !important;
           min-height: 100dvh !important;
-          height: auto !important;
-          max-height: none !important;
+          max-height: 100dvh !important;
           display: flex !important;
           align-items: stretch !important;
           justify-content: stretch !important;
           padding: 0 !important;
-          overflow: visible !important;
+          overflow: hidden !important;
           background: #e7f2df !important;
         }
 
@@ -8971,3 +8935,65 @@
             display: none !important;
           }
         }
+
+
+/* ===== FINAL GLOBAL PAGE SCROLL FIX =====
+   Global website/page scroll works normally.
+   Chat area remains internally scrollable.
+   No other design/features changed.
+=========================================== */
+
+
+.nm-screen {
+  width: 100% !important;
+  min-height: 100dvh !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+.nm-phone {
+  width: 100% !important;
+  min-height: 100dvh !important;
+  height: 100dvh !important;
+  overflow: hidden !important;
+}
+
+.chat-body {
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+/* =========================================================
+   Teligram page-only scrolling fix
+   IMPORTANT: this stylesheet does NOT control html/body/#root.
+   Global application pages keep their own normal scrolling.
+========================================================= */
+
+.nm-screen {
+  width: 100% !important;
+  min-height: 100dvh !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+.nm-phone {
+  width: 100% !important;
+  max-width: 430px !important;
+  min-height: 100dvh !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+.chat-body {
+  flex: 0 0 auto !important;
+  min-height: auto !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+  overflow-y: visible !important;
+  overflow-x: hidden !important;
+}
