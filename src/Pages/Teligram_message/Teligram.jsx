@@ -64,6 +64,8 @@ export default function Teligram() {
   const bottomRef = useRef(null);
   const chatBodyRef = useRef(null);
   const savedRangeRef = useRef(null);
+  // Character-offset snapshot survives browser/WebView focus changes and DOM span rewrites.
+  const savedSelectionOffsetsRef = useRef(null);
   const typingFormatsRef = useRef({ bold: false, underline: false });
   const verifiedPinRef = useRef("");
   const unlockCheckingRef = useRef(false);
@@ -103,6 +105,7 @@ export default function Teligram() {
 
   const [textColor, setTextColor] = useState("#111111");
   const [colorModeActive, setColorModeActive] = useState(false);
+  const [showColorInput, setShowColorInput] = useState(false);
   const [showPinnedList, setShowPinnedList] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
   const [selectedImages, setSelectedImages] = useState([]);
@@ -661,6 +664,7 @@ export default function Teligram() {
     if (typeof document !== "undefined" && document.activeElement === editorRef.current) {
       editorRef.current?.blur();
       savedRangeRef.current = null;
+    savedSelectionOffsetsRef.current = null;
     }
   };
 
@@ -1627,6 +1631,7 @@ export default function Teligram() {
     selection.removeAllRanges();
     selection.addRange(range);
     savedRangeRef.current = range.cloneRange();
+    saveSelection();
 
     setTimeout(updateActiveFormats, 0);
   };
@@ -2312,24 +2317,93 @@ export default function Teligram() {
     selection.removeAllRanges();
     selection.addRange(nextRange);
     savedRangeRef.current = nextRange.cloneRange();
+    saveSelection();
     return true;
+  };
+
+  const getEditorPointOffset = (root, node, offset) => {
+    if (!root || !node) return 0;
+    try {
+      const range = document.createRange();
+      range.selectNodeContents(root);
+      range.setEnd(node, Math.max(0, Number(offset) || 0));
+      return range.toString().length;
+    } catch {
+      return 0;
+    }
+  };
+
+  const getSelectionOffsets = (range) => {
+    const root = editorRef.current;
+    if (!root || !range) return null;
+    return {
+      start: getEditorPointOffset(root, range.startContainer, range.startOffset),
+      end: getEditorPointOffset(root, range.endContainer, range.endOffset),
+    };
+  };
+
+  const findEditorPointAtOffset = (root, targetOffset) => {
+    const wanted = Math.max(0, Number(targetOffset) || 0);
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let node;
+    let total = 0;
+
+    while ((node = walker.nextNode())) {
+      const length = node.nodeValue?.length || 0;
+      if (wanted <= total + length) {
+        return { node, offset: Math.max(0, Math.min(length, wanted - total)) };
+      }
+      total += length;
+    }
+
+    return { node: root, offset: root.childNodes.length };
+  };
+
+  const restoreSelectionFromOffsets = () => {
+    const root = editorRef.current;
+    const snapshot = savedSelectionOffsetsRef.current;
+    const selection = window.getSelection();
+    if (!root || !snapshot || !selection) return false;
+
+    try {
+      const start = findEditorPointAtOffset(root, snapshot.start);
+      const end = findEditorPointAtOffset(root, snapshot.end);
+      const range = document.createRange();
+      range.setStart(start.node, start.offset);
+      range.setEnd(end.node, end.offset);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      savedRangeRef.current = range.cloneRange();
+      return true;
+    } catch {
+      return false;
+    }
   };
 
   const saveSelection = () => {
     const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) return;
+    const root = editorRef.current;
+    if (!selection || selection.rangeCount === 0 || !root) return;
+
     const range = selection.getRangeAt(0);
-    if (editorRef.current && editorRef.current.contains(range.commonAncestorContainer)) {
-      savedRangeRef.current = range.cloneRange();
-    }
+    if (!root.contains(range.commonAncestorContainer)) return;
+
+    savedRangeRef.current = range.cloneRange();
+    savedSelectionOffsetsRef.current = getSelectionOffsets(range);
   };
 
   const restoreSelection = () => {
+    if (restoreSelectionFromOffsets()) return true;
+
     const selection = window.getSelection();
     if (!selection || !savedRangeRef.current) return false;
-    selection.removeAllRanges();
-    selection.addRange(savedRangeRef.current);
-    return true;
+    try {
+      selection.removeAllRanges();
+      selection.addRange(savedRangeRef.current);
+      return true;
+    } catch {
+      return false;
+    }
   };
 
   const updateActiveFormats = () => {
@@ -2493,8 +2567,9 @@ export default function Teligram() {
   const openColorPicker = (e) => {
     e.preventDefault();
     e.stopPropagation();
+    // Preserve the selected word/range before the color control receives focus.
     saveSelection();
-    colorRef.current?.click();
+    setShowColorInput((open) => !open);
   };
 
   const changeColor = (color) => {
@@ -2504,7 +2579,15 @@ export default function Teligram() {
     const finalColor = normalizeTextColor(color);
     if (!editorRef.current) return;
 
-    const savedRange = savedRangeRef.current?.cloneRange();
+    // Restore by character offsets first. This is reliable after the native
+    // browser/WebView color picker temporarily steals focus.
+    restoreSelectionFromOffsets();
+    const restoredSelection = window.getSelection();
+    const savedRange =
+      restoredSelection?.rangeCount
+        ? restoredSelection.getRangeAt(0).cloneRange()
+        : savedRangeRef.current?.cloneRange();
+
     if (!savedRange || !editorRef.current.contains(savedRange.commonAncestorContainer)) {
       return;
     }
@@ -2551,6 +2634,7 @@ export default function Teligram() {
       }
 
       saveSelection();
+      setShowColorInput(false);
       scheduleEditorResize();
     } catch (error) {
       console.error("Color apply error:", error);
@@ -2647,6 +2731,7 @@ export default function Teligram() {
     typingFormatsRef.current = { bold: false, underline: false, color: "#111111" };
     setComposerTextColor("#111111");
     setColorModeActive(false);
+    setShowColorInput(false);
     if (!keepPreviewImage) {
       previewImages.forEach((url) => {
         if (url.startsWith("blob:")) URL.revokeObjectURL(url);
@@ -2670,6 +2755,7 @@ export default function Teligram() {
     setActiveFormats({ bold: false, underline: false });
     setActiveMenuId(null);
     savedRangeRef.current = null;
+    savedSelectionOffsetsRef.current = null;
 
     if (editorRef.current) {
       editorRef.current.innerHTML = "";
@@ -3173,6 +3259,8 @@ export default function Teligram() {
     selection?.removeAllRanges();
     selection?.addRange(nextRange);
     savedRangeRef.current = nextRange.cloneRange();
+    savedSelectionOffsetsRef.current = { start: 0, end: 0 };
+    saveSelection();
 
     editor.style.setProperty("--composerColor", finalColor);
     editor.style.setProperty("color", finalColor, "important");
@@ -3207,6 +3295,7 @@ export default function Teligram() {
     };
     setActiveFormats({ bold: false, underline: false });
     setColorModeActive(false);
+    setShowColorInput(false);
 
     const noteImageUrls = noteHasImage ? getNoteImageUrls(note) : [];
     setPreviewImage(noteImageUrls[0] || "");
@@ -4511,28 +4600,43 @@ export default function Teligram() {
                         <img src={UNDERLINE_SELECT_ICON} alt="Underline" className="tool-icon format-icon underline-select-icon" />
                       </button>
 
-                      <input
-                        ref={colorRef}
-                        type="color"
-                        value={textColor}
-                        hidden
-                        onChange={(e) => changeColor(e.target.value)}
-                      />
+                      <div className="color-tool-wrap">
+                        <button
+                          type="button"
+                          className={`tool-btn color-tool ${colorModeActive ? "active" : ""}`}
+                          onPointerDown={openColorPicker}
+                          title="Text color"
+                          aria-label="Choose text color"
+                          aria-expanded={showColorInput}
+                          style={{ "--pickedColor": textColor }}
+                        >
+                          <img
+                            src={COLOR_SELECT_ICON}
+                            alt="Text color"
+                            className="tool-icon color-icon color-select-icon"
+                          />
+                        </button>
 
-                      <button
-                        type="button"
-                        className={`tool-btn color-tool ${colorModeActive ? "active" : ""}`}
-                        onPointerDown={(e) => {
-                          if (e.pointerType !== "mouse") {
-                            saveSelection();
-                          }
-                        }}
-                        onMouseDown={openColorPicker}
-                        title="Text color"
-                        style={{ "--pickedColor": textColor }}
-                      >
-                        <img src={COLOR_SELECT_ICON} alt="Text color" className="tool-icon color-icon color-select-icon" />
-                      </button>
+                        {showColorInput && (
+                          <div
+                            className="color-input-popover"
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <input
+                              ref={colorRef}
+                              className="color-input-visible"
+                              type="color"
+                              value={textColor}
+                              onPointerDown={() => saveSelection()}
+                              onInput={(e) => changeColor(e.currentTarget.value)}
+                              onChange={(e) => changeColor(e.target.value)}
+                              aria-label="Select text color"
+                            />
+                            <span className="color-value">{textColor.toUpperCase()}</span>
+                          </div>
+                        )}
+                      </div>
 
                       <input
                         ref={imageRef}
@@ -4633,6 +4737,7 @@ export default function Teligram() {
 
                        const span = document.createElement("span");
                        span.dataset.composerTypedColor = "true";
+                       span.style.setProperty("--typed-color", color);
                        span.style.setProperty("color", color, "important");
                        span.style.setProperty("-webkit-text-fill-color", color, "important");
                        // Color is independent. Bold/underline are copied only
@@ -5509,6 +5614,14 @@ export default function Teligram() {
         .text-input:focus {
           border-color: #0ea5e9;
           box-shadow: 0 0 0 3px rgba(14,165,233,0.12);
+        }
+
+        .text-input {
+          white-space: pre-wrap !important;
+          overflow-wrap: anywhere !important;
+          word-break: break-word !important;
+          user-select: text !important;
+          -webkit-user-select: text !important;
         }
 
         .text-input:empty::before {
@@ -8666,21 +8779,16 @@ export default function Teligram() {
           line-height: inherit !important;
         }
 
-        /* Never let the editor's default black color override an inline
-           color chosen for a typing span. */
-        .text-input span[style*="color"],
-        .text-input font[color] {
-          color: inherit;
-        }
-
         .text-input span[data-typing-color-marker="true"] {
           color: var(--typing-color, #111111) !important;
           -webkit-text-fill-color: var(--typing-color, #111111) !important;
         }
 
+        /* Every typed fragment keeps its own color. Changing the next
+           color must never recolor previous words. */
         .text-input span[data-composer-typed-color="true"] {
-          color: inherit !important;
-          -webkit-text-fill-color: inherit !important;
+          color: var(--typed-color, #111111) !important;
+          -webkit-text-fill-color: var(--typed-color, #111111) !important;
         }
 
         .text-input:empty::before {
@@ -13361,6 +13469,57 @@ export default function Teligram() {
         .message-image-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; width:min(300px,72vw); }
         .message-image-grid .message-image { width:100%; max-width:none; max-height:150px; aspect-ratio:1/1; object-fit:cover; }
 
+        /* ===== VISIBLE COLOR PICKER ===== */
+        .color-tool-wrap {
+          position: relative !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          flex: 0 0 auto !important;
+        }
+
+        .color-input-popover {
+          position: absolute !important;
+          left: 50% !important;
+          bottom: calc(100% + 8px) !important;
+          transform: translateX(-50%) !important;
+          z-index: 1000 !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 7px !important;
+          padding: 7px 8px !important;
+          border: 1px solid #d8dee8 !important;
+          border-radius: 10px !important;
+          background: #ffffff !important;
+          box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18) !important;
+        }
+
+        .color-input-visible {
+          width: 34px !important;
+          height: 30px !important;
+          padding: 2px !important;
+          border: 1px solid #cbd5e1 !important;
+          border-radius: 7px !important;
+          background: #ffffff !important;
+          cursor: pointer !important;
+        }
+
+        .color-value {
+          min-width: 62px !important;
+          font-size: 10px !important;
+          line-height: 1 !important;
+          font-weight: 800 !important;
+          color: #475569 !important;
+          font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
+        }
+
+        @media (max-width: 430px) {
+          .color-input-popover {
+            left: auto !important;
+            right: 0 !important;
+            transform: none !important;
+          }
+        }
+
         /* FINAL EXACT FORMATTING/LINK RULES */
         .composer-input-row .text-input strong,
         .composer-input-row .text-input b,
@@ -13385,6 +13544,16 @@ export default function Teligram() {
         .message-link-badge { pointer-events: none !important; }
 
         /* FINAL PER-CHARACTER COLOR FIX */
+        .composer-input-row .text-input span[data-composer-typed-color="true"] {
+          color: var(--typed-color, #111111) !important;
+          -webkit-text-fill-color: var(--typed-color, #111111) !important;
+        }
+
+        .composer-input-row .text-input span[data-typing-color-marker="true"] {
+          color: var(--typing-color, #111111) !important;
+          -webkit-text-fill-color: var(--typing-color, #111111) !important;
+        }
+
         .composer-input-row .text-input {
           color: #111111 !important;
           -webkit-text-fill-color: #111111 !important;
@@ -14246,6 +14415,37 @@ export default function Teligram() {
             aspect-ratio: 1 / 1 !important;
           }
         }
+
+        /* Professional native color picker: visible only when Color is opened. */
+        .color-tool-wrap .color-tool {
+          position: relative !important;
+          overflow: visible !important;
+        }
+
+        .color-input-popover {
+          min-width: 118px !important;
+          min-height: 48px !important;
+          box-sizing: border-box !important;
+          touch-action: manipulation !important;
+        }
+
+        .color-input-visible {
+          appearance: auto !important;
+          -webkit-appearance: auto !important;
+          display: block !important;
+          opacity: 1 !important;
+          visibility: visible !important;
+          pointer-events: auto !important;
+          touch-action: manipulation !important;
+          flex: 0 0 auto !important;
+        }
+
+        .composer-input-row .text-input,
+        .composer-input-row .text-input * {
+          -webkit-user-select: text !important;
+          user-select: text !important;
+        }
+
 `}
     
 
