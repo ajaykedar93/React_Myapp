@@ -3577,7 +3577,19 @@ export default function Teligram() {
     !channelAccessGrantedRef.current;
 
   return (
-    <div className="nm-screen" onClick={() => setActiveMenuId(null)}>
+    <div
+      className="nm-screen"
+      onClick={() => setActiveMenuId(null)}
+      style={{
+        position: "fixed",
+        inset: 0,
+        width: "100vw",
+        height: "100dvh",
+        minHeight: "100dvh",
+        margin: 0,
+        padding: 0,
+      }}
+    >
       <div className="nm-phone">
         <header className="nm-header">
           <button className="header-icon-btn back-btn" onClick={backToChannels}>

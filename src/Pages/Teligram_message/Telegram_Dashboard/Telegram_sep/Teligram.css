@@ -8936,64 +8936,58 @@
           }
         }
 
-
-/* ===== FINAL GLOBAL PAGE SCROLL FIX =====
-   Global website/page scroll works normally.
-   Chat area remains internally scrollable.
-   No other design/features changed.
-=========================================== */
-
-
-.nm-screen {
-  width: 100% !important;
-  min-height: 100dvh !important;
-  height: auto !important;
-  max-height: none !important;
-  overflow: visible !important;
-}
-
-.nm-phone {
-  width: 100% !important;
-  min-height: 100dvh !important;
-  height: 100dvh !important;
-  overflow: hidden !important;
-}
-
-.chat-body {
-  min-height: 0 !important;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-}
-
 /* =========================================================
-   Teligram page-only scrolling fix
-   IMPORTANT: this stylesheet does NOT control html/body/#root.
-   Global application pages keep their own normal scrolling.
+   FINAL TELEGRAM PAGE LAYOUT
+   Header fixed + chat-body only scrolls + composer fixed.
+   No html/body/#root global scroll rules.
 ========================================================= */
 
 .nm-screen {
-  width: 100% !important;
+  width: 100vw !important;
+  height: 100dvh !important;
   min-height: 100dvh !important;
-  height: auto !important;
-  max-height: none !important;
-  overflow: visible !important;
+  max-height: 100dvh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: stretch !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
 }
 
 .nm-phone {
   width: 100% !important;
-  max-width: 430px !important;
-  min-height: 100dvh !important;
-  height: auto !important;
-  max-height: none !important;
-  overflow: visible !important;
+  max-width: 460px !important;
+  height: 100dvh !important;
+  min-height: 0 !important;
+  max-height: 100dvh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+
+.nm-header,
+.search-box,
+.preview-strip,
+.edit-strip,
+.composer {
+  flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
 }
 
 .chat-body {
-  flex: 0 0 auto !important;
-  min-height: auto !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
   height: auto !important;
   max-height: none !important;
-  overflow: visible !important;
-  overflow-y: visible !important;
+  overflow-y: auto !important;
   overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior-y: contain !important;
+  box-sizing: border-box !important;
 }
+
