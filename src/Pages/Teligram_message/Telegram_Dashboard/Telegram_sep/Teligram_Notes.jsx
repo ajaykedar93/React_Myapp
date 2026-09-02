@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import DOMPurify from "dompurify";
-import "./Teligram.css";
+import "./TeligramFormatted.css";
 
 const DEFAULT_BACKEND_URL = "https://express-backend-myapp.onrender.com";
 
@@ -65,7 +65,7 @@ export default function Teligram() {
   const bottomRef = useRef(null);
   const chatBodyRef = useRef(null);
   const savedRangeRef = useRef(null);
-  const typingFormatsRef = useRef({ bold: false, underline: false });
+  const typingFormatsRef = useRef({ bold: false, underline: false, color: "#111111" });
   const verifiedPinRef = useRef("");
   const unlockCheckingRef = useRef(false);
   const unlockRequestIdRef = useRef(0);
