@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import DOMPurify from "dompurify";
-import "./TeligramFormatted.css";
+import "./Teligram.css";
 
 const DEFAULT_BACKEND_URL = "https://express-backend-myapp.onrender.com";
 
