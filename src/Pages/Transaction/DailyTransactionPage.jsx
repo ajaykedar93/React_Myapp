@@ -468,15 +468,21 @@ export default function DailyTransactionPage() {
         .title{position:relative;font-size:clamp(24px,3vw,34px);font-weight:850;letter-spacing:-.8px;text-align:left;padding:10px 0 20px;margin:0 0 16px;color:var(--ink-950);background:none;-webkit-text-fill-color:initial}
         .title:before{content:"";display:inline-block;width:5px;height:29px;margin-right:12px;vertical-align:-5px;border-radius:8px;background:var(--brand-grad)}
         .title:after{content:"Track, manage and review your daily cash flow";display:block;margin:8px 0 0 17px;font-size:13px;letter-spacing:.1px;font-weight:500;color:var(--ink-500)}
-        .kpi-grid{display:grid;gap:16px;grid-template-columns:1fr;margin-bottom:18px}
-        @media(min-width:576px){.kpi-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
-        .card-ui{position:relative;background:rgba(255,255,255,.94);border:1px solid rgba(228,231,236,.95);border-radius:var(--rad);padding:20px;box-shadow:0 8px 24px rgba(16,24,40,.045);transition:transform .22s ease,box-shadow .22s ease,border-color .22s ease}
-        .card-ui:hover{box-shadow:0 14px 32px rgba(16,24,40,.075);border-color:#d6dcf5}
-        @media(max-width:767.98px){.card-ui{border-radius:0;border-left:0;border-right:0;padding:16px}.kpi-grid{gap:10px}}
-        .kpi-card{text-align:left!important;overflow:hidden;min-height:112px;padding:19px 20px}
-        .kpi-card:after{content:"";position:absolute;right:-22px;top:-28px;width:100px;height:100px;border-radius:50%;background:rgba(99,102,241,.065)}
-        .kpi-card h6{position:relative;z-index:1;font-size:12px;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-500);font-weight:750;margin:0 0 12px}
-        .kpi-card h5{position:relative;z-index:1;font-size:clamp(21px,2.3vw,29px);font-weight:850;letter-spacing:-.7px;margin:0}
+        .kpi-grid{display:grid;gap:16px;grid-template-columns:repeat(3,minmax(0,1fr));margin:0 0 22px}
+        @media(max-width:575.98px){.kpi-grid{grid-template-columns:1fr;gap:12px}}
+        .kpi-card{position:relative!important;isolation:isolate;overflow:hidden;min-width:0;min-height:142px;padding:22px!important;border:1px solid rgba(255,255,255,.32)!important;border-radius:20px!important;text-align:left!important;color:#fff!important;box-shadow:0 14px 30px rgba(30,41,59,.14),inset 0 1px 0 rgba(255,255,255,.24)!important;transform:translateY(0);transition:transform .25s ease,box-shadow .25s ease,filter .25s ease}
+        .kpi-card:hover{transform:translateY(-5px);box-shadow:0 20px 40px rgba(30,41,59,.22)!important;filter:saturate(1.08)}
+        .kpi-card:before{content:"";position:absolute;z-index:-1;right:-38px;top:-58px;width:190px;height:190px;border:1px solid rgba(255,255,255,.2);border-radius:50%;box-shadow:0 0 0 22px rgba(255,255,255,.06),0 0 0 46px rgba(255,255,255,.045)}
+        .kpi-card:after{content:"";position:absolute;z-index:-1;right:22px;bottom:-38px;width:100px;height:100px;border-radius:50%;background:rgba(255,255,255,.12);filter:blur(1px)}
+        .kpi-card:nth-child(1){background:linear-gradient(135deg,#f43f5e 0%,#e11d48 48%,#9f1239 100%)!important}
+        .kpi-card:nth-child(2){background:linear-gradient(135deg,#10b981 0%,#059669 48%,#065f46 100%)!important}
+        .kpi-card:nth-child(3){background:linear-gradient(135deg,#8b5cf6 0%,#6d28d9 48%,#4c1d95 100%)!important}
+        .kpi-card h6{position:relative;z-index:1;display:flex;align-items:center;gap:8px;margin:0 0 17px!important;color:rgba(255,255,255,.88)!important;font-size:11px;text-transform:uppercase;letter-spacing:1.15px;font-weight:850}
+        .kpi-card h6:before{content:"";display:inline-block;width:8px;height:8px;flex:0 0 8px;border-radius:50%;background:#fff;box-shadow:0 0 0 4px rgba(255,255,255,.16)}
+        .kpi-card h5{position:relative;z-index:1;margin:0!important;color:#fff!important;font-size:clamp(22px,2.3vw,31px);font-weight:900;letter-spacing:-.65px;line-height:1.2;overflow-wrap:anywhere;font-variant-numeric:tabular-nums;text-shadow:0 2px 12px rgba(15,23,42,.12)}
+        .kpi-card .kpi-caption{position:relative;z-index:1;margin-top:10px;color:rgba(255,255,255,.78);font-size:11px;font-weight:600}
+        @media(max-width:767.98px){.kpi-grid{padding:0 12px}.kpi-card{min-height:120px;padding:18px!important;border-radius:17px!important}.kpi-card h6{margin-bottom:12px!important}.kpi-card h5{font-size:clamp(23px,6vw,29px)}}
+        @media(prefers-reduced-motion:reduce){.kpi-card{transition:none}.kpi-card:hover{transform:none}}
         .form-card{margin-bottom:18px!important}
         .form-card:before{content:"TRANSACTION DETAILS";display:block;font-size:11px;font-weight:850;letter-spacing:1.25px;color:#667085;margin:0 0 18px}
         .form-card .form-label,.form-label{display:block;font-size:12px;font-weight:750;letter-spacing:.1px;margin:0 0 7px;color:var(--ink-700)}
