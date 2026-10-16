@@ -208,7 +208,7 @@ export default function Teligram() {
     try {
       const raw = localStorage.getItem(getPinnedNoteKey(selectedChannel.channel_id));
       const parsed = raw ? JSON.parse(raw) : [];
-      setPinnedNoteIds(Array.isArray(parsed) ? parsed.map(String).slice(0, 5) : raw ? [String(raw)] : []);
+      setPinnedNoteIds(Array.isArray(parsed) ? parsed.map(String) : raw ? [String(raw)] : []);
     } catch {
       const legacy = localStorage.getItem(getPinnedNoteKey(selectedChannel.channel_id));
       setPinnedNoteIds(legacy ? [String(legacy)] : []);
@@ -346,7 +346,7 @@ export default function Teligram() {
 
   const savePinnedNoteIds = (channelId, ids) => {
     if (!channelId || typeof window === "undefined") return;
-    const cleanIds = Array.from(new Set((ids || []).map(String))).slice(0, 5);
+    const cleanIds = Array.from(new Set((ids || []).map(String)));
     if (cleanIds.length) localStorage.setItem(getPinnedNoteKey(channelId), JSON.stringify(cleanIds));
     else localStorage.removeItem(getPinnedNoteKey(channelId));
   };
@@ -3530,10 +3530,6 @@ export default function Teligram() {
     if (alreadyPinned) {
       nextPins = pinnedNoteIds.filter((id) => String(id) !== noteId);
     } else {
-      if (pinnedNoteIds.length >= 5) {
-        showToast("Maximum 5 pinned messages", "error");
-        return;
-      }
       nextPins = [...pinnedNoteIds, noteId];
     }
     setActiveMenuId(null);
@@ -3979,7 +3975,7 @@ export default function Teligram() {
               </div>
             )}
 
-            <main ref={chatBodyRef} className="chat-body" onClick={closeChatKeyboard}>
+            <main ref={chatBodyRef} className="chat-body" onClick={() => setActiveMenuId(null)}>
               {groupedNotes.length === 0 && (
                 <div className="empty-card">
                   <div className="empty-icon">✦</div>
@@ -14244,6 +14240,57 @@ export default function Teligram() {
             max-height: 44px !important;
             flex: 0 0 44px !important;
             aspect-ratio: 1 / 1 !important;
+          }
+        }
+
+        /* Final mobile keyboard + composer visibility overrides */
+        @media (max-width: 767px) {
+          .nm-screen {
+            height: var(--nm-visual-height, var(--app-viewport-height, 100dvh)) !important;
+            min-height: var(--nm-visual-height, var(--app-viewport-height, 100dvh)) !important;
+            max-height: var(--nm-visual-height, var(--app-viewport-height, 100dvh)) !important;
+            overflow: hidden !important;
+          }
+
+          .nm-phone {
+            height: var(--nm-visual-height, var(--app-viewport-height, 100dvh)) !important;
+            min-height: 0 !important;
+            max-height: var(--nm-visual-height, var(--app-viewport-height, 100dvh)) !important;
+            overflow: hidden !important;
+          }
+
+          .chat-body {
+            min-height: 0 !important;
+            flex: 1 1 auto !important;
+            overflow-y: auto !important;
+            overscroll-behavior: contain !important;
+            -webkit-overflow-scrolling: touch !important;
+            overflow-anchor: none !important;
+          }
+
+          .composer {
+            position: relative !important;
+            flex: 0 0 auto !important;
+            min-height: max-content !important;
+            transform: translateY(var(--nm-composer-shift, 0px)) !important;
+            z-index: 100 !important;
+            padding-bottom: max(8px, env(safe-area-inset-bottom)) !important;
+          }
+
+          .composer-card {
+            max-height: none !important;
+            min-height: max-content !important;
+            overflow: visible !important;
+          }
+
+          .text-input {
+            min-height: 42px !important;
+            max-height: min(45vh, calc(var(--nm-visual-height, 100dvh) * 0.45)) !important;
+            overflow-y: auto !important;
+            overscroll-behavior: contain !important;
+            -webkit-overflow-scrolling: touch !important;
+            touch-action: pan-y !important;
+            scroll-margin-bottom: 12px !important;
           }
         }
 `}

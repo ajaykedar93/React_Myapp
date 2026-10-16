@@ -8,6 +8,22 @@ const API_CAT    = `${API_ROOT}/category`;
 const API_SUBCAT = `${API_ROOT}/subcategory`;
 const PER_PAGE = 20;
 
+// Display currency as whole rupees (e.g. 1,000), never with .00.
+const formatAmount = (value) => Math.round(Number(value) || 0).toLocaleString("en-IN");
+
+// Normalize API dates and date-input values to YYYY-MM-DD.
+const getDateKey = (value) => {
+  if (!value) return "";
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+    return value.slice(0, 10);
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate()
+  ).padStart(2, "0")}`;
+};
+
 export default function MainTransactionPage() {
   const [dailyTransactions, setDailyTransactions] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
@@ -258,6 +274,12 @@ export default function MainTransactionPage() {
     return subcategories.filter((s) => Number(s.category_id) === cid);
   }, [subcategories, editModal.form.category_id]);
 
+  // Hide Save Details when the selected date already exists in All Main Transactions.
+  const selectedDateAlreadySaved = useMemo(
+    () => Boolean(selectedDate) && mainTransactions.some((mt) => getDateKey(mt.date) === selectedDate),
+    [mainTransactions, selectedDate]
+  );
+
   return (
     /* ✅ ONLY CHANGE: remove outside padding */
     <div className="container-fluid p-0" style={{ background: "var(--bg)" }}>
@@ -282,7 +304,12 @@ export default function MainTransactionPage() {
         .form-label{font-size:12px;font-weight:750;color:var(--ink-700)}
         .form-control,.form-select{min-height:42px;border:1px solid #d0d5dd;border-radius:10px;font-size:var(--fs);color:var(--ink-900);box-shadow:0 1px 2px rgba(16,24,40,.025);transition:border-color .18s ease,box-shadow .18s ease}
         .form-control:focus,.form-select:focus{border-color:#818cf8;box-shadow:0 0 0 4px rgba(99,102,241,.13)}
-        .btn-solid,.btn-outline{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:10px 17px;border-radius:11px;font-size:13px;font-weight:800;transition:transform .18s ease,box-shadow .18s ease,filter .18s ease}
+        .btn-solid,.btn-outline{display:inline-flex;align-items:center;justify-content:center;min-height:32px;padding:6px 11px;border-radius:8px;font-size:12px;font-weight:750;line-height:1.2;white-space:nowrap;transition:transform .18s ease,box-shadow .18s ease,filter .18s ease}
+        /* Compact, consistent buttons without covering transaction details. */
+        .btn{min-height:28px;padding:4px 8px;font-size:11px;line-height:1.25;border-radius:7px;font-weight:700;white-space:nowrap}
+        .btn.btn-sm{min-height:26px;padding:3px 7px;font-size:10.5px;line-height:1.2}
+        .tx-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:6px;margin-top:10px;position:relative;clear:both}
+        .tx-actions .btn{flex:0 0 auto}
         .btn-solid{background:var(--brand-grad);color:#fff;border:0;box-shadow:0 5px 13px rgba(79,70,229,.2)}
         .btn-solid:hover{color:#fff;filter:brightness(1.04);transform:translateY(-1px);box-shadow:0 8px 18px rgba(79,70,229,.25)}
         .btn-outline{background:#fff;border:1px solid #d0d5dd;color:var(--ink-700);border-style:solid}
@@ -291,9 +318,11 @@ export default function MainTransactionPage() {
         button:disabled{opacity:.55;cursor:not-allowed!important;transform:none!important}
         .tx-card{background:#fff;border:1px solid var(--border);border-radius:15px;padding:15px;box-shadow:0 5px 16px rgba(16,24,40,.045);transition:transform .2s ease,box-shadow .2s ease;animation:cardIn .3s ease both}
         .tx-card:hover{transform:translateY(-2px);box-shadow:0 11px 24px rgba(16,24,40,.08)}
-        .tx-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
-        .tx-title{font-weight:850;font-size:14px;color:var(--ink-950);overflow-wrap:anywhere}
-        .tx-sub{color:var(--ink-500);font-size:12px;line-height:1.45;overflow-wrap:anywhere}
+        .tx-top{display:flex;justify-content:space-between;align-items:center;gap:8px;min-width:0}
+        .tx-top>.date-text{flex:1 1 auto;min-width:0;white-space:nowrap;word-break:keep-all;overflow-wrap:normal;font-size:14px}
+        .tx-top>button{flex:0 0 auto;width:auto;min-width:58px;max-width:78px;padding:5px 8px;font-size:10.5px;line-height:1.2}
+        .tx-title{font-weight:850;font-size:14px;color:var(--ink-950);overflow-wrap:break-word;word-break:normal}
+        .tx-sub{color:var(--ink-500);font-size:12px;line-height:1.45;overflow-wrap:break-word;word-break:normal}
         .badge{display:inline-flex;align-items:center;padding:5px 9px;border-radius:999px;font-size:10px;letter-spacing:.45px;text-transform:uppercase;font-weight:850;white-space:nowrap}
         .badge-debit{background:#ffe4e6;color:#9f1239;border:1px solid #fda4af}
         .badge-credit{background:#d1fae5;color:#065f46;border:1px solid #6ee7b7}
@@ -301,7 +330,7 @@ export default function MainTransactionPage() {
         .btn-outline-primary{--bs-btn-color:#4338ca;--bs-btn-border-color:#a5b4fc;--bs-btn-hover-bg:#4338ca;--bs-btn-hover-border-color:#4338ca}
         .btn-outline-danger{--bs-btn-color:#b91c1c;--bs-btn-border-color:#fda4af;--bs-btn-hover-bg:#b91c1c;--bs-btn-hover-border-color:#b91c1c}
         .tx-row{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:9px;font-size:13px}
-        .tx-amt{font-weight:900;font-size:16px;letter-spacing:-.25px;color:var(--ink-950);text-align:right;overflow-wrap:normal;word-break:normal;font-variant-numeric:tabular-nums}
+        .tx-amt{font-weight:900;font-size:16px;letter-spacing:-.25px;color:var(--ink-950);text-align:right;white-space:nowrap;overflow-wrap:normal;word-break:keep-all;flex:0 0 auto;font-variant-numeric:tabular-nums}
         .table-responsive{border-radius:11px}
         .table{font-size:13px;vertical-align:middle;border-color:#eaecf0}
         .table thead th{position:sticky;top:0;background:#18243a;color:#fff;z-index:1;font-size:11px;text-transform:uppercase;letter-spacing:.45px;font-weight:800;padding:13px 11px;white-space:nowrap;border-color:#2d3b54}
@@ -311,8 +340,10 @@ export default function MainTransactionPage() {
         .table-responsive{width:100%;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
         .table{min-width:760px;width:100%}
         .tx-title,.tx-sub,.tx-amt,.tx-row,.loading-title,.loading-caption{word-break:normal;overflow-wrap:break-word}
-        .tx-amt{white-space:normal;max-width:65%;font-variant-numeric:tabular-nums}
-        .tx-row>div:last-child{min-width:0}
+        .date-text{white-space:nowrap;word-break:keep-all;overflow-wrap:normal}
+        .tx-row>div:first-child{flex:1 1 auto;min-width:0}
+        .tx-row>div:last-child{min-width:0;flex:0 0 auto}
+        .tx-amt{white-space:nowrap;max-width:none;font-variant-numeric:tabular-nums}
         input[type="date"]{width:100%;min-width:0;max-width:100%;color-scheme:light}
         .form-control,.form-select{max-width:100%;min-width:0}
         .table tbody tr{transition:background .15s ease}
@@ -329,20 +360,41 @@ export default function MainTransactionPage() {
         .modal-sheet{border:1px solid rgba(228,231,236,.95)!important;border-radius:20px!important;box-shadow:0 24px 70px rgba(16,24,40,.24)!important;max-width:calc(100vw - 28px);max-height:calc(100dvh - 32px);overflow:auto}
         .position-fixed.top-0.start-0.w-100.h-100.d-flex{backdrop-filter:blur(4px)}
         @media(max-width:767.98px){
-          .page-wrap{padding:0}
-          .page-wrap>.d-flex{padding:10px 14px 12px}
-          .title{font-size:24px}
-          .card-ui{border-radius:15px;margin-left:10px;margin-right:10px;padding:15px}
+          html,body,#root{width:100%;max-width:100%;overflow-x:hidden}
+          .container-fluid.p-0{width:100%;max-width:100%;padding-left:0!important;padding-right:0!important;overflow-x:clip}
+          .page-wrap{width:100%;max-width:100%;padding:0 10px;margin:0 auto}
+          .page-wrap>.d-flex{width:100%;max-width:100%;padding:10px 2px 12px;gap:8px}
+          .title{font-size:24px;min-width:0;overflow-wrap:anywhere}
+          .card-ui{width:100%;max-width:100%;min-width:0;border-radius:15px;margin-left:0!important;margin-right:0!important;padding:14px;overflow:hidden}
+          .card-ui>.row{margin-left:0!important;margin-right:0!important;row-gap:10px}
+          .card-ui>.row>[class*="col-"]{padding-left:6px;padding-right:6px;min-width:0}
           .table-view{display:none}
-          .mobile-view{display:block}
-          .tx-card{border-radius:14px;padding:13px}
-          .card-ui .row{row-gap:10px}
-          .btn-solid,.btn-outline{min-height:40px}
+          .mobile-view{display:block;width:100%;max-width:100%;min-width:0}
+          .mobile-view>.card-ui{margin-left:0!important;margin-right:0!important}
+          .tx-card{width:100%;max-width:100%;min-width:0;border-radius:14px;padding:12px;overflow-wrap:anywhere}
+          .tx-top,.tx-row{min-width:0;max-width:100%}
+          .tx-top>div,.tx-row>div{min-width:0}
+          .tx-top>.date-text{flex:1 1 auto;min-width:0;white-space:nowrap;font-size:13px;letter-spacing:-.2px}
+          .tx-top>button{flex:0 0 auto;width:auto;min-width:58px;max-width:66px;padding:5px 7px;font-size:10px}
+          .tx-title,.tx-sub{overflow-wrap:break-word;word-break:normal}
+          .date-text{white-space:nowrap;word-break:keep-all;overflow-wrap:normal}
+          .tx-amt{white-space:nowrap;max-width:none;flex:0 0 auto;font-size:15px}
+          .tx-row{gap:8px}
+          .tx-row>div:first-child{flex:1 1 auto;min-width:0}
+          .tx-row>div:last-child{flex:0 0 auto;min-width:max-content}
+          .mobile-view .d-grid{min-width:0;width:100%;max-width:100%}
+          .btn-solid,.btn-outline{min-height:30px;padding:5px 9px;font-size:11px}
+          .btn{min-height:27px;padding:4px 7px;font-size:10.5px}
+          .btn.btn-sm{min-height:25px;padding:3px 6px;font-size:10px}
+          .tx-actions{gap:5px;margin-top:9px}
         }
         @media(min-width:768px){.mobile-view{display:none}.page-wrap{padding-left:clamp(16px,2.5vw,30px);padding-right:clamp(16px,2.5vw,30px)}}
         @media(max-width:380px){
+          .page-wrap{padding-left:8px;padding-right:8px}
+          .page-wrap>.d-flex{padding-left:2px;padding-right:2px}
           .title{font-size:21px}
-          .card-ui{padding:12px;margin-left:7px;margin-right:7px}
+          .card-ui{padding:11px}
+          .tx-card{padding:10px}
           .tx-amt{font-size:14px}
           .btn{--bs-btn-font-size:.75rem}
           .toast{padding:11px 14px;font-size:12px}
@@ -583,9 +635,16 @@ export default function MainTransactionPage() {
         {/* Header */}
         <div className="d-flex justify-content-between align-items-center flex-wrap mb-3">
           <h3 className="title m-0">Main Transactions</h3>
-          <button className="btn-solid mt-2 mt-sm-0" onClick={saveDetails}>
-            Save Details
-          </button>
+          {!selectedDateAlreadySaved && (
+            <button
+              className="btn-solid mt-2 mt-sm-0"
+              onClick={saveDetails}
+              disabled={loading || !selectedDate}
+              type="button"
+            >
+              Save Details
+            </button>
+          )}
         </div>
 
         {/* Date & Totals */}
@@ -611,8 +670,8 @@ export default function MainTransactionPage() {
             <div className="col-12 col-md-7">
               <div className="fw-semibold mt-2 mt-md-0" style={{ fontSize: "clamp(.68rem, 2.4vw, .85rem)" }}>
                 Totals:
-                <span className="ms-2 me-3">Debit: ₹ {totalDebit.toFixed(2)}</span>
-                <span className="me-3">Credit: ₹ {totalCredit.toFixed(2)}</span>
+                <span className="ms-2 me-3">Debit: ₹ {formatAmount(totalDebit)}</span>
+                <span className="me-3">Credit: ₹ {formatAmount(totalCredit)}</span>
                 <span>Count: {totalTransactions}</span>
               </div>
             </div>
@@ -649,11 +708,11 @@ export default function MainTransactionPage() {
                           <div className="tx-title">{cat}</div>
                           <div className="tx-sub">
                             {sub} •{" "}
-                            {new Date(t.transaction_date).toLocaleDateString("en-GB", {
+                            <span className="date-text">{new Date(t.transaction_date).toLocaleDateString("en-GB", {
                               day: "2-digit",
                               month: "short",
                               year: "numeric",
-                            })}
+                            })}</span>
                           </div>
                         </div>
                         <span className={`badge ${t.type === "debit" ? "badge-debit" : "badge-credit"}`}>
@@ -663,7 +722,7 @@ export default function MainTransactionPage() {
 
                       <div className="tx-row">
                         <div className="tx-sub">Amount</div>
-                        <div className="tx-amt">₹ {Number(t.amount).toFixed(2)}</div>
+                        <div className="tx-amt">₹ {formatAmount(t.amount)}</div>
                       </div>
 
                       <div className="tx-row">
@@ -673,7 +732,7 @@ export default function MainTransactionPage() {
 
                       {t.purpose && <div className="mt-1 tx-sub">{t.purpose}</div>}
 
-                      <div className="d-flex gap-2 justify-content-end mt-2">
+                      <div className="tx-actions">
                         <button className="btn btn-outline-primary btn-sm" onClick={() => openEdit(t)}>
                           Update
                         </button>
@@ -737,7 +796,7 @@ export default function MainTransactionPage() {
 
                     <div className="tx-row">
                       <div className="tx-sub">Amount</div>
-                      <div className="tx-amt">₹ {Number(s.amount).toFixed(2)}</div>
+                      <div className="tx-amt">₹ {formatAmount(s.amount)}</div>
                     </div>
 
                     <div className="tx-row">
@@ -767,7 +826,7 @@ export default function MainTransactionPage() {
                 {mainTransactions.map((mt) => (
                   <div key={mt.transaction_id} className="tx-card">
                     <div className="tx-top">
-                      <div className="tx-title">{new Date(mt.date).toLocaleDateString()}</div>
+                      <div className="tx-title date-text">{new Date(mt.date).toLocaleDateString()}</div>
                       <button className="btn btn-danger btn-sm" onClick={() => confirmDelete(mt.transaction_id)}>
                         Delete
                       </button>
@@ -775,12 +834,12 @@ export default function MainTransactionPage() {
 
                     <div className="tx-row">
                       <div className="tx-sub">Total Debit</div>
-                      <div className="tx-amt">₹ {Number(mt.total_debit).toFixed(2)}</div>
+                      <div className="tx-amt">₹ {formatAmount(mt.total_debit)}</div>
                     </div>
 
                     <div className="tx-row">
                       <div className="tx-sub">Total Credit</div>
-                      <div className="tx-amt">₹ {Number(mt.total_credit).toFixed(2)}</div>
+                      <div className="tx-amt">₹ {formatAmount(mt.total_credit)}</div>
                     </div>
 
                     <div className="tx-row">
@@ -823,14 +882,14 @@ export default function MainTransactionPage() {
                       {pagedDailyTransactions.map((t, i) => (
                         <tr key={t.daily_transaction_id}>
                           <td>{startIdx + i + 1}</td>
-                          <td>₹ {Number(t.amount).toFixed(2)}</td>
+                          <td>₹ {formatAmount(t.amount)}</td>
                           <td className={t.type === "debit" ? "text-danger" : "text-success"}>{t.type}</td>
                           <td>{t.category_name || t.category_id}</td>
                           <td>{t.subcategory_name || t.subcategory_id || "-"}</td>
                           <td>{t.quantity ?? 0}</td>
                           <td>{t.purpose || "-"}</td>
                           <td>
-                            <div className="d-flex gap-1">
+                            <div className="tx-actions">
                               <button className="btn btn-outline-primary btn-sm" onClick={() => openEdit(t)}>
                                 Update
                               </button>
@@ -895,7 +954,7 @@ export default function MainTransactionPage() {
                     {suggestions.map((s, idx) => (
                       <tr key={s.daily_transaction_id}>
                         <td>{idx + 1}</td>
-                        <td>₹ {Number(s.amount).toFixed(2)}</td>
+                        <td>₹ {formatAmount(s.amount)}</td>
                         <td className={s.type === "debit" ? "text-danger" : "text-success"}>{s.type}</td>
                         <td>{s.category_name || s.category_id}</td>
                         <td>{s.quantity ?? 0}</td>
@@ -934,8 +993,8 @@ export default function MainTransactionPage() {
                     mainTransactions.map((mt) => (
                       <tr key={mt.transaction_id}>
                         <td>{new Date(mt.date).toLocaleDateString()}</td>
-                        <td>₹ {Number(mt.total_debit).toFixed(2)}</td>
-                        <td>₹ {Number(mt.total_credit).toFixed(2)}</td>
+                        <td>₹ {formatAmount(mt.total_debit)}</td>
+                        <td>₹ {formatAmount(mt.total_credit)}</td>
                         <td>{mt.total_transactions}</td>
                         <td>
                           <button className="btn btn-danger btn-sm" onClick={() => confirmDelete(mt.transaction_id)}>

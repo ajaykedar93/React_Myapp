@@ -47,7 +47,12 @@ async function retry(fn, { tries = 4, delay = 600 }) {
 
 // ✅ Date format: 01/01/2026
 const formatDDMMYYYY = (d) => {
-  const dt = new Date(d);
+  if (!d) return "-";
+  const raw = String(d).slice(0, 10);
+  const parts = raw.split("-");
+  const dt = parts.length === 3
+    ? new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
+    : new Date(d);
   if (Number.isNaN(dt.getTime())) return "-";
   const dd = String(dt.getDate()).padStart(2, "0");
   const mm = String(dt.getMonth() + 1).padStart(2, "0");
@@ -101,7 +106,7 @@ export default function DailyTransactionPage() {
 
   // ---------- INR ----------
   const INR = useMemo(
-    () => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }),
+    () => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0, minimumFractionDigits: 0 }),
     []
   );
 
@@ -289,35 +294,41 @@ export default function DailyTransactionPage() {
   // ✅ Dependent subcategory loading
   useEffect(() => {
     const catId = form.category_id;
-
-    setForm((prev) => ({ ...prev, subcategory_id: "" }));
+    let active = true;
 
     if (!catId) {
       setFilteredSubs([]);
-      return;
+      return () => { active = false; };
     }
 
     (async () => {
       try {
         const subs = await fetchSubcategoriesByCategory(catId);
+        if (!active) return;
         setFilteredSubs(subs);
 
-        // merge for history display
         setSubcategories((prev) => {
-          const map = new Map((prev || []).map((s) => [String(s.subcategory_id), s]));
-          subs.forEach((s) => map.set(String(s.subcategory_id), s));
+          const map = new Map((prev || []).map((item) => [String(item.subcategory_id), item]));
+          subs.forEach((item) => map.set(String(item.subcategory_id), item));
           const merged = Array.from(map.values());
           saveCache({ categories, subcategories: merged, transactions, summary });
           return merged;
         });
       } catch {
-        setFilteredSubs([]);
+        if (active) setFilteredSubs([]);
       }
     })();
+
+    return () => { active = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.category_id]);
 
-  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setForm((prev) => name === "category_id"
+      ? { ...prev, category_id: value, subcategory_id: "" }
+      : { ...prev, [name]: value });
+  };
 
   // ---------- Derived: transactions for selected date ----------
   const dayTransactions = useMemo(() => {
@@ -421,7 +432,7 @@ export default function DailyTransactionPage() {
   const editTransaction = (t) => {
     setEditingId(t.daily_transaction_id);
     setForm({
-      amount: t.amount,
+      amount: String(Math.round(Number(t.amount || 0))),
       quantity: t.quantity ?? "",
       type: t.type,
       category_id: String(t.category_id ?? ""),
@@ -510,17 +521,17 @@ export default function DailyTransactionPage() {
         .tx-card:hover{transform:translateY(-2px);box-shadow:0 12px 24px rgba(16,24,40,.08)}
         .tx-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px}
         .tx-left{min-width:0}
-        .tx-title{font-weight:850;font-size:15px;color:var(--ink-950);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-        .tx-sub{color:var(--ink-500);font-size:12px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .tx-title{font-weight:850;font-size:15px;color:var(--ink-950);white-space:normal;overflow-wrap:anywhere;word-break:normal}
+        .tx-sub{color:var(--ink-500);font-size:12px;margin-top:4px;white-space:normal;overflow-wrap:anywhere;word-break:normal}
         .chip{display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;font-size:10px;text-transform:uppercase;letter-spacing:.5px;font-weight:850;border:1px solid var(--border)}
         .chip-debit{background:#fff1f2;color:#be123c;border-color:#fecdd3}
         .chip-credit{background:#ecfdf5;color:#047857;border-color:#a7f3d0}
         .tx-body{display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
-        .tx-amt{font-weight:900;font-size:21px;letter-spacing:-.4px;color:var(--ink-950)}
+        .tx-amt{font-weight:900;font-size:clamp(16px,4.5vw,21px);letter-spacing:-.3px;color:var(--ink-950);white-space:nowrap;font-variant-numeric:tabular-nums}
         .tx-meta{color:var(--ink-500);font-size:11px;text-align:right;display:flex;flex-direction:column;gap:4px}
         .tx-purpose{margin-top:12px;padding-top:10px;border-top:1px solid #eaecf0;color:var(--ink-600);font-size:12px;line-height:1.5;word-break:break-word}
-        .tx-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
-        .tx-actions .btn,.table .btn{border-radius:9px;font-size:12px;font-weight:750;padding:7px 11px;transition:transform .15s ease,background .15s ease}
+        .tx-actions{display:flex;justify-content:flex-end;gap:6px;margin-top:12px;flex-wrap:wrap}
+        .tx-actions .btn,.table .btn{border-radius:8px;font-size:11px;font-weight:750;padding:5px 9px;line-height:1.25;white-space:nowrap;transition:transform .15s ease,background .15s ease,box-shadow .15s ease;max-width:100%}
         .tx-actions .btn:hover,.table .btn:hover{transform:translateY(-1px)}
         @media(max-width:767.98px){.table-view{display:none}}
         @media(min-width:768px){.mobile-view{display:none}}
@@ -541,6 +552,42 @@ export default function DailyTransactionPage() {
         @keyframes modalIn{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
         .brand-text{font-weight:900;background:var(--brand-grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:.1px}
         .subtle{font-size:13px;color:var(--ink-500)}
+        
+        .dtp-root{overflow-x:clip}
+        .page-wrap,.card-ui,.form-card,.row,.col-6,.col-12,.mobile-view,.table-view,.tx-card{min-width:0;max-width:100%}
+        .card-ui{overflow-wrap:anywhere}
+        .form-card .row{margin-left:0;margin-right:0}
+        .form-card [class*="col-"]{min-width:0}
+        .form-card input,.form-card select,.card-ui input,.card-ui select{min-width:0;max-width:100%}
+        .tx-head{min-width:0}
+        .tx-left{flex:1 1 0;min-width:0}
+        .chip{flex:0 0 auto}
+        .tx-body{align-items:center;min-width:0}
+        .tx-meta{flex:0 0 auto}
+        .tx-purpose{overflow-wrap:anywhere;word-break:normal}
+        .tx-actions .btn,.table .btn{box-shadow:0 1px 2px rgba(16,24,40,.06)}
+        .tx-actions .btn:hover,.table .btn:hover{box-shadow:0 3px 8px rgba(16,24,40,.12)}
+        @media(max-width:767.98px){
+          .dtp-root{padding-left:0!important;padding-right:0!important}
+          .page-wrap{padding-left:10px!important;padding-right:10px!important}
+          .kpi-grid{padding:0!important}
+          .mobile-list{padding:0 0 12px!important}
+          .tx-card{padding:13px!important;border-radius:14px}
+          .tx-title{font-size:14px}
+          .tx-amt{font-size:17px}
+          .form-card{padding:14px!important}
+          .form-card .row{--bs-gutter-x:10px;--bs-gutter-y:10px}
+          .form-card .form-control,.form-card .form-select{min-height:42px;padding:9px 10px;font-size:14px}
+          .btn-solid,.btn-ghost{min-height:36px;padding:8px 12px;font-size:12px}
+          .tbl-wrap{padding:6px}
+        }
+        @media(max-width:360px){
+          .page-wrap{padding-left:8px!important;padding-right:8px!important}
+          .tx-card{padding:10px!important}
+          .tx-body{gap:7px}
+          .tx-meta{font-size:10px}
+        }
+
         @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
 `}</style>
 
